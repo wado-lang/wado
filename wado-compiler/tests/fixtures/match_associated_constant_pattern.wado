@@ -1,0 +1,37 @@
+// TODO: associated constants (Type::CONST) should be usable as match/matches patterns.
+// Currently the parser rejects `TokenKind::FOO =>` with "expected FatArrow, found ColonColon".
+
+#![TODO]
+
+struct TokenKind {}
+
+impl TokenKind {
+    pub const FOO: i32 = 10;
+    pub const BAR: i32 = 20;
+    pub const BAZ: i32 = 30;
+}
+
+fn describe(kind: i32) -> String {
+    return match kind {
+        TokenKind::FOO => "foo",
+        TokenKind::BAR => "bar",
+        TokenKind::BAZ => "baz",
+        _ => "unknown",
+    };
+}
+
+test "match with associated constants" {
+    assert describe(10) == "foo";
+    assert describe(20) == "bar";
+    assert describe(30) == "baz";
+    assert describe(99) == "unknown";
+}
+
+test "matches operator with associated constants" {
+    let x: i32 = 10;
+    assert x matches { TokenKind::FOO };
+    assert !(x matches { TokenKind::BAR });
+}
+
+__DATA__
+{"test": {}}

@@ -85,25 +85,28 @@ fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>,
 /// Strip Consume nodes whose child is a Backtrack — fall back to
 /// Backtrack from the original position rather than consuming then failing.
 fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
-    if let Consume(c) = node {
-        let child = strip_dead_consume(c.child);
-        if let Backtrack(_) = child {
-            // Consuming prefix didn't help — return Backtrack with original alts.
-            return child;
-        }
-        return PredictionNode::Consume(ConsumeNode { element: c.element, child });
-    }
-    if let Dispatch(d) = node {
-        let mut new_branches: Array<PredictionBranch> = [];
-        for let b of d.branches {
-            new_branches.append(PredictionBranch {
-                tokens: b.tokens,
-                child: strip_dead_consume(b.child),
-            });
-        }
-        return PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches });
-    }
-    return node;
+    return match node {
+        Consume(c) => {
+            let child = strip_dead_consume(c.child);
+            if let Backtrack(_) = child {
+                // Consuming prefix didn't help — return Backtrack with original alts.
+                child
+            } else {
+                PredictionNode::Consume(ConsumeNode { element: c.element, child })
+            }
+        },
+        Dispatch(d) => {
+            let mut new_branches: Array<PredictionBranch> = [];
+            for let b of d.branches {
+                new_branches.append(PredictionBranch {
+                    tokens: b.tokens,
+                    child: strip_dead_consume(b.child),
+                });
+            }
+            PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches })
+        },
+        _ => node,
+    };
 }
 
 
@@ -209,7 +212,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
             // Check if the inner element is a multi-token RuleRef.
             // If so, enter it via return stack instead of skipping to pos+1.
             let mut entered = false;
-            if let Repeat(rep) = *elem {
+            if let Repeat(rep) = elem {
                 if let RuleRef(inner_name) = rep.element {
                     let mut stv: Array<String> = [];
                     if !ctx.rule_is_single_token(&inner_name, &mut stv) && c.return_stack.len() < 1 {
@@ -255,15 +258,15 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
         }
         if skip_pos < c.elements.len() {
             let skipped_elem = &c.elements[skip_pos];
-            if let TokenRef(name) = *skipped_elem {
+            if let TokenRef(name) = skipped_elem {
                 if `TK_{name}` == *token {
                     results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                 }
-            } else if let Literal(text) = *skipped_elem {
+            } else if let Literal(text) = skipped_elem {
                 if literal_const_name(&text) == *token {
                     results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                 }
-            } else if let RuleRef(name) = *skipped_elem {
+            } else if let RuleRef(name) = skipped_elem {
                 let mut v: Array<String> = [];
                 if first_contains(&ctx.first_of_rule(&name, &mut v), token) {
                     let mut stv: Array<String> = [];
@@ -284,13 +287,13 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
     }
 
     // Terminal: if token matches, advance past this element.
-    if let TokenRef(name) = *elem {
+    if let TokenRef(name) = elem {
         if `TK_{name}` == *token {
             return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
         }
         return [];
     }
-    if let Literal(text) = *elem {
+    if let Literal(text) = elem {
         if literal_const_name(&text) == *token {
             return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
         }
@@ -300,7 +303,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
     // RuleRef: advance past only if the rule always consumes exactly one token.
     // Multi-token rules return opaque (pos=-1); expansion happens in build_sll_node
     // only when needed to resolve ambiguity.
-    if let RuleRef(name) = *elem {
+    if let RuleRef(name) = elem {
         let mut visiting: Array<String> = [];
         let rule_first = ctx.first_of_rule(&name, &mut visiting);
         if !first_contains(&rule_first, token) {
@@ -317,7 +320,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
     }
 
     // Group: treat as consuming one token if the token is in FIRST(group).
-    if let Group(alts) = *elem {
+    if let Group(alts) = elem {
         let mut group_first = TreeSet::<String>::new();
         for let alt of alts {
             let mut visiting: Array<String> = [];
@@ -331,7 +334,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
     }
 
     // Repeat: treat as consuming the inner element.
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         let mut inner_first: Array<String> = [];
         let mut visiting: Array<String> = [];
         inner_first = ctx.first_of_element(&rep.element, &mut visiting);
@@ -343,7 +346,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
     }
 
     // Label: unwrap.
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         let unwrapped = SllConfig {
             alt_index: c.alt_index,
             elements: replace_element_at(&c.elements, c.pos, &lab.element),
@@ -698,11 +701,11 @@ fn sll_find_common_terminal(configs: &Array<SllConfig>) -> Option<Element> {
         }
     }
     let first_elem = &configs[0].elements[configs[0].pos];
-    if let TokenRef(name) = *first_elem {
+    if let TokenRef(name) = first_elem {
         for let mut i = 1; i < configs.len(); i += 1 {
             let elem = &configs[i].elements[configs[i].pos];
-            if let TokenRef(other) = *elem {
-                if other != name {
+            if let TokenRef(other) = elem {
+                if *other != *name {
                     return null;
                 }
             } else {
@@ -711,11 +714,11 @@ fn sll_find_common_terminal(configs: &Array<SllConfig>) -> Option<Element> {
         }
         return Option::<Element>::Some(*first_elem);
     }
-    if let Literal(text) = *first_elem {
+    if let Literal(text) = first_elem {
         for let mut i = 1; i < configs.len(); i += 1 {
             let elem = &configs[i].elements[configs[i].pos];
-            if let Literal(other) = *elem {
-                if other != text {
+            if let Literal(other) = elem {
+                if *other != *text {
                     return null;
                 }
             } else {
@@ -739,10 +742,10 @@ fn find_common_prefix_element(alt_elements: &Array<Array<Element>>) -> Option<El
         }
     }
     let first_elem = &alt_elements[0][0];
-    if let TokenRef(name) = *first_elem {
+    if let TokenRef(name) = first_elem {
         for let mut i = 1; i < alt_elements.len(); i += 1 {
             if let TokenRef(other) = alt_elements[i][0] {
-                if other != name {
+                if other != *name {
                     return null;
                 }
             } else {
@@ -751,10 +754,10 @@ fn find_common_prefix_element(alt_elements: &Array<Array<Element>>) -> Option<El
         }
         return Option::<Element>::Some(*first_elem);
     }
-    if let Literal(text) = *first_elem {
+    if let Literal(text) = first_elem {
         for let mut i = 1; i < alt_elements.len(); i += 1 {
             if let Literal(other) = alt_elements[i][0] {
-                if other != text {
+                if other != *text {
                     return null;
                 }
             } else {
@@ -763,10 +766,10 @@ fn find_common_prefix_element(alt_elements: &Array<Array<Element>>) -> Option<El
         }
         return Option::<Element>::Some(*first_elem);
     }
-    if let RuleRef(name) = *first_elem {
+    if let RuleRef(name) = first_elem {
         for let mut i = 1; i < alt_elements.len(); i += 1 {
             if let RuleRef(other) = alt_elements[i][0] {
-                if other != name {
+                if other != *name {
                     return null;
                 }
             } else {
@@ -807,13 +810,9 @@ fn first_of_elements(elements: &Array<Element>, ctx: &mut GenContext, visiting: 
 }
 
 fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
-    if let Leaf(ai) = *a {
-        if let Leaf(bi) = *b {
-            return ai == bi;
-        }
-    }
-    if let Backtrack(aa) = *a {
-        if let Backtrack(ba) = *b {
+    return match [*a, *b] {
+        [Leaf(ai), Leaf(bi)] => ai == bi,
+        [Backtrack(aa), Backtrack(ba)] => {
             if aa.len() != ba.len() {
                 return false;
             }
@@ -822,30 +821,20 @@ fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
                     return false;
                 }
             }
-            return true;
-        }
-    }
-    // Consume nodes: check same element kind and recurse on child.
-    if let Consume(ca) = *a {
-        if let Consume(cb) = *b {
-            return element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child);
-        }
-    }
-    return false;
+            true
+        },
+        // Consume nodes: check same element kind and recurse on child.
+        [Consume(ca), Consume(cb)] => element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child),
+        _ => false,
+    };
 }
 
 fn element_eq(a: &Element, b: &Element) -> bool {
-    if let TokenRef(na) = *a {
-        if let TokenRef(nb) = *b {
-            return na == nb;
-        }
-    }
-    if let Literal(ta) = *a {
-        if let Literal(tb) = *b {
-            return ta == tb;
-        }
-    }
-    return false;
+    return match [*a, *b] {
+        [TokenRef(na), TokenRef(nb)] => na == nb,
+        [Literal(ta), Literal(tb)] => ta == tb,
+        _ => false,
+    };
 }
 
 fn compute_deeper_first(elements: &Array<Element>, depth: i32, ctx: &mut GenContext) -> Array<String> {
@@ -853,7 +842,7 @@ fn compute_deeper_first(elements: &Array<Element>, depth: i32, ctx: &mut GenCont
     let mut remaining = depth;
     while pos < elements.len() && remaining > 0 {
         let elem = &elements[pos];
-        if let TokenRef(_) | Literal(_) = *elem {
+        if let TokenRef(_) | Literal(_) = elem {
             remaining -= 1;
             pos += 1;
             continue;
@@ -864,7 +853,7 @@ fn compute_deeper_first(elements: &Array<Element>, depth: i32, ctx: &mut GenCont
         }
         // SLL advancement: single-token RuleRef consumes exactly 1 token,
         // so we can safely advance past it and look at the next element.
-        if let RuleRef(name) = *elem {
+        if let RuleRef(name) = elem {
             let mut visiting: Array<String> = [];
             if ctx.rule_is_single_token(&name, &mut visiting) {
                 remaining -= 1;
@@ -887,34 +876,34 @@ fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
 }
 
 fn count_backtrack_nodes(node: &PredictionNode) -> i32 {
-    if let Backtrack(_) = *node {
+    if let Backtrack(_) = node {
         return 1;
     }
-    if let Dispatch(d) = *node {
+    if let Dispatch(d) = node {
         let mut count = 0;
         for let mut i = 0; i < d.branches.len(); i += 1 {
             count += count_backtrack_nodes(&d.branches[i].child);
         }
         return count;
     }
-    if let Consume(c) = *node {
+    if let Consume(c) = node {
         return count_backtrack_nodes(&c.child);
     }
     return 0;
 }
 
 fn count_leaf_nodes(node: &PredictionNode) -> i32 {
-    if let Leaf(_) = *node {
+    if let Leaf(_) = node {
         return 1;
     }
-    if let Dispatch(d) = *node {
+    if let Dispatch(d) = node {
         let mut count = 0;
         for let mut i = 0; i < d.branches.len(); i += 1 {
             count += count_leaf_nodes(&d.branches[i].child);
         }
         return count;
     }
-    if let Consume(c) = *node {
+    if let Consume(c) = node {
         return count_leaf_nodes(&c.child);
     }
     return 0;
@@ -1192,7 +1181,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
     }
     for let mut i = skip; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
-        if let Repeat(rep) = *elem {
+        if let Repeat(rep) = elem {
             if let Optional = rep.kind {
                 if is_ruleref_optional(&rep.element) {
                     let follow = ctx.first_of_elements_from(&alt.elements, i + 1);
@@ -1275,7 +1264,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut Gen
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
-        if let Repeat(rep) = *elem {
+        if let Repeat(rep) = elem {
             if let Optional = rep.kind {
                 if is_ruleref_optional(&rep.element) {
                     let follow = ctx.first_of_elements_from(elements, i + 1);
@@ -1299,7 +1288,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut Gen
 fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
-        if let Repeat(rep) = *elem {
+        if let Repeat(rep) = elem {
             if rep.non_greedy {
                 let follow = ctx.first_of_elements_from(elements, i + 1);
                 let follow_second = compute_follow_second(elements, i + 1, ctx);
@@ -1314,40 +1303,40 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, c
 }
 
 fn is_ruleref_optional(elem: &Element) -> bool {
-    if let RuleRef(_) = *elem {
+    if let RuleRef(_) = elem {
         return true;
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         return is_ruleref_optional(&lab.element);
     }
     return false;
 }
 
 fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    if let TokenRef(name) = *elem {
+    if let TokenRef(name) = elem {
         let const_name = `TK_{name}`;
         let field_name = dedup_name(&to_lower(&name), name_counts);
         w.line(`let {field_name} = p.expect({const_name}, {escape_string(&name)})?;`);
         return;
     }
-    if let Literal(text) = *elem {
+    if let Literal(text) = elem {
         let const_name = literal_const_name(&text);
         let display = `'{text}'`;
         let field_name = dedup_name(&literal_field_name(&text), name_counts);
         w.line(`let {field_name} = p.expect({const_name}, {escape_string(&display)})?;`);
         return;
     }
-    if let RuleRef(name) = *elem {
+    if let RuleRef(name) = elem {
         let fn_name = `parse_{to_snake_case(&name)}`;
         let field_name = dedup_name(&to_snake_case(&name), name_counts);
         w.line(`let {field_name} = {fn_name}(p)?;`);
         return;
     }
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         gen_repeat(w, &rep, ctx, name_counts);
         return;
     }
-    if let Group(alts) = *elem {
+    if let Group(alts) = elem {
         if is_simple_cst_group(&alts) {
             gen_consume_group_store_optional(w, &alts, ctx, name_counts);
         } else if is_token_only_group(&alts) {
@@ -1359,7 +1348,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         }
         return;
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         gen_element(w, &lab.element, ctx, name_counts);
         return;
     }
@@ -1445,7 +1434,7 @@ fn compute_follow_second(elements: &Array<Element>, follow_start: i32, ctx: &mut
         return [];
     }
     let follow_elem = &elements[follow_start];
-    if let Repeat(rep) = *follow_elem {
+    if let Repeat(rep) = follow_elem {
         if let Group(alts) = rep.element {
             if alts.len() == 1 && alts[0].elements.len() >= 2 {
                 return ctx.first_of_elements_from(&alts[0].elements, 1);
@@ -1477,7 +1466,7 @@ fn compute_non_greedy_condition(inner: &Element, follow_first: &Array<String>, f
     // Use 2-token lookahead with follow_second to disambiguate.
     // For (',' column_def)*? followed by (',' table_constraint)*:
     //   peek(0) == ',' for both, peek(1) distinguishes column_def from table_constraint.
-    if let Group(alts) = *inner {
+    if let Group(alts) = inner {
         if alts.len() == 1 && alts[0].elements.len() >= 2 && follow_second.len() > 0 {
             let inner_second_first = ctx.first_of_elements_from(&alts[0].elements, 1);
             let second_continue = subtract_sets(&inner_second_first, follow_second);
@@ -1601,19 +1590,19 @@ fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut Gen
 }
 
 fn is_optional_repeat(elem: &Element) -> bool {
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         if let Optional = rep.kind {
             return true;
         }
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         return is_optional_repeat(&lab.element);
     }
     return false;
 }
 
 fn has_nested_optionals(inner: &Element) -> bool {
-    if let Group(alts) = *inner {
+    if let Group(alts) = inner {
         if alts.len() != 1 {
             return false;
         }
@@ -1670,7 +1659,7 @@ fn shape_lookahead_signature(shape: &Array<i32>, elements: &Array<Element>, ctx:
         let elem = &elements[idx];
         let actual = unwrap_optional(elem);
         // For a Group with single alt, compute token-by-token signature
-        if let Group(alts) = *actual {
+        if let Group(alts) = actual {
             if alts.len() == 1 {
                 for let mut j = 0; j < alts[0].elements.len(); j += 1 {
                     let mut visiting: Array<String> = [];
@@ -1741,7 +1730,7 @@ fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Elemen
             let idx = shape[k];
             let elem = &group_elements[idx];
             let actual = unwrap_optional(elem);
-            if let Group(alts) = *actual {
+            if let Group(alts) = actual {
                 if alts.len() == 1 {
                     for let mut j = 0; j < alts[0].elements.len(); j += 1 {
                         gen_element(w, &alts[0].elements[j], ctx, &mut nc);
@@ -1760,12 +1749,12 @@ fn gen_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Elemen
 }
 
 fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         if let Optional = rep.kind {
             return &rep.element;
         }
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         return unwrap_optional(&lab.element);
     }
     return elem;
@@ -1774,14 +1763,14 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 fn optional_lookahead_depth(inner: &Element) -> i32 {
     // Returns the number of leading fixed tokens that can be checked via lookahead.
     // 0 if the first element is not a fixed token.
-    if let Group(alts) = *inner {
+    if let Group(alts) = inner {
         if alts.len() != 1 {
             return 0;
         }
         let mut depth = 0;
         for let mut i = 0; i < alts[0].elements.len(); i += 1 {
             let elem = &alts[0].elements[i];
-            if let TokenRef(_) | Literal(_) = *elem {
+            if let TokenRef(_) | Literal(_) = elem {
                 depth += 1;
             } else {
                 break;
@@ -1789,7 +1778,7 @@ fn optional_lookahead_depth(inner: &Element) -> i32 {
         }
         return depth;
     }
-    if let TokenRef(_) | Literal(_) = *inner {
+    if let TokenRef(_) | Literal(_) = inner {
         return 1;
     }
     return 0;
@@ -1798,7 +1787,7 @@ fn optional_lookahead_depth(inner: &Element) -> i32 {
 fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
     // Returns up to max_depth leading fixed token constants.
     let mut tokens: Array<String> = [];
-    if let Group(alts) = *inner {
+    if let Group(alts) = inner {
         if alts.len() != 1 {
             return [];
         }
@@ -1807,17 +1796,17 @@ fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
                 break;
             }
             let elem = &alts[0].elements[i];
-            if let TokenRef(name) = *elem {
+            if let TokenRef(name) = elem {
                 tokens.append(`TK_{name}`);
-            } else if let Literal(text) = *elem {
+            } else if let Literal(text) = elem {
                 tokens.append(literal_const_name(&text));
             } else {
                 break;
             }
         }
-    } else if let TokenRef(name) = *inner {
+    } else if let TokenRef(name) = inner {
         tokens.append(`TK_{name}`);
-    } else if let Literal(text) = *inner {
+    } else if let Literal(text) = inner {
         tokens.append(literal_const_name(&text));
     }
     return tokens;
@@ -1825,7 +1814,7 @@ fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
 
 fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, first: &Array<String>, name_counts: &mut Array<[String, i32]>) {
     if has_nested_optionals(inner) {
-        if let Group(alts) = *inner {
+        if let Group(alts) = inner {
             gen_optional_with_lookahead(w, &alts[0].elements, ctx, name_counts);
             return;
         }
@@ -1849,7 +1838,7 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
         }
         w.begin(`if {cond}`);
         let mut nc: Array<[String, i32]> = [];
-        if let Group(alts) = *inner {
+        if let Group(alts) = inner {
             for let mut i = 0; i < alts[0].elements.len(); i += 1 {
                 gen_element(w, &alts[0].elements[i], ctx, &mut nc);
             }
@@ -1868,7 +1857,7 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
     w.begin(`{label}:`);
 
     let mut bt_nc: Array<[String, i32]> = [];
-    if let Group(alts) = *inner {
+    if let Group(alts) = inner {
         if alts.len() == 1 {
             for let elem of alts[0].elements {
                 gen_element_failable(w, &elem, ctx, &saved, &label, &mut bt_nc);
@@ -1885,14 +1874,14 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
 }
 
 fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
-    if let TokenRef(name) = *elem {
+    if let TokenRef(name) = elem {
         let const_name = `TK_{name}`;
         let r_var = dedup_name(&"opt_r", name_counts);
         w.line(`let {r_var} = p.expect({const_name}, {escape_string(&name)});`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         return;
     }
-    if let Literal(text) = *elem {
+    if let Literal(text) = elem {
         let const_name = literal_const_name(&text);
         let display = `'{text}'`;
         let r_var = dedup_name(&"opt_r", name_counts);
@@ -1900,18 +1889,18 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         return;
     }
-    if let RuleRef(name) = *elem {
+    if let RuleRef(name) = elem {
         let fn_name = `parse_{to_snake_case(&name)}`;
         let r_var = dedup_name(&"opt_r", name_counts);
         w.line(`let {r_var} = {fn_name}(p);`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         return;
     }
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         gen_repeat(w, &rep, ctx, name_counts);
         return;
     }
-    if let Group(alts) = *elem {
+    if let Group(alts) = elem {
         if alts.len() == 1 {
             for let inner_elem of alts[0].elements {
                 gen_element_failable(w, &inner_elem, ctx, saved_var, label, name_counts);
@@ -1921,7 +1910,7 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext
         }
         return;
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         gen_element_failable(w, &lab.element, ctx, saved_var, label, name_counts);
         return;
     }
@@ -1991,7 +1980,7 @@ fn gen_storable_optional_with_lookahead(
     opt_name: &String,
     field_name: &String,
 ) {
-    if let Group(alts) = *inner {
+    if let Group(alts) = inner {
         if alts.len() != 1 {
             return;
         }
@@ -2056,7 +2045,7 @@ fn gen_storable_optional_with_lookahead(
 
 /// Generate a null assignment for an absent optional element's struct field.
 fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>) {
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         if let Optional = rep.kind {
             if has_field(&rep.element) {
                 let info = element_field_info(&rep.element);
@@ -2066,7 +2055,7 @@ fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &m
         }
         return;
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         gen_absent_optional_field(w, &lab.element, name_counts);
         return;
     }
@@ -2109,7 +2098,7 @@ fn gen_storable_optional_with_backtrack(
     w.line(`let mut {result_var}: Option<{type_str}> = null;`);
     w.begin(`{label}:`);
 
-    if let Group(alts) = *inner {
+    if let Group(alts) = inner {
         if is_single_alt_group(&alts) {
             let alt = &alts[0];
             // Use fresh name counters so element names match field assignments
@@ -2151,7 +2140,7 @@ fn gen_storable_optional_with_backtrack(
 /// For TokenRef/Literal: generates `let r = p.expect(...); if Err, break; let name = r.unwrap();`
 /// For RuleRef: generates `let r = parse_foo(p); if Err, break; let foo = r.unwrap();`
 fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
-    if let TokenRef(name) = *elem {
+    if let TokenRef(name) = elem {
         let const_name = `TK_{name}`;
         let field_name = dedup_name(&to_lower(&name), name_counts);
         let r_var = dedup_name(&"_bt_r", name_counts);
@@ -2160,7 +2149,7 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
         w.line(`let {field_name} = {r_var}.unwrap();`);
         return;
     }
-    if let Literal(text) = *elem {
+    if let Literal(text) = elem {
         let const_name = literal_const_name(&text);
         let display = `'{text}'`;
         let field_name = dedup_name(&literal_field_name(&text), name_counts);
@@ -2170,7 +2159,7 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
         w.line(`let {field_name} = {r_var}.unwrap();`);
         return;
     }
-    if let RuleRef(name) = *elem {
+    if let RuleRef(name) = elem {
         let fn_name = `parse_{to_snake_case(&name)}`;
         let field_name = dedup_name(&to_snake_case(&name), name_counts);
         let r_var = dedup_name(&"_bt_r", name_counts);
@@ -2179,11 +2168,11 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
         w.line(`let {field_name} = {r_var}.unwrap();`);
         return;
     }
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         gen_repeat(w, &rep, ctx, name_counts);
         return;
     }
-    if let Group(alts) = *elem {
+    if let Group(alts) = elem {
         if is_simple_cst_group(&alts) {
             gen_consume_group_store_optional(w, &alts, ctx, name_counts);
         } else if is_token_only_group(&alts) {
@@ -2195,46 +2184,46 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
         }
         return;
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         gen_element_failable_named(w, &lab.element, ctx, saved_var, label, name_counts);
         return;
     }
 }
 
 fn is_group_with_store(elem: &Element) -> bool {
-    if let Group(alts) = *elem {
+    if let Group(alts) = elem {
         return is_storable_group(&alts);
     }
     return false;
 }
 
 fn has_field(elem: &Element) -> bool {
-    if let TokenRef(_) | Literal(_) | RuleRef(_) = *elem {
+    if let TokenRef(_) | Literal(_) | RuleRef(_) = elem {
         return true;
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         return has_field(&lab.element);
     }
-    if let Group(alts) = *elem {
+    if let Group(alts) = elem {
         return is_storable_group(&alts);
     }
     return false;
 }
 
 fn element_field_info(elem: &Element) -> [String, String] {
-    if let TokenRef(name) = *elem {
+    if let TokenRef(name) = elem {
         return [to_lower(&name), "Token"];
     }
-    if let Literal(text) = *elem {
+    if let Literal(text) = elem {
         return [literal_field_name(&text), "Token"];
     }
-    if let RuleRef(name) = *elem {
+    if let RuleRef(name) = elem {
         return [to_snake_case(&name), rule_type_name(&name)];
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         return element_field_info(&lab.element);
     }
-    if let Group(alts) = *elem {
+    if let Group(alts) = elem {
         if is_simple_cst_group(&alts) {
             return [group_field_base_name(&alts), group_variant_type_name(&alts)];
         }
@@ -2256,22 +2245,22 @@ fn gen_field_assignments(w: &mut CodeWriter, elements: &Array<Element>) {
 }
 
 fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>) {
-    if let TokenRef(name) = *elem {
+    if let TokenRef(name) = elem {
         let field_name = dedup_name(&to_lower(&name), name_counts);
         w.line(`{field_name},`);
         return;
     }
-    if let Literal(text) = *elem {
+    if let Literal(text) = elem {
         let field_name = dedup_name(&literal_field_name(&text), name_counts);
         w.line(`{field_name},`);
         return;
     }
-    if let RuleRef(name) = *elem {
+    if let RuleRef(name) = elem {
         let field_name = dedup_name(&to_snake_case(&name), name_counts);
         w.line(`{field_name},`);
         return;
     }
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         if has_field(&rep.element) {
             let info = element_field_info(&rep.element);
             if let Star | Plus = rep.kind {
@@ -2285,7 +2274,7 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
         }
         return;
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         if has_field(&lab.element) {
             let field_name = to_snake_case(&lab.name);
             dedup_name(&field_name, name_counts);
@@ -2293,7 +2282,7 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
         }
         return;
     }
-    if let Group(alts) = *elem {
+    if let Group(alts) = elem {
         if is_simple_cst_group(&alts) {
             let field_name = dedup_name(&group_field_base_name(&alts), name_counts);
             w.line(`{field_name},`);
@@ -2311,19 +2300,19 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
 /// Replay name counting for an element without emitting code.
 /// This advances the dedup counter so subsequent elements get correct suffixes.
 fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) {
-    if let TokenRef(name) = *elem {
+    if let TokenRef(name) = elem {
         dedup_name(&to_lower(&name), name_counts);
         return;
     }
-    if let Literal(text) = *elem {
+    if let Literal(text) = elem {
         dedup_name(&literal_field_name(&text), name_counts);
         return;
     }
-    if let RuleRef(name) = *elem {
+    if let RuleRef(name) = elem {
         dedup_name(&to_snake_case(&name), name_counts);
         return;
     }
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         if has_field(&rep.element) {
             let info = element_field_info(&rep.element);
             if let Star | Plus = rep.kind {
@@ -2335,13 +2324,13 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) 
         }
         return;
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         if has_field(&lab.element) {
             dedup_name(&to_snake_case(&lab.name), name_counts);
         }
         return;
     }
-    if let Group(alts) = *elem {
+    if let Group(alts) = elem {
         if is_simple_cst_group(&alts) {
             dedup_name(&group_field_base_name(&alts), name_counts);
         } else if is_token_only_group(&alts) {
@@ -2604,7 +2593,7 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
 }
 
 fn gen_group_store_any(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    if let Group(alts) = *inner {
+    if let Group(alts) = inner {
         if is_simple_cst_group(&alts) {
             gen_consume_group_store(w, &alts, ctx, name_counts);
         } else if is_token_only_group(&alts) {
@@ -2658,11 +2647,11 @@ fn gen_group_prediction_code(w: &mut CodeWriter, node: &PredictionNode, alts: &A
 }
 
 fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, skip: i32) {
-    if let Leaf(idx) = *node {
-        let elems = &alts[idx].elements;
+    if let Leaf(idx) = node {
+        let elems = &alts[*idx].elements;
         for let mut i = skip; i < elems.len(); i += 1 {
             let elem = &elems[i];
-            if let Repeat(rep) = *elem {
+            if let Repeat(rep) = elem {
                 if rep.non_greedy {
                     let follow = ctx.first_of_elements_from(elems, i + 1);
                     let follow_second = compute_follow_second(elems, i + 1, ctx);
@@ -2674,12 +2663,12 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
         }
         return;
     }
-    if let Consume(c) = *node {
+    if let Consume(c) = node {
         gen_element(w, &c.element, ctx, name_counts);
         gen_group_prediction_code_skip(w, &c.child, alts, ctx, name_counts, skip + 1);
         return;
     }
-    if let Backtrack(indices) = *node {
+    if let Backtrack(indices) = node {
         let mut sorted = indices.sorted();
         sort_group_by_element_count(&mut sorted, alts);
         let saved_var = dedup_name(&"saved_pos", name_counts);
@@ -2712,7 +2701,7 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
         }
         return;
     }
-    if let Dispatch(d) = *node {
+    if let Dispatch(d) = node {
         let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at({d.depth})` };
         for let mut i = 0; i < d.branches.len(); i += 1 {
             let branch = &d.branches[i];
@@ -2736,10 +2725,10 @@ fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &A
     let mut fixed_tokens: Array<String> = [];
     for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
         let elem = &alt.elements[ei];
-        if let TokenRef(name) = *elem {
+        if let TokenRef(name) = elem {
             fixed_tokens.append(`TK_{name}`);
         }
-        if let Literal(text) = *elem {
+        if let Literal(text) = elem {
             fixed_tokens.append(literal_const_name(&text));
         }
     }
@@ -2813,16 +2802,16 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
 
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
-            if let RuleRef(name) = *elem {
-                if name == rule.name {
-                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
+            if let RuleRef(name) = elem {
+                if *name == rule.name {
+                    let field_name = dedup_name(&to_snake_case(name), &mut name_counts);
                     w.line(`let {field_name} = {prec_fn}(p, {inner_min_prec})?;`);
                 } else {
                     let elem_fn = `parse_{to_snake_case(&name)}`;
                     let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
                     w.line(`let {field_name} = {elem_fn}(p)?;`);
                 }
-            } else if let Group(alts) = *elem {
+            } else if let Group(alts) = elem {
                 if is_token_only_group(&alts) {
                     gen_consume_token_group(w, &alts, ctx, &mut name_counts);
                 } else if is_simple_token_group(&alts) {
@@ -2831,7 +2820,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 } else {
                     gen_element(w, elem, ctx, &mut name_counts);
                 }
-            } else if let Repeat(rep) = *elem {
+            } else if let Repeat(rep) = elem {
                 gen_repeat(w, &rep, ctx, &mut name_counts);
             } else {
                 gen_element(w, elem, ctx, &mut name_counts);
@@ -2882,7 +2871,7 @@ fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, ctx
         // The shared token is inside a Group (e.g. (K_ISNULL | K_NOTNULL | K_NOT K_NULL)).
         // Find the alternative within the group that starts with shared_token,
         // and return the first set of its second element.
-        if let Group(alts) = *elem {
+        if let Group(alts) = elem {
             for let mut a = 0; a < alts.len(); a += 1 {
                 let alt = &alts[a];
                 if alt.elements.len() < 1 {
@@ -3118,14 +3107,14 @@ fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &Stri
 }
 
 fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut Array<[String, i32]>) {
-    if let Leaf(idx) = *node {
+    if let Leaf(idx) = node {
         if skip == 0 {
             w.line(`return {*fn_name}_bt_{idx}(p);`);
         } else {
             // Consumed prefix tokens already — inline the remaining alt body.
             let all_labeled = all_alternatives_labeled(alts);
-            let alt = &alts[idx];
-            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{idx}` };
+            let alt = &alts[*idx];
+            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{*idx}` };
             let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
             gen_alt_body_skip(
                 w,
@@ -3139,12 +3128,12 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         }
         return;
     }
-    if let Consume(c) = *node {
+    if let Consume(c) = node {
         gen_element(w, &c.element, ctx, name_counts);
         gen_prediction_code_inner(w, &c.child, fn_name, alts, type_name, ctx, skip + 1, name_counts);
         return;
     }
-    if let Backtrack(indices) = *node {
+    if let Backtrack(indices) = node {
         // Sort by element count for proper ordering (single RuleRef first, etc.)
         let mut sorted_indices = indices.sorted();
         sort_group_by_element_count(&mut sorted_indices, alts);
@@ -3171,7 +3160,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         }
         return;
     }
-    if let Dispatch(d) = *node {
+    if let Dispatch(d) = node {
         let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at({d.depth})` };
         for let mut i = 0; i < d.branches.len(); i += 1 {
             let branch = &d.branches[i];
@@ -3408,8 +3397,8 @@ fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
         return false;
     }
     let first = &alt.elements[0];
-    if let RuleRef(name) = *first {
-        return name == *rule_name;
+    if let RuleRef(name) = first {
+        return *name == *rule_name;
     }
     return false;
 }
@@ -3489,7 +3478,7 @@ fn alt_sort_priority(alt: &Alternative) -> i32 {
     // 1: Single Token/Literal — simple fallbacks (e.g. K_INSERT)
     if alt.elements.len() == 1 {
         let elem = &alt.elements[0];
-        if let RuleRef(_) = *elem {
+        if let RuleRef(_) = elem {
             return 3;
         }
         return 1;

@@ -68,31 +68,22 @@ impl GenContext {
     }
 
     pub fn first_of_element(&mut self, elem: &Element, visiting: &mut Array<String>) -> Array<String> {
-        if let TokenRef(name) = *elem {
-            return [`TK_{name}`];
-        }
-        if let Literal(text) = *elem {
-            return [literal_const_name(&text)];
-        }
-        if let RuleRef(name) = *elem {
-            return self.first_of_rule(&name, visiting);
-        }
-        if let Group(alts) = *elem {
-            let mut result: Array<String> = [];
-    
-            for let alt of alts {
-                let af = self.first_of_alt(&alt, visiting);
-                extend_dedup(&mut result, &af);
-            }
-            return result;
-        }
-        if let Repeat(rep) = *elem {
-            return self.first_of_element(&rep.element, visiting);
-        }
-        if let Label(lab) = *elem {
-            return self.first_of_element(&lab.element, visiting);
-        }
-        return [];
+        return match elem {
+            TokenRef(name) => [`TK_{name}`],
+            Literal(text) => [literal_const_name(&text)],
+            RuleRef(name) => self.first_of_rule(&name, visiting),
+            Group(alts) => {
+                let mut result: Array<String> = [];
+                for let alt of alts {
+                    let af = self.first_of_alt(&alt, visiting);
+                    extend_dedup(&mut result, &af);
+                }
+                result
+            },
+            Repeat(rep) => self.first_of_element(&rep.element, visiting),
+            Label(lab) => self.first_of_element(&lab.element, visiting),
+            _ => [],
+        };
     }
 
     pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut Array<String>) -> Array<String> {
@@ -182,10 +173,10 @@ impl GenContext {
                     if non_nullable_count > 1 {
                         break;
                     }
-                    if let TokenRef(_) | Literal(_) = *elem {
+                    if let TokenRef(_) | Literal(_) = elem {
                         single_ok = true;
-                    } else if let RuleRef(r) = *elem {
-                        single_ok = self.rule_is_single_token(&r, visiting);
+                    } else if let RuleRef(r) = elem {
+                        single_ok = self.rule_is_single_token(r, visiting);
                     }
                 }
                 if non_nullable_count != 1 || !single_ok {
@@ -207,7 +198,7 @@ impl GenContext {
 }
 
 pub fn is_nullable(elem: &Element) -> bool {
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         if let Star | Optional = rep.kind {
             return true;
         }
@@ -231,7 +222,7 @@ pub fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
             return false;
         }
         let elem = &alt.elements[0];
-        if let TokenRef(_) | Literal(_) = *elem {
+        if let TokenRef(_) | Literal(_) = elem {
             continue;
         }
         return false;

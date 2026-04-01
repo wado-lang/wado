@@ -678,14 +678,14 @@ fn try_variable(chars: &Array<char>, start: i32) -> i32 {
     let mut alts_ok_0 = false;
     alts_0_0: {
         pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] < 'a' || chars[pos] > 'z' { break alts_0_0; }
+        if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { break alts_0_0; }
         pos += 1;
         alts_ok_0 = true;
     }
     if !alts_ok_0 {
         alts_0_1: {
             pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] < 'A' || chars[pos] > 'Z' { break alts_0_1; }
+            if pos >= chars.len() || !('A' <= chars[pos] <= 'Z') { break alts_0_1; }
             pos += 1;
             alts_ok_0 = true;
         }
@@ -710,14 +710,14 @@ fn try_variable(chars: &Array<char>, start: i32) -> i32 {
                 let mut alts_ok_3 = false;
                 alts_3_0: {
                     pos = alts_saved_3;
-                    if pos >= chars.len() || chars[pos] < 'a' || chars[pos] > 'z' { break alts_3_0; }
+                    if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { break alts_3_0; }
                     pos += 1;
                     alts_ok_3 = true;
                 }
                 if !alts_ok_3 {
                     alts_3_1: {
                         pos = alts_saved_3;
-                        if pos >= chars.len() || chars[pos] < 'A' || chars[pos] > 'Z' { break alts_3_1; }
+                        if pos >= chars.len() || !('A' <= chars[pos] <= 'Z') { break alts_3_1; }
                         pos += 1;
                         alts_ok_3 = true;
                     }
@@ -736,7 +736,7 @@ fn try_variable(chars: &Array<char>, start: i32) -> i32 {
             if !alts_ok_2 {
                 alts_2_1: {
                     pos = alts_saved_2;
-                    if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break alts_2_1; }
+                    if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break alts_2_1; }
                     pos += 1;
                     alts_ok_2 = true;
                 }
@@ -752,12 +752,12 @@ fn try_variable(chars: &Array<char>, start: i32) -> i32 {
 
 fn try_scientific_number(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { return -1; }
+    if pos >= chars.len() || !('0' <= chars[pos] <= '9') { return -1; }
     pos += 1;
     loop {
         let rep_saved_4 = pos;
         rep_4: {
-            if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_4; }
+            if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break rep_4; }
             pos += 1;
             continue;
         }
@@ -769,12 +769,12 @@ fn try_scientific_number(chars: &Array<char>, start: i32) -> i32 {
     rep_5: {
         if pos >= chars.len() || chars[pos] != '.' { break rep_5; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_5; }
+        if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break rep_5; }
         pos += 1;
         loop {
             let rep_saved_6 = pos;
             rep_6: {
-                if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_6; }
+                if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break rep_6; }
                 pos += 1;
                 continue;
             }
@@ -827,12 +827,12 @@ fn try_scientific_number(chars: &Array<char>, start: i32) -> i32 {
             opt_ok_9 = true;
         }
         if !opt_ok_9 { pos = opt_saved_9; }
-        if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_7; }
+        if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break rep_7; }
         pos += 1;
         loop {
             let rep_saved_11 = pos;
             rep_11: {
-                if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_11; }
+                if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break rep_11; }
                 pos += 1;
                 continue;
             }
@@ -844,12 +844,12 @@ fn try_scientific_number(chars: &Array<char>, start: i32) -> i32 {
         rep_12: {
             if pos >= chars.len() || chars[pos] != '.' { break rep_12; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_12; }
+            if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break rep_12; }
             pos += 1;
             loop {
                 let rep_saved_13 = pos;
                 rep_13: {
-                    if pos >= chars.len() || chars[pos] < '0' || chars[pos] > '9' { break rep_13; }
+                    if pos >= chars.len() || !('0' <= chars[pos] <= '9') { break rep_13; }
                     pos += 1;
                     continue;
                 }

@@ -85,10 +85,10 @@ fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
 }
 
 fn repeat_inner_walk_field(elem: &Element) -> Option<WalkField> {
-    if let Group(alts) = *elem {
-        if is_simple_cst_group(&alts) {
+    if let Group(alts) = elem {
+        if is_simple_cst_group(alts) {
             let mut cases: Array<GroupCaseInfo> = [];
-            for let alt of &alts {
+            for let alt of alts {
                 if let RuleRef(name) = &alt.elements[0] {
                     cases.append(GroupCaseInfo {
                         case_name: to_pascal_case(name),
@@ -97,19 +97,19 @@ fn repeat_inner_walk_field(elem: &Element) -> Option<WalkField> {
                 }
             }
             return Option::Some(WalkField {
-                name: group_field_base_name(&alts),
+                name: group_field_base_name(alts),
                 action: WalkAction::WalkGroup(cases),
                 wrapper: WalkWrapper::Direct,
             });
         }
-        if is_token_only_group(&alts) {
+        if is_token_only_group(alts) {
             return Option::Some(WalkField {
-                name: token_group_field_name(&alts),
+                name: token_group_field_name(alts),
                 action: WalkAction::VisitToken,
                 wrapper: WalkWrapper::Direct,
             });
         }
-        if is_single_alt_group(&alts) {
+        if is_single_alt_group(alts) {
             return Option::Some(WalkField {
                 name: single_alt_group_field_name(&alts[0]),
                 action: build_struct_walk_action(&alts[0]),
@@ -184,28 +184,28 @@ fn collect_walk_fields(elements: &Array<Element>) -> Array<WalkField> {
 }
 
 fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
-    if let RuleRef(name) = *elem {
+    if let RuleRef(name) = elem {
         return Option::Some(WalkField {
-            name: to_snake_case(&name),
-            action: WalkAction::WalkRule(name),
+            name: to_snake_case(name),
+            action: WalkAction::WalkRule(*name),
             wrapper: WalkWrapper::Direct,
         });
     }
-    if let TokenRef(name) = *elem {
+    if let TokenRef(name) = elem {
         return Option::Some(WalkField {
-            name: to_lower(&name),
+            name: to_lower(name),
             action: WalkAction::VisitToken,
             wrapper: WalkWrapper::Direct,
         });
     }
-    if let Literal(text) = *elem {
+    if let Literal(text) = elem {
         return Option::Some(WalkField {
-            name: literal_field_name(&text),
+            name: literal_field_name(text),
             action: WalkAction::VisitToken,
             wrapper: WalkWrapper::Direct,
         });
     }
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         let inner_field = repeat_inner_walk_field(&rep.element);
         if let Some(inner) = inner_field {
             match rep.kind {
@@ -227,7 +227,7 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
         }
         return null;
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         if let Some(inner) = element_to_walk_field(&lab.element) {
             return Option::Some(WalkField {
                 name: to_snake_case(&lab.name),
@@ -237,10 +237,10 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
         }
         return null;
     }
-    if let Group(alts) = *elem {
-        if is_simple_cst_group(&alts) {
+    if let Group(alts) = elem {
+        if is_simple_cst_group(alts) {
             let mut cases: Array<GroupCaseInfo> = [];
-            for let alt of &alts {
+            for let alt of alts {
                 if let RuleRef(name) = &alt.elements[0] {
                     cases.append(GroupCaseInfo {
                         case_name: to_pascal_case(name),
@@ -249,19 +249,19 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
                 }
             }
             return Option::Some(WalkField {
-                name: group_field_base_name(&alts),
+                name: group_field_base_name(alts),
                 action: WalkAction::WalkGroup(cases),
                 wrapper: WalkWrapper::OptionalWrap,
             });
         }
-        if is_token_only_group(&alts) {
+        if is_token_only_group(alts) {
             return Option::Some(WalkField {
-                name: token_group_field_name(&alts),
+                name: token_group_field_name(alts),
                 action: WalkAction::VisitToken,
                 wrapper: WalkWrapper::Direct,
             });
         }
-        if is_single_alt_group(&alts) {
+        if is_single_alt_group(alts) {
             return Option::Some(WalkField {
                 name: single_alt_group_field_name(&alts[0]),
                 action: build_struct_walk_action(&alts[0]),

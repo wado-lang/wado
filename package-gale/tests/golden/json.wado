@@ -333,16 +333,16 @@ fn try_string(chars: &Array<char>, start: i32) -> i32 {
                         if pos >= chars.len() || chars[pos] != 'u' { break alts_2_1; }
                         pos += 1;
                         if pos >= chars.len() { break alts_2_1; }
-                        if !(false || chars[pos] >= '0' && chars[pos] <= '9' || chars[pos] >= 'a' && chars[pos] <= 'f' || chars[pos] >= 'A' && chars[pos] <= 'F') { break alts_2_1; }
+                        if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_2_1; }
                         pos += 1;
                         if pos >= chars.len() { break alts_2_1; }
-                        if !(false || chars[pos] >= '0' && chars[pos] <= '9' || chars[pos] >= 'a' && chars[pos] <= 'f' || chars[pos] >= 'A' && chars[pos] <= 'F') { break alts_2_1; }
+                        if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_2_1; }
                         pos += 1;
                         if pos >= chars.len() { break alts_2_1; }
-                        if !(false || chars[pos] >= '0' && chars[pos] <= '9' || chars[pos] >= 'a' && chars[pos] <= 'f' || chars[pos] >= 'A' && chars[pos] <= 'F') { break alts_2_1; }
+                        if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_2_1; }
                         pos += 1;
                         if pos >= chars.len() { break alts_2_1; }
-                        if !(false || chars[pos] >= '0' && chars[pos] <= '9' || chars[pos] >= 'a' && chars[pos] <= 'f' || chars[pos] >= 'A' && chars[pos] <= 'F') { break alts_2_1; }
+                        if !(false || '0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_2_1; }
                         pos += 1;
                         alts_ok_2 = true;
                     }
@@ -354,7 +354,7 @@ fn try_string(chars: &Array<char>, start: i32) -> i32 {
                 alts_1_1: {
                     pos = alts_saved_1;
                     if pos >= chars.len() { break alts_1_1; }
-                    if false || chars[pos] == '"' || chars[pos] == '\\' || chars[pos] >= '\u{0}' && chars[pos] <= '\u{1f}' { break alts_1_1; }
+                    if false || chars[pos] == '"' || chars[pos] == '\\' || '\u{0}' <= chars[pos] <= '\u{1f}' { break alts_1_1; }
                     pos += 1;
                     alts_ok_1 = true;
                 }
@@ -392,13 +392,13 @@ fn try_number(chars: &Array<char>, start: i32) -> i32 {
         alts_4_1: {
             pos = alts_saved_4;
             if pos >= chars.len() { break alts_4_1; }
-            if !(false || chars[pos] >= '1' && chars[pos] <= '9') { break alts_4_1; }
+            if !(false || '1' <= chars[pos] <= '9') { break alts_4_1; }
             pos += 1;
             loop {
                 let rep_saved_5 = pos;
                 rep_5: {
                     if pos >= chars.len() { break rep_5; }
-                    if !(false || chars[pos] >= '0' && chars[pos] <= '9') { break rep_5; }
+                    if !(false || '0' <= chars[pos] <= '9') { break rep_5; }
                     pos += 1;
                     continue;
                 }
@@ -415,13 +415,13 @@ fn try_number(chars: &Array<char>, start: i32) -> i32 {
         if pos >= chars.len() || chars[pos] != '.' { break rep_6; }
         pos += 1;
         if pos >= chars.len() { break rep_6; }
-        if !(false || chars[pos] >= '0' && chars[pos] <= '9') { break rep_6; }
+        if !(false || '0' <= chars[pos] <= '9') { break rep_6; }
         pos += 1;
         loop {
             let rep_saved_7 = pos;
             rep_7: {
                 if pos >= chars.len() { break rep_7; }
-                if !(false || chars[pos] >= '0' && chars[pos] <= '9') { break rep_7; }
+                if !(false || '0' <= chars[pos] <= '9') { break rep_7; }
                 pos += 1;
                 continue;
             }
@@ -447,13 +447,13 @@ fn try_number(chars: &Array<char>, start: i32) -> i32 {
         }
         if !opt_ok_9 { pos = opt_saved_9; }
         if pos >= chars.len() { break rep_8; }
-        if !(false || chars[pos] >= '0' && chars[pos] <= '9') { break rep_8; }
+        if !(false || '0' <= chars[pos] <= '9') { break rep_8; }
         pos += 1;
         loop {
             let rep_saved_10 = pos;
             rep_10: {
                 if pos >= chars.len() { break rep_10; }
-                if !(false || chars[pos] >= '0' && chars[pos] <= '9') { break rep_10; }
+                if !(false || '0' <= chars[pos] <= '9') { break rep_10; }
                 pos += 1;
                 continue;
             }

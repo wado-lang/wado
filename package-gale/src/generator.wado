@@ -94,16 +94,16 @@ fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative,
 }
 
 fn repeat_inner_field(elem: &Element) -> Option<Field> {
-    if let Group(alts) = *elem {
-        if is_simple_cst_group(&alts) {
+    if let Group(alts) = elem {
+        if is_simple_cst_group(alts) {
             return Option::<Field>::Some(Field {
-                name: group_field_base_name(&alts),
-                type_str: group_variant_type_name(&alts),
+                name: group_field_base_name(alts),
+                type_str: group_variant_type_name(alts),
             });
         }
-        if is_token_only_group(&alts) {
+        if is_token_only_group(alts) {
             return Option::<Field>::Some(Field {
-                name: token_group_field_name(&alts),
+                name: token_group_field_name(alts),
                 type_str: "Token",
             });
         }
@@ -247,25 +247,25 @@ fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
 }
 
 fn element_to_field(elem: &Element) -> Option<Field> {
-    if let RuleRef(name) = *elem {
+    if let RuleRef(name) = elem {
         return Option::<Field>::Some(Field {
-            name: to_snake_case(&name),
-            type_str: rule_type_name(&name),
+            name: to_snake_case(name),
+            type_str: rule_type_name(name),
         });
     }
-    if let TokenRef(name) = *elem {
+    if let TokenRef(name) = elem {
         return Option::<Field>::Some(Field {
-            name: to_lower(&name),
+            name: to_lower(name),
             type_str: "Token",
         });
     }
-    if let Literal(text) = *elem {
+    if let Literal(text) = elem {
         return Option::<Field>::Some(Field {
-            name: literal_field_name(&text),
+            name: literal_field_name(text),
             type_str: "Token",
         });
     }
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         let inner_field = repeat_inner_field(&rep.element);
         if let Some(inner) = inner_field {
             let field = match rep.kind {
@@ -282,7 +282,7 @@ fn element_to_field(elem: &Element) -> Option<Field> {
         }
         return null;
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         if let Some(inner) = element_to_field(&lab.element) {
             return Option::<Field>::Some(Field {
                 name: to_snake_case(&lab.name),
@@ -291,20 +291,20 @@ fn element_to_field(elem: &Element) -> Option<Field> {
         }
         return null;
     }
-    if let Group(alts) = *elem {
-        if is_simple_cst_group(&alts) {
+    if let Group(alts) = elem {
+        if is_simple_cst_group(alts) {
             return Option::<Field>::Some(Field {
-                name: group_field_base_name(&alts),
-                type_str: `Option<{group_variant_type_name(&alts)}>`,
+                name: group_field_base_name(alts),
+                type_str: `Option<{group_variant_type_name(alts)}>`,
             });
         }
-        if is_token_only_group(&alts) {
+        if is_token_only_group(alts) {
             return Option::<Field>::Some(Field {
-                name: token_group_field_name(&alts),
+                name: token_group_field_name(alts),
                 type_str: "Token",
             });
         }
-        if is_single_alt_group(&alts) {
+        if is_single_alt_group(alts) {
             return Option::<Field>::Some(Field {
                 name: single_alt_group_field_name(&alts[0]),
                 type_str: `Option<{single_alt_group_type_name(&alts[0])}>`,

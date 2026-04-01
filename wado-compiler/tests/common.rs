@@ -147,6 +147,7 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
                 line,
                 column,
                 filename: fname,
+                is_todo_module: false,
             }
         } else {
             // All other errors
