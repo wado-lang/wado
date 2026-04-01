@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775000335983,
+  "lastUpdate": 1775001886159,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9266,6 +9266,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7175f70d93d36d6d187196de27db320e60b10ef0"
         },
         "date": 1775000335763,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5d289c2841c7cdbc2b7c6445547976b705ed1df2",
+          "message": "Merge pull request #745 from wado-lang/claude/fix-todo-e2e-tests-8j2AG\n\nValidate undefined types in all AST type annotations",
+          "timestamp": "2026-04-01T09:01:35+09:00",
+          "tree_id": "1f0df4171734169714d3454131bf955e3aa08391",
+          "url": "https://github.com/wado-lang/wado/commit/5d289c2841c7cdbc2b7c6445547976b705ed1df2"
+        },
+        "date": 1775001885941,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
