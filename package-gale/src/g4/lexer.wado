@@ -97,10 +97,10 @@ impl G4Lexer {
                 },
                 '\\' => {
                     if !self.at_end() {
-                        text.append_char(self.advance());
+                        text.push(self.advance());
                     }
                 },
-                _ => text.append_char(c),
+                _ => text.push(c),
             }
         }
     }
@@ -109,7 +109,7 @@ impl G4Lexer {
         let start = self.pos;
         self.pos += 1;
         let mut text = String::with_capacity(16);
-        text.append_char('[');
+        text.push('[');
         loop {
             if self.at_end() {
                 return make_token(G4Token::Error, "unterminated char class", start, self.pos);
@@ -117,16 +117,16 @@ impl G4Lexer {
             let c = self.advance();
             match c {
                 ']' => {
-                    text.append_char(']');
+                    text.push(']');
                     return make_token(G4Token::CharClass, text, start, self.pos);
                 },
                 '\\' => {
-                    text.append_char(c);
+                    text.push(c);
                     if !self.at_end() {
-                        text.append_char(self.advance());
+                        text.push(self.advance());
                     }
                 },
-                _ => text.append_char(c),
+                _ => text.push(c),
             }
         }
     }
@@ -137,7 +137,7 @@ impl G4Lexer {
         while !self.at_end() {
             let c = self.chars[self.pos];
             if is_ident_char(c) {
-                text.append_char(c);
+                text.push(c);
                 self.pos += 1;
             } else {
                 break;

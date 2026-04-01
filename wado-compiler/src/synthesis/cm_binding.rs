@@ -6307,14 +6307,14 @@ fn synthesize_stream_read_func(
         &lift_ctx,
     );
 
-    // Append to array - use Array::push method pattern
+    // Push to array - use Array::push method pattern
     // arr.push(elem) → internal call
     let elem_idx = next_local;
     next_local += 1;
     local_types.push(elem_type_id);
     loop_body_stmts.push(let_stmt("elem", elem_idx, elem_type_id, lifted_elem));
 
-    let append_call = TirExpr::new(
+    let push_call = TirExpr::new(
         TirExprKind::MethodCall {
             receiver: Box::new(local_ref(arr_idx, "arr", array_type_id)),
             func: FunctionRef {
@@ -6347,7 +6347,7 @@ fn synthesize_stream_read_func(
         TypeTable::UNIT,
         synth_span(),
     );
-    loop_body_stmts.push(expr_stmt(append_call));
+    loop_body_stmts.push(expr_stmt(push_call));
 
     // i += 1
     let increment = assign(

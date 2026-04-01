@@ -27,14 +27,14 @@ impl CodeWriter {
     pub fn write(&mut self, text: &String) {
         for let c of text.chars() {
             if c == '\n' {
-                self.buf.append_char('\n');
+                self.buf.push('\n');
                 self.fresh_line = true;
             } else {
                 if self.fresh_line {
                     self.write_indent();
                     self.fresh_line = false;
                 }
-                self.buf.append_char(c);
+                self.buf.push(c);
             }
         }
     }
@@ -43,13 +43,13 @@ impl CodeWriter {
     pub fn line(&mut self, text: &String) {
         self.write_indent();
         self.buf.push_str(text);
-        self.buf.append_char('\n');
+        self.buf.push('\n');
         self.fresh_line = true;
     }
 
     /// Emit a blank line.
     pub fn blank(&mut self) {
-        self.buf.append_char('\n');
+        self.buf.push('\n');
         self.fresh_line = true;
     }
 
@@ -74,9 +74,9 @@ impl CodeWriter {
     pub fn end_with(&mut self, suffix: &String) {
         self.indent_level -= 1;
         self.write_indent();
-        self.buf.append_char('}');
+        self.buf.push('}');
         self.buf.push_str(suffix);
-        self.buf.append_char('\n');
+        self.buf.push('\n');
         self.fresh_line = true;
     }
 

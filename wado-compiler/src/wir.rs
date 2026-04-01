@@ -954,11 +954,11 @@ pub enum WirAbstractHeapType {
 }
 
 /// Compiler feature flag: function implements `Array<T>::push`.
-pub const COMP_FEATURE_ARRAY_APPEND: u32 = 1 << 0;
+pub const COMP_FEATURE_ARRAY_PUSH: u32 = 1 << 0;
 /// Compiler feature flag: function implements `String::push_str`.
-pub const COMP_FEATURE_STRING_APPEND: u32 = 1 << 1;
+pub const COMP_FEATURE_STRING_PUSH_STR: u32 = 1 << 1;
 /// Compiler feature flag: function implements `String::push_char`.
-pub const COMP_FEATURE_STRING_APPEND_CHAR: u32 = 1 << 2;
+pub const COMP_FEATURE_STRING_PUSH_CHAR: u32 = 1 << 2;
 /// Compiler feature flag: variant is the canonical `Option<T>` type.
 pub const COMP_FEATURE_OPTION: u32 = 1 << 3;
 /// Compiler feature flag: variant is the canonical `Result<T, E>` type.
@@ -990,8 +990,8 @@ pub struct WirFunction {
     /// Parameter names declared in `stores[...]` — the function may store these references.
     /// Used by WIR optimizations for stores-aware alias analysis.
     pub stores: Vec<String>,
-    /// Compiler feature bitflags (e.g., `COMP_FEATURE_ARRAY_APPEND`).
-    /// Set via `#[comp_feature("array_append")]` attribute in Wado source.
+    /// Compiler feature bitflags (e.g., `COMP_FEATURE_ARRAY_PUSH`).
+    /// Set via `#[comp_feature("array_push")]` attribute in Wado source.
     pub comp_features: u32,
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,

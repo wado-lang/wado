@@ -8,10 +8,10 @@ pub fn to_pascal_case(name: &String) -> String {
         if c == '_' {
             capitalize_next = true;
         } else if capitalize_next {
-            result.append_char(c.to_ascii_uppercase());
+            result.push(c.to_ascii_uppercase());
             capitalize_next = false;
         } else {
-            result.append_char(c);
+            result.push(c);
         }
     }
     return result;
@@ -23,12 +23,12 @@ pub fn to_snake_case(name: &String) -> String {
     for let c of name.chars() {
         if c.is_ascii_uppercase() {
             if prev_lower {
-                result.append_char('_');
+                result.push('_');
             }
-            result.append_char(c.to_ascii_lowercase());
+            result.push(c.to_ascii_lowercase());
             prev_lower = false;
         } else {
-            result.append_char(c);
+            result.push(c);
             prev_lower = c.is_ascii_lowercase();
         }
     }
@@ -55,7 +55,7 @@ fn append_escaped_body(result: &mut String, c: char) {
     } else {
         let code = c as i32;
         if code >= 32 && code < 127 {
-            result.append_char(c);
+            result.push(c);
         } else {
             result.push_str(`\\u\{{code:x}\}`);
         }
@@ -67,15 +67,15 @@ pub fn escape_char(c: char) -> String {
         return "'\\''";
     }
     let mut s = String::with_capacity(6);
-    s.append_char('\'');
+    s.push('\'');
     append_escaped_body(&mut s, c);
-    s.append_char('\'');
+    s.push('\'');
     return s;
 }
 
 pub fn escape_string(s: &String) -> String {
     let mut result = String::with_capacity(s.len() + 2);
-    result.append_char('"');
+    result.push('"');
     for let c of s.chars() {
         if c == '"' {
             result.push_str("\\\"");
@@ -83,7 +83,7 @@ pub fn escape_string(s: &String) -> String {
             append_escaped_body(&mut result, c);
         }
     }
-    result.append_char('"');
+    result.push('"');
     return result;
 }
 
@@ -133,9 +133,9 @@ pub fn literal_field_name(text: &String) -> String {
     result.push_str("lit_");
     for let c of chars {
         if 'a' <= c <= 'z' || 'A' <= c <= 'Z' || '0' <= c <= '9' {
-            result.append_char(c.to_ascii_lowercase());
+            result.push(c.to_ascii_lowercase());
         } else {
-            result.append_char('_');
+            result.push('_');
         }
     }
     return result;
@@ -156,7 +156,7 @@ pub fn strip_suffix(s: &String, suffix: &String) -> String {
     }
     let mut result = String::with_capacity(s.len());
     for let mut i = 0; i < s_len - suf_len; i += 1 {
-        result.append_char(s_chars[i]);
+        result.push(s_chars[i]);
     }
     return result;
 }
@@ -282,13 +282,13 @@ pub fn literal_const_name(text: &String) -> String {
     result.push_str("TK_LIT_");
     for let c of text.chars() {
         if c.is_ascii_lowercase() {
-            result.append_char(c.to_ascii_uppercase());
+            result.push(c.to_ascii_uppercase());
         } else if c.is_ascii_uppercase() || '0' <= c <= '9' {
-            result.append_char(c);
+            result.push(c);
         } else if let Some(names) = symbol_char_names(c) {
             result.push_str(&names.1);
         } else {
-            result.append_char('_');
+            result.push('_');
         }
     }
     return result;

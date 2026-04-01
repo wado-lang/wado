@@ -418,7 +418,7 @@ fn build_template_block(
                     string_type,
                     span,
                 );
-                let append_call = TirExpr::new(
+                let push_str_call = TirExpr::new(
                     TirExprKind::MethodCall {
                         receiver: Box::new(buf_ref),
                         func: FunctionRef {
@@ -441,7 +441,7 @@ fn build_template_block(
                     TypeTable::UNIT,
                     span,
                 );
-                stmts.push(TirStmt::new(TirStmtKind::Expr(append_call), span));
+                stmts.push(TirStmt::new(TirStmtKind::Expr(push_str_call), span));
             }
             TirTemplatePart::Interpolation {
                 expr: resolved,
@@ -462,7 +462,7 @@ fn build_template_block(
                     );
                     // Deref if needed (&String → String)
                     let derefed = deref_to_inner(*resolved, string_type, span);
-                    let append_call = TirExpr::new(
+                    let push_str_call = TirExpr::new(
                         TirExprKind::MethodCall {
                             receiver: Box::new(buf_ref),
                             func: FunctionRef {
@@ -482,7 +482,7 @@ fn build_template_block(
                         TypeTable::UNIT,
                         span,
                     );
-                    stmts.push(TirStmt::new(TirStmtKind::Expr(append_call), span));
+                    stmts.push(TirStmt::new(TirStmtKind::Expr(push_str_call), span));
                     continue;
                 }
 

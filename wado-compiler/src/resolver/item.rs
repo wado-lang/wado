@@ -18,10 +18,10 @@ pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
         if attr.name == "comp_feature" {
             for arg in &attr.args {
                 match arg.as_str() {
-                    "array_append" => features |= crate::wir::COMP_FEATURE_ARRAY_APPEND,
-                    "string_append" => features |= crate::wir::COMP_FEATURE_STRING_APPEND,
-                    "string_append_char" => {
-                        features |= crate::wir::COMP_FEATURE_STRING_APPEND_CHAR;
+                    "array_push" => features |= crate::wir::COMP_FEATURE_ARRAY_PUSH,
+                    "string_push_str" => features |= crate::wir::COMP_FEATURE_STRING_PUSH_STR,
+                    "string_push_char" => {
+                        features |= crate::wir::COMP_FEATURE_STRING_PUSH_CHAR;
                     }
                     "option" => features |= crate::wir::COMP_FEATURE_OPTION,
                     "result" => features |= crate::wir::COMP_FEATURE_RESULT,

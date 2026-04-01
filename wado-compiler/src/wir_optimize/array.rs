@@ -2,11 +2,11 @@
 //!
 //! - **Constant array data promotion**: `ArrayNewFixed` of constants → `ArrayNewData`.
 //! - **Large array literal splitting**: `array.new_fixed` (>= threshold) → `array.new_default` + sets.
-//! - **Array append collapse**: inlined `Array::push` sequences → `ArrayNewFixed`.
+//! - **Array push collapse**: inlined `Array::push` sequences → `ArrayNewFixed`.
 
 use crate::hashmap::IndexSet;
 use crate::wir::{
-    COMP_FEATURE_ARRAY_APPEND, WirData, WirInstr, WirModule, WirType, WirTypeDef, WirTypeId,
+    COMP_FEATURE_ARRAY_PUSH, WirData, WirInstr, WirModule, WirType, WirTypeDef, WirTypeId,
 };
 use crate::wir_visitor::WirMutVisitor;
 
@@ -272,17 +272,17 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
 /// This pass recognizes that pattern and rewrites it to use `ArrayNewFixed`
 /// (replacing `ArrayNewDefault` and removing the push calls), which is then
 /// eligible for `promote_constant_arrays_to_data` and `split_large_array_literals`.
-pub(super) fn collapse_array_append_sequences(module: &mut WirModule) {
-    // Build set of function indices that have COMP_FEATURE_ARRAY_APPEND.
-    let append_func_indices: IndexSet<u32> = module
+pub(super) fn collapse_array_push_sequences(module: &mut WirModule) {
+    // Build set of function indices that have COMP_FEATURE_ARRAY_PUSH.
+    let push_func_indices: IndexSet<u32> = module
         .functions
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.comp_features & COMP_FEATURE_ARRAY_APPEND != 0)
+        .filter(|(_, f)| f.comp_features & COMP_FEATURE_ARRAY_PUSH != 0)
         .map(|(i, _)| crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap())
         .collect();
 
-    if append_func_indices.is_empty() {
+    if push_func_indices.is_empty() {
         return;
     }
 
@@ -306,8 +306,8 @@ pub(super) fn collapse_array_append_sequences(module: &mut WirModule) {
 
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
-            let mut visitor = CollapseAppends {
-                append_func_indices: &append_func_indices,
+            let mut visitor = CollapsePushes {
+                push_func_indices: &push_func_indices,
                 array_struct_types: &array_struct_types,
             };
             visitor.visit_body(body);
@@ -330,7 +330,7 @@ struct ArrayInitInfo {
     local_name: String,
     /// WIR type ID of the raw Wasm array type (e.g., `builtin::array<i32>`).
     raw_array_type_id: WirTypeId,
-    /// Expected number of appends (from `ArrayNewDefault` capacity).
+    /// Expected number of pushes (from `ArrayNewDefault` capacity).
     capacity: usize,
     /// How to access the Array<T> from the local.
     access_path: ArrayAccessPath,
@@ -339,12 +339,12 @@ struct ArrayInitInfo {
     used_field_index: usize,
 }
 
-struct CollapseAppends<'a> {
-    append_func_indices: &'a IndexSet<u32>,
+struct CollapsePushes<'a> {
+    push_func_indices: &'a IndexSet<u32>,
     array_struct_types: &'a IndexSet<u32>,
 }
 
-impl WirMutVisitor for CollapseAppends<'_> {
+impl WirMutVisitor for CollapsePushes<'_> {
     fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
         // First recurse into all children.
         self.walk_body(body);
@@ -358,11 +358,11 @@ impl WirMutVisitor for CollapseAppends<'_> {
                 // Each push may be a single instruction (Block wrapping LocalSet+Call)
                 // or multiple flat instructions (LocalSet* + Call) from block flattening.
                 if n > 0
-                    && let Some((values, consumed)) = try_match_append_sequence(
+                    && let Some((values, consumed)) = try_match_push_sequence(
                         &body[i + 1..],
                         n,
                         &init_info,
-                        self.append_func_indices,
+                        self.push_func_indices,
                     )
                 {
                     // Rewrite: replace ArrayNewDefault with ArrayNewFixed in the init.
@@ -493,11 +493,11 @@ fn try_extract_array_new_default(
 ///
 /// Returns the extracted element values and the total number of instructions consumed,
 /// or `None` if the pattern doesn't match.
-fn try_match_append_sequence(
+fn try_match_push_sequence(
     instrs: &[WirInstr],
     expected_count: usize,
     init_info: &ArrayInitInfo,
-    append_func_indices: &IndexSet<u32>,
+    push_func_indices: &IndexSet<u32>,
 ) -> Option<(Vec<WirInstr>, usize)> {
     let mut values = Vec::with_capacity(expected_count);
     let mut consumed = 0;
@@ -508,7 +508,7 @@ fn try_match_append_sequence(
         // Try pattern 1: Block wrapping LocalSet* + Call (from inlined labeled blocks)
         let (call, aliases, value_bindings) = extract_call_from_block(instr);
         if let WirInstr::Call { func_id, args } = call
-            && append_func_indices.contains(&func_id.index())
+            && push_func_indices.contains(&func_id.index())
             && args.len() == 2
             && receiver_matches_with_aliases(&args[0], init_info, &aliases)
         {
@@ -540,7 +540,7 @@ fn try_match_append_sequence(
         if j > consumed
             && j < instrs.len()
             && let WirInstr::Call { func_id, args } = &instrs[j]
-            && append_func_indices.contains(&func_id.index())
+            && push_func_indices.contains(&func_id.index())
             && args.len() == 2
             && receiver_matches_with_aliases(&args[0], init_info, &flat_aliases)
         {

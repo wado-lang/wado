@@ -133,7 +133,7 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
     f3.emit_begin(w);
     w.line("let mut s = String::with_capacity(end - start);");
     w.begin("for let mut i = start; i < end; i += 1");
-    w.line("s.append_char(self.chars[i]);");
+    w.line("s.push(self.chars[i]);");
     w.end();
     w.line("return s;");
     w.end();
@@ -368,7 +368,7 @@ fn lit_try_fn_name(const_name: &String) -> String {
     result.push_str("try_lit_");
     let chars: Array<char> = const_name.chars().collect();
     for let mut i = 7; i < chars.len(); i += 1 {
-        result.append_char(chars[i].to_ascii_lowercase());
+        result.push(chars[i].to_ascii_lowercase());
     }
     return result;
 }
