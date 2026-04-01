@@ -197,64 +197,52 @@ fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &Array<Lexer
 }
 
 fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &Array<LexerRule>, fail_action: &String) {
-    if let Literal(text) = *elem {
-        let chars: Array<char> = text.chars().collect();
-        for let mut i = 0; i < chars.len(); i += 1 {
-            w.line(`if pos >= chars.len() || chars[pos] != {escape_char(chars[i])} \{ {fail_action}; \}`);
-            w.line("pos += 1;");
-        }
-        return;
-    }
-    if let CharRange(pair) = *elem {
-        w.line(
-            `if pos >= chars.len() || chars[pos] < {escape_char(pair.0)} || chars[pos] > {escape_char(pair.1)} \{ {fail_action}; \}`,
-        );
-        w.line("pos += 1;");
-        return;
-    }
-    if let CharClass(cc) = *elem {
-        gen_char_class(w, &cc, fail_action);
-        return;
-    }
-    if let AnyChar = *elem {
-        w.line(`if pos >= chars.len() \{ {fail_action}; \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let RuleRef(name) = *elem {
-        if name == "EOF" {
-            w.line(`if pos < chars.len() \{ {fail_action}; \}`);
-            return;
-        }
-        let frag = find_fragment(all_rules, &name);
-        if let Some(f) = frag {
-            if f.body.len() == 1 {
-                gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action);
-            } else {
-                gen_lexer_alts(w, &f.body, all_rules, fail_action);
+    match *elem {
+        Literal(text) => {
+            let chars: Array<char> = text.chars().collect();
+            for let mut i = 0; i < chars.len(); i += 1 {
+                w.line(`if pos >= chars.len() || chars[pos] != {escape_char(chars[i])} \{ {fail_action}; \}`);
+                w.line("pos += 1;");
             }
-        } else {
-            let fn_name = `try_{to_lower(&name)}`;
-            w.line(`pos = {fn_name}(chars, pos);`);
-            w.line(`if pos < 0 \{ {fail_action}; \}`);
-        }
-        return;
-    }
-    if let Group(alts) = *elem {
-        if alts.len() == 1 {
-            gen_lexer_alt_seq(w, &alts[0], all_rules, fail_action);
-        } else {
-            gen_lexer_alts(w, &alts, all_rules, fail_action);
-        }
-        return;
-    }
-    if let Repeat(rep) = *elem {
-        gen_lexer_repeat(w, &rep, all_rules, fail_action);
-        return;
-    }
-    if let Not(not_elem) = *elem {
-        gen_lexer_not(w, &not_elem, all_rules, fail_action);
-        return;
+        },
+        CharRange(pair) => {
+            w.line(
+                `if pos >= chars.len() || chars[pos] < {escape_char(pair.0)} || chars[pos] > {escape_char(pair.1)} \{ {fail_action}; \}`,
+            );
+            w.line("pos += 1;");
+        },
+        CharClass(cc) => gen_char_class(w, &cc, fail_action),
+        AnyChar => {
+            w.line(`if pos >= chars.len() \{ {fail_action}; \}`);
+            w.line("pos += 1;");
+        },
+        RuleRef(name) => {
+            if name == "EOF" {
+                w.line(`if pos < chars.len() \{ {fail_action}; \}`);
+            } else {
+                let frag = find_fragment(all_rules, &name);
+                if let Some(f) = frag {
+                    if f.body.len() == 1 {
+                        gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action);
+                    } else {
+                        gen_lexer_alts(w, &f.body, all_rules, fail_action);
+                    }
+                } else {
+                    let fn_name = `try_{to_lower(&name)}`;
+                    w.line(`pos = {fn_name}(chars, pos);`);
+                    w.line(`if pos < 0 \{ {fail_action}; \}`);
+                }
+            }
+        },
+        Group(alts) => {
+            if alts.len() == 1 {
+                gen_lexer_alt_seq(w, &alts[0], all_rules, fail_action);
+            } else {
+                gen_lexer_alts(w, &alts, all_rules, fail_action);
+            }
+        },
+        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action),
+        Not(not_elem) => gen_lexer_not(w, &not_elem, all_rules, fail_action),
     }
 }
 
