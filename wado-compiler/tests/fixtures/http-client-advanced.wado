@@ -1,0 +1,115 @@
+// Advanced HTTP client test with custom headers, multiple sequential requests,
+// and response header reading.
+//
+// Tests:
+// - Outgoing request with custom headers (Fields.append on outgoing)
+// - Multiple sequential Client::send calls from single handler
+// - Reading upstream response headers (Response.get_headers)
+// - Reading upstream response status code (Response.get_status_code)
+// - Constructing aggregated response from multiple upstream responses
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Scheme, Trailers } from "wasi:http";
+use { Client } from "wasi:http/client.wado";
+
+fn send_request(path: String) -> Response {
+    let headers = Fields::new();
+    let _ = headers.append("x-request-id" as FieldName, "req-123".as_bytes() as FieldValue);
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [out_req, _req_future] = Request::new(headers, null, trailers_future, null);
+
+    out_req.set_scheme(Option::<Scheme>::Some(Scheme::Http));
+    out_req.set_authority(Option::<String>::Some("localhost"));
+    out_req.set_path_with_query(Option::<String>::Some(path));
+
+    let result = Client::send(out_req);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    return match result {
+        Ok(r) => r,
+        Err(_) => panic("request failed"),
+    };
+}
+
+fn read_body(resp: Response) -> String {
+    let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [body_stream, _trailers] = Response::consume_body(resp, res_future);
+
+    let mut result = "";
+    loop {
+        let chunk = body_stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        let text = match String::from_utf8(chunk) {
+            Ok(s) => s,
+            Err(_) => panic("invalid utf-8"),
+        };
+        result = result + text;
+    }
+    body_stream.drop();
+    return result;
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // First request: GET /api/a with custom headers
+    let resp1 = send_request("/api/a");
+    let status1 = resp1.get_status_code();
+    assert status1 == 200;
+
+    // Read response headers from first request
+    let resp1_headers = resp1.get_headers();
+    assert resp1_headers.has("x-upstream" as FieldName);
+    let upstream_vals = resp1_headers.get("x-upstream" as FieldName);
+    assert upstream_vals.len() > 0;
+
+    let body1 = read_body(resp1);
+
+    // Second request: GET /api/b
+    let resp2 = send_request("/api/b");
+    let status2 = resp2.get_status_code();
+    assert status2 == 201;
+    let body2 = read_body(resp2);
+
+    // Third request: GET /api/c
+    let resp3 = send_request("/api/c");
+    assert resp3.get_status_code() == 200;
+    let body3 = read_body(resp3);
+
+    // Build aggregated response from all three
+    let combined = body1 + "," + body2 + "," + body3;
+
+    let [resp_trailers_future, resp_trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [resp_rx, resp_tx] = Stream::<u8>::new();
+    let resp_headers = Fields::new();
+    let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(resp_rx), resp_trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    resp_tx.write(combined.as_bytes());
+    resp_tx.drop();
+    resp_trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body": "alpha,beta,gamma"
+    },
+    "outgoing_mocks": {
+        "/api/a": {
+            "status": 200,
+            "body": "alpha",
+            "headers": [["x-upstream", "true"]]
+        },
+        "/api/b": {
+            "status": 201,
+            "body": "beta"
+        },
+        "/api/c": {
+            "status": 200,
+            "body": "gamma"
+        }
+    }
+}
