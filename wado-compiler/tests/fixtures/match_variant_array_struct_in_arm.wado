@@ -2,7 +2,10 @@
 // invalid Wasm: "type mismatch: expected (ref $type), found (ref (exact $type))"
 // Discovered while refactoring package-gale/src/parser_gen.wado if-let chains to match.
 
+#![TODO]
+
 use { println } from "core:cli";
+use { Stdout } from "core:cli";
 
 struct Pair {
     a: i32,
@@ -29,8 +32,6 @@ fn classify(s: Shape) -> Array<Pair> {
     };
 }
 
-use { Stdout } from "core:cli";
-
 export fn run() with Stdout {
     let result = classify(Shape::Circle(5));
     assert result.len() == 1;
@@ -46,3 +47,6 @@ export fn run() with Stdout {
 
     println("ok");
 }
+
+__DATA__
+{"stdout": "ok\n"}

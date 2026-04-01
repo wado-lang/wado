@@ -115,6 +115,7 @@ fn main()
             line,
             column,
             filename,
+            ..
         } => {
             assert!(
                 message.contains("expected") || message.contains("{"),
@@ -146,6 +147,7 @@ fn main() {
             line,
             column,
             filename,
+            ..
         } => {
             assert!(
                 message.contains("expected") || message.contains("identifier"),
@@ -178,6 +180,7 @@ fn main() {
             line,
             column,
             filename,
+            ..
         } => {
             assert!(
                 message.contains("expected") || message.contains(";"),
@@ -207,6 +210,7 @@ use;
             line,
             column,
             filename,
+            ..
         } => {
             assert!(
                 message.contains("expected") || message.contains("identifier"),
@@ -300,6 +304,7 @@ fn run() {
             line,
             column,
             filename,
+            ..
         } => {
             assert!(
                 message.contains("!= operator cannot be chained"),
@@ -331,6 +336,7 @@ fn run() {
             line,
             column,
             filename,
+            ..
         } => {
             assert!(
                 message.contains("cannot mix ascending") || message.contains("descending"),
@@ -362,6 +368,7 @@ fn run() {
             line,
             column,
             filename,
+            ..
         } => {
             assert!(
                 message.contains("cannot mix ascending") || message.contains("descending"),
@@ -393,6 +400,7 @@ fn run() {
             line,
             column,
             filename,
+            ..
         } => {
             assert!(
                 message.contains("cannot mix ==") || message.contains("inequality"),
@@ -424,6 +432,7 @@ fn run() {
             line,
             column,
             filename,
+            ..
         } => {
             assert!(
                 message.contains("cannot mix ==") || message.contains("inequality"),
@@ -455,6 +464,7 @@ fn run() {
             line,
             column,
             filename,
+            ..
         } => {
             assert!(
                 message.contains("!= operator cannot be chained"),
@@ -475,6 +485,7 @@ fn test_error_display_with_filename() {
         line: 10,
         column: 5,
         filename: Some("test.wado".to_string()),
+        is_todo_module: false,
     };
 
     let display = format!("{err}");

@@ -725,6 +725,7 @@ pub fn format(source: &str) -> Result<String, CompileError> {
         line: e.span.line,
         column: e.span.column,
         filename: None,
+        is_todo_module: parser.has_todo(),
     })?;
 
     // Unparse (no lowering - preserve high-level constructs)
@@ -756,6 +757,7 @@ pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
         line: e.span.line,
         column: e.span.column,
         filename: None,
+        is_todo_module: parser.has_todo(),
     })?;
     Ok(ParseResult {
         ast,
@@ -781,6 +783,8 @@ pub enum CompileError {
         line: usize,
         column: usize,
         filename: Option<String>,
+        /// True if the module had `#![TODO]` before the parse error occurred.
+        is_todo_module: bool,
     },
     /// Binding error (local name resolution)
     Bind {
@@ -794,6 +798,13 @@ pub enum CompileError {
         column: usize,
         filename: Option<String>,
     },
+}
+
+impl CompileError {
+    /// Returns true if the error occurred in a `#![TODO]` module.
+    pub fn is_todo_module(&self) -> bool {
+        matches!(self, CompileError::Parser { is_todo_module: true, .. })
+    }
 }
 
 impl std::fmt::Display for CompileError {
@@ -819,6 +830,7 @@ impl std::fmt::Display for CompileError {
                 line,
                 column,
                 filename,
+                ..
             } => {
                 if let Some(file) = filename {
                     write!(f, "{file}:{line}:{column}: parse error: {message}")

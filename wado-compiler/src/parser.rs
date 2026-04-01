@@ -35,6 +35,9 @@ pub struct Parser {
     data_section: Option<String>,
     /// Paths referenced by `#include_str` / `#include_bytes`, collected as they are parsed.
     include_paths: crate::hashmap::IndexSet<String>,
+    /// Inner attributes parsed before items. Retained even if parsing fails later,
+    /// so callers can check `has_todo()` after a parse error.
+    parsed_inner_attributes: Vec<InnerAttribute>,
 }
 
 #[derive(Debug)]
@@ -80,6 +83,7 @@ impl Parser {
             shebang: None,
             data_section: None,
             include_paths: crate::hashmap::IndexSet::default(),
+            parsed_inner_attributes: Vec::new(),
         }
     }
 
@@ -97,7 +101,14 @@ impl Parser {
             shebang,
             data_section,
             include_paths: crate::hashmap::IndexSet::default(),
+            parsed_inner_attributes: Vec::new(),
         }
+    }
+
+    /// Returns true if the parsed inner attributes include `#![TODO]`.
+    /// Valid even after a parse error, since inner attributes are parsed first.
+    pub fn has_todo(&self) -> bool {
+        self.parsed_inner_attributes.iter().any(|a| a.name == "TODO")
     }
 
     /// Parse an expression with struct literals restricted. Used in contexts
@@ -141,8 +152,10 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> ParseResult<Module> {
-        // Parse inner attributes at the start of the module
+        // Parse inner attributes at the start of the module.
+        // Store them so has_todo() works even if item parsing fails later.
         let inner_attributes = self.parse_inner_attributes()?;
+        self.parsed_inner_attributes = inner_attributes.clone();
 
         let mut items = Vec::new();
 

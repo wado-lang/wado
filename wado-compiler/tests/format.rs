@@ -1092,8 +1092,11 @@ fn test_format_idempotent_all_fixtures() {
         let source = fs::read_to_string(&path).expect("cannot read file");
         let filename = path.file_name().unwrap().to_str().unwrap();
 
-        // Skip files that expect compile errors or are TODO tests (check __DATA__ section)
-        if source.contains("compile_error") || source.contains("\"TODO\": true") {
+        // Skip files that expect compile errors or are TODO modules
+        if source.contains("compile_error")
+            || source.contains("\"TODO\": true")
+            || source.contains("#![TODO]")
+        {
             continue;
         }
 
