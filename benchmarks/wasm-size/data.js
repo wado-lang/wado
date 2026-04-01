@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775001886159,
+  "lastUpdate": 1775035202178,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9305,6 +9305,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5d289c2841c7cdbc2b7c6445547976b705ed1df2"
         },
         "date": 1775001885941,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7964085ca2420484da447d2365caa564434f619c",
+          "message": "Merge pull request #747 from wado-lang/claude/expand-wasi-http-tests-6qLB2\n\nExpand wasi:http e2e test coverage",
+          "timestamp": "2026-04-01T18:16:55+09:00",
+          "tree_id": "69ec12036791a3f9b37964928de2c62193708088",
+          "url": "https://github.com/wado-lang/wado/commit/7964085ca2420484da447d2365caa564434f619c"
+        },
+        "date": 1775035201974,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
