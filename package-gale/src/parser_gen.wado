@@ -807,13 +807,9 @@ fn first_of_elements(elements: &Array<Element>, ctx: &mut GenContext, visiting: 
 }
 
 fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
-    if let Leaf(ai) = *a {
-        if let Leaf(bi) = *b {
-            return ai == bi;
-        }
-    }
-    if let Backtrack(aa) = *a {
-        if let Backtrack(ba) = *b {
+    return match [*a, *b] {
+        [Leaf(ai), Leaf(bi)] => ai == bi,
+        [Backtrack(aa), Backtrack(ba)] => {
             if aa.len() != ba.len() {
                 return false;
             }
@@ -822,30 +818,20 @@ fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
                     return false;
                 }
             }
-            return true;
-        }
-    }
-    // Consume nodes: check same element kind and recurse on child.
-    if let Consume(ca) = *a {
-        if let Consume(cb) = *b {
-            return element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child);
-        }
-    }
-    return false;
+            true
+        },
+        // Consume nodes: check same element kind and recurse on child.
+        [Consume(ca), Consume(cb)] => element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child),
+        _ => false,
+    };
 }
 
 fn element_eq(a: &Element, b: &Element) -> bool {
-    if let TokenRef(na) = *a {
-        if let TokenRef(nb) = *b {
-            return na == nb;
-        }
-    }
-    if let Literal(ta) = *a {
-        if let Literal(tb) = *b {
-            return ta == tb;
-        }
-    }
-    return false;
+    return match [*a, *b] {
+        [TokenRef(na), TokenRef(nb)] => na == nb,
+        [Literal(ta), Literal(tb)] => ta == tb,
+        _ => false,
+    };
 }
 
 fn compute_deeper_first(elements: &Array<Element>, depth: i32, ctx: &mut GenContext) -> Array<String> {
