@@ -173,10 +173,10 @@ impl GenContext {
                     if non_nullable_count > 1 {
                         break;
                     }
-                    if let TokenRef(_) | Literal(_) = *elem {
+                    if let TokenRef(_) | Literal(_) = elem {
                         single_ok = true;
-                    } else if let RuleRef(r) = *elem {
-                        single_ok = self.rule_is_single_token(&r, visiting);
+                    } else if let RuleRef(r) = elem {
+                        single_ok = self.rule_is_single_token(r, visiting);
                     }
                 }
                 if non_nullable_count != 1 || !single_ok {
@@ -198,7 +198,7 @@ impl GenContext {
 }
 
 pub fn is_nullable(elem: &Element) -> bool {
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         if let Star | Optional = rep.kind {
             return true;
         }
@@ -222,7 +222,7 @@ pub fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
             return false;
         }
         let elem = &alt.elements[0];
-        if let TokenRef(_) | Literal(_) = *elem {
+        if let TokenRef(_) | Literal(_) = elem {
             continue;
         }
         return false;
