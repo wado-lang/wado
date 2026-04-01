@@ -1,0 +1,130 @@
+// Comprehensive outgoing request construction via Client::send.
+//
+// Tests:
+// - Request.new with options=Some(RequestOptions)
+// TODO: Request.new with contents=Some(Stream<u8>) — times out at O0/O2
+// - Request.set_method → Ok
+// - Request.get_options → Some (immutable RequestOptions)
+// - RequestOptionsError::Immutable from set on immutable options
+// - Request.get_path_with_query → None (default before setting)
+// - Request.get_scheme → None (default before setting)
+// - Request.get_authority → None (default before setting)
+// - Request.set_path_with_query → Ok
+// - Request.set_scheme → Ok
+// - Request.set_authority → Ok
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Method, Scheme, RequestOptions, Trailers } from "wasi:http";
+use { Client } from "wasi:http/client.wado";
+use { Duration } from "wasi:clocks";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Create RequestOptions with a timeout
+    let opts = RequestOptions::new();
+    let _ = opts.set_connect_timeout(Option::<Duration>::Some(5000000000));
+
+    // Create outgoing request with options (no body stream for now)
+    let req_headers = Fields::new();
+    let _ = req_headers.append("content-type" as FieldName, "text/plain".as_bytes() as FieldValue);
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [out_req, _req_future] = Request::new(
+        req_headers,
+        null,
+        trailers_future,
+        Option::<RequestOptions>::Some(opts),
+    );
+
+    // Test defaults before setting: all should be None
+    assert out_req.get_path_with_query() matches { None };
+    assert out_req.get_scheme() matches { None };
+    assert out_req.get_authority() matches { None };
+
+    // Test set_method → Ok
+    let method_result = out_req.set_method(Method::Post);
+    assert method_result matches { Ok(_) };
+    let m = out_req.get_method();
+    assert m matches { Post };
+
+    // Test get_options → Some(immutable RequestOptions)
+    let req_opts = out_req.get_options();
+    if let Some(ro) = req_opts {
+        // The returned options should have our timeout
+        let ct = ro.get_connect_timeout();
+        if let Some(d) = ct {
+            assert d == 5000000000;
+        } else {
+            panic("options should have connect timeout");
+        }
+        // Try to set on immutable options → Err(Immutable)
+        let set_result = ro.set_connect_timeout(Option::<Duration>::Some(1000000000));
+        assert set_result matches { Err(_) };
+        if let Err(e) = set_result {
+            assert e matches { Immutable };
+        }
+    } else {
+        panic("get_options should return Some");
+    }
+
+    // Set path, scheme, authority → Ok
+    let path_result = out_req.set_path_with_query(Option::<String>::Some("/upstream"));
+    assert path_result matches { Ok(_) };
+    let scheme_result = out_req.set_scheme(Option::<Scheme>::Some(Scheme::Http));
+    assert scheme_result matches { Ok(_) };
+    let auth_result = out_req.set_authority(Option::<String>::Some("localhost"));
+    assert auth_result matches { Ok(_) };
+
+    // Verify they are now Some
+    if let Some(p) = out_req.get_path_with_query() {
+        assert p == "/upstream";
+    } else {
+        panic("path should be Some after set");
+    }
+
+    // Send
+    let result = Client::send(out_req);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    let upstream = match result {
+        Ok(r) => r,
+        Err(_) => panic("send failed"),
+    };
+
+    // Read upstream response body
+    let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [body_stream, _upstream_trailers] = Response::consume_body(upstream, res_future);
+    let mut body = "";
+    loop {
+        let chunk = body_stream.read(4096);
+        if chunk.len() == 0 { break; }
+        let text = match String::from_utf8(chunk) {
+            Ok(s) => s,
+            Err(_) => panic("invalid utf-8"),
+        };
+        body = body + text;
+    }
+    body_stream.drop();
+
+    // Build response
+    let [resp_trailers_future, resp_trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [resp_rx, resp_tx] = Stream::<u8>::new();
+    let resp_headers = Fields::new();
+    let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(resp_rx), resp_trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+    resp_tx.write(body.as_bytes());
+    resp_tx.drop();
+    resp_trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body": "upstream ok"
+    },
+    "outgoing_mocks": {
+        "/upstream": {
+            "status": 200,
+            "body": "upstream ok"
+        }
+    }
+}

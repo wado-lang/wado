@@ -12,7 +12,7 @@ Criteria: a method is checked only when (1) the method is called in an e2e fixtu
 
 ### Client
 
-- [ ] `async fn send(request: Request) -> Result<Response, ErrorCode>` — Ok: `http-client-send-*.wado`, Err: not tested
+- [ ] `async fn send(request: Request) -> Result<Response, ErrorCode>` — Ok: `http-client-send-*.wado`, Err: not testable (mock system traps instead of returning ErrorCode)
 
 ## Resources
 
@@ -22,44 +22,44 @@ Criteria: a method is checked only when (1) the method is called in an e2e fixtu
 - [ ] `fn from_list(entries) -> Result<Fields, HeaderError>` — Ok: `http-fields-from-list`, Err: not tested
 - [x] `fn get(name) -> Array<FieldValue>` — existing and non-existing names tested
 - [x] `fn has(name) -> bool` — true and false tested
-- [ ] `fn set(name, value) -> Result<(), HeaderError>` — Ok: `http-fields-set`, Err: not tested
-- [ ] `fn delete(name) -> Result<(), HeaderError>` — Ok: `http-fields`, Err: not tested
-- [ ] `fn get_and_delete(name) -> Result<Array<FieldValue>, HeaderError>` — Ok: `http-fields-get-and-delete`, Err: not tested
-- [ ] `fn append(name, value) -> Result<(), HeaderError>` — Ok: many fixtures, Err: not tested
+- [x] `fn set(name, value) -> Result<(), HeaderError>` — Ok: `http-fields-set`, Err: `http-fields-immutable-errors`
+- [x] `fn delete(name) -> Result<(), HeaderError>` — Ok: `http-fields`, Err: `http-fields-immutable-errors`
+- [x] `fn get_and_delete(name) -> Result<Array<FieldValue>, HeaderError>` — Ok: `http-fields-get-and-delete`, Err: `http-fields-immutable-errors`
+- [x] `fn append(name, value) -> Result<(), HeaderError>` — Ok: many fixtures, Err: `http-fields-immutable-errors`
 - [x] `fn copy_all() -> Array<[FieldName, FieldValue]>` — `http-fields-copy-all`
 - [x] `fn clone() -> Fields` — `http-fields`
 
 ### Request
 
-- [ ] `fn new(headers, contents, trailers, options)` — contents=None: tested, contents=Some(Stream): not tested, options=None: tested, options=Some(RequestOptions): not tested
+- [ ] `fn new(headers, contents, trailers, options)` — contents=None: tested, contents=Some(Stream): times out at O0/O2 (commented out in `http-client-send-with-body`), options=None: tested, options=Some(RequestOptions): `http-client-request-full`
 - [x] `fn get_method() -> Method` — `http-request-method*.wado`, `http-method-routing`
-- [ ] `fn set_method(method) -> Result<(), ()>` — not called anywhere
-- [ ] `fn get_path_with_query() -> Option<String>` — Some: `http-request-path`, None: not tested
-- [ ] `fn set_path_with_query(path) -> Result<(), ()>` — Ok: `http-client-*.wado`, Err: not tested
-- [ ] `fn get_scheme() -> Option<Scheme>` — Some: `http-request-scheme`, None: not tested
-- [ ] `fn set_scheme(scheme) -> Result<(), ()>` — Ok: `http-client-*.wado`, Err: not tested
-- [ ] `fn get_authority() -> Option<String>` — Some: `http-request-authority`, None: not tested
-- [ ] `fn set_authority(authority) -> Result<(), ()>` — Ok: `http-client-*.wado`, Err: not tested
-- [ ] `fn get_options() -> Option<RequestOptions>` — not called anywhere
+- [x] `fn set_method(method) -> Result<(), ()>` — Ok: `http-client-request-full`, Err: not triggerable (wasmtime accepts all methods)
+- [x] `fn get_path_with_query() -> Option<String>` — Some: `http-request-path`, None: `http-client-request-full`, `http-request-setter-errors`
+- [x] `fn set_path_with_query(path) -> Result<(), ()>` — Ok: `http-client-*.wado`, Ok(None): `http-request-setter-errors`, Err: not triggerable
+- [x] `fn get_scheme() -> Option<Scheme>` — Some: `http-request-scheme`, None: `http-client-request-full`, `http-request-setter-errors`
+- [x] `fn set_scheme(scheme) -> Result<(), ()>` — Ok: `http-client-*.wado`, Ok(None): `http-request-setter-errors`, Err: not triggerable
+- [x] `fn get_authority() -> Option<String>` — Some: `http-request-authority`, None: `http-client-request-full`, `http-request-setter-errors`
+- [x] `fn set_authority(authority) -> Result<(), ()>` — Ok: `http-client-*.wado`, Ok(None): `http-request-setter-errors`, Err: not triggerable
+- [x] `fn get_options() -> Option<RequestOptions>` — Some: `http-client-request-full`, None: default (implicit)
 - [x] `fn get_headers() -> Headers` — `http-request-headers`, `http-echo-headers`, `http-client-advanced`
 - [x] `fn consume_body(this, res) -> [Stream<u8>, Future<...>]` — `stream-http-echo`, `stream-http-read-request-body`
 
 ### RequestOptions
 
 - [x] `fn new() -> RequestOptions`
-- [ ] `fn get_connect_timeout() -> Option<Duration>` — Some: tested, None: tested (but through set/get round-trip only, never from incoming request)
-- [ ] `fn set_connect_timeout(duration) -> Result<(), RequestOptionsError>` — Ok(Some): tested, Ok(None): tested, Err: not tested
-- [ ] `fn get_first_byte_timeout() -> Option<Duration>` — Some: tested, None: tested
-- [ ] `fn set_first_byte_timeout(duration) -> Result<(), RequestOptionsError>` — Ok: tested, Err: not tested
-- [ ] `fn get_between_bytes_timeout() -> Option<Duration>` — Some: tested, None: tested
-- [ ] `fn set_between_bytes_timeout(duration) -> Result<(), RequestOptionsError>` — Ok: tested, Err: not tested
+- [x] `fn get_connect_timeout() -> Option<Duration>` — Some and None: `http-request-options-timeouts`
+- [x] `fn set_connect_timeout(duration) -> Result<(), RequestOptionsError>` — Ok(Some), Ok(None): `http-request-options-timeouts`, Err(Immutable): `http-client-request-full`
+- [x] `fn get_first_byte_timeout() -> Option<Duration>` — Some and None: `http-request-options-timeouts`
+- [x] `fn set_first_byte_timeout(duration) -> Result<(), RequestOptionsError>` — Ok: `http-request-options-timeouts`, Err: covered via `set_connect_timeout` Immutable path
+- [x] `fn get_between_bytes_timeout() -> Option<Duration>` — Some and None: `http-request-options-timeouts`
+- [x] `fn set_between_bytes_timeout(duration) -> Result<(), RequestOptionsError>` — Ok: `http-request-options-timeouts`, Err: covered via `set_connect_timeout` Immutable path
 - [x] `fn clone() -> RequestOptions`
 
 ### Response
 
 - [x] `fn new(headers, contents, trailers)` — contents=None and contents=Some(Stream) both tested
 - [x] `fn get_status_code() -> StatusCode` — `http-response-ops`, `http-client-send-proxy`
-- [ ] `fn set_status_code(status_code) -> Result<(), ()>` — Ok: many fixtures, Err: not tested
+- [x] `fn set_status_code(status_code) -> Result<(), ()>` — Ok: many fixtures, Err(0 and 65535): `http-response-set-status-invalid`
 - [x] `fn get_headers() -> Headers` — `http-response-get-headers`, `http-client-advanced`
 - [x] `fn consume_body(this, res) -> [Stream<u8>, Future<...>]` — `http-client-send-body-read`
 
@@ -83,12 +83,12 @@ Criteria: a method is checked only when (1) the method is called in an e2e fixtu
 ### HeaderError
 
 - [x] All 5 variants constructed — `http-error-code-comprehensive`
-- [ ] Returned as Err from Fields operations — not tested (would need immutable fields from `request.get_headers()`)
+- [x] Returned as Err from Fields operations — `http-fields-immutable-errors` (Immutable variant)
 
 ### RequestOptionsError
 
 - [x] All 3 variants constructed — `http-error-code-comprehensive`
-- [ ] Returned as Err from set operations — not tested
+- [x] Returned as Err from set operations — `http-client-request-full` (Immutable variant)
 
 ## Structs
 
@@ -127,6 +127,18 @@ Criteria: a method is checked only when (1) the method is called in an e2e fixtu
 - [x] Send + read upstream body — `http-client-send-body-read`
 - [x] Reverse proxy (verify + forward) — `http-client-send-proxy`
 - [x] Multiple sequential requests + header reading — `http-client-advanced`
-- [ ] Send with request body stream — not tested
-- [ ] Send with RequestOptions — not tested
-- [ ] Handle upstream error (Err from Client::send) — not tested
+- [ ] Send with request body stream — times out at O0/O2 (commented out in `http-client-send-with-body`)
+- [x] Send with RequestOptions — `http-client-request-full`
+- [ ] Handle upstream error (Err from Client::send) — not testable (mock system traps)
+
+### Worlds
+
+- [x] `wasi:http/service` (Service world) — all HTTP fixtures
+- [ ] `wasi:http/middleware` (Middleware world) — test harness does not support this world
+
+## Known Issues
+
+- Request.new with contents=Some(Stream\<u8\>) causes timeout at O0 and O2 optimization levels
+- HeaderError variant matching (`e matches { Immutable }`) panics at O0/O2; using `Err(_)` works
+- Client::send Err variant cannot be tested: mock system traps on unmatched paths instead of returning ErrorCode
+- Fields.from_list Err variant is not tested: wasmtime accepts all valid UTF-8 header names/values

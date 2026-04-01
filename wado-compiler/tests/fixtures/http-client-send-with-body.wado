@@ -1,0 +1,54 @@
+// Test: Client::send with request body stream (contents=Some(Stream<u8>)).
+//
+// TODO: This test times out at O0 and O2. The body stream + Client::send
+// combination causes the async runtime to hang. Commenting out the body stream
+// parts until the underlying issue is resolved.
+//
+// Tests (when uncommented):
+// - Request.new with contents=Some(Stream<u8>)
+// - Writing body to outgoing request stream before sending
+
+use { Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
+use { Client } from "wasi:http/client.wado";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // TODO: uncomment body stream when timeout issue is fixed
+    // let [body_rx, body_tx] = Stream::<u8>::new();
+
+    let headers = Fields::new();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [out_req, _req_future] = Request::new(
+        headers,
+        // TODO: use Option::<Stream<u8>>::Some(body_rx) when timeout issue is fixed
+        null,
+        trailers_future,
+        null,
+    );
+
+    out_req.set_scheme(Option::<Scheme>::Some(Scheme::Http));
+    out_req.set_authority(Option::<String>::Some("localhost"));
+    out_req.set_path_with_query(Option::<String>::Some("/upstream"));
+
+    // TODO: uncomment body write when timeout issue is fixed
+    // body_tx.write("request body".as_bytes());
+    // body_tx.drop();
+
+    let result = Client::send(out_req);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    task return result;
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body": "ok"
+    },
+    "outgoing_mocks": {
+        "/upstream": {
+            "status": 200,
+            "body": "ok"
+        }
+    }
+}
