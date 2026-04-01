@@ -207,7 +207,7 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &Array<Lex
         },
         CharRange(pair) => {
             w.line(
-                `if pos >= chars.len() || chars[pos] < {escape_char(pair.0)} || chars[pos] > {escape_char(pair.1)} \{ {fail_action}; \}`,
+                `if pos >= chars.len() || !({escape_char(pair.0)} <= chars[pos] <= {escape_char(pair.1)}) \{ {fail_action}; \}`,
             );
             w.line("pos += 1;");
         },
@@ -254,7 +254,7 @@ fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
             if range.start == range.end {
                 w.write(` || chars[pos] == {escape_char(range.start)}`);
             } else {
-                w.write(` || chars[pos] >= {escape_char(range.start)} && chars[pos] <= {escape_char(range.end)}`);
+                w.write(` || {escape_char(range.start)} <= chars[pos] <= {escape_char(range.end)}`);
             }
         }
         w.write(` \{ {*fail_action}; \}
@@ -265,7 +265,7 @@ fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
             if range.start == range.end {
                 w.write(` || chars[pos] == {escape_char(range.start)}`);
             } else {
-                w.write(` || chars[pos] >= {escape_char(range.start)} && chars[pos] <= {escape_char(range.end)}`);
+                w.write(` || {escape_char(range.start)} <= chars[pos] <= {escape_char(range.end)}`);
             }
         }
         w.write(`) \{ {*fail_action}; \}
