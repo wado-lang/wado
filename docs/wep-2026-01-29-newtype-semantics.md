@@ -162,7 +162,7 @@ type MyArray<T> = Array<T>;
 
 let arr: MyArray<i32> = [1, 2, 3];
 arr.len();                        // OK: inherits Array methods
-arr.append(4);                    // OK
+arr.push(4);                      // OK
 
 let plain: Array<i32> = arr as Array<i32>;  // ERROR: generic cast not allowed
 ```

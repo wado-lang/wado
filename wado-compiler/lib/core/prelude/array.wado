@@ -83,7 +83,7 @@ impl Array<T> {
     }
 
     /// Appends a single element to the end.
-    #[comp_feature("array_append")]
+    #[comp_feature("array_push")]
     pub fn push(&mut self, value: T) with stores[value] {
         let used = self.used;
         if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -91,11 +91,6 @@ impl Array<T> {
         }
         builtin::array_set::<T>(self.repr, used, value);
         self.used = used + 1;
-    }
-
-    /// @deprecated Use `push` instead.
-    pub fn append(&mut self, value: T) with stores[value] {
-        self.push(value);
     }
 
     pub fn pop(&mut self) -> Option<T> {

@@ -50,7 +50,7 @@ nums.sort();        // OK: i32 implements Ord
 
 struct Foo {}
 let mut foos: Array<Foo> = [];
-foos.append(Foo {}); // OK: append has no bounds
+foos.push(Foo {}); // OK: push has no bounds
 foos.sort();         // ERROR: type 'Foo' does not implement trait 'Ord'
                      //        required by bound on 'T'
 ```

@@ -130,13 +130,13 @@ fn gen_element_variant_types(w: &mut CodeWriter, elem: &Element, emitted: &mut A
         if is_simple_cst_group(group_alts) {
             let type_name = group_variant_type_name(group_alts);
             if !has_emitted(emitted, &type_name) {
-                emitted.append(type_name);
+                emitted.push(type_name);
                 gen_group_variant_type(w, group_alts);
             }
         } else if is_single_alt_group(group_alts) {
             let type_name = single_alt_group_type_name(&group_alts[0]);
             if !has_emitted(emitted, &type_name) {
-                emitted.append(type_name);
+                emitted.push(type_name);
                 gen_single_alt_group_struct(w, &group_alts[0], emitted);
             }
         } else {
@@ -220,7 +220,7 @@ fn collect_fields(elements: &Array<Element>) -> Array<Field> {
             let count = get_name_count(&name_counts, &field.name);
             increment_name_count(&mut name_counts, &field.name);
             let final_name = if count > 0 { `{field.name}_{count + 1}` } else { field.name };
-            fields.append(Field { name: final_name, type_str: field.type_str });
+            fields.push(Field { name: final_name, type_str: field.type_str });
         }
     }
     return fields;
@@ -243,7 +243,7 @@ fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
             return;
         }
     }
-    counts.append([*name, 1]);
+    counts.push([*name, 1]);
 }
 
 fn element_to_field(elem: &Element) -> Option<Field> {

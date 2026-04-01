@@ -29,7 +29,7 @@ fn render(template: String, context: &TreeMap<String, String>) -> String {
                         if let Some(fc) = check.next() {
                             if fc != '!' {
                                 if let Some(value) = context.get(key) {
-                                    result.append(value);
+                                    result.push_str(value);
                                 }
                             }
                         }
@@ -38,33 +38,33 @@ fn render(template: String, context: &TreeMap<String, String>) -> String {
                     in_tag = false;
                     seen_close_brace = false;
                 } else {
-                    tag.append_char('}');
-                    tag.append_char(c);
+                    tag.push('}');
+                    tag.push(c);
                     seen_close_brace = false;
                 }
             } else if c == '}' {
                 seen_close_brace = true;
             } else {
-                tag.append_char(c);
+                tag.push(c);
             }
         } else if seen_open_brace {
             if c == '{' {
                 in_tag = true;
                 seen_open_brace = false;
             } else {
-                result.append_char('{');
-                result.append_char(c);
+                result.push('{');
+                result.push(c);
                 seen_open_brace = false;
             }
         } else if c == '{' {
             seen_open_brace = true;
         } else {
-            result.append_char(c);
+            result.push(c);
         }
     }
 
     if seen_open_brace {
-        result.append_char('{');
+        result.push('{');
     }
 
     return result;

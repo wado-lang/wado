@@ -51,9 +51,9 @@ The compiler directly emits an efficient sequence using a mutable string and lab
 __tmpl: {
     let mut __r = "Hello, ";
     name.fmt(&mut Formatter::new(&mut __r, FormatSpec::default()));
-    __r.append("! You are ");
+    __r.push_str("! You are ");
     age.fmt(&mut Formatter::new(&mut __r, FormatSpec::default()));
-    __r.append(".");
+    __r.push_str(".");
     __r
 }
 ```
@@ -81,9 +81,9 @@ fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
     let mut query = strings[0];
     let mut params: Array<SqlParam> = [];
     for let [i, v] of values.enumerate() {
-        params.append(v.to_sql_param());
-        query.append("?");
-        query.append(strings[i + 1]);
+        params.push(v.to_sql_param());
+        query.push_str("?");
+        query.push_str(strings[i + 1]);
     }
     return SqlQuery { query, params };
 }
@@ -101,7 +101,7 @@ impl String {
         let mut result = strings[0];
         for let [i, v] of values.enumerate() {
             v.fmt(&mut Formatter::new(&mut result, FormatSpec::default()));
-            result.append(strings[i + 1]);
+            result.push_str(strings[i + 1]);
         }
         return result;
     }

@@ -2089,7 +2089,7 @@ pub enum TirExprKind {
     /// Created by the resolver with resolved sub-expressions but without
     /// expanding to formatting code. The synthesis phase (pre-monomorphize)
     /// expands this into the `__tmpl` labeled block with `String::with_capacity`,
-    /// `append`, `Formatter`, and `Display`/inspect calls.
+    /// `push_str`, `Formatter`, and `Display`/inspect calls.
     TemplateString {
         parts: Vec<TirTemplatePart>,
     },

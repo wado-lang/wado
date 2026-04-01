@@ -94,10 +94,10 @@ impl G4Parser {
 
             if is_frag || is_lexer_rule_name(&rule_name) {
                 let rule = self.parse_lexer_rule(rule_name, is_frag)?;
-                lexer_rules.append(rule);
+                lexer_rules.push(rule);
             } else {
                 let rule = self.parse_parser_rule(rule_name)?;
-                parser_rules.append(rule);
+                parser_rules.push(rule);
             }
         }
 
@@ -114,12 +114,12 @@ impl G4Parser {
     fn parse_alternatives(&mut self) -> Result<Array<Alternative>, ParseError> {
         let mut alts: Array<Alternative> = [];
         let first = self.parse_alternative()?;
-        alts.append(first);
+        alts.push(first);
 
         while self.is_kind(G4Token::Pipe) {
             self.advance();
             let alt = self.parse_alternative()?;
-            alts.append(alt);
+            alts.push(alt);
         }
         return Result::<Array<Alternative>, ParseError>::Ok(alts);
     }
@@ -137,7 +137,7 @@ impl G4Parser {
                 break;
             }
             let elem = self.parse_element()?;
-            elements.append(elem);
+            elements.push(elem);
         }
 
         if self.is_kind(G4Token::Hash) {
@@ -251,12 +251,12 @@ impl G4Parser {
     fn parse_lexer_alternatives(&mut self) -> Result<Array<LexerAlt>, ParseError> {
         let mut alts: Array<LexerAlt> = [];
         let first = self.parse_lexer_alt()?;
-        alts.append(first);
+        alts.push(first);
 
         while self.is_kind(G4Token::Pipe) {
             self.advance();
             let alt = self.parse_lexer_alt()?;
-            alts.append(alt);
+            alts.push(alt);
         }
         return Result::<Array<LexerAlt>, ParseError>::Ok(alts);
     }
@@ -272,7 +272,7 @@ impl G4Parser {
                 break;
             }
             let elem = self.parse_lexer_element()?;
-            elements.append(elem);
+            elements.push(elem);
         }
         return Result::<LexerAlt, ParseError>::Ok(LexerAlt { elements });
     }
@@ -424,9 +424,9 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
         if pos < end && chars[pos] == '-' && pos + 1 < end {
             advance_char(&chars, &mut pos);
             let c2 = resolve_char(&chars, &mut pos);
-            ranges.append(CharRange::range(c, c2));
+            ranges.push(CharRange::range(c, c2));
         } else {
-            ranges.append(CharRange::single(c));
+            ranges.push(CharRange::single(c));
         }
     }
 

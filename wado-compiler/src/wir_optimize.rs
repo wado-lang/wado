@@ -10,9 +10,9 @@
 //! | `sroa_return`     | Multi-value return SROA (structs + variants)|
 //! | `sroa_param`      | Single-field parameter SROA                |
 //! | `elide_struct`    | Struct local elimination (single + multi)   |
-//! | `array`           | Append collapse / data promotion / splitting|
+//! | `array`           | Push collapse / data promotion / splitting  |
 //! | `const_forward`   | Struct field constant forwarding            |
-//! | `string`          | Short string append simplification          |
+//! | `string`          | Short string push_str simplification        |
 //! | `peephole`        | Constant folding, copy elision, MV elision  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
 //! | `dae`             | Dead argument elimination                   |
@@ -44,7 +44,7 @@ use crate::wir::WirModule;
 pub use dce::{dce_unreachable_functions, dce_unreachable_types};
 
 use array::{
-    collapse_array_append_sequences, promote_constant_arrays_to_data, split_large_array_literals,
+    collapse_array_push_sequences, promote_constant_arrays_to_data, split_large_array_literals,
 };
 use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
@@ -59,7 +59,7 @@ use nullable_ref::optimize_nullable_refs;
 use peephole::run_peephole;
 use sroa_param::sroa_single_field_parameters;
 use sroa_return::sroa_multi_value_returns;
-use string::simplify_short_string_appends;
+use string::simplify_short_string_pushes;
 
 /// Run a single WIR optimization pass with profiling.
 fn wir_pass(
@@ -105,13 +105,13 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel, profiler: &dyn 
 
     // Phase 3: Data flow
     //
-    // Collapse inlined append sequences and forward constants.
-    // Order matters: append collapse exposes StructNew nodes that field
+    // Collapse inlined push sequences and forward constants.
+    // Order matters: push collapse exposes StructNew nodes that field
     // forwarding then uses for constant index bounds check elimination.
     // Loop-guarded bounds checks are eliminated at TIR level by the
     // condition_implication pass.
     profiler.span_start("wir/phase3_data_flow");
-    collapse_array_append_sequences(module);
+    collapse_array_push_sequences(module);
     forward_struct_field_constants(module);
     profiler.span_end("wir/phase3_data_flow");
 
@@ -119,7 +119,7 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel, profiler: &dyn 
     //
     // Rewrite library call patterns into more efficient instruction sequences.
     profiler.span_start("wir/phase4_lib_rewrites");
-    simplify_short_string_appends(module);
+    simplify_short_string_pushes(module);
     promote_constant_arrays_to_data(module);
     split_large_array_literals(module);
     profiler.span_end("wir/phase4_lib_rewrites");

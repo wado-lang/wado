@@ -799,7 +799,7 @@ impl Stack<T> {
     }
 
     fn push(&mut self, item: T) {
-        self.items.append(item);
+        self.items.push(item);
     }
 }
 

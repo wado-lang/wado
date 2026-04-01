@@ -117,15 +117,15 @@ impl TreeRecorder {
 
 impl Visitor for TreeRecorder {
     fn enter_rule(&mut self, name: &String, span: &Span) {
-        self.events.append(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+        self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
     }
 
     fn exit_rule(&mut self, name: &String, span: &Span) {
-        self.events.append(TreeEvent::Exit);
+        self.events.push(TreeEvent::Exit);
     }
 
     fn visit_token(&mut self, token: &Token) {
-        self.events.append(TreeEvent::VisitToken(*token));
+        self.events.push(TreeEvent::VisitToken(*token));
     }
 }
 
@@ -141,9 +141,9 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
                 break;
             }
             if let Enter(_) = ev {
-                children.append(CstChild::Node(tree_build_node(events, pos)));
+                children.push(CstChild::Node(tree_build_node(events, pos)));
             } else if let VisitToken(t) = ev {
-                children.append(CstChild::Token(t));
+                children.push(CstChild::Token(t));
                 *pos += 1;
             }
         }
@@ -299,7 +299,7 @@ impl Lexer {
     fn slice(&self, start: i32, end: i32) -> String {
         let mut s = String::with_capacity(end - start);
         for let mut i = start; i < end; i += 1 {
-            s.append_char(self.chars[i]);
+            s.push(self.chars[i]);
         }
         return s;
     }
@@ -584,22 +584,22 @@ pub fn tokenize(input: &String) -> Array<Token> {
         if end > best_end { best_end = end; best_kind = TK_WS; }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
-            tokens.append(tok);
+            tokens.push(tok);
             trivia = [];
             lexer.pos = start + 1;
         } else {
             let is_skip = false || best_kind == TK_WS;
             if is_skip {
-                trivia.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+                trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
             } else {
                 let tok = Token::with_trivia(best_kind, lexer.slice(start, best_end), Span::new(start, best_end), trivia);
-                tokens.append(tok);
+                tokens.push(tok);
                 trivia = [];
             }
             lexer.pos = best_end;
         }
     }
-    tokens.append(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
+    tokens.push(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
     return tokens;
 }
 
@@ -692,7 +692,7 @@ fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
             comma,
             pair,
         };
-        comma_pair_list.append(comma_pair);
+        comma_pair_list.push(comma_pair);
     }
     let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
     return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
@@ -730,7 +730,7 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
                     comma,
                     pair,
                 };
-                comma_pair_list.append(comma_pair);
+                comma_pair_list.push(comma_pair);
             }
             let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
             return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
@@ -781,7 +781,7 @@ fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
             comma,
             value,
         };
-        comma_value_list.append(comma_value);
+        comma_value_list.push(comma_value);
     }
     let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
     return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {
@@ -819,7 +819,7 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
                     comma,
                     value,
                 };
-                comma_value_list.append(comma_value);
+                comma_value_list.push(comma_value);
             }
             let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
             return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {

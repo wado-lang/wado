@@ -114,15 +114,15 @@ impl TreeRecorder {
 
 impl Visitor for TreeRecorder {
     fn enter_rule(&mut self, name: &String, span: &Span) {
-        self.events.append(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+        self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
     }
 
     fn exit_rule(&mut self, name: &String, span: &Span) {
-        self.events.append(TreeEvent::Exit);
+        self.events.push(TreeEvent::Exit);
     }
 
     fn visit_token(&mut self, token: &Token) {
-        self.events.append(TreeEvent::VisitToken(*token));
+        self.events.push(TreeEvent::VisitToken(*token));
     }
 }
 
@@ -138,9 +138,9 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
                 break;
             }
             if let Enter(_) = ev {
-                children.append(CstChild::Node(tree_build_node(events, pos)));
+                children.push(CstChild::Node(tree_build_node(events, pos)));
             } else if let VisitToken(t) = ev {
-                children.append(CstChild::Token(t));
+                children.push(CstChild::Token(t));
                 *pos += 1;
             }
         }

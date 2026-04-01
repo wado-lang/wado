@@ -51,8 +51,8 @@ fn collect_lits_from_elements(elements: &Array<Element>, seen: &mut Array<String
 fn collect_lits_from_element(elem: &Element, seen: &mut Array<String>, result: &mut Array<LitToken>) {
     if let Literal(text) = elem {
         if !seen_contains(seen, text) {
-            seen.append(*text);
-            result.append(LitToken { text: *text, const_name: literal_const_name(text) });
+            seen.push(*text);
+            result.push(LitToken { text: *text, const_name: literal_const_name(text) });
         }
     }
     if let Repeat(rep) = elem {
@@ -133,7 +133,7 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
     f3.emit_begin(w);
     w.line("let mut s = String::with_capacity(end - start);");
     w.begin("for let mut i = start; i < end; i += 1");
-    w.line("s.append_char(self.chars[i]);");
+    w.line("s.push(self.chars[i]);");
     w.end();
     w.line("return s;");
     w.end();
@@ -365,10 +365,10 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &Array<LitToken>) {
 
 fn lit_try_fn_name(const_name: &String) -> String {
     let mut result = String::with_capacity(const_name.len() + 4);
-    result.append("try_lit_");
+    result.push_str("try_lit_");
     let chars: Array<char> = const_name.chars().collect();
     for let mut i = 7; i < chars.len(); i += 1 {
-        result.append_char(chars[i].to_ascii_lowercase());
+        result.push(chars[i].to_ascii_lowercase());
     }
     return result;
 }
@@ -404,7 +404,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
 
     w.begin("if best_end <= start");
     w.line("let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);");
-    w.line("tokens.append(tok);");
+    w.line("tokens.push(tok);");
     w.line("trivia = [];");
     w.line("lexer.pos = start + 1;");
     w.else_begin("else");
@@ -418,16 +418,16 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.write(";\n");
 
     w.begin("if is_skip");
-    w.line("trivia.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));");
+    w.line("trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));");
     w.else_begin("else");
     w.line("let tok = Token::with_trivia(best_kind, lexer.slice(start, best_end), Span::new(start, best_end), trivia);");
-    w.line("tokens.append(tok);");
+    w.line("tokens.push(tok);");
     w.line("trivia = [];");
     w.end();
     w.line("lexer.pos = best_end;");
     w.end();  // else
     w.end();  // while
-    w.line("tokens.append(Token::with_trivia(TK_EOF, \"\", Span::new(lexer.pos, lexer.pos), trivia));");
+    w.line("tokens.push(Token::with_trivia(TK_EOF, \"\", Span::new(lexer.pos, lexer.pos), trivia));");
     w.line("return tokens;");
     w.end();  // fn
     w.blank();

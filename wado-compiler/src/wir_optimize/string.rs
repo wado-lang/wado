@@ -1,22 +1,22 @@
 //! String optimization passes for WIR.
 //!
-//! - **Short string append simplification**: `String::append("short")` → `String::append_char` × N.
+//! - **Short string push simplification**: `String::push_str("short")` → `String::push_char` × N.
 
 use crate::wir::{
-    COMP_FEATURE_STRING_APPEND, COMP_FEATURE_STRING_APPEND_CHAR, WirData, WirFuncId, WirInstr,
+    COMP_FEATURE_STRING_PUSH_CHAR, COMP_FEATURE_STRING_PUSH_STR, WirData, WirFuncId, WirInstr,
     WirModule,
 };
 use crate::wir_visitor::WirMutVisitor;
 
-/// Rewrite `String::append(buf, "short_constant")` calls into sequences of
-/// `String::append_char(buf, ch)` calls when the constant string is ≤8 bytes.
+/// Rewrite `String::push_str(buf, "short_constant")` calls into sequences of
+/// `String::push_char(buf, ch)` calls when the constant string is ≤8 bytes.
 ///
 /// This eliminates GC allocations for the temporary `String` struct and its
 /// backing `array<u8>` that are created for each short constant string argument.
 ///
 /// Pattern matched (WIR):
 /// ```text
-/// Call { func_id: <string_append>,
+/// Call { func_id: <push_str>,
 ///   args: [receiver, StructNew { String,
 ///     fields: [RefAsNonNull(ArrayNewData { data_index, offset: 0, len: L }), I32Const(L)]
 ///   }]
@@ -24,35 +24,35 @@ use crate::wir_visitor::WirMutVisitor;
 /// ```
 /// Rewritten to:
 /// ```text
-/// Call { func_id: <string_append_char>, args: [receiver, I32Const(byte0)] }
-/// Call { func_id: <string_append_char>, args: [receiver, I32Const(byte1)] }
+/// Call { func_id: <push_char>, args: [receiver, I32Const(byte0)] }
+/// Call { func_id: <push_char>, args: [receiver, I32Const(byte1)] }
 /// ...
 /// ```
-pub(super) fn simplify_short_string_appends(module: &mut WirModule) {
-    // Find string_append and string_append_char function indices.
-    let mut append_func_id: Option<WirFuncId> = None;
-    let mut append_char_func_id: Option<WirFuncId> = None;
+pub(super) fn simplify_short_string_pushes(module: &mut WirModule) {
+    // Find push_str and push_char function indices.
+    let mut push_str_func_id: Option<WirFuncId> = None;
+    let mut push_char_func_id: Option<WirFuncId> = None;
 
     for (i, f) in module.functions.iter().enumerate() {
         let idx = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
-        if f.comp_features & COMP_FEATURE_STRING_APPEND != 0 {
-            append_func_id = Some(WirFuncId::new(idx, f.name.fq.as_str().into()));
+        if f.comp_features & COMP_FEATURE_STRING_PUSH_STR != 0 {
+            push_str_func_id = Some(WirFuncId::new(idx, f.name.fq.as_str().into()));
         }
-        if f.comp_features & COMP_FEATURE_STRING_APPEND_CHAR != 0 {
-            append_char_func_id = Some(WirFuncId::new(idx, f.name.fq.as_str().into()));
+        if f.comp_features & COMP_FEATURE_STRING_PUSH_CHAR != 0 {
+            push_char_func_id = Some(WirFuncId::new(idx, f.name.fq.as_str().into()));
         }
     }
 
-    let (Some(append_id), Some(append_char_id)) = (append_func_id, append_char_func_id) else {
+    let (Some(push_str_id), Some(push_char_id)) = (push_str_func_id, push_char_func_id) else {
         return;
     };
 
     let data = &module.data;
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
-            let mut visitor = SimplifyShortAppends {
-                append_id: &append_id,
-                append_char_id: &append_char_id,
+            let mut visitor = SimplifyShortPushes {
+                push_str_id: &push_str_id,
+                push_char_id: &push_char_id,
                 data,
             };
             visitor.visit_body(body);
@@ -60,26 +60,23 @@ pub(super) fn simplify_short_string_appends(module: &mut WirModule) {
     }
 }
 
-struct SimplifyShortAppends<'a> {
-    append_id: &'a WirFuncId,
-    append_char_id: &'a WirFuncId,
+struct SimplifyShortPushes<'a> {
+    push_str_id: &'a WirFuncId,
+    push_char_id: &'a WirFuncId,
     data: &'a [WirData],
 }
 
-impl WirMutVisitor for SimplifyShortAppends<'_> {
+impl WirMutVisitor for SimplifyShortPushes<'_> {
     fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
         // First recurse into children.
         self.walk_body(body);
 
-        // Scan for String::append calls with short constant string args.
+        // Scan for String::push_str calls with short constant string args.
         let mut i = 0;
         while i < body.len() {
-            if let Some(replacements) = try_rewrite_short_string_append(
-                &body[i],
-                self.append_id,
-                self.append_char_id,
-                self.data,
-            ) {
+            if let Some(replacements) =
+                try_rewrite_short_push_str(&body[i], self.push_str_id, self.push_char_id, self.data)
+            {
                 let n = replacements.len();
                 body.splice(i..=i, replacements);
                 i += n;
@@ -90,19 +87,19 @@ impl WirMutVisitor for SimplifyShortAppends<'_> {
     }
 }
 
-/// Maximum byte length for short-constant string append optimization.
-const MAX_SHORT_STRING_APPEND_LEN: usize = 8;
+/// Maximum byte length for short-constant string `push_str` optimization.
+const MAX_SHORT_PUSH_STR_LEN: usize = 8;
 
-/// Try to match and rewrite a single `String::append(buf, "short")` call.
+/// Try to match and rewrite a single `String::push_str(buf, "short")` call.
 /// Returns `None` if the instruction doesn't match the pattern.
-/// Returns `Some(vec![append_char calls])` on success.
-fn try_rewrite_short_string_append(
+/// Returns `Some(vec![push_char calls])` on success.
+fn try_rewrite_short_push_str(
     instr: &WirInstr,
-    append_id: &WirFuncId,
-    append_char_id: &WirFuncId,
+    push_str_id: &WirFuncId,
+    push_char_id: &WirFuncId,
     data: &[WirData],
 ) -> Option<Vec<WirInstr>> {
-    // Match: Call { func_id: string_append, args: [receiver, string_arg] }
+    // Match: Call { func_id: push_str, args: [receiver, string_arg] }
     // Also match: Block { body: [Call { ... }] } (optimizer sometimes wraps in blocks)
     let call = match instr {
         WirInstr::Call { .. } => instr,
@@ -114,7 +111,7 @@ fn try_rewrite_short_string_append(
         return None;
     };
 
-    if func_id != append_id || args.len() != 2 {
+    if func_id != push_str_id || args.len() != 2 {
         return None;
     }
 
@@ -152,7 +149,7 @@ fn try_rewrite_short_string_append(
     };
     let str_len = usize::try_from(*str_len_i32).ok()?;
 
-    if str_len == 0 || str_len > MAX_SHORT_STRING_APPEND_LEN {
+    if str_len == 0 || str_len > MAX_SHORT_PUSH_STR_LEN {
         return None;
     }
 
@@ -171,13 +168,13 @@ fn try_rewrite_short_string_append(
     }
     let bytes = &seg.bytes[..str_len];
 
-    // Clone the receiver expression for each append_char call.
+    // Clone the receiver expression for each push_char call.
     let receiver = &args[0];
 
     let mut replacements = Vec::with_capacity(str_len);
     for &byte in bytes {
         replacements.push(WirInstr::Call {
-            func_id: append_char_id.clone(),
+            func_id: push_char_id.clone(),
             args: vec![receiver.clone(), WirInstr::I32Const(i32::from(byte))],
         });
     }

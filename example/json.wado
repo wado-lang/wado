@@ -450,7 +450,7 @@ impl Parser {
         let end = self.pos;
         let mut num_str = String::with_capacity(end - start);
         for let mut i = start; i < end; i += 1 {
-            num_str.append_char(char::from_u32_unchecked(self.bytes[i] as u32));
+            num_str.push(char::from_u32_unchecked(self.bytes[i] as u32));
         }
 
         if let Some(n) = f64::parse(num_str) {
@@ -566,21 +566,21 @@ impl Parser {
                 self.advance();
 
                 if esc == '"' as u8 {
-                    result.append_char('"');
+                    result.push('"');
                 } else if esc == '\\' as u8 {
-                    result.append_char('\\');
+                    result.push('\\');
                 } else if esc == '/' as u8 {
-                    result.append_char('/');
+                    result.push('/');
                 } else if esc == 'b' as u8 {
-                    result.append_char(char::from_u32_unchecked(0x08 as u32));
+                    result.push(char::from_u32_unchecked(0x08 as u32));
                 } else if esc == 'f' as u8 {
-                    result.append_char(char::from_u32_unchecked(0x0C as u32));
+                    result.push(char::from_u32_unchecked(0x0C as u32));
                 } else if esc == 'n' as u8 {
-                    result.append_char('\n');
+                    result.push('\n');
                 } else if esc == 'r' as u8 {
-                    result.append_char('\r');
+                    result.push('\r');
                 } else if esc == 't' as u8 {
-                    result.append_char('\t');
+                    result.push('\t');
                 } else if esc == 'u' as u8 {
                     let cp = self.parse_unicode_escape();
                     if cp < 0 {
@@ -601,14 +601,14 @@ impl Parser {
                         }
                         let full_cp = surrogate_to_codepoint(cp, low);
                         if let Some(c) = char::from_i32(full_cp) {
-                            result.append_char(c);
+                            result.push(c);
                         } else {
                             return null;
                         }
                     } else if is_low_surrogate(cp) {
                         return null;
                     } else if let Some(c) = char::from_i32(cp) {
-                        result.append_char(c);
+                        result.push(c);
                     } else {
                         return null;
                     }
@@ -621,7 +621,7 @@ impl Parser {
                 if cp < 0 {
                     return null;
                 }
-                result.append_char(char::from_u32_unchecked(cp as u32));
+                result.push(char::from_u32_unchecked(cp as u32));
             }
         }
     }
@@ -856,7 +856,7 @@ impl Parser {
         let mut items: Array<JsonValue> = [];
         loop {
             if let Some(v) = self.parse_value() {
-                items.append(v);
+                items.push(v);
             } else {
                 return null;
             }
@@ -1238,43 +1238,43 @@ test "parse-empty-input" {
 
 fn escape_json_string(s: &String) -> String {
     let mut result = String::with_capacity(s.len() + 2);
-    result.append_char('"');
+    result.push('"');
     for let c of s.chars() {
         let code = c as u32;
         if c == '"' {
-            result.append("\\\"");
+            result.push_str("\\\"");
         } else if c == '\\' {
-            result.append("\\\\");
+            result.push_str("\\\\");
         } else if c == '\n' {
-            result.append("\\n");
+            result.push_str("\\n");
         } else if c == '\r' {
-            result.append("\\r");
+            result.push_str("\\r");
         } else if c == '\t' {
-            result.append("\\t");
+            result.push_str("\\t");
         } else if code == 0x08 {
-            result.append("\\b");
+            result.push_str("\\b");
         } else if code == 0x0C {
-            result.append("\\f");
+            result.push_str("\\f");
         } else if code < 0x20 {
             // Other control characters → \u00XX
-            result.append("\\u00");
+            result.push_str("\\u00");
             let hi = code >> 4 & 0x0F;
             let lo = code & 0x0F;
             if hi < 10 {
-                result.append_char(char::from_u32_unchecked('0' as u32 + hi));
+                result.push(char::from_u32_unchecked('0' as u32 + hi));
             } else {
-                result.append_char(char::from_u32_unchecked('a' as u32 + hi - 10));
+                result.push(char::from_u32_unchecked('a' as u32 + hi - 10));
             }
             if lo < 10 {
-                result.append_char(char::from_u32_unchecked('0' as u32 + lo));
+                result.push(char::from_u32_unchecked('0' as u32 + lo));
             } else {
-                result.append_char(char::from_u32_unchecked('a' as u32 + lo - 10));
+                result.push(char::from_u32_unchecked('a' as u32 + lo - 10));
             }
         } else {
-            result.append_char(c);
+            result.push(c);
         }
     }
-    result.append_char('"');
+    result.push('"');
     return result;
 }
 
@@ -1294,30 +1294,30 @@ pub fn stringify(value: &JsonValue) -> String {
         Str(s) => escape_json_string(&s),
         Arr(items) => {
             let mut result = String::with_capacity(32);
-            result.append_char('[');
+            result.push('[');
             for let mut i = 0; i < items.len(); i += 1 {
                 if i > 0 {
-                    result.append_char(',');
+                    result.push(',');
                 }
-                result.append(stringify(&items[i]));
+                result.push_str(stringify(&items[i]));
             }
-            result.append_char(']');
+            result.push(']');
             result;
         },
         Obj(map) => {
             let mut result = String::with_capacity(32);
-            result.append_char('{');
+            result.push('{');
             let entries = map.entries();
             for let mut i = 0; i < entries.len(); i += 1 {
                 if i > 0 {
-                    result.append_char(',');
+                    result.push(',');
                 }
                 let [key, val] = entries[i];
-                result.append(escape_json_string(&key));
-                result.append_char(':');
-                result.append(stringify(&val));
+                result.push_str(escape_json_string(&key));
+                result.push(':');
+                result.push_str(stringify(&val));
             }
-            result.append_char('}');
+            result.push('}');
             result;
         },
     };
@@ -1327,7 +1327,7 @@ fn make_indent(level: i32, size: i32) -> String {
     let total = level * size;
     let mut s = String::with_capacity(total);
     for let mut i = 0; i < total; i += 1 {
-        s.append_char(' ');
+        s.push(' ');
     }
     return s;
 }
@@ -1343,17 +1343,17 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
                 "[]";
             } else {
                 let mut result = String::with_capacity(64);
-                result.append("[\n");
+                result.push_str("[\n");
                 for let mut i = 0; i < items.len(); i += 1 {
-                    result.append(make_indent(level + 1, indent_size));
-                    result.append(stringify_at_level(&items[i], level + 1, indent_size));
+                    result.push_str(make_indent(level + 1, indent_size));
+                    result.push_str(stringify_at_level(&items[i], level + 1, indent_size));
                     if i < items.len() - 1 {
-                        result.append_char(',');
+                        result.push(',');
                     }
-                    result.append_char('\n');
+                    result.push('\n');
                 }
-                result.append(make_indent(level, indent_size));
-                result.append_char(']');
+                result.push_str(make_indent(level, indent_size));
+                result.push(']');
                 result;
             }
         },
@@ -1363,20 +1363,20 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
                 "{}";
             } else {
                 let mut result = String::with_capacity(64);
-                result.append("{\n");
+                result.push_str("{\n");
                 for let mut i = 0; i < entries.len(); i += 1 {
                     let [key, val] = entries[i];
-                    result.append(make_indent(level + 1, indent_size));
-                    result.append(escape_json_string(&key));
-                    result.append(": ");
-                    result.append(stringify_at_level(&val, level + 1, indent_size));
+                    result.push_str(make_indent(level + 1, indent_size));
+                    result.push_str(escape_json_string(&key));
+                    result.push_str(": ");
+                    result.push_str(stringify_at_level(&val, level + 1, indent_size));
                     if i < entries.len() - 1 {
-                        result.append_char(',');
+                        result.push(',');
                     }
-                    result.append_char('\n');
+                    result.push('\n');
                 }
-                result.append(make_indent(level, indent_size));
-                result.append_char('}');
+                result.push_str(make_indent(level, indent_size));
+                result.push('}');
                 result;
             }
         },
@@ -1429,9 +1429,9 @@ test "stringify-empty-array" {
 
 test "stringify-array" {
     let mut items: Array<JsonValue> = [];
-    items.append(JsonValue::Number(1.0));
-    items.append(JsonValue::Number(2.0));
-    items.append(JsonValue::Number(3.0));
+    items.push(JsonValue::Number(1.0));
+    items.push(JsonValue::Number(2.0));
+    items.push(JsonValue::Number(3.0));
     let v = JsonValue::Arr(items);
     assert stringify(&v) == "[1,2,3]";
 }
@@ -1504,9 +1504,9 @@ test "stringify-pretty-empty" {
 
 test "stringify-pretty-array" {
     let mut items: Array<JsonValue> = [];
-    items.append(JsonValue::Number(1.0));
-    items.append(JsonValue::Number(2.0));
-    items.append(JsonValue::Number(3.0));
+    items.push(JsonValue::Number(1.0));
+    items.push(JsonValue::Number(2.0));
+    items.push(JsonValue::Number(3.0));
     let v = JsonValue::Arr(items);
     assert stringify_pretty(&v) == "[\n  1,\n  2,\n  3\n]";
 }

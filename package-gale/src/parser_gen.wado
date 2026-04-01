@@ -38,7 +38,7 @@ fn first_contains(first: &Array<String>, token: &String) -> bool {
 fn dedup_append_arr(arr: &mut Array<String>, source: &Array<String>) {
     for let tk of source {
         if !first_contains(arr, &tk) {
-            arr.append(tk);
+            arr.push(tk);
         }
     }
 }
@@ -71,7 +71,7 @@ fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>,
     // Build initial SLL configs: one per alternative, at element position 0.
     let mut configs: Array<SllConfig> = [];
     for let mut i = 0; i < alt_indices.len(); i += 1 {
-        configs.append(SllConfig {
+        configs.push(SllConfig {
             alt_index: alt_indices[i],
             elements: alt_elements[i],
             pos: 0,
@@ -98,7 +98,7 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
         Dispatch(d) => {
             let mut new_branches: Array<PredictionBranch> = [];
             for let b of d.branches {
-                new_branches.append(PredictionBranch {
+                new_branches.push(PredictionBranch {
                     tokens: b.tokens,
                     child: strip_dead_consume(b.child),
                 });
@@ -134,9 +134,9 @@ fn sll_config_clone(c: &SllConfig) -> SllConfig {
 fn push_return(stack: &Array<SllReturn>, elements: Array<Element>, pos: i32) -> Array<SllReturn> {
     let mut new_stack: Array<SllReturn> = [];
     for let s of stack {
-        new_stack.append(*s);
+        new_stack.push(*s);
     }
-    new_stack.append(SllReturn { elements, pos });
+    new_stack.push(SllReturn { elements, pos });
     return new_stack;
 }
 
@@ -145,7 +145,7 @@ fn pop_return(c: &SllConfig) -> SllConfig {
     let ret = &c.return_stack[last_idx];
     let mut new_stack: Array<SllReturn> = [];
     for let mut i = 0; i < last_idx; i += 1 {
-        new_stack.append(c.return_stack[i]);
+        new_stack.push(c.return_stack[i]);
     }
     return SllConfig {
         alt_index: c.alt_index,
@@ -235,7 +235,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
                                     };
                                     let advanced = sll_advance_inner(&exp, token, ctx, inline_depth + 1);
                                     for let a of advanced {
-                                        results.append(a);
+                                        results.push(a);
                                     }
                                 }
                             }
@@ -244,7 +244,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
                 }
             }
             if !entered {
-                results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack });
+                results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack });
             }
         }
         // Also try skipping: advance past all consecutive nullables non-recursively.
@@ -252,7 +252,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
         while skip_pos < c.elements.len() && is_nullable(&c.elements[skip_pos]) {
             let mut v: Array<String> = [];
             if first_contains(&ctx.first_of_element(&c.elements[skip_pos], &mut v), token) {
-                results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
+                results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
             }
             skip_pos += 1;
         }
@@ -260,26 +260,26 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
             let skipped_elem = &c.elements[skip_pos];
             if let TokenRef(name) = skipped_elem {
                 if `TK_{name}` == *token {
-                    results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
+                    results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                 }
             } else if let Literal(text) = skipped_elem {
                 if literal_const_name(&text) == *token {
-                    results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
+                    results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                 }
             } else if let RuleRef(name) = skipped_elem {
                 let mut v: Array<String> = [];
                 if first_contains(&ctx.first_of_rule(&name, &mut v), token) {
                     let mut stv: Array<String> = [];
                     if ctx.rule_is_single_token(&name, &mut stv) {
-                        results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
+                        results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                     } else {
-                        results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: c.return_stack });
+                        results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: c.return_stack });
                     }
                 }
             } else {
                 let mut v: Array<String> = [];
                 if first_contains(&ctx.first_of_element(skipped_elem, &mut v), token) {
-                    results.append(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
+                    results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
                 }
             }
         }
@@ -363,9 +363,9 @@ fn replace_element_at(elements: &Array<Element>, pos: i32, replacement: &Element
     let mut result: Array<Element> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         if i == pos {
-            result.append(*replacement);
+            result.push(*replacement);
         } else {
-            result.append(elements[i]);
+            result.push(elements[i]);
         }
     }
     return result;
@@ -376,7 +376,7 @@ fn sll_unique_alts(configs: &Array<SllConfig>) -> Array<i32> {
     let mut alts: Array<i32> = [];
     for let c of configs {
         if !array_contains_i32(&alts, c.alt_index) {
-            alts.append(c.alt_index);
+            alts.push(c.alt_index);
         }
     }
     return alts;
@@ -390,8 +390,8 @@ fn sll_dedup_by_alt(configs: &Array<SllConfig>) -> Array<SllConfig> {
     let mut result: Array<SllConfig> = [];
     for let c of configs {
         if !array_contains_i32(&seen_alts, c.alt_index) {
-            seen_alts.append(c.alt_index);
-            result.append(sll_config_clone(c));
+            seen_alts.push(c.alt_index);
+            result.push(sll_config_clone(c));
         }
     }
     return result;
@@ -422,7 +422,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
         // Advance all configs past this shared terminal.
         let mut advanced: Array<SllConfig> = [];
         for let c of closed {
-            advanced.append(SllConfig {
+            advanced.push(SllConfig {
                 alt_index: c.alt_index,
                 elements: c.elements,
                 pos: c.pos + 1,
@@ -440,12 +440,12 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
     let mut config_first_sets: Array<TreeSet<String>> = [];
     for let c of closed {
         let first = sll_config_first(&c, ctx);
-        config_first_sets.append(str_set_from(&first));
-        config_firsts.append(first);
+        config_first_sets.push(str_set_from(&first));
+        config_firsts.push(first);
         for let tk of first {
             if !all_tokens_seen.contains(tk) {
                 all_tokens_seen.insert(tk);
-                all_tokens.append(tk);
+                all_tokens.push(tk);
             }
         }
     }
@@ -466,10 +466,10 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
                     if a.pos == -1 {
                         // Opaque config: multi-token RuleRef, can't advance past.
                         if !array_contains_i32(&opaque_alts, a.alt_index) {
-                            opaque_alts.append(a.alt_index);
+                            opaque_alts.push(a.alt_index);
                         }
                     } else {
-                        next_configs.append(a);
+                        next_configs.push(a);
                     }
                 }
             }
@@ -485,7 +485,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
         // Add opaque alts (they survive regardless of further lookahead).
         for let oa of opaque_alts {
             if !array_contains_i32(&next_alts, oa) {
-                next_alts.append(oa);
+                next_alts.push(oa);
             }
         }
 
@@ -495,13 +495,13 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
             for let mut b = 0; b < branches.len(); b += 1 {
                 if let Leaf(idx) = branches[b].child {
                     if idx == next_alts[0] {
-                        branches[b].tokens.append(*tk);
+                        branches[b].tokens.push(*tk);
                         merged = true;
                     }
                 }
             }
             if !merged {
-                branches.append(PredictionBranch {
+                branches.push(PredictionBranch {
                     tokens: [*tk],
                     child: PredictionNode::Leaf(next_alts[0]),
                 });
@@ -522,12 +522,12 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
             let mut merged = false;
             for let mut b = 0; b < branches.len(); b += 1 {
                 if prediction_node_eq(&branches[b].child, &child) {
-                    branches[b].tokens.append(*tk);
+                    branches[b].tokens.push(*tk);
                     merged = true;
                 }
             }
             if !merged {
-                branches.append(PredictionBranch {
+                branches.push(PredictionBranch {
                     tokens: [*tk],
                     child,
                 });
@@ -596,7 +596,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
                     let advanced = sll_advance_inner(&exp, token, ctx, 0);
                     for let a of advanced {
                         if a.pos != -1 {
-                            expanded_configs.append(a);
+                            expanded_configs.push(a);
                         }
                     }
                 }
@@ -611,10 +611,10 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
     // so their FIRST sets are all at the same lookahead level (depth).
     let mut all_configs: Array<SllConfig> = [];
     for let c of non_opaque_configs {
-        all_configs.append(sll_config_clone(c));
+        all_configs.push(sll_config_clone(c));
     }
     for let ec of expanded_configs {
-        all_configs.append(ec);
+        all_configs.push(ec);
     }
     // Compute FIRST for each config at the decision point level.
     let mut all_tokens: Array<String> = [];
@@ -623,11 +623,11 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
     for let c of all_configs {
         let first = sll_config_first(&c, ctx);
         let first_set = str_set_from(&first);
-        config_first_sets.append(first_set);
+        config_first_sets.push(first_set);
         for let tk of first {
             if !all_tokens_seen.contains(tk) {
                 all_tokens_seen.insert(tk);
-                all_tokens.append(tk);
+                all_tokens.push(tk);
             }
         }
     }
@@ -640,7 +640,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         for let mut i = 0; i < all_configs.len(); i += 1 {
             if config_first_sets[i].contains(*tk) {
                 if !array_contains_i32(&token_alts, all_configs[i].alt_index) {
-                    token_alts.append(all_configs[i].alt_index);
+                    token_alts.push(all_configs[i].alt_index);
                 }
             }
         }
@@ -653,12 +653,12 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         let mut merged = false;
         for let mut b = 0; b < branches.len(); b += 1 {
             if prediction_node_eq(&branches[b].child, &child) {
-                branches[b].tokens.append(*tk);
+                branches[b].tokens.push(*tk);
                 merged = true;
             }
         }
         if !merged {
-            branches.append(PredictionBranch { tokens: [*tk], child });
+            branches.push(PredictionBranch { tokens: [*tk], child });
         }
     }
     if !has_improvement || branches.is_empty() {
@@ -677,7 +677,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
     for let b of branches {
         if let Leaf(idx) = b.child {
             if !array_contains_i32(&covered_alts, idx) {
-                covered_alts.append(idx);
+                covered_alts.push(idx);
             }
         }
     }
@@ -785,7 +785,7 @@ fn find_common_prefix_element(alt_elements: &Array<Array<Element>>) -> Option<El
 fn elements_suffix(elements: &Array<Element>, start: i32) -> Array<Element> {
     let mut result: Array<Element> = [];
     for let mut i = start; i < elements.len(); i += 1 {
-        result.append(elements[i]);
+        result.push(elements[i]);
     }
     return result;
 }
@@ -799,7 +799,7 @@ fn first_of_elements(elements: &Array<Element>, ctx: &mut GenContext, visiting: 
         for let tk of ef {
             if !seen.contains(tk) {
                 seen.insert(tk);
-                result.append(tk);
+                result.push(tk);
             }
         }
         if !is_nullable(&elem) {
@@ -1024,14 +1024,14 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     let mut non_lr_indices: Array<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         if !is_left_recursive(&rule.alternatives[i], &rule.name) {
-            non_lr_indices.append(i);
+            non_lr_indices.push(i);
         }
     }
 
     let mut first_sets: Array<Array<String>> = [];
     for let idx of non_lr_indices {
         let mut visiting: Array<String> = [];
-        first_sets.append(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
+        first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
     let mut groups = compute_overlap_groups(&first_sets);
     let needs_bt = has_multi_alt_groups(&groups);
@@ -1042,16 +1042,16 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
                 sort_group_by_specificity(&mut groups[g], &first_sets);
                 let mut mapped_alts: Array<Alternative> = [];
                 for let gi of groups[g] {
-                    mapped_alts.append(rule.alternatives[non_lr_indices[gi]]);
+                    mapped_alts.push(rule.alternatives[non_lr_indices[gi]]);
                 }
                 let mut local_indices: Array<i32> = [];
                 for let mut i = 0; i < groups[g].len(); i += 1 {
-                    local_indices.append(i);
+                    local_indices.push(i);
                 }
                 sort_group_by_element_count(&mut local_indices, &mapped_alts);
                 let mut reordered: Array<i32> = [];
                 for let li of local_indices {
-                    reordered.append(groups[g][li]);
+                    reordered.push(groups[g][li]);
                 }
                 groups[g] = reordered;
             }
@@ -1091,7 +1091,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     let mut lr_indices: Array<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         if is_left_recursive(&rule.alternatives[i], &rule.name) {
-            lr_indices.append(i);
+            lr_indices.push(i);
         }
     }
     let has_lr = lr_indices.len() > 0;
@@ -1225,7 +1225,7 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
     let max_k = 5;
     let mut all_pos_sets: Array<Array<Array<String>>> = [];
     for let alt of rule.alternatives {
-        all_pos_sets.append(ctx.alt_position_first_sets(&alt, max_k));
+        all_pos_sets.push(ctx.alt_position_first_sets(&alt, max_k));
     }
     let depth = find_needed_depth(&all_pos_sets);
 
@@ -1372,7 +1372,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
             } else {
                 gen_element(w, inner, ctx, &mut nc);
             }
-            w.line(`{list_name}.append({field_info.0});`);
+            w.line(`{list_name}.push({field_info.0});`);
             w.end();
         }
         if let Plus = rep.kind {
@@ -1388,7 +1388,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
             } else {
                 gen_element(w, inner, ctx, &mut nc);
             }
-            w.line(`{list_name}.append({field_info.0});`);
+            w.line(`{list_name}.push({field_info.0});`);
             w.end();
         }
         if let Optional = rep.kind {
@@ -1502,7 +1502,7 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenC
                 w.begin(`while {while_cond}`);
                 let mut nc2: Array<[String, i32]> = [];
                 gen_element(w, inner, ctx, &mut nc2);
-                w.line(`{list_name}.append({field_info.0});`);
+                w.line(`{list_name}.push({field_info.0});`);
                 w.end();
             }
         } else {
@@ -1512,7 +1512,7 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenC
                 w.begin(`while {while_cond}`);
                 let mut nc: Array<[String, i32]> = [];
                 gen_element(w, inner, ctx, &mut nc);
-                w.line(`{list_name}.append({field_info.0});`);
+                w.line(`{list_name}.push({field_info.0});`);
                 w.end();
             }
         }
@@ -1534,12 +1534,12 @@ fn union_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
     let mut seen = TreeSet::<String>::new();
     for let mut i = 0; i < a.len(); i += 1 {
         seen.insert(a[i]);
-        result.append(a[i]);
+        result.push(a[i]);
     }
     for let mut i = 0; i < b.len(); i += 1 {
         if !seen.contains(b[i]) {
             seen.insert(b[i]);
-            result.append(b[i]);
+            result.push(b[i]);
         }
     }
     return result;
@@ -1550,7 +1550,7 @@ fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
     for let x of a {
         if !b_set.contains(*x) {
-            result.append(x);
+            result.push(x);
         }
     }
     return result;
@@ -1620,7 +1620,7 @@ fn compute_shapes(elements: &Array<Element>) -> Array<Array<i32>> {
     let mut opt_indices: Array<i32> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         if is_nullable(&elements[i]) {
-            opt_indices.append(i);
+            opt_indices.push(i);
         }
     }
     let n = opt_indices.len();
@@ -1641,13 +1641,13 @@ fn compute_shapes(elements: &Array<Element>) -> Array<Array<i32>> {
             }
             if is_opt {
                 if mask >> opt_bit & 1 == 1 {
-                    shape.append(i);
+                    shape.push(i);
                 }
             } else {
-                shape.append(i);
+                shape.push(i);
             }
         }
-        shapes.append(shape);
+        shapes.push(shape);
     }
     return shapes;
 }
@@ -1663,14 +1663,14 @@ fn shape_lookahead_signature(shape: &Array<i32>, elements: &Array<Element>, ctx:
             if alts.len() == 1 {
                 for let mut j = 0; j < alts[0].elements.len(); j += 1 {
                     let mut visiting: Array<String> = [];
-                    sig.append(ctx.first_of_element(&alts[0].elements[j], &mut visiting));
+                    sig.push(ctx.first_of_element(&alts[0].elements[j], &mut visiting));
                 }
                 continue;
             }
         }
         // For simple elements (RuleRef, TokenRef, Literal), one position
         let mut visiting: Array<String> = [];
-        sig.append(ctx.first_of_element(actual, &mut visiting));
+        sig.push(ctx.first_of_element(actual, &mut visiting));
     }
     return sig;
 }
@@ -1681,26 +1681,26 @@ fn gen_lookahead_condition(sig: &Array<Array<String>>) -> String {
         let tokens = &sig[d];
         let check_expr = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
         if tokens.len() == 1 {
-            parts.append(`{check_expr} == {tokens[0]}`);
+            parts.push(`{check_expr} == {tokens[0]}`);
         } else {
             let mut inner = String::with_capacity(64);
-            inner.append("(");
+            inner.push_str("(");
             for let mut j = 0; j < tokens.len(); j += 1 {
                 if j > 0 {
-                    inner.append(" || ");
+                    inner.push_str(" || ");
                 }
-                inner.append(`{check_expr} == {tokens[j]}`);
+                inner.push_str(`{check_expr} == {tokens[j]}`);
             }
-            inner.append(")");
-            parts.append(inner);
+            inner.push_str(")");
+            parts.push(inner);
         }
     }
     let mut result = String::with_capacity(128);
     for let mut i = 0; i < parts.len(); i += 1 {
         if i > 0 {
-            result.append(" && ");
+            result.push_str(" && ");
         }
-        result.append(parts[i]);
+        result.push_str(parts[i]);
     }
     return result;
 }
@@ -1797,17 +1797,17 @@ fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
             }
             let elem = &alts[0].elements[i];
             if let TokenRef(name) = elem {
-                tokens.append(`TK_{name}`);
+                tokens.push(`TK_{name}`);
             } else if let Literal(text) = elem {
-                tokens.append(literal_const_name(&text));
+                tokens.push(literal_const_name(&text));
             } else {
                 break;
             }
         }
     } else if let TokenRef(name) = inner {
-        tokens.append(`TK_{name}`);
+        tokens.push(`TK_{name}`);
     } else if let Literal(text) = inner {
-        tokens.append(literal_const_name(&text));
+        tokens.push(literal_const_name(&text));
     }
     return tokens;
 }
@@ -1827,14 +1827,14 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
         let mut cond_parts: Array<String> = [];
         for let mut d = 0; d < la_tokens.len(); d += 1 {
             let check = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
-            cond_parts.append(`{check} == {la_tokens[d]}`);
+            cond_parts.push(`{check} == {la_tokens[d]}`);
         }
         let mut cond = String::with_capacity(128);
         for let mut i = 0; i < cond_parts.len(); i += 1 {
             if i > 0 {
-                cond.append(" && ");
+                cond.push_str(" && ");
             }
-            cond.append(cond_parts[i]);
+            cond.push_str(cond_parts[i]);
         }
         w.begin(`if {cond}`);
         let mut nc: Array<[String, i32]> = [];
@@ -1939,14 +1939,14 @@ fn gen_storable_optional(
         let mut cond_parts: Array<String> = [];
         for let mut d = 0; d < la_tokens.len(); d += 1 {
             let check = if d == 0 { "p.peek_kind()" } else { `p.peek_at({d})` };
-            cond_parts.append(`{check} == {la_tokens[d]}`);
+            cond_parts.push(`{check} == {la_tokens[d]}`);
         }
         let mut cond = String::with_capacity(128);
         for let mut i = 0; i < cond_parts.len(); i += 1 {
             if i > 0 {
-                cond.append(" && ");
+                cond.push_str(" && ");
             }
-            cond.append(cond_parts[i]);
+            cond.push_str(cond_parts[i]);
         }
         w.begin(`let {opt_name}: Option<{type_str}> = if {cond}`);
         let mut nc: Array<[String, i32]> = [];
@@ -2354,7 +2354,7 @@ fn gen_consume_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut Ge
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
         let mut visiting: Array<String> = [];
-        first_sets.append(ctx.first_of_alt(&alt, &mut visiting));
+        first_sets.push(ctx.first_of_alt(&alt, &mut visiting));
     }
     let groups = compute_overlap_groups(&first_sets);
 
@@ -2397,7 +2397,7 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
         let mut visiting: Array<String> = [];
-        first_sets.append(ctx.first_of_alt(alt, &mut visiting));
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
 
     let groups = compute_overlap_groups(&first_sets);
@@ -2512,7 +2512,7 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
         let mut visiting: Array<String> = [];
-        first_sets.append(ctx.first_of_alt(alt, &mut visiting));
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
 
     let groups = compute_overlap_groups(&first_sets);
@@ -2633,10 +2633,10 @@ fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Al
     let mut pred_elements: Array<Array<Element>> = [];
     for let mut k = 0; k < group.len(); k += 1 {
         let alt_idx = group[k];
-        pred_indices.append(alt_idx);
+        pred_indices.push(alt_idx);
         let mut visiting: Array<String> = [];
-        pred_firsts.append(ctx.first_of_alt(&alts[alt_idx], &mut visiting));
-        pred_elements.append(alts[alt_idx].elements);
+        pred_firsts.push(ctx.first_of_alt(&alts[alt_idx], &mut visiting));
+        pred_elements.push(alts[alt_idx].elements);
     }
     let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, ctx);
     gen_group_prediction_code(w, &tree, alts, ctx, name_counts);
@@ -2726,10 +2726,10 @@ fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &A
     for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
         let elem = &alt.elements[ei];
         if let TokenRef(name) = elem {
-            fixed_tokens.append(`TK_{name}`);
+            fixed_tokens.push(`TK_{name}`);
         }
         if let Literal(text) = elem {
-            fixed_tokens.append(literal_const_name(&text));
+            fixed_tokens.push(literal_const_name(&text));
         }
     }
     if fixed_tokens.len() == 0 {
@@ -2909,7 +2909,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
     // Pre-convert suffix_first_sets to TreeSets for efficient lookup.
     let mut suffix_sets: Array<TreeSet<String>> = [];
     for let sfs of suffix_first_sets {
-        suffix_sets.append(str_set_from(sfs));
+        suffix_sets.push(str_set_from(sfs));
     }
 
     // For each token in the group, find which alternatives match it.
@@ -2960,7 +2960,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
             }
             if !shared_seen.contains(tk) {
                 shared_seen.insert(tk);
-                shared_tokens.append(tk);
+                shared_tokens.push(tk);
             }
         }
     }
@@ -3034,10 +3034,10 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
             lr_position += 1;
             continue;
         }
-        valid_lr_indices.append(lr_idx);
-        suffix_first_sets.append(suffix_first);
+        valid_lr_indices.push(lr_idx);
+        suffix_first_sets.push(suffix_first);
         // Precedence: first LR alt = highest (N), last = 1
-        lr_precs.append(total_lr - lr_position);
+        lr_precs.push(total_lr - lr_position);
         lr_position += 1;
     }
 
@@ -3223,9 +3223,9 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             for let mut k = 0; k < sorted_group.len(); k += 1 {
                 let idx = sorted_group[k];
                 let real_idx = non_lr_indices[idx];
-                pred_indices.append(real_idx);
-                pred_firsts.append(first_sets[idx]);
-                pred_elements.append(rule.alternatives[real_idx].elements);
+                pred_indices.push(real_idx);
+                pred_firsts.push(first_sets[idx]);
+                pred_elements.push(rule.alternatives[real_idx].elements);
             }
             let tree = build_prediction(&pred_indices, &pred_firsts, &pred_elements, 0, 5, ctx);
             let bt_count = count_backtrack_nodes(&tree);
@@ -3269,9 +3269,9 @@ fn kind_check_str(tokens: &Array<String>, expr: &String) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < tokens.len(); i += 1 {
         if i > 0 {
-            result.append(" || ");
+            result.push_str(" || ");
         }
-        result.append(`{expr} == {tokens[i]}`);
+        result.push_str(`{expr} == {tokens[i]}`);
     }
     return result;
 }
@@ -3280,21 +3280,21 @@ fn build_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> Str
     let mut cond = String::with_capacity(128);
     for let mut d = 0; d < depth; d += 1 {
         if d > 0 {
-            cond.append(" && ");
+            cond.push_str(" && ");
         }
         let tokens = &pos_sets[d];
         let check_expr = if d == 0 { "kind" } else { `p.peek_at({d})` };
         if tokens.len() == 1 {
-            cond.append(`{check_expr} == {tokens[0]}`);
+            cond.push_str(`{check_expr} == {tokens[0]}`);
         } else {
-            cond.append("(");
+            cond.push_str("(");
             for let mut j = 0; j < tokens.len(); j += 1 {
                 if j > 0 {
-                    cond.append(" || ");
+                    cond.push_str(" || ");
                 }
-                cond.append(`{check_expr} == {tokens[j]}`);
+                cond.push_str(`{check_expr} == {tokens[j]}`);
             }
-            cond.append(")");
+            cond.push_str(")");
         }
     }
     return cond;
@@ -3380,7 +3380,7 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
             return;
         }
     }
-    counts.append([*name, 1]);
+    counts.push([*name, 1]);
 }
 
 fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
@@ -3407,7 +3407,7 @@ fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>
     let n = first_sets.len();
     let mut group_ids: Array<i32> = [];
     for let mut i = 0; i < n; i += 1 {
-        group_ids.append(i);
+        group_ids.push(i);
     }
     for let mut i = 0; i < n; i += 1 {
         for let mut j = i + 1; j < n; j += 1 {
@@ -3436,10 +3436,10 @@ fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>
             }
         }
         if found >= 0 {
-            groups[found].append(i);
+            groups[found].push(i);
         } else {
-            seen_ids.append(gid);
-            groups.append([i]);
+            seen_ids.push(gid);
+            groups.push([i]);
         }
     }
     return groups;

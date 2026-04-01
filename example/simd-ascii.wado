@@ -39,9 +39,9 @@ fn to_lowercase_simd(input: String) -> String {
     while i < len {
         let b = input.get_byte(i);
         if b >= 'A' as u8 && b <= 'Z' as u8 {
-            result.append_char(char::from_u32_unchecked((b + 0x20 as u8) as u32));
+            result.push(char::from_u32_unchecked((b + 0x20 as u8) as u32));
         } else {
-            result.append_char(char::from_u32_unchecked(b as u32));
+            result.push(char::from_u32_unchecked(b as u32));
         }
         i = i + 1;
     }

@@ -429,7 +429,7 @@ impl Monomorphizer {
                 }
 
                 // Also check if the receiver is a monomorphized generic struct
-                // e.g., c.get() where c: Counter<i32>, or arr.append() where arr: Array<fn(i32)->i32>
+                // e.g., c.get() where c: Counter<i32>, or arr.push() where arr: Array<fn(i32)->i32>
                 let struct_info = self.get_struct_info_from_type(receiver.type_id, type_table);
                 if let Some((base_struct, impl_type_args)) = struct_info
                     && !impl_type_args.is_empty()
@@ -1909,7 +1909,7 @@ impl Monomorphizer {
         };
 
         // Check if the struct actually needs type arg substitution.
-        // Skip for non-generic structs (e.g., String::append from template strings)
+        // Skip for non-generic structs (e.g., String::push_str from template strings)
         // that happen to appear inside a generic impl block.
         let has_explicit_type_params = info.struct_name != info.base_struct_name;
         let receiver_is_generic = {
@@ -2383,7 +2383,7 @@ impl Monomorphizer {
                             // Only set if arg_type is concrete (not a type param)
                             // AND not already present in monomorph_info.type_args.
                             // If it's already there, it's an impl type arg (e.g.,
-                            // Array<String>::append where T=String comes from the
+                            // Array<String>::push where T=String comes from the
                             // impl, not a method-level type param). Adding it again
                             // would cause double-counting in instantiation.
                             let is_concrete = !matches!(
@@ -2395,7 +2395,7 @@ impl Monomorphizer {
                             // Check if the inferred type is already an impl type arg
                             // of the receiver's struct. If so, it's not a method-level
                             // type arg and should not be added (to avoid double-counting
-                            // in instantiation). e.g., Array<String>::append infers
+                            // in instantiation). e.g., Array<String>::push infers
                             // String from the arg, but String is the impl type arg.
                             let receiver_impl_type_args = {
                                 let mut base = receiver.type_id;

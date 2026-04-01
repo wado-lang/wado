@@ -803,7 +803,7 @@ for let item of collection {
 
 **Known Limitations:**
 
-- **Cross-module monomorphization**: Generic stdlib methods (like `ArrayIter::collect` calling `Array::append`) may encounter type table ID mismatches when called from user code. Workaround: Use direct builtin calls in stdlib generic functions instead of method calls.
+- **Cross-module monomorphization**: Generic stdlib methods (like `ArrayIter::collect` calling `Array::push`) may encounter type table ID mismatches when called from user code. Workaround: Use direct builtin calls in stdlib generic functions instead of method calls.
 
 ### Builtin Comparison Traits
 

@@ -246,7 +246,7 @@ impl SequenceLiteralBuilder for Array<T> {
     }
 
     fn push_literal(&mut self, value: T) {
-        self.append(value);
+        self.push(value);
     }
 
     fn build(self) -> Self {
@@ -326,7 +326,7 @@ impl SequenceLiteralBuilder for JSONValue {
     }
 
     fn push_literal(&mut self, value: JSONValue) {
-        if let Array(arr) = self { arr.append(value); }
+        if let Array(arr) = self { arr.push(value); }
     }
 
     fn build(self) -> Self { return self; }
