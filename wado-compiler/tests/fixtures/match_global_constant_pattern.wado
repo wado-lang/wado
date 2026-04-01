@@ -1,0 +1,34 @@
+// TODO: immutable global variables should be usable as match/matches patterns.
+// Currently they are treated as fresh variable bindings instead of value comparisons,
+// causing all arms to match the first pattern unconditionally.
+
+#![TODO]
+
+global TK_FOO: i32 = 1;
+global TK_BAR: i32 = 2;
+global TK_BAZ: i32 = 3;
+
+fn describe(kind: i32) -> String {
+    return match kind {
+        TK_FOO => "foo",
+        TK_BAR => "bar",
+        TK_BAZ => "baz",
+        _ => "unknown",
+    };
+}
+
+test "match with global constants" {
+    assert describe(1) == "foo";
+    assert describe(2) == "bar";
+    assert describe(3) == "baz";
+    assert describe(99) == "unknown";
+}
+
+test "matches operator with global constants" {
+    let x: i32 = 1;
+    assert x matches { TK_FOO };
+    assert !(x matches { TK_BAR });
+}
+
+__DATA__
+{"test": {}}
