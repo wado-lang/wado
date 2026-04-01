@@ -9,7 +9,7 @@
 //! loop {
 //!     let s = __tmpl: {
 //!         let mut __r = String { repr: array_new(N), used: 0 };
-//!         __r.append(...);
+//!         __r.push_str(...);
 //!         break __tmpl: __r;
 //!     };
 //!     s.len();   // s only used as method receiver
@@ -22,7 +22,7 @@
 //! loop {
 //!     let s /* skip_value_copy */ = __tmpl: {
 //!         __tmpl_buf_0.used = 0;        // reset (no struct.new)
-//!         __tmpl_buf_0.append(...);      // reuse same String
+//!         __tmpl_buf_0.push_str(...);      // reuse same String
 //!         break __tmpl: __tmpl_buf_0;
 //!     };
 //!     s.len();   // s aliases __tmpl_buf_0

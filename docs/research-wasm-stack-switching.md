@@ -196,7 +196,7 @@ fn collect_all() -> Array<i32> {
 
     with handler Generator<i32> {
         yield(value) => |resume| {
-            result.append(value);
+            result.push(value);
             resume();           // resume the continuation
         },
     } {

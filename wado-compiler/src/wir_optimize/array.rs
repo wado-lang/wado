@@ -2,7 +2,7 @@
 //!
 //! - **Constant array data promotion**: `ArrayNewFixed` of constants → `ArrayNewData`.
 //! - **Large array literal splitting**: `array.new_fixed` (>= threshold) → `array.new_default` + sets.
-//! - **Array append collapse**: inlined `Array::append` sequences → `ArrayNewFixed`.
+//! - **Array append collapse**: inlined `Array::push` sequences → `ArrayNewFixed`.
 
 use crate::hashmap::IndexSet;
 use crate::wir::{
@@ -257,20 +257,20 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
     *instr = WirInstr::Seq(seq);
 }
 
-/// Collapse inlined `Array::append` sequences back to `ArrayNewFixed`.
+/// Collapse inlined `Array::push` sequences back to `ArrayNewFixed`.
 ///
 /// After the `SequenceLiteralBuilder` trait path is inlined, array literals like
 /// `[10, 20, 30]` become:
 ///
 /// ```text
 /// LocalSet { name: X, value: StructNew { ... ArrayNewDefault(N) ... I32Const(0) } }
-/// Block { Call { Array::append(receiver, v0) } }
-/// Block { Call { Array::append(receiver, v1) } }
+/// Block { Call { Array::push(receiver, v0) } }
+/// Block { Call { Array::push(receiver, v1) } }
 /// ...
 /// ```
 ///
 /// This pass recognizes that pattern and rewrites it to use `ArrayNewFixed`
-/// (replacing `ArrayNewDefault` and removing the append calls), which is then
+/// (replacing `ArrayNewDefault` and removing the push calls), which is then
 /// eligible for `promote_constant_arrays_to_data` and `split_large_array_literals`.
 pub(super) fn collapse_array_append_sequences(module: &mut WirModule) {
     // Build set of function indices that have COMP_FEATURE_ARRAY_APPEND.
@@ -349,13 +349,13 @@ impl WirMutVisitor for CollapseAppends<'_> {
         // First recurse into all children.
         self.walk_body(body);
 
-        // Now scan the flat body for init + append patterns.
+        // Now scan the flat body for init + push patterns.
         let mut i = 0;
         while i < body.len() {
             if let Some(init_info) = try_match_array_init(&body[i], self.array_struct_types) {
                 let n = init_info.capacity;
-                // Check if the next instructions are matching append calls.
-                // Each append may be a single instruction (Block wrapping LocalSet+Call)
+                // Check if the next instructions are matching push calls.
+                // Each push may be a single instruction (Block wrapping LocalSet+Call)
                 // or multiple flat instructions (LocalSet* + Call) from block flattening.
                 if n > 0
                     && let Some((values, consumed)) = try_match_append_sequence(
@@ -367,7 +367,7 @@ impl WirMutVisitor for CollapseAppends<'_> {
                 {
                     // Rewrite: replace ArrayNewDefault with ArrayNewFixed in the init.
                     rewrite_init_to_fixed(&mut body[i], &init_info, values);
-                    // Remove the consumed append instructions.
+                    // Remove the consumed push instructions.
                     body.drain(i + 1..i + 1 + consumed);
                     // Continue from the next instruction after the rewritten init.
                     i += 1;
@@ -486,8 +486,8 @@ fn try_extract_array_new_default(
     })
 }
 
-/// Try to match N append operations starting from the given instruction slice.
-/// Each append may be either:
+/// Try to match N push operations starting from the given instruction slice.
+/// Each push may be either:
 /// - A single `Block` instruction wrapping `LocalSet* + Call` (from inlined labeled blocks)
 /// - A sequence of flat `LocalSet* + Call` instructions (from flattened blocks)
 ///
@@ -590,7 +590,7 @@ fn resolve_value_binding(
     }
     // If the argument is a ValueCopy wrapping a LocalGet, resolve the inner LocalGet.
     // This handles the case where call-site value copying wraps an element that was
-    // bound by a preceding LocalSet in the append sequence.
+    // bound by a preceding LocalSet in the push sequence.
     if let WirInstr::ValueCopy {
         type_id,
         source_type,
@@ -616,7 +616,7 @@ fn resolve_value_binding(
 /// ```text
 /// Block { body: [
 ///   LocalSet { name: "__local_7", value: LocalGet { name: "__local_0" } },
-///   Call { func_id: append, args: [LocalGet { name: "__local_7" }, value] }
+///   Call { func_id: push, args: [LocalGet { name: "__local_7" }, value] }
 /// ] }
 /// ```
 ///
@@ -626,7 +626,7 @@ fn resolve_value_binding(
 /// Block { body: [
 ///   LocalSet { name: "__local_4", value: LocalGet { name: "__local_0" } },
 ///   LocalSet { name: "__local_5", value: StructNew { String, ... } },
-///   Call { func_id: append, args: [LocalGet("__local_4"), LocalGet("__local_5")] }
+///   Call { func_id: push, args: [LocalGet("__local_4"), LocalGet("__local_5")] }
 /// ] }
 /// ```
 ///

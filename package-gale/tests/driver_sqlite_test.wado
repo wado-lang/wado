@@ -3,21 +3,21 @@ use { CstNode, CstChild } from "./golden/sqlite.wado";
 
 fn unparse_xml(node: &CstNode) -> String {
     let mut out = String::with_capacity(256);
-    out.append(`<{node.name}>`);
+    out.push_str(`<{node.name}>`);
     for let child of &node.children {
         if let Token(t) = *child {
             for let trivia of &t.leading_trivia {
-                out.append(trivia.text);
+                out.push_str(trivia.text);
             }
             let kind_name = sqlite::token_kind_name(t.kind);
-            out.append(`<{kind_name}>`);
-            out.append(t.text);
-            out.append(`</{kind_name}>`);
+            out.push_str(`<{kind_name}>`);
+            out.push_str(t.text);
+            out.push_str(`</{kind_name}>`);
         } else if let Node(n) = *child {
-            out.append(&unparse_xml(n));
+            out.push_str(&unparse_xml(n));
         }
     }
-    out.append(`</{node.name}>`);
+    out.push_str(`</{node.name}>`);
     return out;
 }
 

@@ -139,7 +139,7 @@ resolver unrolls the `for let v of tuple` loop as usual:
 fn inspect_all<..T: Inspect>(values: [..T]) -> Array<String> {
     let mut parts: Array<String> = [];
     for let v of values {
-        parts.append(v.inspect());
+        parts.push(v.inspect());
     }
     return parts;
 }
@@ -252,7 +252,7 @@ where T: Reflect<Fields = [..F]>
         let values: [..F] = self.fields();
         let mut parts: Array<String> = [];
         for let [i, v] of values.enumerate() {
-            parts.append(`{names[i]}: {v.inspect()}`);
+            parts.push(`{names[i]}: {v.inspect()}`);
         }
         return `{T::type_name()} \{ {parts.join(", ")} \}`;
     }
@@ -334,7 +334,7 @@ impl<..T: Inspect> Inspect for [..T] {
     fn inspect(&self) -> String {
         let mut parts: Array<String> = [];
         for let v of *self {
-            parts.append(v.inspect());
+            parts.push(v.inspect());
         }
         return `[{parts.join(", ")}]`;
     }
@@ -377,7 +377,7 @@ where T: Reflect<Fields = [..F]>
         let values: [..F] = self.fields();
         let mut parts: Array<String> = [];
         for let [i, v] of values.enumerate() {
-            parts.append(`{names[i]}: {v.inspect()}`);
+            parts.push(`{names[i]}: {v.inspect()}`);
         }
         return `{T::type_name()} \{ {parts.join(", ")} \}`;
     }

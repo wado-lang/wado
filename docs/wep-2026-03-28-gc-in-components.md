@@ -108,7 +108,7 @@ For zero-copy WASI calls, Wado's CM-boundary types must live in a rec group that
 
 ### 1.6 Mutability Decision
 
-Wado uses mutable fields internally (struct fields are mutable via `&mut self`, arrays support `.append()`). The proposal warns that mutable fields force copies.
+Wado uses mutable fields internally (struct fields are mutable via `&mut self`, arrays support `.push()`). The proposal warns that mutable fields force copies.
 
 **Decision:** Use **mutable** fields in the CM GC lowering. Rationale:
 

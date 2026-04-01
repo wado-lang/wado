@@ -1,7 +1,7 @@
 //! Template string expansion synthesis phase.
 //!
 //! Expands `TirExprKind::TemplateString` nodes into concrete formatting code:
-//! a `__tmpl` labeled block containing `String::with_capacity`, `append` calls,
+//! a `__tmpl` labeled block containing `String::with_capacity`, `push_str` calls,
 //! `Formatter` construction, and `Display`/`Inspect` trait dispatch.
 //!
 //! Pipeline position: pre-monomorphize synthesis phase.
@@ -450,7 +450,7 @@ fn build_template_block(
                 // Strip refs for type-based decisions
                 let inner_type = strip_refs(resolved.type_id, tt);
 
-                // If String type (or &String, &&String, ...) with no format spec, just append directly
+                // If String type (or &String, &&String, ...) with no format spec, just push_str directly
                 if inner_type == string_type && format_spec.is_none() {
                     let buf_ref = TirExpr::new(
                         TirExprKind::Local {

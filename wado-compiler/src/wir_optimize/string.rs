@@ -1,6 +1,6 @@
 //! String optimization passes for WIR.
 //!
-//! - **Short string append simplification**: `String::append("short")` → `String::append_char` × N.
+//! - **Short string append simplification**: `String::push_str("short")` → `String::push_char` × N.
 
 use crate::wir::{
     COMP_FEATURE_STRING_APPEND, COMP_FEATURE_STRING_APPEND_CHAR, WirData, WirFuncId, WirInstr,
@@ -8,8 +8,8 @@ use crate::wir::{
 };
 use crate::wir_visitor::WirMutVisitor;
 
-/// Rewrite `String::append(buf, "short_constant")` calls into sequences of
-/// `String::append_char(buf, ch)` calls when the constant string is ≤8 bytes.
+/// Rewrite `String::push_str(buf, "short_constant")` calls into sequences of
+/// `String::push_char(buf, ch)` calls when the constant string is ≤8 bytes.
 ///
 /// This eliminates GC allocations for the temporary `String` struct and its
 /// backing `array<u8>` that are created for each short constant string argument.
@@ -71,7 +71,7 @@ impl WirMutVisitor for SimplifyShortAppends<'_> {
         // First recurse into children.
         self.walk_body(body);
 
-        // Scan for String::append calls with short constant string args.
+        // Scan for String::push_str calls with short constant string args.
         let mut i = 0;
         while i < body.len() {
             if let Some(replacements) = try_rewrite_short_string_append(
@@ -90,10 +90,10 @@ impl WirMutVisitor for SimplifyShortAppends<'_> {
     }
 }
 
-/// Maximum byte length for short-constant string append optimization.
+/// Maximum byte length for short-constant string push_str optimization.
 const MAX_SHORT_STRING_APPEND_LEN: usize = 8;
 
-/// Try to match and rewrite a single `String::append(buf, "short")` call.
+/// Try to match and rewrite a single `String::push_str(buf, "short")` call.
 /// Returns `None` if the instruction doesn't match the pattern.
 /// Returns `Some(vec![append_char calls])` on success.
 fn try_rewrite_short_string_append(

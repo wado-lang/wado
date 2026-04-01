@@ -788,7 +788,7 @@ fn synthesize_lift_list(
     let elem_size = cm_abi::cm_size(elem_ty);
 
     // Resolve TypeIds for the element type and Array<ElemType>.
-    // These are needed by the monomorphizer to instantiate Array::with_capacity and .append().
+    // These are needed by the monomorphizer to instantiate Array::with_capacity and .push().
     let (elem_type_id, array_type_id) = if let Some(ctx) = ctx {
         let mut tt = ctx.type_table.borrow_mut();
         let elem_tid = wasi_type_to_type_id(elem_ty, &mut tt);
@@ -3277,7 +3277,7 @@ fn synthesize_adapter(
         let resolved = wasi_registry.resolve_type(return_type);
 
         // Inline lifting for all types, including list<T> which uses
-        // Array::<T>::with_capacity() and .append() with proper monomorphization info.
+        // Array::<T>::with_capacity() and .push() with proper monomorphization info.
         let lift_ctx = LiftContext {
             wasi_registry,
             type_table,
@@ -6307,8 +6307,8 @@ fn synthesize_stream_read_func(
         &lift_ctx,
     );
 
-    // Append to array - use Array::append method pattern
-    // arr.append(elem) → internal call
+    // Append to array - use Array::push method pattern
+    // arr.push(elem) → internal call
     let elem_idx = next_local;
     next_local += 1;
     local_types.push(elem_type_id);

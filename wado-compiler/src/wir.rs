@@ -953,11 +953,11 @@ pub enum WirAbstractHeapType {
     Extern,
 }
 
-/// Compiler feature flag: function implements `Array<T>::append`.
+/// Compiler feature flag: function implements `Array<T>::push`.
 pub const COMP_FEATURE_ARRAY_APPEND: u32 = 1 << 0;
-/// Compiler feature flag: function implements `String::append`.
+/// Compiler feature flag: function implements `String::push_str`.
 pub const COMP_FEATURE_STRING_APPEND: u32 = 1 << 1;
-/// Compiler feature flag: function implements `String::append_char`.
+/// Compiler feature flag: function implements `String::push_char`.
 pub const COMP_FEATURE_STRING_APPEND_CHAR: u32 = 1 << 2;
 /// Compiler feature flag: variant is the canonical `Option<T>` type.
 pub const COMP_FEATURE_OPTION: u32 = 1 << 3;

@@ -117,15 +117,15 @@ impl TreeRecorder {
 
 impl Visitor for TreeRecorder {
     fn enter_rule(&mut self, name: &String, span: &Span) {
-        self.events.append(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+        self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
     }
 
     fn exit_rule(&mut self, name: &String, span: &Span) {
-        self.events.append(TreeEvent::Exit);
+        self.events.push(TreeEvent::Exit);
     }
 
     fn visit_token(&mut self, token: &Token) {
-        self.events.append(TreeEvent::VisitToken(*token));
+        self.events.push(TreeEvent::VisitToken(*token));
     }
 }
 
@@ -141,9 +141,9 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
                 break;
             }
             if let Enter(_) = ev {
-                children.append(CstChild::Node(tree_build_node(events, pos)));
+                children.push(CstChild::Node(tree_build_node(events, pos)));
             } else if let VisitToken(t) = ev {
-                children.append(CstChild::Token(t));
+                children.push(CstChild::Token(t));
                 *pos += 1;
             }
         }
@@ -6520,22 +6520,22 @@ pub fn tokenize(input: &String) -> Array<Token> {
         if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
-            tokens.append(tok);
+            tokens.push(tok);
             trivia = [];
             lexer.pos = start + 1;
         } else {
             let is_skip = false || best_kind == TK_SINGLE_LINE_COMMENT || best_kind == TK_MULTILINE_COMMENT || best_kind == TK_SPACES;
             if is_skip {
-                trivia.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+                trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
             } else {
                 let tok = Token::with_trivia(best_kind, lexer.slice(start, best_end), Span::new(start, best_end), trivia);
-                tokens.append(tok);
+                tokens.push(tok);
                 trivia = [];
             }
             lexer.pos = best_end;
         }
     }
-    tokens.append(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
+    tokens.push(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
     return tokens;
 }
 
@@ -6785,7 +6785,7 @@ fn parse_parse(p: &mut Parser) -> Result<ParseNode, ParseError> {
             let error = parse_error(p)?;
             SqlStmtListOrErrorGroup::Error(error)
         };
-        sql_stmt_list_or_error_list.append(sql_stmt_list_or_error);
+        sql_stmt_list_or_error_list.push(sql_stmt_list_or_error);
     }
     let eof = p.expect(TK_EOF, "EOF")?;
     return Result::<ParseNode, ParseError>::Ok(ParseNode {
@@ -6809,7 +6809,7 @@ fn parse_sql_stmt_list(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
     let mut semicolon_list: Array<Token> = [];
     while p.peek_kind() == TK_LIT_SEMI {
         let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
-        semicolon_list.append(semicolon);
+        semicolon_list.push(semicolon);
     }
     let sql_stmt = parse_sql_stmt(p)?;
     let mut semicolon_sql_stmt_list: Array<SemicolonSqlStmtItem> = [];
@@ -6819,19 +6819,19 @@ fn parse_sql_stmt_list(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
         while _plus_first || p.peek_kind() == TK_LIT_SEMI {
             _plus_first = false;
             let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
-            semicolon_list.append(semicolon);
+            semicolon_list.push(semicolon);
         }
         let sql_stmt = parse_sql_stmt(p)?;
         let semicolon_sql_stmt = SemicolonSqlStmtItem {
             semicolon_list,
             sql_stmt,
         };
-        semicolon_sql_stmt_list.append(semicolon_sql_stmt);
+        semicolon_sql_stmt_list.push(semicolon_sql_stmt);
     }
     let mut semicolon_list_2: Array<Token> = [];
     while p.peek_kind() == TK_LIT_SEMI {
         let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
-        semicolon_list_2.append(semicolon);
+        semicolon_list_2.push(semicolon);
     }
     return Result::<SqlStmtListNode, ParseError>::Ok(SqlStmtListNode {
         span: Span::new(start, p.last_end()),
@@ -7259,7 +7259,7 @@ fn parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, 
         let item_select_core = ItemSelectCoreItem {
             select_core,
         };
-        item_select_core_list.append(item_select_core);
+        item_select_core_list.push(item_select_core);
     }
     let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
         let k_order = p.expect(TK_K_ORDER, "K_ORDER")?;
@@ -7273,7 +7273,7 @@ fn parse_compound_select_stmt(p: &mut Parser) -> Result<CompoundSelectStmtNode, 
                 comma,
                 ordering_term,
             };
-            comma_ordering_term_list.append(comma_ordering_term);
+            comma_ordering_term_list.push(comma_ordering_term);
         }
         let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
             k_order,
@@ -7381,7 +7381,7 @@ fn parse_create_index_stmt(p: &mut Parser) -> Result<CreateIndexStmtNode, ParseE
             comma,
             indexed_column,
         };
-        comma_indexed_column_list.append(comma_indexed_column);
+        comma_indexed_column_list.push(comma_indexed_column);
     }
     let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
     let k_where_expr: Option<KWhereExprItem> = if p.peek_kind() == TK_K_WHERE {
@@ -7474,7 +7474,7 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
                 comma,
                 column_def,
             };
-            comma_column_def_list.append(comma_column_def);
+            comma_column_def_list.push(comma_column_def);
         }
         let mut comma_table_constraint_list: Array<CommaTableConstraintItem> = [];
         while p.peek_kind() == TK_LIT_COMMA {
@@ -7484,7 +7484,7 @@ fn parse_create_table_stmt(p: &mut Parser) -> Result<CreateTableStmtNode, ParseE
                 comma,
                 table_constraint,
             };
-            comma_table_constraint_list.append(comma_table_constraint);
+            comma_table_constraint_list.push(comma_table_constraint);
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         let k_without_identifier: Option<KWithoutIdentifierItem> = if p.peek_kind() == TK_K_WITHOUT && p.peek_at(1) == TK_IDENTIFIER {
@@ -7594,7 +7594,7 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
                     comma,
                     column_name,
                 };
-                comma_column_name_list.append(comma_column_name);
+                comma_column_name_list.push(comma_column_name);
             }
             let k_of_column_name_item = KOfColumnNameItemItem {
                 k_of,
@@ -7697,7 +7697,7 @@ fn parse_create_trigger_stmt(p: &mut Parser) -> Result<CreateTriggerStmtNode, Pa
             update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt,
             semicolon,
         };
-        item_semicolon_list.append(item_semicolon);
+        item_semicolon_list.push(item_semicolon);
     }
     let k_end = p.expect(TK_K_END, "K_END")?;
     return Result::<CreateTriggerStmtNode, ParseError>::Ok(CreateTriggerStmtNode {
@@ -7835,7 +7835,7 @@ fn parse_create_virtual_table_stmt(p: &mut Parser) -> Result<CreateVirtualTableS
                 comma,
                 module_argument,
             };
-            comma_module_argument_list.append(comma_module_argument);
+            comma_module_argument_list.push(comma_module_argument);
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         let lparen_module_argument_item_rparen = LparenModuleArgumentItemRparenItem {
@@ -7929,7 +7929,7 @@ fn parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, Pa
                     comma,
                     ordering_term,
                 };
-                comma_ordering_term_list.append(comma_ordering_term);
+                comma_ordering_term_list.push(comma_ordering_term);
             }
             let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
                 k_order,
@@ -8010,7 +8010,7 @@ fn parse_delete_stmt_limited(p: &mut Parser) -> Result<DeleteStmtLimitedNode, Pa
                     comma,
                     ordering_term,
                 };
-                comma_ordering_term_list.append(comma_ordering_term);
+                comma_ordering_term_list.push(comma_ordering_term);
             }
             let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
                 k_order,
@@ -8277,7 +8277,7 @@ fn parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, 
             compound_operator,
             select_core,
         };
-        compound_operator_select_core_list.append(compound_operator_select_core);
+        compound_operator_select_core_list.push(compound_operator_select_core);
     }
     let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
         let k_order = p.expect(TK_K_ORDER, "K_ORDER")?;
@@ -8291,7 +8291,7 @@ fn parse_factored_select_stmt(p: &mut Parser) -> Result<FactoredSelectStmtNode, 
                 comma,
                 ordering_term,
             };
-            comma_ordering_term_list.append(comma_ordering_term);
+            comma_ordering_term_list.push(comma_ordering_term);
         }
         let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
             k_order,
@@ -8408,7 +8408,7 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
                 comma,
                 column_name,
             };
-            comma_column_name_list.append(comma_column_name);
+            comma_column_name_list.push(comma_column_name);
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         let lparen_column_name_item_rparen = LparenColumnNameItemRparenItem {
@@ -8442,7 +8442,7 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
                             comma,
                             expr,
                         };
-                        comma_expr_list.append(comma_expr);
+                        comma_expr_list.push(comma_expr);
                     }
                     let opt_r_4 = p.expect(TK_LIT_RPAREN, "')'");
                     if let Err(_) = opt_r_4 { p.pos = saved_pos; break bt_try; }
@@ -8459,7 +8459,7 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
                                 comma,
                                 expr,
                             };
-                            comma_expr_list.append(comma_expr);
+                            comma_expr_list.push(comma_expr);
                         }
                         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
                         let comma_lparen_expr_item_rparen = CommaLparenExprItemRparenItem {
@@ -8469,7 +8469,7 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
                             comma_expr_list,
                             rparen,
                         };
-                        comma_lparen_expr_item_rparen_list.append(comma_lparen_expr_item_rparen);
+                        comma_lparen_expr_item_rparen_list.push(comma_lparen_expr_item_rparen);
                     }
                     bt_done = true;
                 }
@@ -8704,7 +8704,7 @@ fn parse_simple_select_stmt(p: &mut Parser) -> Result<SimpleSelectStmtNode, Pars
                 comma,
                 ordering_term,
             };
-            comma_ordering_term_list.append(comma_ordering_term);
+            comma_ordering_term_list.push(comma_ordering_term);
         }
         let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
             k_order,
@@ -8772,7 +8772,7 @@ fn parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
             compound_operator,
             select_or_values,
         };
-        compound_operator_select_or_values_list.append(compound_operator_select_or_values);
+        compound_operator_select_or_values_list.push(compound_operator_select_or_values);
     }
     let k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemItem> = if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
         let k_order = p.expect(TK_K_ORDER, "K_ORDER")?;
@@ -8786,7 +8786,7 @@ fn parse_select_stmt(p: &mut Parser) -> Result<SelectStmtNode, ParseError> {
                 comma,
                 ordering_term,
             };
-            comma_ordering_term_list.append(comma_ordering_term);
+            comma_ordering_term_list.push(comma_ordering_term);
         }
         let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
             k_order,
@@ -8863,7 +8863,7 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                 comma,
                 result_column,
             };
-            comma_result_column_list.append(comma_result_column);
+            comma_result_column_list.push(comma_result_column);
         }
         let k_from_item: Option<KFromItemItem> = if p.peek_kind() == TK_K_FROM {
             let k_from = p.expect(TK_K_FROM, "K_FROM")?;
@@ -8889,7 +8889,7 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                                 comma,
                                 table_or_subquery,
                             };
-                            comma_table_or_subquery_list.append(comma_table_or_subquery);
+                            comma_table_or_subquery_list.push(comma_table_or_subquery);
                         }
                     }
                 }
@@ -8924,7 +8924,7 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                     comma,
                     expr,
                 };
-                comma_expr_list.append(comma_expr);
+                comma_expr_list.push(comma_expr);
             }
             let k_having_expr: Option<KHavingExprItem> = if p.peek_kind() == TK_K_HAVING {
                 let k_having = p.expect(TK_K_HAVING, "K_HAVING")?;
@@ -8971,7 +8971,7 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                 comma,
                 expr,
             };
-            comma_expr_list.append(comma_expr);
+            comma_expr_list.push(comma_expr);
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         let mut comma_lparen_expr_item_rparen_list: Array<CommaLparenExprItemRparenItem> = [];
@@ -8987,7 +8987,7 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                     comma,
                     expr,
                 };
-                comma_expr_list.append(comma_expr);
+                comma_expr_list.push(comma_expr);
             }
             let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
             let comma_lparen_expr_item_rparen = CommaLparenExprItemRparenItem {
@@ -8997,7 +8997,7 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
                 comma_expr_list,
                 rparen,
             };
-            comma_lparen_expr_item_rparen_list.append(comma_lparen_expr_item_rparen);
+            comma_lparen_expr_item_rparen_list.push(comma_lparen_expr_item_rparen);
         }
         return Result::<SelectOrValuesNode, ParseError>::Ok(SelectOrValuesNode::Alt1(SelectOrValuesAlt1 {
             span: Span::new(start, p.last_end()),
@@ -9062,7 +9062,7 @@ fn parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
             eq,
             expr,
         };
-        comma_column_name_eq_expr_list.append(comma_column_name_eq_expr);
+        comma_column_name_eq_expr_list.push(comma_column_name_eq_expr);
     }
     let k_where_expr: Option<KWhereExprItem> = if p.peek_kind() == TK_K_WHERE {
         let k_where = p.expect(TK_K_WHERE, "K_WHERE")?;
@@ -9135,7 +9135,7 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
             eq,
             expr,
         };
-        comma_column_name_eq_expr_list.append(comma_column_name_eq_expr);
+        comma_column_name_eq_expr_list.push(comma_column_name_eq_expr);
     }
     let k_where_expr: Option<KWhereExprItem> = if p.peek_kind() == TK_K_WHERE {
         let k_where = p.expect(TK_K_WHERE, "K_WHERE")?;
@@ -9161,7 +9161,7 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
                     comma,
                     ordering_term,
                 };
-                comma_ordering_term_list.append(comma_ordering_term);
+                comma_ordering_term_list.push(comma_ordering_term);
             }
             let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
                 k_order,
@@ -9242,7 +9242,7 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
                     comma,
                     ordering_term,
                 };
-                comma_ordering_term_list.append(comma_ordering_term);
+                comma_ordering_term_list.push(comma_ordering_term);
             }
             let k_order_k_by_ordering_term_item = KOrderKByOrderingTermItemItem {
                 k_order,
@@ -9315,7 +9315,7 @@ fn parse_column_def(p: &mut Parser) -> Result<ColumnDefNode, ParseError> {
     let mut column_constraint_list: Array<ColumnConstraintNode> = [];
     while p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_REFERENCES {
         let column_constraint = parse_column_constraint(p)?;
-        column_constraint_list.append(column_constraint);
+        column_constraint_list.push(column_constraint);
     }
     return Result::<ColumnDefNode, ParseError>::Ok(ColumnDefNode {
         span: Span::new(start, p.last_end()),
@@ -9542,7 +9542,7 @@ fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
             k_then,
             expr_2,
         };
-        k_when_expr_k_then_expr_list.append(k_when_expr_k_then_expr);
+        k_when_expr_k_then_expr_list.push(k_when_expr_k_then_expr);
     }
     let k_else_expr: Option<KElseExprItem> = if p.peek_kind() == TK_K_ELSE {
         let k_else = p.expect(TK_K_ELSE, "K_ELSE")?;
@@ -9640,7 +9640,7 @@ fn parse_expr_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
                         comma,
                         expr,
                     };
-                    comma_expr_list.append(comma_expr);
+                    comma_expr_list.push(comma_expr);
                 }
             } else if grp_kind == TK_LIT_STAR {
                 let star = p.expect(TK_LIT_STAR, "'*'")?;
@@ -9977,7 +9977,7 @@ fn parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
                                                 comma,
                                                 expr,
                                             };
-                                            comma_expr_list.append(comma_expr);
+                                            comma_expr_list.push(comma_expr);
                                         }
                                     }
                                 } else if p.peek_kind() == TK_NUMERIC_LITERAL || p.peek_kind() == TK_STRING_LITERAL || p.peek_kind() == TK_BLOB_LITERAL || p.peek_kind() == TK_K_NULL || p.peek_kind() == TK_K_CURRENT_TIME || p.peek_kind() == TK_K_CURRENT_DATE || p.peek_kind() == TK_K_CURRENT_TIMESTAMP || p.peek_kind() == TK_BIND_PARAMETER || p.peek_kind() == TK_IDENTIFIER || p.peek_kind() == TK_K_ABORT || p.peek_kind() == TK_K_ACTION || p.peek_kind() == TK_K_ADD || p.peek_kind() == TK_K_AFTER || p.peek_kind() == TK_K_ALL || p.peek_kind() == TK_K_ALTER || p.peek_kind() == TK_K_ANALYZE || p.peek_kind() == TK_K_AND || p.peek_kind() == TK_K_AS || p.peek_kind() == TK_K_ASC || p.peek_kind() == TK_K_ATTACH || p.peek_kind() == TK_K_AUTOINCREMENT || p.peek_kind() == TK_K_BEFORE || p.peek_kind() == TK_K_BEGIN || p.peek_kind() == TK_K_BETWEEN || p.peek_kind() == TK_K_BY || p.peek_kind() == TK_K_CASCADE || p.peek_kind() == TK_K_CASE || p.peek_kind() == TK_K_CAST || p.peek_kind() == TK_K_CHECK || p.peek_kind() == TK_K_COLLATE || p.peek_kind() == TK_K_COLUMN || p.peek_kind() == TK_K_COMMIT || p.peek_kind() == TK_K_CONFLICT || p.peek_kind() == TK_K_CONSTRAINT || p.peek_kind() == TK_K_CREATE || p.peek_kind() == TK_K_CROSS || p.peek_kind() == TK_K_DATABASE || p.peek_kind() == TK_K_DEFAULT || p.peek_kind() == TK_K_DEFERRABLE || p.peek_kind() == TK_K_DEFERRED || p.peek_kind() == TK_K_DELETE || p.peek_kind() == TK_K_DESC || p.peek_kind() == TK_K_DETACH || p.peek_kind() == TK_K_DISTINCT || p.peek_kind() == TK_K_DROP || p.peek_kind() == TK_K_EACH || p.peek_kind() == TK_K_ELSE || p.peek_kind() == TK_K_END || p.peek_kind() == TK_K_ESCAPE || p.peek_kind() == TK_K_EXCEPT || p.peek_kind() == TK_K_EXCLUSIVE || p.peek_kind() == TK_K_EXISTS || p.peek_kind() == TK_K_EXPLAIN || p.peek_kind() == TK_K_FAIL || p.peek_kind() == TK_K_FOR || p.peek_kind() == TK_K_FOREIGN || p.peek_kind() == TK_K_FROM || p.peek_kind() == TK_K_FULL || p.peek_kind() == TK_K_GLOB || p.peek_kind() == TK_K_GROUP || p.peek_kind() == TK_K_HAVING || p.peek_kind() == TK_K_IF || p.peek_kind() == TK_K_IGNORE || p.peek_kind() == TK_K_IMMEDIATE || p.peek_kind() == TK_K_IN || p.peek_kind() == TK_K_INDEX || p.peek_kind() == TK_K_INDEXED || p.peek_kind() == TK_K_INITIALLY || p.peek_kind() == TK_K_INNER || p.peek_kind() == TK_K_INSERT || p.peek_kind() == TK_K_INSTEAD || p.peek_kind() == TK_K_INTERSECT || p.peek_kind() == TK_K_INTO || p.peek_kind() == TK_K_IS || p.peek_kind() == TK_K_ISNULL || p.peek_kind() == TK_K_JOIN || p.peek_kind() == TK_K_KEY || p.peek_kind() == TK_K_LEFT || p.peek_kind() == TK_K_LIKE || p.peek_kind() == TK_K_LIMIT || p.peek_kind() == TK_K_MATCH || p.peek_kind() == TK_K_NATURAL || p.peek_kind() == TK_K_NO || p.peek_kind() == TK_K_NOT || p.peek_kind() == TK_K_NOTNULL || p.peek_kind() == TK_K_OF || p.peek_kind() == TK_K_OFFSET || p.peek_kind() == TK_K_ON || p.peek_kind() == TK_K_OR || p.peek_kind() == TK_K_ORDER || p.peek_kind() == TK_K_OUTER || p.peek_kind() == TK_K_PLAN || p.peek_kind() == TK_K_PRAGMA || p.peek_kind() == TK_K_PRIMARY || p.peek_kind() == TK_K_QUERY || p.peek_kind() == TK_K_RAISE || p.peek_kind() == TK_K_RECURSIVE || p.peek_kind() == TK_K_REFERENCES || p.peek_kind() == TK_K_REGEXP || p.peek_kind() == TK_K_REINDEX || p.peek_kind() == TK_K_RELEASE || p.peek_kind() == TK_K_RENAME || p.peek_kind() == TK_K_REPLACE || p.peek_kind() == TK_K_RESTRICT || p.peek_kind() == TK_K_RIGHT || p.peek_kind() == TK_K_ROLLBACK || p.peek_kind() == TK_K_ROW || p.peek_kind() == TK_K_SAVEPOINT || p.peek_kind() == TK_K_SET || p.peek_kind() == TK_K_TABLE || p.peek_kind() == TK_K_TEMP || p.peek_kind() == TK_K_TEMPORARY || p.peek_kind() == TK_K_THEN || p.peek_kind() == TK_K_TO || p.peek_kind() == TK_K_TRANSACTION || p.peek_kind() == TK_K_TRIGGER || p.peek_kind() == TK_K_UNION || p.peek_kind() == TK_K_UNIQUE || p.peek_kind() == TK_K_UPDATE || p.peek_kind() == TK_K_USING || p.peek_kind() == TK_K_VACUUM || p.peek_kind() == TK_K_VIEW || p.peek_kind() == TK_K_VIRTUAL || p.peek_kind() == TK_K_WHEN || p.peek_kind() == TK_K_WHERE || p.peek_kind() == TK_K_WITHOUT || p.peek_kind() == TK_LIT_LPAREN || p.peek_kind() == TK_LIT_MINUS || p.peek_kind() == TK_LIT_PLUS || p.peek_kind() == TK_LIT_TILDE {
@@ -9990,7 +9990,7 @@ fn parse_expr_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
                                             comma,
                                             expr,
                                         };
-                                        comma_expr_list.append(comma_expr);
+                                        comma_expr_list.push(comma_expr);
                                     }
                                 }
                             }
@@ -10342,7 +10342,7 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
                 comma,
                 column_name,
             };
-            comma_column_name_list.append(comma_column_name);
+            comma_column_name_list.push(comma_column_name);
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         let lparen_column_name_item_rparen = LparenColumnNameItemRparenItem {
@@ -10549,7 +10549,7 @@ fn parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseEr
                 comma,
                 indexed_column,
             };
-            comma_indexed_column_list.append(comma_indexed_column);
+            comma_indexed_column_list.push(comma_indexed_column);
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         let conflict_clause = parse_conflict_clause(p)?;
@@ -10571,7 +10571,7 @@ fn parse_table_constraint(p: &mut Parser) -> Result<TableConstraintNode, ParseEr
                 comma,
                 column_name,
             };
-            comma_column_name_list.append(comma_column_name);
+            comma_column_name_list.push(comma_column_name);
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         let foreign_key_clause = parse_foreign_key_clause(p)?;
@@ -10600,7 +10600,7 @@ fn parse_with_clause(p: &mut Parser) -> Result<WithClauseNode, ParseError> {
             comma,
             common_table_expression,
         };
-        comma_common_table_expression_list.append(comma_common_table_expression);
+        comma_common_table_expression_list.push(comma_common_table_expression);
     }
     return Result::<WithClauseNode, ParseError>::Ok(WithClauseNode {
         span: Span::new(start, p.last_end()),
@@ -10751,7 +10751,7 @@ fn parse_common_table_expression(p: &mut Parser) -> Result<CommonTableExpression
                 comma,
                 column_name,
             };
-            comma_column_name_list.append(comma_column_name);
+            comma_column_name_list.push(comma_column_name);
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         let lparen_column_name_item_rparen = LparenColumnNameItemRparenItem {
@@ -10882,7 +10882,7 @@ fn parse_table_or_subquery_bt_2(p: &mut Parser) -> Result<TableOrSubqueryNode, P
                         comma,
                         table_or_subquery,
                     };
-                    comma_table_or_subquery_list.append(comma_table_or_subquery);
+                    comma_table_or_subquery_list.push(comma_table_or_subquery);
                 }
             }
         }
@@ -10972,7 +10972,7 @@ fn parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, P
                     comma,
                     expr,
                 };
-                comma_expr_list.append(comma_expr);
+                comma_expr_list.push(comma_expr);
             }
             let expr_item = ExprItemItem {
                 expr,
@@ -11145,7 +11145,7 @@ fn parse_join_clause(p: &mut Parser) -> Result<JoinClauseNode, ParseError> {
             table_or_subquery,
             join_constraint,
         };
-        join_operator_table_or_subquery_join_constraint_list.append(join_operator_table_or_subquery_join_constraint);
+        join_operator_table_or_subquery_join_constraint_list.push(join_operator_table_or_subquery_join_constraint);
     }
     return Result::<JoinClauseNode, ParseError>::Ok(JoinClauseNode {
         span: Span::new(start, p.last_end()),
@@ -11225,7 +11225,7 @@ fn parse_join_constraint(p: &mut Parser) -> Result<JoinConstraintNode, ParseErro
                         comma,
                         column_name,
                     };
-                    comma_column_name_list.append(comma_column_name);
+                    comma_column_name_list.push(comma_column_name);
                 }
                 let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
             }
@@ -11261,7 +11261,7 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                 comma,
                 result_column,
             };
-            comma_result_column_list.append(comma_result_column);
+            comma_result_column_list.push(comma_result_column);
         }
         let k_from_item: Option<KFromItemItem> = if p.peek_kind() == TK_K_FROM {
             let k_from = p.expect(TK_K_FROM, "K_FROM")?;
@@ -11287,7 +11287,7 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                                 comma,
                                 table_or_subquery,
                             };
-                            comma_table_or_subquery_list.append(comma_table_or_subquery);
+                            comma_table_or_subquery_list.push(comma_table_or_subquery);
                         }
                     }
                 }
@@ -11322,7 +11322,7 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                     comma,
                     expr,
                 };
-                comma_expr_list.append(comma_expr);
+                comma_expr_list.push(comma_expr);
             }
             let k_having_expr: Option<KHavingExprItem> = if p.peek_kind() == TK_K_HAVING {
                 let k_having = p.expect(TK_K_HAVING, "K_HAVING")?;
@@ -11369,7 +11369,7 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                 comma,
                 expr,
             };
-            comma_expr_list.append(comma_expr);
+            comma_expr_list.push(comma_expr);
         }
         let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
         let mut comma_lparen_expr_item_rparen_list: Array<CommaLparenExprItemRparenItem> = [];
@@ -11385,7 +11385,7 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                     comma,
                     expr,
                 };
-                comma_expr_list.append(comma_expr);
+                comma_expr_list.push(comma_expr);
             }
             let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
             let comma_lparen_expr_item_rparen = CommaLparenExprItemRparenItem {
@@ -11395,7 +11395,7 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
                 comma_expr_list,
                 rparen,
             };
-            comma_lparen_expr_item_rparen_list.append(comma_lparen_expr_item_rparen);
+            comma_lparen_expr_item_rparen_list.push(comma_lparen_expr_item_rparen);
         }
         return Result::<SelectCoreNode, ParseError>::Ok(SelectCoreNode::Alt1(SelectCoreAlt1 {
             span: Span::new(start, p.last_end()),

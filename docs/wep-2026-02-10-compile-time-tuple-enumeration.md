@@ -156,9 +156,9 @@ fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
     let mut query = strings[0];
     let mut params: Array<SqlParam> = [];
     for let [i, v] of values.enumerate() {
-        params.append(v.to_sql_param());
-        query.append("?");
-        query.append(strings[i + 1]);
+        params.push(v.to_sql_param());
+        query.push_str("?");
+        query.push_str(strings[i + 1]);
     }
     return SqlQuery { query, params };
 }
@@ -170,16 +170,16 @@ When called as `sql::<[i32, String]>(strings, [42, "Alice"])`, the loop body exp
 __unroll_0: {
     let i: i32 = 0;
     let v: i32 = values.0;
-    params.append(v.to_sql_param());      // resolves to i32::to_sql_param
-    query.append("?");
-    query.append(strings[1]);
+    params.push(v.to_sql_param());        // resolves to i32::to_sql_param
+    query.push_str("?");
+    query.push_str(strings[1]);
 }
 __unroll_1: {
     let i: i32 = 1;
     let v: String = values.1;
-    params.append(v.to_sql_param());      // resolves to String::to_sql_param
-    query.append("?");
-    query.append(strings[2]);
+    params.push(v.to_sql_param());        // resolves to String::to_sql_param
+    query.push_str("?");
+    query.push_str(strings[2]);
 }
 ```
 
@@ -209,7 +209,7 @@ error: method `to_sql_param` not found on type `bool`
    |                       ^^^^^^^^^^^^^^^^
    |                       element 2 of tuple [i32, String, bool]
    |
-11 |         params.append(v.to_sql_param());
+11 |         params.push(v.to_sql_param());
    |                       ^^^^^^^^^^^^^^^^ `bool` does not implement `ToSqlParam`
    |
 note: tuple type determined here

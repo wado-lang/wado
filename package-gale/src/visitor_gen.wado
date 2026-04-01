@@ -90,7 +90,7 @@ fn repeat_inner_walk_field(elem: &Element) -> Option<WalkField> {
             let mut cases: Array<GroupCaseInfo> = [];
             for let alt of alts {
                 if let RuleRef(name) = &alt.elements[0] {
-                    cases.append(GroupCaseInfo {
+                    cases.push(GroupCaseInfo {
                         case_name: to_pascal_case(name),
                         rule_name: *name,
                     });
@@ -177,7 +177,7 @@ fn collect_walk_fields(elements: &Array<Element>) -> Array<WalkField> {
             let count = get_name_count(&name_counts, &base_name);
             increment_name_count(&mut name_counts, &base_name);
             let final_name = if count > 0 { `{base_name}_{count + 1}` } else { base_name };
-            fields.append(WalkField { name: final_name, action: field.action, wrapper: field.wrapper });
+            fields.push(WalkField { name: final_name, action: field.action, wrapper: field.wrapper });
         }
     }
     return fields;
@@ -242,7 +242,7 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
             let mut cases: Array<GroupCaseInfo> = [];
             for let alt of alts {
                 if let RuleRef(name) = &alt.elements[0] {
-                    cases.append(GroupCaseInfo {
+                    cases.push(GroupCaseInfo {
                         case_name: to_pascal_case(name),
                         rule_name: *name,
                     });
@@ -295,7 +295,7 @@ fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
             return;
         }
     }
-    counts.append([*name, 1]);
+    counts.push([*name, 1]);
 }
 
 fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {

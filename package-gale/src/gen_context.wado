@@ -46,7 +46,7 @@ impl GenContext {
         }
 
         let is_top_level = visiting.is_empty();
-        visiting.append(*name);
+        visiting.push(*name);
 
         let mut result: Array<String> = [];
 
@@ -125,7 +125,7 @@ impl GenContext {
             if first.len() == 0 {
                 break;
             }
-            result.append(first);
+            result.push(first);
             let mut skipped_nullable = false;
             while start < alt.elements.len() {
                 let was_nullable = is_nullable(&alt.elements[start]);
@@ -156,7 +156,7 @@ impl GenContext {
         }
 
         let is_top_level = visiting.is_empty();
-        visiting.append(*name);
+        visiting.push(*name);
 
         let mut result = false;
         let rule = self.find_rule(name);
@@ -233,7 +233,7 @@ pub fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
 fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
     for let item of source {
         if !arr_contains(target, item) {
-            target.append(*item);
+            target.push(*item);
         }
     }
 }
@@ -251,7 +251,7 @@ fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
     let mut new_arr: Array<String> = [];
     for let v of visiting {
         if *v != *name {
-            new_arr.append(*v);
+            new_arr.push(*v);
         }
     }
     *visiting = new_arr;

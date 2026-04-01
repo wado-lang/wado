@@ -792,7 +792,7 @@ impl Matrix {
         let size = rows * cols;
         let mut data: Array<f64> = [];
         for let mut i = 0; i < size; i += 1 {
-            data.append(0.0);
+            data.push(0.0);
         }
         return Matrix { data, rows, cols };
     }

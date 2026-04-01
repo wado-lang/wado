@@ -51,13 +51,13 @@ fn escape_control(c: char) -> Option<String> {
 
 fn append_escaped_body(result: &mut String, c: char) {
     if let Some(esc) = escape_control(c) {
-        result.append(&esc);
+        result.push_str(&esc);
     } else {
         let code = c as i32;
         if code >= 32 && code < 127 {
             result.append_char(c);
         } else {
-            result.append(`\\u\{{code:x}\}`);
+            result.push_str(`\\u\{{code:x}\}`);
         }
     }
 }
@@ -78,7 +78,7 @@ pub fn escape_string(s: &String) -> String {
     result.append_char('"');
     for let c of s.chars() {
         if c == '"' {
-            result.append("\\\"");
+            result.push_str("\\\"");
         } else {
             append_escaped_body(&mut result, c);
         }
@@ -89,7 +89,7 @@ pub fn escape_string(s: &String) -> String {
 
 pub fn rule_type_name(name: &String) -> String {
     let mut result = to_pascal_case(name);
-    result.append("Node");
+    result.push_str("Node");
     return result;
 }
 
@@ -130,7 +130,7 @@ pub fn literal_field_name(text: &String) -> String {
         }
     }
     let mut result = String::with_capacity(text.len() + 4);
-    result.append("lit_");
+    result.push_str("lit_");
     for let c of chars {
         if 'a' <= c <= 'z' || 'A' <= c <= 'Z' || '0' <= c <= '9' {
             result.append_char(c.to_ascii_lowercase());
@@ -177,21 +177,21 @@ pub fn is_simple_cst_group(alts: &Array<Alternative>) -> bool {
 pub fn group_variant_type_name(alts: &Array<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i > 0 { result.append("Or"); }
+        if i > 0 { result.push_str("Or"); }
         if let RuleRef(name) = &alts[i].elements[0] {
-            result.append(&to_pascal_case(name));
+            result.push_str(&to_pascal_case(name));
         }
     }
-    result.append("Group");
+    result.push_str("Group");
     return result;
 }
 
 pub fn group_field_base_name(alts: &Array<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i > 0 { result.append("_or_"); }
+        if i > 0 { result.push_str("_or_"); }
         if let RuleRef(name) = &alts[i].elements[0] {
-            result.append(&to_snake_case(name));
+            result.push_str(&to_snake_case(name));
         }
     }
     return result;
@@ -249,9 +249,9 @@ fn element_base_name(elem: &Element) -> String {
 pub fn single_alt_group_type_name(alt: &Alternative) -> String {
     let mut result = String::with_capacity(64);
     for let elem of &alt.elements {
-        result.append(&to_pascal_case(&element_base_name(&elem)));
+        result.push_str(&to_pascal_case(&element_base_name(&elem)));
     }
-    result.append("Item");
+    result.push_str("Item");
     return result;
 }
 
@@ -260,8 +260,8 @@ pub fn single_alt_group_type_name(alt: &Alternative) -> String {
 pub fn single_alt_group_field_name(alt: &Alternative) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
-        if i > 0 { result.append("_"); }
-        result.append(&element_base_name(&alt.elements[i]));
+        if i > 0 { result.push_str("_"); }
+        result.push_str(&element_base_name(&alt.elements[i]));
     }
     return result;
 }
@@ -271,22 +271,22 @@ pub fn single_alt_group_field_name(alt: &Alternative) -> String {
 pub fn token_group_field_name(alts: &Array<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i > 0 { result.append("_or_"); }
-        result.append(&element_base_name(&alts[i].elements[0]));
+        if i > 0 { result.push_str("_or_"); }
+        result.push_str(&element_base_name(&alts[i].elements[0]));
     }
     return result;
 }
 
 pub fn literal_const_name(text: &String) -> String {
     let mut result = String::with_capacity(text.len() + 8);
-    result.append("TK_LIT_");
+    result.push_str("TK_LIT_");
     for let c of text.chars() {
         if c.is_ascii_lowercase() {
             result.append_char(c.to_ascii_uppercase());
         } else if c.is_ascii_uppercase() || '0' <= c <= '9' {
             result.append_char(c);
         } else if let Some(names) = symbol_char_names(c) {
-            result.append(&names.1);
+            result.push_str(&names.1);
         } else {
             result.append_char('_');
         }

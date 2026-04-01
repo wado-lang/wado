@@ -16,19 +16,19 @@ representative of the problems:
 
 ### Pain Points in package-gale
 
-**1. Pervasive `out.append()` noise.** Every line of generated code requires an explicit
-`out.append(...)` call. The generator code bears little visual resemblance to the output:
+**1. Pervasive `out.push_str()` noise.** Every line of generated code requires an explicit
+`out.push_str(...)` call. The generator code bears little visual resemblance to the output:
 
 ```wado
 // What the generator looks like (lexer_gen.wado:90-109)
-out.append("struct Lexer {\n");
-out.append("    chars: Array<char>,\n");
-out.append("    pos: i32,\n");
-out.append("}\n\n");
-out.append("impl Lexer {\n");
-out.append("    fn new(input: &String) -> Lexer {\n");
-out.append("        return Lexer { chars: input.chars().collect(), pos: 0 };\n");
-out.append("    }\n\n");
+out.push_str("struct Lexer {\n");
+out.push_str("    chars: Array<char>,\n");
+out.push_str("    pos: i32,\n");
+out.push_str("}\n\n");
+out.push_str("impl Lexer {\n");
+out.push_str("    fn new(input: &String) -> Lexer {\n");
+out.push_str("        return Lexer { chars: input.chars().collect(), pos: 0 };\n");
+out.push_str("    }\n\n");
 // ... 20 more lines of this
 ```
 
@@ -55,7 +55,7 @@ but the generated Wado code also uses `{}` for blocks. Every brace in the output
 escaped as `\{` and `\}`:
 
 ```wado
-out.append(`{indent}if pos >= chars.len() \{ {fail_action}; \}\n`);
+out.push_str(`{indent}if pos >= chars.len() \{ {fail_action}; \}\n`);
 ```
 
 **5. Duplicated logic.** `dedup_name` / `get_count` / `increment_count` are implemented
@@ -431,7 +431,7 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
 }
 ```
 
-Compare with the current code (20 lines of `out.append()` with manual `\n` and spaces).
+Compare with the current code (20 lines of `out.push_str()` with manual `\n` and spaces).
 
 ### Assessment for Wado
 
@@ -560,21 +560,21 @@ Current package-gale code (manual string appending):
 
 ```wado
 fn gen_lexer_struct(out: &mut String) {
-    out.append("struct Lexer {\n");
-    out.append("    chars: Array<char>,\n");
-    out.append("    pos: i32,\n");
-    out.append("}\n\n");
-    out.append("impl Lexer {\n");
-    out.append("    fn new(input: &String) -> Lexer {\n");
-    out.append("        return Lexer { chars: input.chars().collect(), pos: 0 };\n");
-    out.append("    }\n\n");
+    out.push_str("struct Lexer {\n");
+    out.push_str("    chars: Array<char>,\n");
+    out.push_str("    pos: i32,\n");
+    out.push_str("}\n\n");
+    out.push_str("impl Lexer {\n");
+    out.push_str("    fn new(input: &String) -> Lexer {\n");
+    out.push_str("        return Lexer { chars: input.chars().collect(), pos: 0 };\n");
+    out.push_str("    }\n\n");
     // ...
 }
 
 fn gen_if_check(out: &mut String, indent: &String, ctr: &mut i32, ...) {
     let inner = `{indent}    `;
     *ctr += 1;
-    out.append(`{indent}if pos >= chars.len() \{ {fail_action}; \}\n`);
+    out.push_str(`{indent}if pos >= chars.len() \{ {fail_action}; \}\n`);
 }
 ```
 

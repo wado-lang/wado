@@ -117,15 +117,15 @@ impl TreeRecorder {
 
 impl Visitor for TreeRecorder {
     fn enter_rule(&mut self, name: &String, span: &Span) {
-        self.events.append(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+        self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
     }
 
     fn exit_rule(&mut self, name: &String, span: &Span) {
-        self.events.append(TreeEvent::Exit);
+        self.events.push(TreeEvent::Exit);
     }
 
     fn visit_token(&mut self, token: &Token) {
-        self.events.append(TreeEvent::VisitToken(*token));
+        self.events.push(TreeEvent::VisitToken(*token));
     }
 }
 
@@ -141,9 +141,9 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
                 break;
             }
             if let Enter(_) = ev {
-                children.append(CstChild::Node(tree_build_node(events, pos)));
+                children.push(CstChild::Node(tree_build_node(events, pos)));
             } else if let VisitToken(t) = ev {
-                children.append(CstChild::Token(t));
+                children.push(CstChild::Token(t));
                 *pos += 1;
             }
         }
@@ -650,22 +650,22 @@ pub fn tokenize(input: &String) -> Array<Token> {
         if end > best_end { best_end = end; best_kind = TK_DOT; }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
-            tokens.append(tok);
+            tokens.push(tok);
             trivia = [];
             lexer.pos = start + 1;
         } else {
             let is_skip = false || best_kind == TK_WHITESPACE;
             if is_skip {
-                trivia.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+                trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
             } else {
                 let tok = Token::with_trivia(best_kind, lexer.slice(start, best_end), Span::new(start, best_end), trivia);
-                tokens.append(tok);
+                tokens.push(tok);
                 trivia = [];
             }
             lexer.pos = best_end;
         }
     }
-    tokens.append(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
+    tokens.push(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
     return tokens;
 }
 
@@ -735,7 +735,7 @@ fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     let mut item_list: Array<ItemNode> = [];
     while p.peek_kind() == TK_STRING || p.peek_kind() == TK_SYMBOL || p.peek_kind() == TK_NUMBER || p.peek_kind() == TK_DOT || p.peek_kind() == TK_LPAREN {
         let item = parse_item(p)?;
-        item_list.append(item);
+        item_list.push(item);
     }
     let eof = p.expect(TK_EOF, "EOF")?;
     return Result::<SexprNode, ParseError>::Ok(SexprNode {
@@ -806,7 +806,7 @@ fn parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
     let mut item_list: Array<ItemNode> = [];
     while p.peek_kind() == TK_STRING || p.peek_kind() == TK_SYMBOL || p.peek_kind() == TK_NUMBER || p.peek_kind() == TK_DOT || p.peek_kind() == TK_LPAREN {
         let item = parse_item(p)?;
-        item_list.append(item);
+        item_list.push(item);
     }
     let rparen = p.expect(TK_RPAREN, "RPAREN")?;
     return Result::<ListNode, ParseError>::Ok(ListNode {

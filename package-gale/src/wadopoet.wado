@@ -42,7 +42,7 @@ impl CodeWriter {
     /// Write a complete line (auto-indented, with trailing newline).
     pub fn line(&mut self, text: &String) {
         self.write_indent();
-        self.buf.append(text);
+        self.buf.push_str(text);
         self.buf.append_char('\n');
         self.fresh_line = true;
     }
@@ -56,8 +56,8 @@ impl CodeWriter {
     /// Begin a block: emits "opener {" and increases indentation.
     pub fn begin(&mut self, opener: &String) {
         self.write_indent();
-        self.buf.append(opener);
-        self.buf.append(" {\n");
+        self.buf.push_str(opener);
+        self.buf.push_str(" {\n");
         self.fresh_line = true;
         self.indent_level += 1;
     }
@@ -66,7 +66,7 @@ impl CodeWriter {
     pub fn end(&mut self) {
         self.indent_level -= 1;
         self.write_indent();
-        self.buf.append("}\n");
+        self.buf.push_str("}\n");
         self.fresh_line = true;
     }
 
@@ -75,7 +75,7 @@ impl CodeWriter {
         self.indent_level -= 1;
         self.write_indent();
         self.buf.append_char('}');
-        self.buf.append(suffix);
+        self.buf.push_str(suffix);
         self.buf.append_char('\n');
         self.fresh_line = true;
     }
@@ -85,9 +85,9 @@ impl CodeWriter {
     pub fn else_begin(&mut self, opener: &String) {
         self.indent_level -= 1;
         self.write_indent();
-        self.buf.append("} ");
-        self.buf.append(opener);
-        self.buf.append(" {\n");
+        self.buf.push_str("} ");
+        self.buf.push_str(opener);
+        self.buf.push_str(" {\n");
         self.fresh_line = true;
         self.indent_level += 1;
     }
@@ -111,7 +111,7 @@ impl CodeWriter {
 
     /// Append raw text with no indentation handling.
     pub fn raw(&mut self, text: &String) {
-        self.buf.append(text);
+        self.buf.push_str(text);
         if text.len() > 0 {
             let chars: Array<char> = text.chars().collect();
             self.fresh_line = chars[chars.len() - 1] == '\n';
@@ -126,7 +126,7 @@ impl CodeWriter {
 
     fn write_indent(&mut self) {
         for let mut i = 0; i < self.indent_level; i += 1 {
-            self.buf.append("    ");
+            self.buf.push_str("    ");
         }
     }
 }
@@ -164,17 +164,17 @@ impl StructSpec {
     }
 
     pub fn add_field(&mut self, name: &String, type_str: &String) -> &mut StructSpec with stores[self] {
-        self.fields.append(FieldSpec::new(name, type_str));
+        self.fields.push(FieldSpec::new(name, type_str));
         return self;
     }
 
     pub fn add_pub_field(&mut self, name: &String, type_str: &String) -> &mut StructSpec with stores[self] {
-        self.fields.append(FieldSpec::new_pub(name, type_str));
+        self.fields.push(FieldSpec::new_pub(name, type_str));
         return self;
     }
 
     pub fn add_field_spec(&mut self, field: FieldSpec) -> &mut StructSpec with stores[self] {
-        self.fields.append(field);
+        self.fields.push(field);
         return self;
     }
 
@@ -211,12 +211,12 @@ impl VariantSpec {
     }
 
     pub fn add_case(&mut self, name: &String) -> &mut VariantSpec with stores[self] {
-        self.cases.append(VariantCase { name: *name, payload: null });
+        self.cases.push(VariantCase { name: *name, payload: null });
         return self;
     }
 
     pub fn add_case_with_payload(&mut self, name: &String, payload: &String) -> &mut VariantSpec with stores[self] {
-        self.cases.append(VariantCase {
+        self.cases.push(VariantCase {
             name: *name,
             payload: Option::<String>::Some(*payload),
         });
@@ -254,7 +254,7 @@ impl EnumSpec {
     }
 
     pub fn add_member(&mut self, name: &String) -> &mut EnumSpec with stores[self] {
-        self.members.append(*name);
+        self.members.push(*name);
         return self;
     }
 
@@ -285,7 +285,7 @@ impl FlagsSpec {
     }
 
     pub fn add_member(&mut self, name: &String) -> &mut FlagsSpec with stores[self] {
-        self.members.append(*name);
+        self.members.push(*name);
         return self;
     }
 
@@ -345,17 +345,17 @@ impl FnSpec {
     }
 
     pub fn add_param(&mut self, name: &String, type_str: &String) -> &mut FnSpec with stores[self] {
-        self.params.append(ParamSpec::new(name, type_str));
+        self.params.push(ParamSpec::new(name, type_str));
         return self;
     }
 
     pub fn add_mut_param(&mut self, name: &String, type_str: &String) -> &mut FnSpec with stores[self] {
-        self.params.append(ParamSpec::new_mut(name, type_str));
+        self.params.push(ParamSpec::new_mut(name, type_str));
         return self;
     }
 
     pub fn add_param_spec(&mut self, param: ParamSpec) -> &mut FnSpec with stores[self] {
-        self.params.append(param);
+        self.params.push(param);
         return self;
     }
 
@@ -374,27 +374,27 @@ impl FnSpec {
     pub fn signature(&self) -> String {
         let mut sig = String::with_capacity(64);
         if self.is_pub {
-            sig.append("pub ");
+            sig.push_str("pub ");
         }
-        sig.append(`fn {self.name}(`);
+        sig.push_str(`fn {self.name}(`);
         let mut first = true;
         if let Some(recv) = &self.receiver {
-            sig.append(*recv);
+            sig.push_str(*recv);
             first = false;
         }
         for let param of &self.params {
             if !first {
-                sig.append(", ");
+                sig.push_str(", ");
             }
             if param.is_mut {
-                sig.append("mut ");
+                sig.push_str("mut ");
             }
-            sig.append(`{param.name}: {param.type_str}`);
+            sig.push_str(`{param.name}: {param.type_str}`);
             first = false;
         }
-        sig.append(")");
+        sig.push_str(")");
         if let Some(ret) = &self.return_type {
-            sig.append(` -> {*ret}`);
+            sig.push_str(` -> {*ret}`);
         }
         return sig;
     }
@@ -459,12 +459,12 @@ impl TraitSpec {
     }
 
     pub fn add_associated_type(&mut self, name: &String) -> &mut TraitSpec with stores[self] {
-        self.associated_types.append(*name);
+        self.associated_types.push(*name);
         return self;
     }
 
     pub fn add_method(&mut self, method: FnSpec) -> &mut TraitSpec with stores[self] {
-        self.methods.append(method);
+        self.methods.push(method);
         return self;
     }
 

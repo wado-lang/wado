@@ -92,13 +92,13 @@ fn normalize(data: &Array<f64>) -> Array<f64> {
     while i + 2 <= len {
         let chunk: f64x2 = [(*data)[i], (*data)[i + 1]];
         let normalized = (chunk - mean_vec) / sd_vec;
-        result.append(normalized.extract_lane(0));
-        result.append(normalized.extract_lane(1));
+        result.push(normalized.extract_lane(0));
+        result.push(normalized.extract_lane(1));
         i = i + 2;
     }
 
     if i < len {
-        result.append(((*data)[i] - s.mean) / sd);
+        result.push(((*data)[i] - s.mean) / sd);
     }
 
     return result;

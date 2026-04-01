@@ -27,7 +27,7 @@ fn read_file_bytes(path: String) -> Array<u8> with Preopens {
             break;
         }
         for let mut i = 0; i < chunk.len(); i += 1 {
-            buf.append(chunk[i]);
+            buf.push(chunk[i]);
         }
     }
     stream.drop();
@@ -37,7 +37,7 @@ fn read_file_bytes(path: String) -> Array<u8> with Preopens {
 test "compression round-trip" {
     let mut data: Array<u8> = [];
     for let mut i = 0; i < 100; i += 1 {
-        data.append((i % 256) as u8);
+        data.push((i % 256) as u8);
     }
     let compressed = zlib_compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();

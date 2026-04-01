@@ -117,15 +117,15 @@ impl TreeRecorder {
 
 impl Visitor for TreeRecorder {
     fn enter_rule(&mut self, name: &String, span: &Span) {
-        self.events.append(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
+        self.events.push(TreeEvent::Enter(TreeEnterInfo { name: *name, span: *span }));
     }
 
     fn exit_rule(&mut self, name: &String, span: &Span) {
-        self.events.append(TreeEvent::Exit);
+        self.events.push(TreeEvent::Exit);
     }
 
     fn visit_token(&mut self, token: &Token) {
-        self.events.append(TreeEvent::VisitToken(*token));
+        self.events.push(TreeEvent::VisitToken(*token));
     }
 }
 
@@ -141,9 +141,9 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
                 break;
             }
             if let Enter(_) = ev {
-                children.append(CstChild::Node(tree_build_node(events, pos)));
+                children.push(CstChild::Node(tree_build_node(events, pos)));
             } else if let VisitToken(t) = ev {
-                children.append(CstChild::Token(t));
+                children.push(CstChild::Token(t));
                 *pos += 1;
             }
         }
@@ -949,22 +949,22 @@ pub fn tokenize(input: &String) -> Array<Token> {
         if end > best_end { best_end = end; best_kind = TK_WS; }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
-            tokens.append(tok);
+            tokens.push(tok);
             trivia = [];
             lexer.pos = start + 1;
         } else {
             let is_skip = false || best_kind == TK_WS;
             if is_skip {
-                trivia.append(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+                trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
             } else {
                 let tok = Token::with_trivia(best_kind, lexer.slice(start, best_end), Span::new(start, best_end), trivia);
-                tokens.append(tok);
+                tokens.push(tok);
                 trivia = [];
             }
             lexer.pos = best_end;
         }
     }
-    tokens.append(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
+    tokens.push(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
     return tokens;
 }
 
@@ -1075,7 +1075,7 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
             plus_or_minus,
             multiplying_expression,
         };
-        item_multiplying_expression_list.append(item_multiplying_expression);
+        item_multiplying_expression_list.push(item_multiplying_expression);
     }
     return Result::<ExpressionNode, ParseError>::Ok(ExpressionNode {
         span: Span::new(start, p.last_end()),
@@ -1095,7 +1095,7 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
             times_or_div,
             pow_expression,
         };
-        item_pow_expression_list.append(item_pow_expression);
+        item_pow_expression_list.push(item_pow_expression);
     }
     return Result::<MultiplyingExpressionNode, ParseError>::Ok(MultiplyingExpressionNode {
         span: Span::new(start, p.last_end()),
@@ -1115,7 +1115,7 @@ fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError>
             pow,
             signed_atom,
         };
-        pow_signed_atom_list.append(pow_signed_atom);
+        pow_signed_atom_list.push(pow_signed_atom);
     }
     return Result::<PowExpressionNode, ParseError>::Ok(PowExpressionNode {
         span: Span::new(start, p.last_end()),
@@ -1270,7 +1270,7 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
             comma,
             expression,
         };
-        comma_expression_list.append(comma_expression);
+        comma_expression_list.push(comma_expression);
     }
     let rparen = p.expect(TK_RPAREN, "RPAREN")?;
     return Result::<FuncNode, ParseError>::Ok(FuncNode {

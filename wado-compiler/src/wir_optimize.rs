@@ -10,9 +10,9 @@
 //! | `sroa_return`     | Multi-value return SROA (structs + variants)|
 //! | `sroa_param`      | Single-field parameter SROA                |
 //! | `elide_struct`    | Struct local elimination (single + multi)   |
-//! | `array`           | Append collapse / data promotion / splitting|
+//! | `array`           | Push collapse / data promotion / splitting  |
 //! | `const_forward`   | Struct field constant forwarding            |
-//! | `string`          | Short string append simplification          |
+//! | `string`          | Short string push_str simplification        |
 //! | `peephole`        | Constant folding, copy elision, MV elision  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
 //! | `dae`             | Dead argument elimination                   |
@@ -105,8 +105,8 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel, profiler: &dyn 
 
     // Phase 3: Data flow
     //
-    // Collapse inlined append sequences and forward constants.
-    // Order matters: append collapse exposes StructNew nodes that field
+    // Collapse inlined push sequences and forward constants.
+    // Order matters: push collapse exposes StructNew nodes that field
     // forwarding then uses for constant index bounds check elimination.
     // Loop-guarded bounds checks are eliminated at TIR level by the
     // condition_implication pass.
