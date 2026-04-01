@@ -49,21 +49,21 @@ fn collect_lits_from_elements(elements: &Array<Element>, seen: &mut Array<String
 }
 
 fn collect_lits_from_element(elem: &Element, seen: &mut Array<String>, result: &mut Array<LitToken>) {
-    if let Literal(text) = *elem {
-        if !seen_contains(seen, &text) {
-            seen.append(text);
-            result.append(LitToken { text, const_name: literal_const_name(&text) });
+    if let Literal(text) = elem {
+        if !seen_contains(seen, text) {
+            seen.append(*text);
+            result.append(LitToken { text: *text, const_name: literal_const_name(text) });
         }
     }
-    if let Repeat(rep) = *elem {
+    if let Repeat(rep) = elem {
         collect_lits_from_element(&rep.element, seen, result);
     }
-    if let Group(alts) = *elem {
+    if let Group(alts) = elem {
         for let alt of alts {
             collect_lits_from_elements(&alt.elements, seen, result);
         }
     }
-    if let Label(lab) = *elem {
+    if let Label(lab) = elem {
         collect_lits_from_element(&lab.element, seen, result);
     }
 }
