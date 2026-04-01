@@ -1,0 +1,38 @@
+// Test: Fields.from_list Err variant (HeaderError).
+//
+// Attempts to create Fields from a list with an invalid header name
+// containing a null byte, which should trigger HeaderError::InvalidSyntax.
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Valid from_list → Ok
+    let valid_entries: Array<[FieldName, FieldValue]> = [
+        ["x-valid" as FieldName, "value".as_bytes() as FieldValue],
+    ];
+    let valid_result = Fields::from_list(valid_entries);
+    assert valid_result matches { Ok(_) };
+
+    // Invalid header name with null byte → should be Err
+    let null_byte: Array<u8> = [0 as u8];
+    let null_name = match String::from_utf8(null_byte) {
+        Ok(s) => s,
+        Err(_) => panic("failed to create string with null byte"),
+    };
+    let invalid_entries: Array<[FieldName, FieldValue]> = [
+        [null_name as FieldName, "value".as_bytes() as FieldValue],
+    ];
+    let invalid_result = Fields::from_list(invalid_entries);
+    assert invalid_result matches { Err(_) };
+
+    // Return success
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let resp_headers = Fields::new();
+    let [response, _tx_future] = Response::new(resp_headers, null, trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

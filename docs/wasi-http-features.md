@@ -12,14 +12,14 @@ Criteria: a method is checked only when (1) the method is called in an e2e fixtu
 
 ### Client
 
-- [ ] `async fn send(request: Request) -> Result<Response, ErrorCode>` — Ok: `http-client-send-*.wado`, Err: not testable (mock system traps instead of returning ErrorCode)
+- [ ] `async fn send(request: Request) -> Result<Response, ErrorCode>` — Ok: `http-client-send-*.wado`, Err: mock traps instead of returning ErrorCode (`http-client-send-error` documents this with `trapped: true`)
 
 ## Resources
 
 ### Fields
 
 - [x] `fn new() -> Fields`
-- [ ] `fn from_list(entries) -> Result<Fields, HeaderError>` — Ok: `http-fields-from-list`, Err: not tested
+- [x] `fn from_list(entries) -> Result<Fields, HeaderError>` — Ok: `http-fields-from-list`, Err: `http-fields-from-list-error` (null byte header name)
 - [x] `fn get(name) -> Array<FieldValue>` — existing and non-existing names tested
 - [x] `fn has(name) -> bool` — true and false tested
 - [x] `fn set(name, value) -> Result<(), HeaderError>` — Ok: `http-fields-set`, Err: `http-fields-immutable-errors`
@@ -129,16 +129,16 @@ Criteria: a method is checked only when (1) the method is called in an e2e fixtu
 - [x] Multiple sequential requests + header reading — `http-client-advanced`
 - [ ] Send with request body stream — times out at O0/O2 (commented out in `http-client-send-with-body`)
 - [x] Send with RequestOptions — `http-client-request-full`
-- [ ] Handle upstream error (Err from Client::send) — not testable (mock system traps)
+- [ ] Handle upstream error (Err from Client::send) — mock traps instead of ErrorCode; `http-client-send-error` documents this with `trapped: true`
 
 ### Worlds
 
 - [x] `wasi:http/service` (Service world) — all HTTP fixtures
-- [ ] `wasi:http/middleware` (Middleware world) — test harness does not support this world
+- [ ] `wasi:http/middleware` (Middleware world) — `http-middleware-forward` (commented out; compiler panics, test harness lacks Handler mock)
 
 ## Known Issues
 
-- Request.new with contents=Some(Stream\<u8\>) causes timeout at O0 and O2 optimization levels
-- HeaderError variant matching (`e matches { Immutable }`) panics at O0/O2; using `Err(_)` works
-- Client::send Err variant cannot be tested: mock system traps on unmatched paths instead of returning ErrorCode
-- Fields.from_list Err variant is not tested: wasmtime accepts all valid UTF-8 header names/values
+- Request.new with contents=Some(Stream\<u8\>) causes timeout at O0 and O2 optimization levels (`http-client-send-with-body`)
+- HeaderError variant matching (`e matches { Immutable }`) panics at O0/O2; using `Err(_)` works (`http-fields-immutable-errors`)
+- Client::send Err variant: mock system traps on unmatched paths instead of returning ErrorCode (`http-client-send-error`)
+- Handler effect in service world causes compiler panic instead of proper error (`http-middleware-forward`)
