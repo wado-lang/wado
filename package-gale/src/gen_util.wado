@@ -132,7 +132,7 @@ pub fn literal_field_name(text: &String) -> String {
     let mut result = String::with_capacity(text.len() + 4);
     result.append("lit_");
     for let c of chars {
-        if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+        if 'a' <= c <= 'z' || 'A' <= c <= 'Z' || '0' <= c <= '9' {
             result.append_char(c.to_ascii_lowercase());
         } else {
             result.append_char('_');
@@ -283,7 +283,7 @@ pub fn literal_const_name(text: &String) -> String {
     for let c of text.chars() {
         if c.is_ascii_lowercase() {
             result.append_char(c.to_ascii_uppercase());
-        } else if c.is_ascii_uppercase() || c >= '0' && c <= '9' {
+        } else if c.is_ascii_uppercase() || '0' <= c <= '9' {
             result.append_char(c);
         } else if let Some(names) = symbol_char_names(c) {
             result.append(&names.1);
