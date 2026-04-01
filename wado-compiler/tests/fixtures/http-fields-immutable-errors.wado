@@ -1,0 +1,70 @@
+// Test Fields operations on immutable fields (from request.get_headers()).
+//
+// Tests:
+// - Fields.append on immutable fields → Err(HeaderError::Immutable)
+// - Fields.set on immutable fields → Err(HeaderError::Immutable)
+// - Fields.delete on immutable fields → Err(HeaderError::Immutable)
+// - Fields.get_and_delete on immutable fields → Err(HeaderError::Immutable)
+// - Fields.get and Fields.has still work on immutable fields
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Get immutable headers from incoming request
+    let headers = request.get_headers();
+
+    // Read operations should work on immutable fields
+    let has_host = headers.has("host" as FieldName);
+    // has() returns bool, no error — fine on immutable
+    let vals = headers.get("host" as FieldName);
+    // get() returns Array<FieldValue>, no error — fine on immutable
+
+    // append on immutable → Err
+    let append_result = headers.append(
+        "x-new" as FieldName,
+        "value".as_bytes() as FieldValue,
+    );
+    assert append_result matches { Err(_) };
+
+    // set on immutable → Err
+    let values: Array<FieldValue> = ["val".as_bytes() as FieldValue];
+    let set_result = headers.set("host" as FieldName, values);
+    assert set_result matches { Err(_) };
+
+    // delete on immutable → Err
+    let delete_result = headers.delete("host" as FieldName);
+    assert delete_result matches { Err(_) };
+
+    // get_and_delete on immutable → Err
+    let gad_result = headers.get_and_delete("host" as FieldName);
+    assert gad_result matches { Err(_) };
+
+    // copy_all and clone still work on immutable fields
+    let entries = headers.copy_all();
+    let cloned = headers.clone();
+    // The cloned copy is mutable
+    let clone_append = cloned.append("x-clone" as FieldName, "ok".as_bytes() as FieldValue);
+    assert clone_append matches { Ok(_) };
+
+    // Return success
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [resp_rx, resp_tx] = Stream::<u8>::new();
+    let resp_headers = Fields::new();
+    let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(resp_rx), trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+    resp_tx.write("ok".as_bytes());
+    resp_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "request": {
+            "headers": [["x-test", "hello"]]
+        },
+        "status": 200,
+        "body": "ok"
+    }
+}

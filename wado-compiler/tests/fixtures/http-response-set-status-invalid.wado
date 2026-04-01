@@ -1,0 +1,39 @@
+// Test Response.set_status_code with invalid values.
+//
+// Tests:
+// - Response.set_status_code with valid value → Ok
+// - Response.set_status_code with invalid value (0) → Err
+// - Response.set_status_code with invalid value (65535) → Err
+
+use { Request, Response, ErrorCode, Fields, StatusCode, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+
+    // Valid status code → Ok
+    let ok_result = response.set_status_code(201 as StatusCode);
+    assert ok_result matches { Ok(_) };
+    assert response.get_status_code() == 201;
+
+    // Invalid status code 0 → Err
+    let err_result_0 = response.set_status_code(0 as StatusCode);
+    assert err_result_0 matches { Err(_) };
+    // Status should remain 201 after failed set
+    assert response.get_status_code() == 201;
+
+    // Invalid status code 65535 → Err
+    let err_result_max = response.set_status_code(65535 as StatusCode);
+    assert err_result_max matches { Err(_) };
+    assert response.get_status_code() == 201;
+
+    // Reset to 200 for the test assertion
+    let _ = response.set_status_code(200 as StatusCode);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

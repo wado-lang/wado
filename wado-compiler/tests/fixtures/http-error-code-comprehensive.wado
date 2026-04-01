@@ -1,0 +1,203 @@
+// Comprehensive ErrorCode variant and payload construction test.
+//
+// Tests:
+// - ErrorCode variants without payloads (DnsTimeout, ConnectionRefused, etc.)
+// - DnsErrorPayload struct construction
+// - TlsAlertReceivedPayload struct construction
+// - FieldSizePayload struct construction
+// - ErrorCode variants with Option payloads (HttpRequestBodySize, HttpResponseBodySize, etc.)
+// - HeaderError variant construction
+// - RequestOptionsError variant construction
+
+use {
+    Request, Response, ErrorCode, Fields, Trailers,
+    DnsErrorPayload, TlsAlertReceivedPayload, FieldSizePayload,
+    HeaderError, RequestOptionsError,
+} from "wasi:http";
+
+fn error_tag(e: &ErrorCode) -> String {
+    return match *e {
+        DnsTimeout => "dns-timeout",
+        DnsError(_) => "dns-error",
+        DestinationNotFound => "destination-not-found",
+        DestinationUnavailable => "destination-unavailable",
+        DestinationIpProhibited => "destination-ip-prohibited",
+        DestinationIpUnroutable => "destination-ip-unroutable",
+        ConnectionRefused => "connection-refused",
+        ConnectionTerminated => "connection-terminated",
+        ConnectionTimeout => "connection-timeout",
+        ConnectionReadTimeout => "connection-read-timeout",
+        ConnectionWriteTimeout => "connection-write-timeout",
+        ConnectionLimitReached => "connection-limit-reached",
+        TlsProtocolError => "tls-protocol-error",
+        TlsCertificateError => "tls-certificate-error",
+        TlsAlertReceived(_) => "tls-alert-received",
+        HttpRequestDenied => "http-request-denied",
+        HttpRequestLengthRequired => "http-request-length-required",
+        HttpRequestBodySize(_) => "http-request-body-size",
+        HttpRequestMethodInvalid => "http-request-method-invalid",
+        HttpRequestUriInvalid => "http-request-uri-invalid",
+        HttpRequestUriTooLong => "http-request-uri-too-long",
+        HttpRequestHeaderSectionSize(_) => "http-request-header-section-size",
+        HttpRequestHeaderSize(_) => "http-request-header-size",
+        HttpRequestTrailerSectionSize(_) => "http-request-trailer-section-size",
+        HttpRequestTrailerSize(_) => "http-request-trailer-size",
+        HttpResponseIncomplete => "http-response-incomplete",
+        HttpResponseHeaderSectionSize(_) => "http-response-header-section-size",
+        HttpResponseHeaderSize(_) => "http-response-header-size",
+        HttpResponseBodySize(_) => "http-response-body-size",
+        HttpResponseTrailerSectionSize(_) => "http-response-trailer-section-size",
+        HttpResponseTrailerSize(_) => "http-response-trailer-size",
+        HttpResponseTransferCoding(_) => "http-response-transfer-coding",
+        HttpResponseContentCoding(_) => "http-response-content-coding",
+        HttpResponseTimeout => "http-response-timeout",
+        HttpUpgradeFailed => "http-upgrade-failed",
+        HttpProtocolError => "http-protocol-error",
+        LoopDetected => "loop-detected",
+        ConfigurationError => "configuration-error",
+        InternalError(_) => "internal-error",
+    };
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Test no-payload variants
+    assert error_tag(&ErrorCode::DnsTimeout) == "dns-timeout";
+    assert error_tag(&ErrorCode::DestinationNotFound) == "destination-not-found";
+    assert error_tag(&ErrorCode::DestinationUnavailable) == "destination-unavailable";
+    assert error_tag(&ErrorCode::DestinationIpProhibited) == "destination-ip-prohibited";
+    assert error_tag(&ErrorCode::DestinationIpUnroutable) == "destination-ip-unroutable";
+    assert error_tag(&ErrorCode::ConnectionRefused) == "connection-refused";
+    assert error_tag(&ErrorCode::ConnectionTerminated) == "connection-terminated";
+    assert error_tag(&ErrorCode::ConnectionTimeout) == "connection-timeout";
+    assert error_tag(&ErrorCode::ConnectionReadTimeout) == "connection-read-timeout";
+    assert error_tag(&ErrorCode::ConnectionWriteTimeout) == "connection-write-timeout";
+    assert error_tag(&ErrorCode::ConnectionLimitReached) == "connection-limit-reached";
+    assert error_tag(&ErrorCode::TlsProtocolError) == "tls-protocol-error";
+    assert error_tag(&ErrorCode::TlsCertificateError) == "tls-certificate-error";
+    assert error_tag(&ErrorCode::HttpRequestDenied) == "http-request-denied";
+    assert error_tag(&ErrorCode::HttpRequestLengthRequired) == "http-request-length-required";
+    assert error_tag(&ErrorCode::HttpRequestMethodInvalid) == "http-request-method-invalid";
+    assert error_tag(&ErrorCode::HttpRequestUriInvalid) == "http-request-uri-invalid";
+    assert error_tag(&ErrorCode::HttpRequestUriTooLong) == "http-request-uri-too-long";
+    assert error_tag(&ErrorCode::HttpResponseIncomplete) == "http-response-incomplete";
+    assert error_tag(&ErrorCode::HttpResponseTimeout) == "http-response-timeout";
+    assert error_tag(&ErrorCode::HttpUpgradeFailed) == "http-upgrade-failed";
+    assert error_tag(&ErrorCode::HttpProtocolError) == "http-protocol-error";
+    assert error_tag(&ErrorCode::LoopDetected) == "loop-detected";
+    assert error_tag(&ErrorCode::ConfigurationError) == "configuration-error";
+
+    // Test DnsErrorPayload
+    let dns_payload = DnsErrorPayload {
+        rcode: Option::<String>::Some("NXDOMAIN"),
+        info_code: Option::<u16>::Some(3),
+    };
+    assert dns_payload.rcode matches { Some(_) };
+    assert dns_payload.info_code matches { Some(_) };
+    let dns_err = ErrorCode::DnsError(dns_payload);
+    assert error_tag(&dns_err) == "dns-error";
+    if let DnsError(p) = dns_err {
+        if let Some(rcode) = p.rcode {
+            assert rcode == "NXDOMAIN";
+        }
+        if let Some(code) = p.info_code {
+            assert code == 3;
+        }
+    }
+
+    // Test DnsErrorPayload with None fields
+    let dns_empty = DnsErrorPayload {
+        rcode: null,
+        info_code: null,
+    };
+    let dns_err2 = ErrorCode::DnsError(dns_empty);
+    assert error_tag(&dns_err2) == "dns-error";
+
+    // Test TlsAlertReceivedPayload
+    let tls_payload = TlsAlertReceivedPayload {
+        alert_id: Option::<u8>::Some(48),
+        alert_message: Option::<String>::Some("handshake failure"),
+    };
+    let tls_err = ErrorCode::TlsAlertReceived(tls_payload);
+    assert error_tag(&tls_err) == "tls-alert-received";
+    if let TlsAlertReceived(p) = tls_err {
+        if let Some(id) = p.alert_id {
+            assert id == 48;
+        }
+        if let Some(msg) = p.alert_message {
+            assert msg == "handshake failure";
+        }
+    }
+
+    // Test FieldSizePayload
+    let field_payload = FieldSizePayload {
+        field_name: Option::<String>::Some("content-length"),
+        field_size: Option::<u32>::Some(1048576),
+    };
+    let header_err = ErrorCode::HttpRequestHeaderSize(Option::<FieldSizePayload>::Some(field_payload));
+    assert error_tag(&header_err) == "http-request-header-size";
+    let trailer_err = ErrorCode::HttpRequestTrailerSize(FieldSizePayload {
+        field_name: Option::<String>::Some("x-large"),
+        field_size: Option::<u32>::Some(999),
+    });
+    assert error_tag(&trailer_err) == "http-request-trailer-size";
+
+    // Test Option payload variants
+    let body_err = ErrorCode::HttpRequestBodySize(Option::<u64>::Some(1024));
+    assert error_tag(&body_err) == "http-request-body-size";
+    let body_err_none = ErrorCode::HttpRequestBodySize(null);
+    assert error_tag(&body_err_none) == "http-request-body-size";
+
+    let resp_body_err = ErrorCode::HttpResponseBodySize(Option::<u64>::Some(2048));
+    assert error_tag(&resp_body_err) == "http-response-body-size";
+
+    let transfer_err = ErrorCode::HttpResponseTransferCoding(Option::<String>::Some("chunked"));
+    assert error_tag(&transfer_err) == "http-response-transfer-coding";
+    let content_err = ErrorCode::HttpResponseContentCoding(Option::<String>::Some("gzip"));
+    assert error_tag(&content_err) == "http-response-content-coding";
+
+    let internal = ErrorCode::InternalError(Option::<String>::Some("test"));
+    assert error_tag(&internal) == "internal-error";
+    let internal_none = ErrorCode::InternalError(null);
+    assert error_tag(&internal_none) == "internal-error";
+
+    // Test HeaderError variants
+    let he1 = HeaderError::InvalidSyntax;
+    let he2 = HeaderError::Forbidden;
+    let he3 = HeaderError::Immutable;
+    let he4 = HeaderError::SizeExceeded;
+    let he5 = HeaderError::Other(Option::<String>::Some("custom"));
+    let he6 = HeaderError::Other(null);
+    assert he1 matches { InvalidSyntax };
+    assert he2 matches { Forbidden };
+    assert he3 matches { Immutable };
+    assert he4 matches { SizeExceeded };
+    assert he5 matches { Other(_) };
+    assert he6 matches { Other(_) };
+
+    // Test RequestOptionsError variants
+    let roe1 = RequestOptionsError::NotSupported;
+    let roe2 = RequestOptionsError::Immutable;
+    let roe3 = RequestOptionsError::Other(Option::<String>::Some("custom"));
+    assert roe1 matches { NotSupported };
+    assert roe2 matches { Immutable };
+    assert roe3 matches { Other(_) };
+
+    // Return success
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [resp_rx, resp_tx] = Stream::<u8>::new();
+    let resp_headers = Fields::new();
+    let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(resp_rx), trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+    resp_tx.write("ok".as_bytes());
+    resp_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body": "ok"
+    }
+}

@@ -1,0 +1,82 @@
+// Comprehensive test for Method and Scheme variant handling.
+//
+// Tests:
+// - Method::Other(String) custom method
+// - Method::Head, Options, Trace, Connect matching
+// - Scheme::Other(String) custom scheme
+// - Scheme matching and get_scheme()
+
+use { Request, Response, ErrorCode, Fields, Method, Scheme, Trailers } from "wasi:http";
+
+fn method_name(m: Method) -> String {
+    return match m {
+        Get => "GET",
+        Head => "HEAD",
+        Post => "POST",
+        Put => "PUT",
+        Delete => "DELETE",
+        Connect => "CONNECT",
+        Options => "OPTIONS",
+        Trace => "TRACE",
+        Patch => "PATCH",
+        Other(s) => s,
+    };
+}
+
+fn scheme_name(s: Scheme) -> String {
+    return match s {
+        Http => "http",
+        Https => "https",
+        Other(s) => s,
+    };
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Test Method::Other construction and matching
+    let custom = Method::Other("PURGE");
+    assert method_name(custom) == "PURGE";
+
+    // Test standard method variants
+    assert method_name(Method::Head) == "HEAD";
+    assert method_name(Method::Options) == "OPTIONS";
+    assert method_name(Method::Trace) == "TRACE";
+    assert method_name(Method::Connect) == "CONNECT";
+
+    // Test incoming request method
+    let m = request.get_method();
+    assert method_name(m) == "GET";
+
+    // Test Scheme variants
+    assert scheme_name(Scheme::Http) == "http";
+    assert scheme_name(Scheme::Https) == "https";
+    assert scheme_name(Scheme::Other("ftp")) == "ftp";
+    assert scheme_name(Scheme::Other("wss")) == "wss";
+
+    // Test request scheme (incoming request should have a scheme)
+    let req_scheme = request.get_scheme();
+    if let Some(s) = req_scheme {
+        let name = scheme_name(s);
+        // Should be either "http" or "https"
+        assert name == "http" || name == "https";
+    }
+
+    // Build response with body indicating success
+    let [resp_trailers_future, resp_trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [resp_rx, resp_tx] = Stream::<u8>::new();
+    let resp_headers = Fields::new();
+    let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(resp_rx), resp_trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    resp_tx.write("ok".as_bytes());
+    resp_tx.drop();
+    resp_trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body": "ok"
+    }
+}

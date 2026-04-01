@@ -1,0 +1,97 @@
+// Comprehensive RequestOptions test with actual timeout values.
+//
+// Tests:
+// - RequestOptions::new() constructor
+// - set_connect_timeout / get_connect_timeout with Duration
+// - set_first_byte_timeout / get_first_byte_timeout with Duration
+// - set_between_bytes_timeout / get_between_bytes_timeout with Duration
+// - RequestOptions.clone() preserves values
+// - Default timeouts are None
+use { Request, Response, ErrorCode, Fields, RequestOptions, Trailers } from "wasi:http";
+use { Duration } from "wasi:clocks";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Test defaults are None
+    let opts = RequestOptions::new();
+    assert opts.get_connect_timeout() matches { None };
+    assert opts.get_first_byte_timeout() matches { None };
+    assert opts.get_between_bytes_timeout() matches { None };
+
+    // Set connect timeout (5 seconds = 5_000_000_000 nanoseconds)
+    let connect_ns: Duration = 5000000000;
+    let result = opts.set_connect_timeout(Option::<Duration>::Some(connect_ns));
+    assert result matches { Ok(_) };
+    let ct = opts.get_connect_timeout();
+    if let Some(d) = ct {
+        assert d == 5000000000;
+    } else {
+        panic("connect timeout should be Some");
+    }
+
+    // Set first byte timeout (10 seconds)
+    let first_byte_ns: Duration = 10000000000;
+    let result2 = opts.set_first_byte_timeout(Option::<Duration>::Some(first_byte_ns));
+    assert result2 matches { Ok(_) };
+    let fbt = opts.get_first_byte_timeout();
+    if let Some(d) = fbt {
+        assert d == 10000000000;
+    } else {
+        panic("first byte timeout should be Some");
+    }
+
+    // Set between bytes timeout (2 seconds)
+    let between_ns: Duration = 2000000000;
+    let result3 = opts.set_between_bytes_timeout(Option::<Duration>::Some(between_ns));
+    assert result3 matches { Ok(_) };
+    let bbt = opts.get_between_bytes_timeout();
+    if let Some(d) = bbt {
+        assert d == 2000000000;
+    } else {
+        panic("between bytes timeout should be Some");
+    }
+
+    // Clone and verify preserved values
+    let cloned = opts.clone();
+    let cloned_ct = cloned.get_connect_timeout();
+    if let Some(d) = cloned_ct {
+        assert d == 5000000000;
+    } else {
+        panic("cloned connect timeout should be Some");
+    }
+    let cloned_fbt = cloned.get_first_byte_timeout();
+    if let Some(d) = cloned_fbt {
+        assert d == 10000000000;
+    } else {
+        panic("cloned first byte timeout should be Some");
+    }
+    let cloned_bbt = cloned.get_between_bytes_timeout();
+    if let Some(d) = cloned_bbt {
+        assert d == 2000000000;
+    } else {
+        panic("cloned between bytes timeout should be Some");
+    }
+
+    // Reset timeout to None
+    let result4 = opts.set_connect_timeout(null);
+    assert result4 matches { Ok(_) };
+    assert opts.get_connect_timeout() matches { None };
+
+    // Return success
+    let [resp_trailers_future, resp_trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [resp_rx, resp_tx] = Stream::<u8>::new();
+    let resp_headers = Fields::new();
+    let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(resp_rx), resp_trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+    resp_tx.write("ok".as_bytes());
+    resp_tx.drop();
+    resp_trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body": "ok"
+    }
+}
