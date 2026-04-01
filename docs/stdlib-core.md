@@ -1537,7 +1537,7 @@ Event-specific data (e.g. count|status for streams).
 
 #### `pub struct String`
 
-UTF-8 encoded string type with O(1) amortized append
+UTF-8 encoded string type with O(1) amortized push_str
 
 _Fields are private._
 
@@ -1601,10 +1601,6 @@ Much faster than a loop for large n (e.g., trailing zeros in large integers).
 Appends another string to this string.
 Grows the string if necessary (O(1) amortized).
 
-##### `pub fn append(&mut self, other: String)`
-
-@deprecated Use `push_str` instead.
-
 ##### `pub fn concat(a: String, b: String) -> String`
 
 Concatenate two strings into a new string
@@ -1621,10 +1617,6 @@ Returns an iterator over the Unicode scalar values (chars) of the string.
 ##### `pub fn push(&mut self, c: char)`
 
 Appends a Unicode scalar value (char) to this string.
-
-##### `pub fn append_char(&mut self, c: char)`
-
-@deprecated Use `push` instead.
 
 ##### `pub fn truncate(&mut self, byte_len: i32)`
 
@@ -1985,10 +1977,6 @@ Returns the total number of elements the array can hold without reallocating.
 ##### `pub fn push(&mut self, value: T)`
 
 Appends a single element to the end.
-
-##### `pub fn append(&mut self, value: T)`
-
-@deprecated Use `push` instead.
 
 ##### `pub fn pop(&mut self) -> Option<T>`
 

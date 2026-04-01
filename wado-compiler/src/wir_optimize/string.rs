@@ -74,12 +74,9 @@ impl WirMutVisitor for SimplifyShortPushes<'_> {
         // Scan for String::push_str calls with short constant string args.
         let mut i = 0;
         while i < body.len() {
-            if let Some(replacements) = try_rewrite_short_push_str(
-                &body[i],
-                self.push_str_id,
-                self.push_char_id,
-                self.data,
-            ) {
+            if let Some(replacements) =
+                try_rewrite_short_push_str(&body[i], self.push_str_id, self.push_char_id, self.data)
+            {
                 let n = replacements.len();
                 body.splice(i..=i, replacements);
                 i += n;
@@ -90,7 +87,7 @@ impl WirMutVisitor for SimplifyShortPushes<'_> {
     }
 }
 
-/// Maximum byte length for short-constant string push_str optimization.
+/// Maximum byte length for short-constant string `push_str` optimization.
 const MAX_SHORT_PUSH_STR_LEN: usize = 8;
 
 /// Try to match and rewrite a single `String::push_str(buf, "short")` call.

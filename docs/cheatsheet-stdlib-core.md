@@ -854,12 +854,10 @@ impl String {
     pub fn internal_reserve_uninit(&mut self, n: i32) -> i32;
     pub fn append_byte_filled(&mut self, byte: u8, n: i32);
     pub fn push_str(&mut self, other: String);
-    pub fn append(&mut self, other: String);
     pub fn concat(a: String, b: String) -> String;
     pub fn bytes(&self) -> StrUtf8ByteIter;
     pub fn chars(&self) -> StrCharIter;
     pub fn push(&mut self, c: char);
-    pub fn append_char(&mut self, c: char);
     pub fn truncate(&mut self, byte_len: i32);
     pub fn truncate_chars(&mut self, char_count: i32);
     pub fn truncate_bytes(&mut self, byte_len: i32);
@@ -1064,7 +1062,6 @@ impl Array {
     pub fn internal_raw_data(&self) -> builtin::array<T>;
     pub fn internal_from_raw(repr: builtin::array<T>, used: i32) -> Array<T>;
     pub fn push(&mut self, value: T);
-    pub fn append(&mut self, value: T);
     pub fn pop(&mut self) -> Option<T>;
     pub fn first(&self) -> Option<T>;
     pub fn last(&self) -> Option<T>;
