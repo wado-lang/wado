@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775035213498,
+  "lastUpdate": 1775050837272,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9383,6 +9383,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6b0ffaad39f8b1a5e30056a7cfd5a374059dbddc"
         },
         "date": 1775035213298,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b633c5a762ef7157e9408768e086b428c5e3eda4",
+          "message": "Merge pull request #749 from wado-lang/claude/webidl-bindgen-design-IhLQc\n\nWEP: Tide — WebIDL binding generator for Wado",
+          "timestamp": "2026-04-01T22:37:35+09:00",
+          "tree_id": "37193d9d43b7c10bbd0c1c7cfeede69d092429a1",
+          "url": "https://github.com/wado-lang/wado/commit/b633c5a762ef7157e9408768e086b428c5e3eda4"
+        },
+        "date": 1775050837048,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
