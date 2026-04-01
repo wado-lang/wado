@@ -85,25 +85,28 @@ fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>,
 /// Strip Consume nodes whose child is a Backtrack — fall back to
 /// Backtrack from the original position rather than consuming then failing.
 fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
-    if let Consume(c) = node {
-        let child = strip_dead_consume(c.child);
-        if let Backtrack(_) = child {
-            // Consuming prefix didn't help — return Backtrack with original alts.
-            return child;
-        }
-        return PredictionNode::Consume(ConsumeNode { element: c.element, child });
-    }
-    if let Dispatch(d) = node {
-        let mut new_branches: Array<PredictionBranch> = [];
-        for let b of d.branches {
-            new_branches.append(PredictionBranch {
-                tokens: b.tokens,
-                child: strip_dead_consume(b.child),
-            });
-        }
-        return PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches });
-    }
-    return node;
+    return match node {
+        Consume(c) => {
+            let child = strip_dead_consume(c.child);
+            if let Backtrack(_) = child {
+                // Consuming prefix didn't help — return Backtrack with original alts.
+                child
+            } else {
+                PredictionNode::Consume(ConsumeNode { element: c.element, child })
+            }
+        },
+        Dispatch(d) => {
+            let mut new_branches: Array<PredictionBranch> = [];
+            for let b of d.branches {
+                new_branches.append(PredictionBranch {
+                    tokens: b.tokens,
+                    child: strip_dead_consume(b.child),
+                });
+            }
+            PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches })
+        },
+        _ => node,
+    };
 }
 
 
