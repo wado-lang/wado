@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775035202178,
+  "lastUpdate": 1775035213498,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9344,6 +9344,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7964085ca2420484da447d2365caa564434f619c"
         },
         "date": 1775035201974,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6b0ffaad39f8b1a5e30056a7cfd5a374059dbddc",
+          "message": "Merge pull request #748 from wado-lang/claude/refactor-gale-patterns-9mQ2A\n\nRefactor package-gale: match ergonomics, match expressions, chained comparisons",
+          "timestamp": "2026-04-01T18:17:19+09:00",
+          "tree_id": "7fab717050d5a9746ffaa8c6830ef855da6f071b",
+          "url": "https://github.com/wado-lang/wado/commit/6b0ffaad39f8b1a5e30056a7cfd5a374059dbddc"
+        },
+        "date": 1775035213298,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
