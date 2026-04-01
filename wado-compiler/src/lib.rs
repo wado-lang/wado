@@ -803,7 +803,13 @@ pub enum CompileError {
 impl CompileError {
     /// Returns true if the error occurred in a `#![TODO]` module.
     pub fn is_todo_module(&self) -> bool {
-        matches!(self, CompileError::Parser { is_todo_module: true, .. })
+        matches!(
+            self,
+            CompileError::Parser {
+                is_todo_module: true,
+                ..
+            }
+        )
     }
 }
 

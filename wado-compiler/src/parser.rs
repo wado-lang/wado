@@ -108,7 +108,9 @@ impl Parser {
     /// Returns true if the parsed inner attributes include `#![TODO]`.
     /// Valid even after a parse error, since inner attributes are parsed first.
     pub fn has_todo(&self) -> bool {
-        self.parsed_inner_attributes.iter().any(|a| a.name == "TODO")
+        self.parsed_inner_attributes
+            .iter()
+            .any(|a| a.name == "TODO")
     }
 
     /// Parse an expression with struct literals restricted. Used in contexts
