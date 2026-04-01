@@ -68,31 +68,22 @@ impl GenContext {
     }
 
     pub fn first_of_element(&mut self, elem: &Element, visiting: &mut Array<String>) -> Array<String> {
-        if let TokenRef(name) = *elem {
-            return [`TK_{name}`];
-        }
-        if let Literal(text) = *elem {
-            return [literal_const_name(&text)];
-        }
-        if let RuleRef(name) = *elem {
-            return self.first_of_rule(&name, visiting);
-        }
-        if let Group(alts) = *elem {
-            let mut result: Array<String> = [];
-    
-            for let alt of alts {
-                let af = self.first_of_alt(&alt, visiting);
-                extend_dedup(&mut result, &af);
-            }
-            return result;
-        }
-        if let Repeat(rep) = *elem {
-            return self.first_of_element(&rep.element, visiting);
-        }
-        if let Label(lab) = *elem {
-            return self.first_of_element(&lab.element, visiting);
-        }
-        return [];
+        return match *elem {
+            TokenRef(name) => [`TK_{name}`],
+            Literal(text) => [literal_const_name(&text)],
+            RuleRef(name) => self.first_of_rule(&name, visiting),
+            Group(alts) => {
+                let mut result: Array<String> = [];
+                for let alt of alts {
+                    let af = self.first_of_alt(&alt, visiting);
+                    extend_dedup(&mut result, &af);
+                }
+                result
+            },
+            Repeat(rep) => self.first_of_element(&rep.element, visiting),
+            Label(lab) => self.first_of_element(&lab.element, visiting),
+            _ => [],
+        };
     }
 
     pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut Array<String>) -> Array<String> {
