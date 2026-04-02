@@ -974,3 +974,34 @@ test "char_indices multibyte" {
     assert indices[0].0 == 0;
     assert indices[1].0 == 3;
 }
+
+test "eq_ignore_ascii_case same case" {
+    assert "hello".eq_ignore_ascii_case("hello");
+    assert "HELLO".eq_ignore_ascii_case("HELLO");
+}
+
+test "eq_ignore_ascii_case different case" {
+    assert "Hello".eq_ignore_ascii_case("hello");
+    assert "hello".eq_ignore_ascii_case("HELLO");
+    assert "HeLLo WoRLd".eq_ignore_ascii_case("hello world");
+}
+
+test "eq_ignore_ascii_case non-alpha" {
+    assert "123!@#".eq_ignore_ascii_case("123!@#");
+    assert !"123".eq_ignore_ascii_case("456");
+}
+
+test "eq_ignore_ascii_case different lengths" {
+    assert !"hello".eq_ignore_ascii_case("hell");
+    assert !"hell".eq_ignore_ascii_case("hello");
+}
+
+test "eq_ignore_ascii_case empty" {
+    assert "".eq_ignore_ascii_case("");
+    assert !"".eq_ignore_ascii_case("a");
+}
+
+test "eq_ignore_ascii_case non-ASCII unchanged" {
+    assert "café".eq_ignore_ascii_case("café");
+    assert !"café".eq_ignore_ascii_case("CAFÉ");
+}

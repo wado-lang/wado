@@ -13,6 +13,9 @@ fn i32_min(a: i32, b: i32) -> i32 {
 fn i32_max(a: i32, b: i32) -> i32 {
     return builtin::select::<i32>(a > b, a, b);
 }
+fn byte_to_ascii_lowercase(b: u8) -> u8 {
+    return b | ((b >= 'A' as u8 && b <= 'Z' as u8) as u8 * ('A' as u8 ^ 'a' as u8));
+}
 /// UTF-8 encoded string type with O(1) amortized push_str
 pub struct String {
     repr: builtin::array<u8>,
@@ -573,6 +576,25 @@ impl String {
     /// Non-ASCII bytes are left unchanged.
     pub fn to_ascii_uppercase(&self) -> String {
         return String::from_iter(self.chars().map(|c: char| c.to_ascii_uppercase()));
+    }
+
+    /// Checks that two strings are an ASCII case-insensitive match.
+    /// Non-ASCII bytes are compared exactly.
+    pub fn eq_ignore_ascii_case(&self, other: String) -> bool {
+        let len = self.len();
+        if len != other.len() {
+            return false;
+        }
+        let a = self.internal_raw_bytes();
+        let b = other.internal_raw_bytes();
+        for let mut i = 0; i < len; i += 1 {
+            let ab = builtin::array_get_u8(a, i);
+            let bb = builtin::array_get_u8(b, i);
+            if byte_to_ascii_lowercase(ab) != byte_to_ascii_lowercase(bb) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// Internal: extract a substring by byte range [start, end).
