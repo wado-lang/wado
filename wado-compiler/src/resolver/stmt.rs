@@ -36,14 +36,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let len = block.stmts.len();
         let mut stmts = Vec::new();
         for (i, s) in block.stmts.iter().enumerate() {
-            // Propagate expected type to the last expression for coercion
-            if expected_type.is_some()
-                && i == len - 1
-                && let Stmt::Expr(expr_stmt) = s
-            {
-                let expr = self.resolve_expr(&expr_stmt.expr, ctx, expected_type);
-                stmts.push(TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span));
-                continue;
+            // Propagate expected type to the last expression/statement for coercion
+            if expected_type.is_some() && i == len - 1 {
+                if let Stmt::Expr(expr_stmt) = s {
+                    let expr = self.resolve_expr(&expr_stmt.expr, ctx, expected_type);
+                    stmts.push(TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span));
+                    continue;
+                }
+                if let Stmt::If(if_stmt) = s {
+                    stmts.extend(self.resolve_if_stmt_with_expected(if_stmt, ctx, expected_type));
+                    continue;
+                }
+                if let Stmt::Match(match_expr) = s {
+                    let tir = self.resolve_match_expr(match_expr, ctx, expected_type);
+                    stmts.push(TirStmt::new(TirStmtKind::Expr(tir), match_expr.span));
+                    continue;
+                }
+                if let Stmt::LabeledBlock(labeled_block) = s {
+                    stmts.push(self.resolve_labeled_block_with_expected(
+                        labeled_block,
+                        ctx,
+                        expected_type,
+                    ));
+                    continue;
+                }
             }
             stmts.extend(self.resolve_stmt(s, ctx));
         }
@@ -86,9 +102,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         labeled_block: &ast::LabeledBlockStmt,
         ctx: &mut FunctionContext,
     ) -> TirStmt {
+        self.resolve_labeled_block_with_expected(labeled_block, ctx, None)
+    }
+
+    fn resolve_labeled_block_with_expected(
+        &mut self,
+        labeled_block: &ast::LabeledBlockStmt,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirStmt {
         ctx.active_labels.push(labeled_block.label.clone());
         // resolve_block already handles scope entry/exit
-        let block = self.resolve_block(&labeled_block.block, ctx, None);
+        let block = self.resolve_block(&labeled_block.block, ctx, expected_type);
         ctx.active_labels.pop();
 
         TirStmt::new(
@@ -802,6 +827,54 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     else_block.as_ref(),
                     ctx,
                     None,
+                    if_stmt.span,
+                );
+                ctx.exit_scope();
+
+                stmts
+            }
+        }
+    }
+
+    /// Like `resolve_if_stmt` but propagates `expected_type` to blocks for coercion.
+    /// Used when an if statement is the last statement in a block that needs type coercion
+    /// (e.g., match arm returning Array<T> from an if-else with tuple literals).
+    fn resolve_if_stmt_with_expected(
+        &mut self,
+        if_stmt: &IfStmt,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> Vec<TirStmt> {
+        match &if_stmt.condition {
+            ast::Condition::Expr(expr) => {
+                let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                let then_block = self.resolve_block(&if_stmt.then_block, ctx, expected_type);
+                let else_block = if_stmt
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.resolve_block(b, ctx, expected_type));
+                vec![TirStmt::new(
+                    TirStmtKind::If {
+                        condition,
+                        then_block,
+                        else_block,
+                    },
+                    if_stmt.span,
+                )]
+            }
+            ast::Condition::LetChain { elements, .. } => {
+                let else_block = if_stmt
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.resolve_block(b, ctx, expected_type));
+
+                ctx.enter_scope();
+                let stmts = self.resolve_let_chain_stmts(
+                    elements,
+                    &if_stmt.then_block,
+                    else_block.as_ref(),
+                    ctx,
+                    expected_type,
                     if_stmt.span,
                 );
                 ctx.exit_scope();
