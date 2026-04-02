@@ -409,13 +409,24 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.line("lexer.pos = start + 1;");
     w.else_begin("else");
 
-    w.write("let is_skip = false");
+    let mut skip_names: Array<String> = [];
     for let rule of lexer_rules {
         if rule.skip {
-            w.write(` || best_kind == TK_{rule.name}`);
+            skip_names.push(`TK_{rule.name}`);
         }
     }
-    w.write(";\n");
+    if skip_names.is_empty() {
+        w.line("let is_skip = false;");
+    } else {
+        w.write("let is_skip = best_kind matches { ");
+        for let mut i = 0; i < skip_names.len(); i += 1 {
+            if i > 0 {
+                w.write(" | ");
+            }
+            w.write(&skip_names[i]);
+        }
+        w.write(" };\n");
+    }
 
     w.begin("if is_skip");
     w.line("trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));");
@@ -440,20 +451,22 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, li
     f.set_return_type("String");
     f.emit_begin(w);
 
+    w.line("return match kind {");
+    w.indent();
     for let rule of lexer_rules {
         if !rule.is_fragment {
-            w.line(`if kind == TK_{rule.name} \{ return "{rule.name}"; \}`);
+            w.line(`TK_{rule.name} => "{rule.name}",`);
         }
     }
-    w.line("if kind == TK_EOF { return \"Eof\"; }");
-    w.line("if kind == TK_ERROR { return \"Error\"; }");
-
+    w.line("TK_EOF => \"Eof\",");
+    w.line("TK_ERROR => \"Error\",");
     for let lit of lit_tokens {
         let name = lit.const_name;
-        w.line(`if kind == {name} \{ return "{name}"; \}`);
+        w.line(`{name} => "{name}",`);
     }
-
-    w.line("return \"Unknown\";");
+    w.line("_ => \"Unknown\",");
+    w.dedent();
+    w.line("};");
     w.end();  // fn
     w.blank();
 }

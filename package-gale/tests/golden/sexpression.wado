@@ -654,7 +654,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             trivia = [];
             lexer.pos = start + 1;
         } else {
-            let is_skip = false || best_kind == TK_WHITESPACE;
+            let is_skip = best_kind matches { TK_WHITESPACE };
             if is_skip {
                 trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
             } else {
@@ -670,16 +670,18 @@ pub fn tokenize(input: &String) -> Array<Token> {
 }
 
 pub fn token_kind_name(kind: i32) -> String {
-    if kind == TK_STRING { return "STRING"; }
-    if kind == TK_WHITESPACE { return "WHITESPACE"; }
-    if kind == TK_NUMBER { return "NUMBER"; }
-    if kind == TK_SYMBOL { return "SYMBOL"; }
-    if kind == TK_LPAREN { return "LPAREN"; }
-    if kind == TK_RPAREN { return "RPAREN"; }
-    if kind == TK_DOT { return "DOT"; }
-    if kind == TK_EOF { return "Eof"; }
-    if kind == TK_ERROR { return "Error"; }
-    return "Unknown";
+    return match kind {
+        TK_STRING => "STRING",
+        TK_WHITESPACE => "WHITESPACE",
+        TK_NUMBER => "NUMBER",
+        TK_SYMBOL => "SYMBOL",
+        TK_LPAREN => "LPAREN",
+        TK_RPAREN => "RPAREN",
+        TK_DOT => "DOT",
+        TK_EOF => "Eof",
+        TK_ERROR => "Error",
+        _ => "Unknown",
+    };
 }
 
 struct Parser {

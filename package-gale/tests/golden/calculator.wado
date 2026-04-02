@@ -953,7 +953,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             trivia = [];
             lexer.pos = start + 1;
         } else {
-            let is_skip = false || best_kind == TK_WS;
+            let is_skip = best_kind matches { TK_WS };
             if is_skip {
                 trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
             } else {
@@ -969,36 +969,38 @@ pub fn tokenize(input: &String) -> Array<Token> {
 }
 
 pub fn token_kind_name(kind: i32) -> String {
-    if kind == TK_COS { return "COS"; }
-    if kind == TK_SIN { return "SIN"; }
-    if kind == TK_TAN { return "TAN"; }
-    if kind == TK_ACOS { return "ACOS"; }
-    if kind == TK_ASIN { return "ASIN"; }
-    if kind == TK_ATAN { return "ATAN"; }
-    if kind == TK_LN { return "LN"; }
-    if kind == TK_LOG { return "LOG"; }
-    if kind == TK_SQRT { return "SQRT"; }
-    if kind == TK_LPAREN { return "LPAREN"; }
-    if kind == TK_RPAREN { return "RPAREN"; }
-    if kind == TK_PLUS { return "PLUS"; }
-    if kind == TK_MINUS { return "MINUS"; }
-    if kind == TK_TIMES { return "TIMES"; }
-    if kind == TK_DIV { return "DIV"; }
-    if kind == TK_GT { return "GT"; }
-    if kind == TK_LT { return "LT"; }
-    if kind == TK_EQ { return "EQ"; }
-    if kind == TK_COMMA { return "COMMA"; }
-    if kind == TK_POINT { return "POINT"; }
-    if kind == TK_POW { return "POW"; }
-    if kind == TK_PI { return "PI"; }
-    if kind == TK_EULER { return "EULER"; }
-    if kind == TK_I { return "I"; }
-    if kind == TK_VARIABLE { return "VARIABLE"; }
-    if kind == TK_SCIENTIFIC_NUMBER { return "SCIENTIFIC_NUMBER"; }
-    if kind == TK_WS { return "WS"; }
-    if kind == TK_EOF { return "Eof"; }
-    if kind == TK_ERROR { return "Error"; }
-    return "Unknown";
+    return match kind {
+        TK_COS => "COS",
+        TK_SIN => "SIN",
+        TK_TAN => "TAN",
+        TK_ACOS => "ACOS",
+        TK_ASIN => "ASIN",
+        TK_ATAN => "ATAN",
+        TK_LN => "LN",
+        TK_LOG => "LOG",
+        TK_SQRT => "SQRT",
+        TK_LPAREN => "LPAREN",
+        TK_RPAREN => "RPAREN",
+        TK_PLUS => "PLUS",
+        TK_MINUS => "MINUS",
+        TK_TIMES => "TIMES",
+        TK_DIV => "DIV",
+        TK_GT => "GT",
+        TK_LT => "LT",
+        TK_EQ => "EQ",
+        TK_COMMA => "COMMA",
+        TK_POINT => "POINT",
+        TK_POW => "POW",
+        TK_PI => "PI",
+        TK_EULER => "EULER",
+        TK_I => "I",
+        TK_VARIABLE => "VARIABLE",
+        TK_SCIENTIFIC_NUMBER => "SCIENTIFIC_NUMBER",
+        TK_WS => "WS",
+        TK_EOF => "Eof",
+        TK_ERROR => "Error",
+        _ => "Unknown",
+    };
 }
 
 struct Parser {

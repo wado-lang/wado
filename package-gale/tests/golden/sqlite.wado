@@ -6524,7 +6524,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             trivia = [];
             lexer.pos = start + 1;
         } else {
-            let is_skip = false || best_kind == TK_SINGLE_LINE_COMMENT || best_kind == TK_MULTILINE_COMMENT || best_kind == TK_SPACES;
+            let is_skip = best_kind matches { TK_SINGLE_LINE_COMMENT | TK_MULTILINE_COMMENT | TK_SPACES };
             if is_skip {
                 trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
             } else {
@@ -6540,190 +6540,192 @@ pub fn tokenize(input: &String) -> Array<Token> {
 }
 
 pub fn token_kind_name(kind: i32) -> String {
-    if kind == TK_SCOL { return "SCOL"; }
-    if kind == TK_DOT { return "DOT"; }
-    if kind == TK_OPEN_PAR { return "OPEN_PAR"; }
-    if kind == TK_CLOSE_PAR { return "CLOSE_PAR"; }
-    if kind == TK_COMMA { return "COMMA"; }
-    if kind == TK_ASSIGN { return "ASSIGN"; }
-    if kind == TK_STAR { return "STAR"; }
-    if kind == TK_PLUS { return "PLUS"; }
-    if kind == TK_MINUS { return "MINUS"; }
-    if kind == TK_TILDE { return "TILDE"; }
-    if kind == TK_PIPE2 { return "PIPE2"; }
-    if kind == TK_DIV { return "DIV"; }
-    if kind == TK_MOD { return "MOD"; }
-    if kind == TK_LT2 { return "LT2"; }
-    if kind == TK_GT2 { return "GT2"; }
-    if kind == TK_AMP { return "AMP"; }
-    if kind == TK_PIPE { return "PIPE"; }
-    if kind == TK_LT { return "LT"; }
-    if kind == TK_LT_EQ { return "LT_EQ"; }
-    if kind == TK_GT { return "GT"; }
-    if kind == TK_GT_EQ { return "GT_EQ"; }
-    if kind == TK_EQ { return "EQ"; }
-    if kind == TK_NOT_EQ1 { return "NOT_EQ1"; }
-    if kind == TK_NOT_EQ2 { return "NOT_EQ2"; }
-    if kind == TK_K_ABORT { return "K_ABORT"; }
-    if kind == TK_K_ACTION { return "K_ACTION"; }
-    if kind == TK_K_ADD { return "K_ADD"; }
-    if kind == TK_K_AFTER { return "K_AFTER"; }
-    if kind == TK_K_ALL { return "K_ALL"; }
-    if kind == TK_K_ALTER { return "K_ALTER"; }
-    if kind == TK_K_ANALYZE { return "K_ANALYZE"; }
-    if kind == TK_K_AND { return "K_AND"; }
-    if kind == TK_K_AS { return "K_AS"; }
-    if kind == TK_K_ASC { return "K_ASC"; }
-    if kind == TK_K_ATTACH { return "K_ATTACH"; }
-    if kind == TK_K_AUTOINCREMENT { return "K_AUTOINCREMENT"; }
-    if kind == TK_K_BEFORE { return "K_BEFORE"; }
-    if kind == TK_K_BEGIN { return "K_BEGIN"; }
-    if kind == TK_K_BETWEEN { return "K_BETWEEN"; }
-    if kind == TK_K_BY { return "K_BY"; }
-    if kind == TK_K_CASCADE { return "K_CASCADE"; }
-    if kind == TK_K_CASE { return "K_CASE"; }
-    if kind == TK_K_CAST { return "K_CAST"; }
-    if kind == TK_K_CHECK { return "K_CHECK"; }
-    if kind == TK_K_COLLATE { return "K_COLLATE"; }
-    if kind == TK_K_COLUMN { return "K_COLUMN"; }
-    if kind == TK_K_COMMIT { return "K_COMMIT"; }
-    if kind == TK_K_CONFLICT { return "K_CONFLICT"; }
-    if kind == TK_K_CONSTRAINT { return "K_CONSTRAINT"; }
-    if kind == TK_K_CREATE { return "K_CREATE"; }
-    if kind == TK_K_CROSS { return "K_CROSS"; }
-    if kind == TK_K_CURRENT_DATE { return "K_CURRENT_DATE"; }
-    if kind == TK_K_CURRENT_TIME { return "K_CURRENT_TIME"; }
-    if kind == TK_K_CURRENT_TIMESTAMP { return "K_CURRENT_TIMESTAMP"; }
-    if kind == TK_K_DATABASE { return "K_DATABASE"; }
-    if kind == TK_K_DEFAULT { return "K_DEFAULT"; }
-    if kind == TK_K_DEFERRABLE { return "K_DEFERRABLE"; }
-    if kind == TK_K_DEFERRED { return "K_DEFERRED"; }
-    if kind == TK_K_DELETE { return "K_DELETE"; }
-    if kind == TK_K_DESC { return "K_DESC"; }
-    if kind == TK_K_DETACH { return "K_DETACH"; }
-    if kind == TK_K_DISTINCT { return "K_DISTINCT"; }
-    if kind == TK_K_DROP { return "K_DROP"; }
-    if kind == TK_K_EACH { return "K_EACH"; }
-    if kind == TK_K_ELSE { return "K_ELSE"; }
-    if kind == TK_K_END { return "K_END"; }
-    if kind == TK_K_ESCAPE { return "K_ESCAPE"; }
-    if kind == TK_K_EXCEPT { return "K_EXCEPT"; }
-    if kind == TK_K_EXCLUSIVE { return "K_EXCLUSIVE"; }
-    if kind == TK_K_EXISTS { return "K_EXISTS"; }
-    if kind == TK_K_EXPLAIN { return "K_EXPLAIN"; }
-    if kind == TK_K_FAIL { return "K_FAIL"; }
-    if kind == TK_K_FOR { return "K_FOR"; }
-    if kind == TK_K_FOREIGN { return "K_FOREIGN"; }
-    if kind == TK_K_FROM { return "K_FROM"; }
-    if kind == TK_K_FULL { return "K_FULL"; }
-    if kind == TK_K_GLOB { return "K_GLOB"; }
-    if kind == TK_K_GROUP { return "K_GROUP"; }
-    if kind == TK_K_HAVING { return "K_HAVING"; }
-    if kind == TK_K_IF { return "K_IF"; }
-    if kind == TK_K_IGNORE { return "K_IGNORE"; }
-    if kind == TK_K_IMMEDIATE { return "K_IMMEDIATE"; }
-    if kind == TK_K_IN { return "K_IN"; }
-    if kind == TK_K_INDEX { return "K_INDEX"; }
-    if kind == TK_K_INDEXED { return "K_INDEXED"; }
-    if kind == TK_K_INITIALLY { return "K_INITIALLY"; }
-    if kind == TK_K_INNER { return "K_INNER"; }
-    if kind == TK_K_INSERT { return "K_INSERT"; }
-    if kind == TK_K_INSTEAD { return "K_INSTEAD"; }
-    if kind == TK_K_INTERSECT { return "K_INTERSECT"; }
-    if kind == TK_K_INTO { return "K_INTO"; }
-    if kind == TK_K_IS { return "K_IS"; }
-    if kind == TK_K_ISNULL { return "K_ISNULL"; }
-    if kind == TK_K_JOIN { return "K_JOIN"; }
-    if kind == TK_K_KEY { return "K_KEY"; }
-    if kind == TK_K_LEFT { return "K_LEFT"; }
-    if kind == TK_K_LIKE { return "K_LIKE"; }
-    if kind == TK_K_LIMIT { return "K_LIMIT"; }
-    if kind == TK_K_MATCH { return "K_MATCH"; }
-    if kind == TK_K_NATURAL { return "K_NATURAL"; }
-    if kind == TK_K_NO { return "K_NO"; }
-    if kind == TK_K_NOT { return "K_NOT"; }
-    if kind == TK_K_NOTNULL { return "K_NOTNULL"; }
-    if kind == TK_K_NULL { return "K_NULL"; }
-    if kind == TK_K_OF { return "K_OF"; }
-    if kind == TK_K_OFFSET { return "K_OFFSET"; }
-    if kind == TK_K_ON { return "K_ON"; }
-    if kind == TK_K_OR { return "K_OR"; }
-    if kind == TK_K_ORDER { return "K_ORDER"; }
-    if kind == TK_K_OUTER { return "K_OUTER"; }
-    if kind == TK_K_PLAN { return "K_PLAN"; }
-    if kind == TK_K_PRAGMA { return "K_PRAGMA"; }
-    if kind == TK_K_PRIMARY { return "K_PRIMARY"; }
-    if kind == TK_K_QUERY { return "K_QUERY"; }
-    if kind == TK_K_RAISE { return "K_RAISE"; }
-    if kind == TK_K_RECURSIVE { return "K_RECURSIVE"; }
-    if kind == TK_K_REFERENCES { return "K_REFERENCES"; }
-    if kind == TK_K_REGEXP { return "K_REGEXP"; }
-    if kind == TK_K_REINDEX { return "K_REINDEX"; }
-    if kind == TK_K_RELEASE { return "K_RELEASE"; }
-    if kind == TK_K_RENAME { return "K_RENAME"; }
-    if kind == TK_K_REPLACE { return "K_REPLACE"; }
-    if kind == TK_K_RESTRICT { return "K_RESTRICT"; }
-    if kind == TK_K_RIGHT { return "K_RIGHT"; }
-    if kind == TK_K_ROLLBACK { return "K_ROLLBACK"; }
-    if kind == TK_K_ROW { return "K_ROW"; }
-    if kind == TK_K_SAVEPOINT { return "K_SAVEPOINT"; }
-    if kind == TK_K_SELECT { return "K_SELECT"; }
-    if kind == TK_K_SET { return "K_SET"; }
-    if kind == TK_K_TABLE { return "K_TABLE"; }
-    if kind == TK_K_TEMP { return "K_TEMP"; }
-    if kind == TK_K_TEMPORARY { return "K_TEMPORARY"; }
-    if kind == TK_K_THEN { return "K_THEN"; }
-    if kind == TK_K_TO { return "K_TO"; }
-    if kind == TK_K_TRANSACTION { return "K_TRANSACTION"; }
-    if kind == TK_K_TRIGGER { return "K_TRIGGER"; }
-    if kind == TK_K_UNION { return "K_UNION"; }
-    if kind == TK_K_UNIQUE { return "K_UNIQUE"; }
-    if kind == TK_K_UPDATE { return "K_UPDATE"; }
-    if kind == TK_K_USING { return "K_USING"; }
-    if kind == TK_K_VACUUM { return "K_VACUUM"; }
-    if kind == TK_K_VALUES { return "K_VALUES"; }
-    if kind == TK_K_VIEW { return "K_VIEW"; }
-    if kind == TK_K_VIRTUAL { return "K_VIRTUAL"; }
-    if kind == TK_K_WHEN { return "K_WHEN"; }
-    if kind == TK_K_WHERE { return "K_WHERE"; }
-    if kind == TK_K_WITH { return "K_WITH"; }
-    if kind == TK_K_WITHOUT { return "K_WITHOUT"; }
-    if kind == TK_IDENTIFIER { return "IDENTIFIER"; }
-    if kind == TK_NUMERIC_LITERAL { return "NUMERIC_LITERAL"; }
-    if kind == TK_BIND_PARAMETER { return "BIND_PARAMETER"; }
-    if kind == TK_STRING_LITERAL { return "STRING_LITERAL"; }
-    if kind == TK_BLOB_LITERAL { return "BLOB_LITERAL"; }
-    if kind == TK_SINGLE_LINE_COMMENT { return "SINGLE_LINE_COMMENT"; }
-    if kind == TK_MULTILINE_COMMENT { return "MULTILINE_COMMENT"; }
-    if kind == TK_SPACES { return "SPACES"; }
-    if kind == TK_UNEXPECTED_CHAR { return "UNEXPECTED_CHAR"; }
-    if kind == TK_EOF { return "Eof"; }
-    if kind == TK_ERROR { return "Error"; }
-    if kind == TK_LIT_SEMI { return "TK_LIT_SEMI"; }
-    if kind == TK_LIT_DOT { return "TK_LIT_DOT"; }
-    if kind == TK_LIT_COMMA { return "TK_LIT_COMMA"; }
-    if kind == TK_LIT_LPAREN { return "TK_LIT_LPAREN"; }
-    if kind == TK_LIT_RPAREN { return "TK_LIT_RPAREN"; }
-    if kind == TK_LIT_EQ { return "TK_LIT_EQ"; }
-    if kind == TK_LIT_PIPEPIPE { return "TK_LIT_PIPEPIPE"; }
-    if kind == TK_LIT_STAR { return "TK_LIT_STAR"; }
-    if kind == TK_LIT_SLASH { return "TK_LIT_SLASH"; }
-    if kind == TK_LIT_PERCENT { return "TK_LIT_PERCENT"; }
-    if kind == TK_LIT_PLUS { return "TK_LIT_PLUS"; }
-    if kind == TK_LIT_MINUS { return "TK_LIT_MINUS"; }
-    if kind == TK_LIT_LTLT { return "TK_LIT_LTLT"; }
-    if kind == TK_LIT_GTGT { return "TK_LIT_GTGT"; }
-    if kind == TK_LIT_AMP { return "TK_LIT_AMP"; }
-    if kind == TK_LIT_PIPE { return "TK_LIT_PIPE"; }
-    if kind == TK_LIT_LT { return "TK_LIT_LT"; }
-    if kind == TK_LIT_LTEQ { return "TK_LIT_LTEQ"; }
-    if kind == TK_LIT_GT { return "TK_LIT_GT"; }
-    if kind == TK_LIT_GTEQ { return "TK_LIT_GTEQ"; }
-    if kind == TK_LIT_EQEQ { return "TK_LIT_EQEQ"; }
-    if kind == TK_LIT_BANGEQ { return "TK_LIT_BANGEQ"; }
-    if kind == TK_LIT_LTGT { return "TK_LIT_LTGT"; }
-    if kind == TK_LIT_TILDE { return "TK_LIT_TILDE"; }
-    return "Unknown";
+    return match kind {
+        TK_SCOL => "SCOL",
+        TK_DOT => "DOT",
+        TK_OPEN_PAR => "OPEN_PAR",
+        TK_CLOSE_PAR => "CLOSE_PAR",
+        TK_COMMA => "COMMA",
+        TK_ASSIGN => "ASSIGN",
+        TK_STAR => "STAR",
+        TK_PLUS => "PLUS",
+        TK_MINUS => "MINUS",
+        TK_TILDE => "TILDE",
+        TK_PIPE2 => "PIPE2",
+        TK_DIV => "DIV",
+        TK_MOD => "MOD",
+        TK_LT2 => "LT2",
+        TK_GT2 => "GT2",
+        TK_AMP => "AMP",
+        TK_PIPE => "PIPE",
+        TK_LT => "LT",
+        TK_LT_EQ => "LT_EQ",
+        TK_GT => "GT",
+        TK_GT_EQ => "GT_EQ",
+        TK_EQ => "EQ",
+        TK_NOT_EQ1 => "NOT_EQ1",
+        TK_NOT_EQ2 => "NOT_EQ2",
+        TK_K_ABORT => "K_ABORT",
+        TK_K_ACTION => "K_ACTION",
+        TK_K_ADD => "K_ADD",
+        TK_K_AFTER => "K_AFTER",
+        TK_K_ALL => "K_ALL",
+        TK_K_ALTER => "K_ALTER",
+        TK_K_ANALYZE => "K_ANALYZE",
+        TK_K_AND => "K_AND",
+        TK_K_AS => "K_AS",
+        TK_K_ASC => "K_ASC",
+        TK_K_ATTACH => "K_ATTACH",
+        TK_K_AUTOINCREMENT => "K_AUTOINCREMENT",
+        TK_K_BEFORE => "K_BEFORE",
+        TK_K_BEGIN => "K_BEGIN",
+        TK_K_BETWEEN => "K_BETWEEN",
+        TK_K_BY => "K_BY",
+        TK_K_CASCADE => "K_CASCADE",
+        TK_K_CASE => "K_CASE",
+        TK_K_CAST => "K_CAST",
+        TK_K_CHECK => "K_CHECK",
+        TK_K_COLLATE => "K_COLLATE",
+        TK_K_COLUMN => "K_COLUMN",
+        TK_K_COMMIT => "K_COMMIT",
+        TK_K_CONFLICT => "K_CONFLICT",
+        TK_K_CONSTRAINT => "K_CONSTRAINT",
+        TK_K_CREATE => "K_CREATE",
+        TK_K_CROSS => "K_CROSS",
+        TK_K_CURRENT_DATE => "K_CURRENT_DATE",
+        TK_K_CURRENT_TIME => "K_CURRENT_TIME",
+        TK_K_CURRENT_TIMESTAMP => "K_CURRENT_TIMESTAMP",
+        TK_K_DATABASE => "K_DATABASE",
+        TK_K_DEFAULT => "K_DEFAULT",
+        TK_K_DEFERRABLE => "K_DEFERRABLE",
+        TK_K_DEFERRED => "K_DEFERRED",
+        TK_K_DELETE => "K_DELETE",
+        TK_K_DESC => "K_DESC",
+        TK_K_DETACH => "K_DETACH",
+        TK_K_DISTINCT => "K_DISTINCT",
+        TK_K_DROP => "K_DROP",
+        TK_K_EACH => "K_EACH",
+        TK_K_ELSE => "K_ELSE",
+        TK_K_END => "K_END",
+        TK_K_ESCAPE => "K_ESCAPE",
+        TK_K_EXCEPT => "K_EXCEPT",
+        TK_K_EXCLUSIVE => "K_EXCLUSIVE",
+        TK_K_EXISTS => "K_EXISTS",
+        TK_K_EXPLAIN => "K_EXPLAIN",
+        TK_K_FAIL => "K_FAIL",
+        TK_K_FOR => "K_FOR",
+        TK_K_FOREIGN => "K_FOREIGN",
+        TK_K_FROM => "K_FROM",
+        TK_K_FULL => "K_FULL",
+        TK_K_GLOB => "K_GLOB",
+        TK_K_GROUP => "K_GROUP",
+        TK_K_HAVING => "K_HAVING",
+        TK_K_IF => "K_IF",
+        TK_K_IGNORE => "K_IGNORE",
+        TK_K_IMMEDIATE => "K_IMMEDIATE",
+        TK_K_IN => "K_IN",
+        TK_K_INDEX => "K_INDEX",
+        TK_K_INDEXED => "K_INDEXED",
+        TK_K_INITIALLY => "K_INITIALLY",
+        TK_K_INNER => "K_INNER",
+        TK_K_INSERT => "K_INSERT",
+        TK_K_INSTEAD => "K_INSTEAD",
+        TK_K_INTERSECT => "K_INTERSECT",
+        TK_K_INTO => "K_INTO",
+        TK_K_IS => "K_IS",
+        TK_K_ISNULL => "K_ISNULL",
+        TK_K_JOIN => "K_JOIN",
+        TK_K_KEY => "K_KEY",
+        TK_K_LEFT => "K_LEFT",
+        TK_K_LIKE => "K_LIKE",
+        TK_K_LIMIT => "K_LIMIT",
+        TK_K_MATCH => "K_MATCH",
+        TK_K_NATURAL => "K_NATURAL",
+        TK_K_NO => "K_NO",
+        TK_K_NOT => "K_NOT",
+        TK_K_NOTNULL => "K_NOTNULL",
+        TK_K_NULL => "K_NULL",
+        TK_K_OF => "K_OF",
+        TK_K_OFFSET => "K_OFFSET",
+        TK_K_ON => "K_ON",
+        TK_K_OR => "K_OR",
+        TK_K_ORDER => "K_ORDER",
+        TK_K_OUTER => "K_OUTER",
+        TK_K_PLAN => "K_PLAN",
+        TK_K_PRAGMA => "K_PRAGMA",
+        TK_K_PRIMARY => "K_PRIMARY",
+        TK_K_QUERY => "K_QUERY",
+        TK_K_RAISE => "K_RAISE",
+        TK_K_RECURSIVE => "K_RECURSIVE",
+        TK_K_REFERENCES => "K_REFERENCES",
+        TK_K_REGEXP => "K_REGEXP",
+        TK_K_REINDEX => "K_REINDEX",
+        TK_K_RELEASE => "K_RELEASE",
+        TK_K_RENAME => "K_RENAME",
+        TK_K_REPLACE => "K_REPLACE",
+        TK_K_RESTRICT => "K_RESTRICT",
+        TK_K_RIGHT => "K_RIGHT",
+        TK_K_ROLLBACK => "K_ROLLBACK",
+        TK_K_ROW => "K_ROW",
+        TK_K_SAVEPOINT => "K_SAVEPOINT",
+        TK_K_SELECT => "K_SELECT",
+        TK_K_SET => "K_SET",
+        TK_K_TABLE => "K_TABLE",
+        TK_K_TEMP => "K_TEMP",
+        TK_K_TEMPORARY => "K_TEMPORARY",
+        TK_K_THEN => "K_THEN",
+        TK_K_TO => "K_TO",
+        TK_K_TRANSACTION => "K_TRANSACTION",
+        TK_K_TRIGGER => "K_TRIGGER",
+        TK_K_UNION => "K_UNION",
+        TK_K_UNIQUE => "K_UNIQUE",
+        TK_K_UPDATE => "K_UPDATE",
+        TK_K_USING => "K_USING",
+        TK_K_VACUUM => "K_VACUUM",
+        TK_K_VALUES => "K_VALUES",
+        TK_K_VIEW => "K_VIEW",
+        TK_K_VIRTUAL => "K_VIRTUAL",
+        TK_K_WHEN => "K_WHEN",
+        TK_K_WHERE => "K_WHERE",
+        TK_K_WITH => "K_WITH",
+        TK_K_WITHOUT => "K_WITHOUT",
+        TK_IDENTIFIER => "IDENTIFIER",
+        TK_NUMERIC_LITERAL => "NUMERIC_LITERAL",
+        TK_BIND_PARAMETER => "BIND_PARAMETER",
+        TK_STRING_LITERAL => "STRING_LITERAL",
+        TK_BLOB_LITERAL => "BLOB_LITERAL",
+        TK_SINGLE_LINE_COMMENT => "SINGLE_LINE_COMMENT",
+        TK_MULTILINE_COMMENT => "MULTILINE_COMMENT",
+        TK_SPACES => "SPACES",
+        TK_UNEXPECTED_CHAR => "UNEXPECTED_CHAR",
+        TK_EOF => "Eof",
+        TK_ERROR => "Error",
+        TK_LIT_SEMI => "TK_LIT_SEMI",
+        TK_LIT_DOT => "TK_LIT_DOT",
+        TK_LIT_COMMA => "TK_LIT_COMMA",
+        TK_LIT_LPAREN => "TK_LIT_LPAREN",
+        TK_LIT_RPAREN => "TK_LIT_RPAREN",
+        TK_LIT_EQ => "TK_LIT_EQ",
+        TK_LIT_PIPEPIPE => "TK_LIT_PIPEPIPE",
+        TK_LIT_STAR => "TK_LIT_STAR",
+        TK_LIT_SLASH => "TK_LIT_SLASH",
+        TK_LIT_PERCENT => "TK_LIT_PERCENT",
+        TK_LIT_PLUS => "TK_LIT_PLUS",
+        TK_LIT_MINUS => "TK_LIT_MINUS",
+        TK_LIT_LTLT => "TK_LIT_LTLT",
+        TK_LIT_GTGT => "TK_LIT_GTGT",
+        TK_LIT_AMP => "TK_LIT_AMP",
+        TK_LIT_PIPE => "TK_LIT_PIPE",
+        TK_LIT_LT => "TK_LIT_LT",
+        TK_LIT_LTEQ => "TK_LIT_LTEQ",
+        TK_LIT_GT => "TK_LIT_GT",
+        TK_LIT_GTEQ => "TK_LIT_GTEQ",
+        TK_LIT_EQEQ => "TK_LIT_EQEQ",
+        TK_LIT_BANGEQ => "TK_LIT_BANGEQ",
+        TK_LIT_LTGT => "TK_LIT_LTGT",
+        TK_LIT_TILDE => "TK_LIT_TILDE",
+        _ => "Unknown",
+    };
 }
 
 struct Parser {
