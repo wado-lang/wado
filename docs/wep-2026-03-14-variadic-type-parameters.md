@@ -410,7 +410,9 @@ where T: Reflect<Fields = [..F]>
 - [ ] `Reflect` trait: synthesize per-struct impl in the lowering pass
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [ ] Error messages: show call site, element index, and body location
-- [ ] Standard library: add variadic impls for `Eq`, `Default`, `Clone`
+- [x] Tuple `Eq`: monomorphizer expands `==`/`!=` on concrete tuples to element-wise
+      comparisons; enables `<..T: Eq>` trait bounds on variadic functions
+- [ ] Standard library: add variadic impls for `Default`, `Clone`
 - [ ] Remove compiler-magic struct `Inspect`; replace with the `Reflect`-based impl
 
 ---

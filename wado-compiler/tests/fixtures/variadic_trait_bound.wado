@@ -1,11 +1,28 @@
-#![TODO]
 fn all_equal<..T: Eq>(a: [..T], b: [..T]) -> bool {
     return a == b;
 }
 
+fn not_equal<..T: Eq>(a: [..T], b: [..T]) -> bool {
+    return a != b;
+}
+
 export fn run() {
+    // Basic variadic Eq
     assert all_equal([1, "hello"], [1, "hello"]);
     assert !all_equal([1, "hello"], [2, "hello"]);
+    assert !all_equal([1, "hello"], [1, "world"]);
+
+    // NotEq
+    assert not_equal([1, "hello"], [2, "hello"]);
+    assert !not_equal([1, "hello"], [1, "hello"]);
+
+    // Single element tuple
+    assert all_equal([42], [42]);
+    assert !all_equal([42], [99]);
+
+    // Three elements
+    assert all_equal([1, "a", true], [1, "a", true]);
+    assert !all_equal([1, "a", true], [1, "a", false]);
 }
 
 __DATA__
