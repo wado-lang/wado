@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775127953843,
+  "lastUpdate": 1775132923735,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9656,6 +9656,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e6db6a17e2be8c03624a4ac64b651af9f75bce81"
         },
         "date": 1775127953618,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "796a6ee15b4b610e1cba8375d6c3531435fbe199",
+          "message": "Merge pull request #756 from wado-lang/claude/tuple-destruct-rest-rcau4\n\nImplement tuple destructuring with rest pattern (..)",
+          "timestamp": "2026-04-02T21:25:45+09:00",
+          "tree_id": "73988a5c616e2fbeb3cc890830433c129a994766",
+          "url": "https://github.com/wado-lang/wado/commit/796a6ee15b4b610e1cba8375d6c3531435fbe199"
+        },
+        "date": 1775132923512,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
