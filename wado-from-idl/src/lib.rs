@@ -1,4 +1,4 @@
-//! wado-from-wit: Generate Wado standard library from WIT files
+//! wado-from-idl: Generate Wado standard library from IDL files (WIT, `WebIDL`)
 
 pub mod codegen;
 pub mod ir;

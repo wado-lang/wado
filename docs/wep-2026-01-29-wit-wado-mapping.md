@@ -14,7 +14,7 @@ Wado compiles to WebAssembly Component Model and needs a clear mapping between W
 Define a clear bidirectional mapping between WIT constructs and Wado language features. This mapping guides:
 
 1. **WIT generation**: Auto-generate WIT from Wado source for embedding in compiled components
-2. **WIT consumption**: Import external WIT definitions into Wado (via `wado-from-wit`)
+2. **WIT consumption**: Import external WIT definitions into Wado (via `wado-from-idl`)
 3. **Language design**: Ensure Wado constructs align with Component Model concepts
 
 ## Export Principle

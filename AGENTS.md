@@ -23,7 +23,7 @@ See also:
 
 `wasi:*` modules are part of the Wado standard library.
 
-Those modules are generated from WIT files by the `wado-from-wit` tool, so if `wasi/*.wado` files need to be updated, edit `wado-from-wit` instead, and run:
+Those modules are generated from WIT files by the `wado-from-idl` tool, so if `wasi/*.wado` files need to be updated, edit `wado-from-idl` instead, and run:
 
 ```sh
 mise run update-stdlib-wasi
