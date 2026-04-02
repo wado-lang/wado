@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775121710278,
+  "lastUpdate": 1775121729722,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9578,6 +9578,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2e4f73a266d2c1c6af8e39802851fa32b372271d"
         },
         "date": 1775121710055,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "41af89f906898c68105f6f8db9fcf1960d29cb1d",
+          "message": "Merge pull request #754 from wado-lang/claude/fix-global-constant-pattern-wabQe\n\nFix global constant patterns in match/matches expressions",
+          "timestamp": "2026-04-02T18:19:09+09:00",
+          "tree_id": "cf5b88a57b825e3cfec56f6ea893910941b13a52",
+          "url": "https://github.com/wado-lang/wado/commit/41af89f906898c68105f6f8db9fcf1960d29cb1d"
+        },
+        "date": 1775121729503,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
