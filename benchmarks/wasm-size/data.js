@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775086946186,
+  "lastUpdate": 1775110201923,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9461,6 +9461,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0132b7afa1566ed64107386ab9bfb715235a628b"
         },
         "date": 1775086945966,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7cc44ce3d1c1824a8361b7197889f01285013bab",
+          "message": "Merge pull request #751 from wado-lang/claude/refactor-wasi-to-cm-attribute-wJyuO\n\nRename #[wasi(\"...\")] attribute to #[cm(\"...\")] for general CM support",
+          "timestamp": "2026-04-02T15:03:38+09:00",
+          "tree_id": "d589c8c8887715996c36a33d5b131c9222d3bbd2",
+          "url": "https://github.com/wado-lang/wado/commit/7cc44ce3d1c1824a8361b7197889f01285013bab"
+        },
+        "date": 1775110201706,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
