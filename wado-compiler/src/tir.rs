@@ -2184,7 +2184,7 @@ pub enum TirPattern {
         type_id: TypeId,
     },
     Literal(TirLiteralPattern),
-    Tuple(Vec<TirPattern>),
+    Tuple(Vec<TirPattern>, /* has_rest */ bool),
     Variant {
         enum_type: TypeId,
         variant_name: String,

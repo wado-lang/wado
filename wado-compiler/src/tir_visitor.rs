@@ -101,7 +101,7 @@ pub trait TirMutVisitor {
     fn walk_pattern(&mut self, pattern: &mut TirPattern) {
         match pattern {
             TirPattern::Wildcard | TirPattern::Binding { .. } | TirPattern::Literal(_) => {}
-            TirPattern::Tuple(patterns) => {
+            TirPattern::Tuple(patterns, _) => {
                 for p in patterns {
                     self.visit_pattern(p);
                 }

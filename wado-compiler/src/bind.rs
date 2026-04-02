@@ -551,7 +551,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             crate::ast::Pattern::Ident(name) | crate::ast::Pattern::MutIdent(name) => {
                 self.define_uninit(name, is_mut, is_reactive, span)?;
             }
-            crate::ast::Pattern::Tuple(patterns) => {
+            crate::ast::Pattern::Tuple(patterns, _) => {
                 for p in patterns {
                     self.bind_let_pattern_uninit(p, is_mut, is_reactive, span)?;
                 }
@@ -585,7 +585,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             crate::ast::Pattern::Ident(name) | crate::ast::Pattern::MutIdent(name) => {
                 self.define(name, is_mut, is_reactive, span)?;
             }
-            crate::ast::Pattern::Tuple(patterns) => {
+            crate::ast::Pattern::Tuple(patterns, _) => {
                 for p in patterns {
                     self.bind_let_pattern(p, is_mut, is_reactive, span)?;
                 }
@@ -1067,7 +1067,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             crate::ast::Pattern::MutIdent(name) => {
                 self.define(name, true, false, span)?;
             }
-            crate::ast::Pattern::Tuple(patterns) => {
+            crate::ast::Pattern::Tuple(patterns, _) => {
                 for p in patterns {
                     self.bind_pattern(p, span)?;
                 }

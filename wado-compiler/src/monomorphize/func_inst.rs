@@ -2927,7 +2927,7 @@ impl Monomorphizer {
                     Self::collect_locals_in_pattern(b, locals);
                 }
             }
-            TirPattern::Tuple(patterns) => {
+            TirPattern::Tuple(patterns, _) => {
                 for p in patterns {
                     Self::collect_locals_in_pattern(p, locals);
                 }
@@ -3074,7 +3074,7 @@ impl Monomorphizer {
                 }
                 None
             }
-            TirPattern::Tuple(patterns) => {
+            TirPattern::Tuple(patterns, _) => {
                 for p in patterns {
                     if let Some(t) = Self::find_local_type_in_pattern(p, local_idx) {
                         return Some(t);

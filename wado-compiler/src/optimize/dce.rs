@@ -1630,7 +1630,7 @@ fn collect_types_from_pattern(
             collect_type_transitive(*type_id, type_table, reachable);
         }
         TirPattern::Literal(_) => {}
-        TirPattern::Tuple(patterns) => {
+        TirPattern::Tuple(patterns, _) => {
             for p in patterns {
                 collect_types_from_pattern(p, type_table, reachable);
             }

@@ -357,7 +357,7 @@ impl Monomorphizer {
                 // Substitute the binding's type (e.g., type parameter T -> i32)
                 *type_id = self.substitute_type(*type_id, substitution, type_table);
             }
-            TirPattern::Tuple(patterns) => {
+            TirPattern::Tuple(patterns, _) => {
                 for p in patterns {
                     self.substitute_types_in_pattern(p, substitution, type_table);
                 }

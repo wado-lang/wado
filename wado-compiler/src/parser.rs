@@ -1761,14 +1761,16 @@ impl Parser {
             self.advance();
             let patterns = self.parse_comma_separated(&TokenKind::RParen, Self::parse_pattern)?;
             self.expect(&TokenKind::RParen)?;
-            Ok(Pattern::Tuple(patterns))
+            Ok(Pattern::Tuple(patterns, false))
         } else if self.check(&TokenKind::LBracket) {
             // Tuple pattern with brackets: [a, b, c] or [a, b, ..]
             self.advance();
             let mut patterns = Vec::new();
+            let mut has_rest = false;
             if !self.check(&TokenKind::RBracket) {
                 if self.check_dot_dot_or_ellipsis() {
                     self.consume_dot_dot()?;
+                    has_rest = true;
                     // Rest-only: [..] — consume and produce empty pattern list
                 } else {
                     patterns.push(self.parse_pattern()?);
@@ -1779,6 +1781,7 @@ impl Parser {
                         }
                         if self.check_dot_dot_or_ellipsis() {
                             self.consume_dot_dot()?;
+                            has_rest = true;
                             if self.check(&TokenKind::Comma) {
                                 self.advance();
                             }
@@ -1789,7 +1792,7 @@ impl Parser {
                 }
             }
             self.expect(&TokenKind::RBracket)?;
-            Ok(Pattern::Tuple(patterns))
+            Ok(Pattern::Tuple(patterns, has_rest))
         } else if self.check(&TokenKind::LBrace) {
             // Unnamed struct pattern: { x, y }
             self.parse_struct_pattern_fields(None)

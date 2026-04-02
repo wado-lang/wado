@@ -478,7 +478,7 @@ fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut ModifiedVars) {
                 collect_pattern_bindings(binding, modified);
             }
         }
-        TirPattern::Tuple(patterns) => {
+        TirPattern::Tuple(patterns, _) => {
             for p in patterns {
                 collect_pattern_bindings(p, modified);
             }

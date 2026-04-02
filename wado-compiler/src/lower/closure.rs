@@ -2002,11 +2002,12 @@ impl ClosureLowerer {
                 type_id: *type_id,
             },
             TirPattern::Literal(lit) => TirPattern::Literal(lit.clone()),
-            TirPattern::Tuple(patterns) => TirPattern::Tuple(
+            TirPattern::Tuple(patterns, has_rest) => TirPattern::Tuple(
                 patterns
                     .iter()
                     .map(|p| self.transform_closure_body_pattern(p))
                     .collect(),
+                *has_rest,
             ),
             TirPattern::Variant {
                 enum_type,
