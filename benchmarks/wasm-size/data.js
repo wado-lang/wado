@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775150501338,
+  "lastUpdate": 1775174263268,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9812,6 +9812,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9c96f33facea64a95d136e3c39bb87401e1a2673"
         },
         "date": 1775150501112,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5147fb777e0f38f7f8c48b7474bd399a654c45b5",
+          "message": "Merge pull request #760 from wado-lang/claude/add-char-eq-ignore-ascii-case-xkM5z\n\nAdd `eq_ignore_ascii_case` for `char` and `String`",
+          "timestamp": "2026-04-03T08:54:54+09:00",
+          "tree_id": "5c5e66da6aec89c235394118b00029027ef6ba89",
+          "url": "https://github.com/wado-lang/wado/commit/5147fb777e0f38f7f8c48b7474bd399a654c45b5"
+        },
+        "date": 1775174263045,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
