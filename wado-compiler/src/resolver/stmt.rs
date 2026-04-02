@@ -947,6 +947,38 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         ref_binding,
                     );
                 }
+                // Check if the identifier refers to an immutable global constant
+                if !matches!(pattern, Pattern::MutIdent(_)) {
+                    if let Some(&(ty, mutable)) = self.current_module_globals.get(name)
+                        && !mutable
+                    {
+                        return TirPattern::ConstantValue {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::GlobalVarGet {
+                                    module_source: self.current_module_source.clone(),
+                                    name: name.clone(),
+                                },
+                                ty,
+                                span,
+                            )),
+                        };
+                    }
+                    if let Some((source_module, original_name, ty, mutable)) =
+                        self.imported_globals.get(name)
+                        && !*mutable
+                    {
+                        return TirPattern::ConstantValue {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::GlobalVarGet {
+                                    module_source: source_module.clone(),
+                                    name: original_name.clone(),
+                                },
+                                *ty,
+                                span,
+                            )),
+                        };
+                    }
+                }
                 let is_mut = matches!(pattern, Pattern::MutIdent(_));
                 let binding_type = match ref_binding {
                     RefBinding::Ref => self
@@ -1051,10 +1083,58 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 bindings,
                 span,
             } => {
-                // Bare uppercase identifier that is not a known case of the scrutinee type
-                // is treated as a variable binding (e.g. `if let VAL = opt`).
+                // Bare uppercase identifier that is not a known case of the scrutinee type.
+                // Check if it's an associated constant (e.g., `i32::MAX`) before falling back
+                // to a variable binding.
                 if bindings.is_empty() && !self.is_known_case_of_type(scrutinee_type, variant_name)
                 {
+                    // Check for associated constants (e.g., `i32::MAX`, `f64::PI`)
+                    // Resolve to literal patterns when possible for switch optimization.
+                    if let Some((const_ty, const_expr)) =
+                        self.associated_constants.get(variant_name).cloned()
+                    {
+                        let type_id = self.resolve_type(&const_ty);
+                        let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
+                        // If the resolved expression is a literal, emit a Literal pattern
+                        // so it benefits from switch optimization and exhaustiveness checking.
+                        match &resolved.kind {
+                            TirExprKind::IntLiteral { repr, .. } => {
+                                let scrutinee_resolved =
+                                    self.type_table.borrow().get(scrutinee_type).clone();
+                                let is_unsigned = matches!(
+                                    scrutinee_resolved,
+                                    ResolvedType::Primitive(
+                                        PrimitiveType::U8
+                                            | PrimitiveType::U16
+                                            | PrimitiveType::U32
+                                            | PrimitiveType::U64
+                                            | PrimitiveType::U128
+                                    )
+                                ) || matches!(
+                                    scrutinee_resolved,
+                                    ResolvedType::Struct { ref name, .. } if name == "u128"
+                                );
+                                if is_unsigned {
+                                    if let Ok(v) = util::parse_u128_literal(repr) {
+                                        return TirPattern::Literal(TirLiteralPattern::U128(v));
+                                    }
+                                } else if let Ok(v) = util::parse_i128_literal(repr) {
+                                    return TirPattern::Literal(TirLiteralPattern::I128(v));
+                                }
+                            }
+                            TirExprKind::BoolLiteral(v) => {
+                                return TirPattern::Literal(TirLiteralPattern::Bool(*v));
+                            }
+                            TirExprKind::CharLiteral(v) => {
+                                return TirPattern::Literal(TirLiteralPattern::Char(*v));
+                            }
+                            _ => {}
+                        }
+                        return TirPattern::ConstantValue {
+                            expr: Box::new(TirExpr::new(resolved.kind, type_id, *span)),
+                        };
+                    }
+
                     let binding_type = match ref_binding {
                         RefBinding::Ref => self
                             .type_table
@@ -2073,7 +2153,10 @@ fn collect_pattern_bindings_with_index_inner(
                 collect_pattern_bindings_with_index_inner(first, out);
             }
         }
-        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } => {}
+        TirPattern::Wildcard
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::ConstantValue { .. } => {}
     }
 }
 
@@ -2105,6 +2188,9 @@ fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) {
                 remap_pattern_local(p, from, to);
             }
         }
-        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } => {}
+        TirPattern::Wildcard
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::ConstantValue { .. } => {}
     }
 }

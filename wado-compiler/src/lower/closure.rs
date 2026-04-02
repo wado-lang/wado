@@ -1625,6 +1625,7 @@ impl ClosureLowerer {
                     .map(|p| self.transform_closure_body_pattern(p))
                     .collect(),
             ),
+            TirPattern::ConstantValue { expr } => TirPattern::ConstantValue { expr: expr.clone() },
         }
     }
 

@@ -2196,6 +2196,11 @@ pub enum TirPattern {
     },
     /// Or pattern: matches if any alternative matches
     Or(Vec<TirPattern>),
+    /// Constant value pattern: compares scrutinee against a constant expression
+    /// (immutable global variable or associated constant like `i32::MAX`)
+    ConstantValue {
+        expr: Box<TirExpr>,
+    },
 }
 
 #[derive(Debug, Clone)]

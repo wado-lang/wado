@@ -953,7 +953,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             trivia = [];
             lexer.pos = start + 1;
         } else {
-            let is_skip = false || best_kind == TK_WS;
+            let is_skip = best_kind matches { TK_WS };
             if is_skip {
                 trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
             } else {
@@ -969,36 +969,38 @@ pub fn tokenize(input: &String) -> Array<Token> {
 }
 
 pub fn token_kind_name(kind: i32) -> String {
-    if kind == TK_COS { return "COS"; }
-    if kind == TK_SIN { return "SIN"; }
-    if kind == TK_TAN { return "TAN"; }
-    if kind == TK_ACOS { return "ACOS"; }
-    if kind == TK_ASIN { return "ASIN"; }
-    if kind == TK_ATAN { return "ATAN"; }
-    if kind == TK_LN { return "LN"; }
-    if kind == TK_LOG { return "LOG"; }
-    if kind == TK_SQRT { return "SQRT"; }
-    if kind == TK_LPAREN { return "LPAREN"; }
-    if kind == TK_RPAREN { return "RPAREN"; }
-    if kind == TK_PLUS { return "PLUS"; }
-    if kind == TK_MINUS { return "MINUS"; }
-    if kind == TK_TIMES { return "TIMES"; }
-    if kind == TK_DIV { return "DIV"; }
-    if kind == TK_GT { return "GT"; }
-    if kind == TK_LT { return "LT"; }
-    if kind == TK_EQ { return "EQ"; }
-    if kind == TK_COMMA { return "COMMA"; }
-    if kind == TK_POINT { return "POINT"; }
-    if kind == TK_POW { return "POW"; }
-    if kind == TK_PI { return "PI"; }
-    if kind == TK_EULER { return "EULER"; }
-    if kind == TK_I { return "I"; }
-    if kind == TK_VARIABLE { return "VARIABLE"; }
-    if kind == TK_SCIENTIFIC_NUMBER { return "SCIENTIFIC_NUMBER"; }
-    if kind == TK_WS { return "WS"; }
-    if kind == TK_EOF { return "Eof"; }
-    if kind == TK_ERROR { return "Error"; }
-    return "Unknown";
+    return match kind {
+        TK_COS => "COS",
+        TK_SIN => "SIN",
+        TK_TAN => "TAN",
+        TK_ACOS => "ACOS",
+        TK_ASIN => "ASIN",
+        TK_ATAN => "ATAN",
+        TK_LN => "LN",
+        TK_LOG => "LOG",
+        TK_SQRT => "SQRT",
+        TK_LPAREN => "LPAREN",
+        TK_RPAREN => "RPAREN",
+        TK_PLUS => "PLUS",
+        TK_MINUS => "MINUS",
+        TK_TIMES => "TIMES",
+        TK_DIV => "DIV",
+        TK_GT => "GT",
+        TK_LT => "LT",
+        TK_EQ => "EQ",
+        TK_COMMA => "COMMA",
+        TK_POINT => "POINT",
+        TK_POW => "POW",
+        TK_PI => "PI",
+        TK_EULER => "EULER",
+        TK_I => "I",
+        TK_VARIABLE => "VARIABLE",
+        TK_SCIENTIFIC_NUMBER => "SCIENTIFIC_NUMBER",
+        TK_WS => "WS",
+        TK_EOF => "Eof",
+        TK_ERROR => "Error",
+        _ => "Unknown",
+    };
 }
 
 struct Parser {
@@ -1068,7 +1070,7 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let multiplying_expression = parse_multiplying_expression(p)?;
     let mut item_multiplying_expression_list: Array<ItemMultiplyingExpressionItem> = [];
-    while p.peek_kind() == TK_PLUS || p.peek_kind() == TK_MINUS {
+    while p.peek_kind() matches { TK_PLUS | TK_MINUS } {
         let plus_or_minus = p.advance();
         let multiplying_expression = parse_multiplying_expression(p)?;
         let item_multiplying_expression = ItemMultiplyingExpressionItem {
@@ -1088,7 +1090,7 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
     let start = p.peek().span.start;
     let pow_expression = parse_pow_expression(p)?;
     let mut item_pow_expression_list: Array<ItemPowExpressionItem> = [];
-    while p.peek_kind() == TK_TIMES || p.peek_kind() == TK_DIV {
+    while p.peek_kind() matches { TK_TIMES | TK_DIV } {
         let times_or_div = p.advance();
         let pow_expression = parse_pow_expression(p)?;
         let item_pow_expression = ItemPowExpressionItem {
@@ -1145,14 +1147,14 @@ fn parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
             signed_atom,
         }));
     }
-    if (kind == TK_COS || kind == TK_TAN || kind == TK_SIN || kind == TK_ACOS || kind == TK_ATAN || kind == TK_ASIN || kind == TK_LOG || kind == TK_LN || kind == TK_SQRT) {
+    if kind matches { TK_COS | TK_TAN | TK_SIN | TK_ACOS | TK_ATAN | TK_ASIN | TK_LOG | TK_LN | TK_SQRT } {
         let func_ = parse_func_(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt2(SignedAtomAlt2 {
             span: Span::new(start, p.last_end()),
             func_,
         }));
     }
-    if (kind == TK_SCIENTIFIC_NUMBER || kind == TK_VARIABLE || kind == TK_PI || kind == TK_EULER || kind == TK_I || kind == TK_LPAREN) {
+    if kind matches { TK_SCIENTIFIC_NUMBER | TK_VARIABLE | TK_PI | TK_EULER | TK_I | TK_LPAREN } {
         let atom = parse_atom(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt3(SignedAtomAlt3 {
             span: Span::new(start, p.last_end()),
@@ -1183,7 +1185,7 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
             variable,
         }));
     }
-    if (kind == TK_PI || kind == TK_EULER || kind == TK_I) {
+    if kind matches { TK_PI | TK_EULER | TK_I } {
         let constant = parse_constant(p)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt2(AtomAlt2 {
             span: Span::new(start, p.last_end()),

@@ -337,6 +337,21 @@ fn condition_references_var(condition: &crate::ast::Condition, name: &str) -> bo
     }
 }
 
+/// Collect bare `Pattern::Ident` names at the top level of a pattern,
+/// including through or-alternatives. These are candidates for global
+/// constant references that should not be tracked as local variables.
+/// Nested idents inside variants/structs/tuples are real local bindings.
+fn collect_top_level_bare_idents(pattern: &crate::ast::Pattern) -> Vec<String> {
+    match pattern {
+        crate::ast::Pattern::Ident(name) => vec![name.clone()],
+        crate::ast::Pattern::Or(alternatives) => alternatives
+            .iter()
+            .flat_map(collect_top_level_bare_idents)
+            .collect(),
+        _ => vec![],
+    }
+}
+
 /// The binder performs local name resolution
 pub struct Binder<'a, H: CompilerHost> {
     scopes: Vec<Scope>,
@@ -904,13 +919,22 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 // Pattern bindings are scoped to the matches expression only
                 // (specifically, they're only visible in the guard if present)
                 // Always enter a scope and bind pattern to track variable names,
-                // so we can detect "use after scope exit" errors
+                // so we can detect "use after scope exit" errors.
+                //
+                // Bare idents at the top level of the pattern (or or-alternatives)
+                // might be global constants rather than new locals. We must remove
+                // those from local_names_in_function after the scope exits, otherwise
+                // they shadow the real globals when used as expressions later.
+                let bare_idents = collect_top_level_bare_idents(&matches_expr.pattern);
                 self.enter_scope();
                 self.bind_pattern(&matches_expr.pattern, matches_expr.span)?;
                 if let Some(guard) = &matches_expr.guard {
                     self.bind_expr(guard)?;
                 }
                 self.exit_scope();
+                for name in &bare_idents {
+                    self.local_names_in_function.shift_remove(name);
+                }
             }
 
             Expr::TryOp(qm) => {
@@ -997,6 +1021,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             // Process each arm from the pre-match state
             self.possibly_uninit.clone_from(&uninit_before);
 
+            let bare_idents = collect_top_level_bare_idents(&arm.pattern);
             self.enter_scope();
             self.bind_pattern(&arm.pattern, arm.span)?;
             if let Some(guard) = &arm.guard {
@@ -1004,6 +1029,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             }
             self.bind_expr(&arm.body)?;
             self.exit_scope();
+            for name in &bare_idents {
+                self.local_names_in_function.shift_remove(name);
+            }
 
             // Merge: a var is possibly-uninit after the match if possibly-uninit in any arm
             match uninit_after_all_arms.take() {

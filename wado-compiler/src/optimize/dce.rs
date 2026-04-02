@@ -1665,6 +1665,9 @@ fn collect_types_from_pattern(
                 collect_types_from_pattern(p, type_table, reachable);
             }
         }
+        TirPattern::ConstantValue { expr } => {
+            collect_type_transitive(expr.type_id, type_table, reachable);
+        }
     }
 }
 
