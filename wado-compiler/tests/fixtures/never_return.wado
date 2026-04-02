@@ -1,0 +1,35 @@
+// Test that panic/unreachable (never type) can be used as the return value
+// of functions with any return type.
+
+fn always_panic() -> i32 {
+    panic("not implemented");
+}
+
+fn always_unreachable() -> String {
+    unreachable();
+}
+
+fn panic_in_match(opt: Option<i32>) -> i32 {
+    return match opt {
+        Some(v) => v,
+        None => panic("none"),
+    };
+}
+
+fn conditional_panic(x: i32) -> i32 {
+    if x > 0 {
+        return x;
+    }
+    panic("must be positive");
+}
+
+test "panic as function return" {
+    // We can't call always_panic() without trapping,
+    // but the fact that it compiles is the test.
+    // Test conditional_panic which has a non-panic path.
+    assert conditional_panic(42) == 42;
+    assert panic_in_match(Option::<i32>::Some(10)) == 10;
+}
+
+__DATA__
+{"test": {}}
