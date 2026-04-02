@@ -1690,6 +1690,11 @@ Non-ASCII bytes are left unchanged.
 Returns a new string with all ASCII lowercase letters converted to uppercase.
 Non-ASCII bytes are left unchanged.
 
+##### `pub fn eq_ignore_ascii_case(&self, other: String) -> bool`
+
+Checks that two strings are an ASCII case-insensitive match.
+Non-ASCII bytes are compared exactly.
+
 ##### `pub fn contains(&self, pat: String) -> bool`
 
 Returns true if this string contains the given substring.
@@ -2204,6 +2209,13 @@ non-uppercase characters are returned unchanged.
 
 Converts an ASCII lowercase letter to uppercase. Non-ASCII and
 non-lowercase characters are returned unchanged.
+
+##### `pub fn eq_ignore_ascii_case(&self, other: &char) -> bool`
+
+Checks that two characters are an ASCII case-insensitive match.
+
+Equivalent to `to_ascii_lowercase() == other.to_ascii_lowercase()`,
+but implemented branchlessly.
 
 ##### `pub fn is_hexdigit(&self) -> bool`
 
