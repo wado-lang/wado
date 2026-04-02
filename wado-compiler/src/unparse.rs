@@ -4068,6 +4068,9 @@ impl<'a> TirUnparser<'a> {
                     self.unparse_tir_pattern(p);
                 }
             }
+            TirPattern::ConstantValue { expr } => {
+                self.unparse_expr(expr);
+            }
         }
     }
 
@@ -4606,6 +4609,9 @@ impl<'a> TirUnparser<'a> {
                     }
                     self.unparse_pattern(p);
                 }
+            }
+            TirPattern::ConstantValue { expr } => {
+                self.unparse_expr(expr);
             }
         }
     }

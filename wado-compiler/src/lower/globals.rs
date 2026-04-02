@@ -584,7 +584,7 @@ fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
                 renumber_locals_in_pattern(&mut f.pattern, offset);
             }
         }
-        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } => {}
+        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } => {}
         TirPattern::Or(alternatives) => {
             for p in alternatives {
                 renumber_locals_in_pattern(p, offset);

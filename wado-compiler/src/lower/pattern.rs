@@ -368,13 +368,13 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Tuple(sub_patterns) => sub_patterns.iter().any(|p| {
                 matches!(
                     p,
-                    TirPattern::Literal(_) | TirPattern::Variant { .. } | TirPattern::Enum { .. }
+                    TirPattern::Literal(_) | TirPattern::Variant { .. } | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. }
                 )
             }),
             TirPattern::Struct { fields, .. } => fields.iter().any(|f| {
                 matches!(
                     f.pattern,
-                    TirPattern::Literal(_) | TirPattern::Variant { .. } | TirPattern::Enum { .. }
+                    TirPattern::Literal(_) | TirPattern::Variant { .. } | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. }
                 )
             }),
             _ => false,
@@ -700,6 +700,32 @@ impl<'a> PatternLowerer<'a> {
                     type_id: elem_type,
                 };
             }
+            TirPattern::ConstantValue { expr: const_expr } => {
+                let temp_index = self.alloc_local(elem_type);
+                let local_expr = TirExpr::new(
+                    TirExprKind::Local {
+                        index: temp_index,
+                        name: format!("__const_{temp_index}"),
+                    },
+                    elem_type,
+                    span,
+                );
+                let cond = TirExpr::new(
+                    TirExprKind::Binary {
+                        op: TirBinaryOp::Eq,
+                        left: Box::new(local_expr),
+                        right: const_expr.clone(),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+                conditions.push(cond);
+                *sub = TirPattern::Binding {
+                    name: format!("__const_{temp_index}"),
+                    local_index: temp_index,
+                    type_id: elem_type,
+                };
+            }
             _ => {}
         }
     }
@@ -898,6 +924,25 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_let_pattern(&pattern, false, scrutinee, stmt.span, out, type_table);
                     self.lower_block(&mut then_block, type_table);
                     out.extend(then_block.stmts);
+                } else if let TirPattern::ConstantValue { expr: const_expr } = &pattern {
+                    let condition = TirExpr::new(
+                        TirExprKind::Binary {
+                            op: TirBinaryOp::Eq,
+                            left: Box::new(scrutinee),
+                            right: const_expr.clone(),
+                        },
+                        TypeTable::BOOL,
+                        stmt.span,
+                    );
+                    self.lower_block(&mut then_block, type_table);
+                    out.push(TirStmt::new(
+                        TirStmtKind::If {
+                            condition,
+                            then_block,
+                            else_block,
+                        },
+                        stmt.span,
+                    ));
                 } else if can_lower {
                     // Lower Option, Variant, and Enum patterns to Let + If
                     self.lower_if_pattern_option(
@@ -1266,8 +1311,8 @@ impl<'a> PatternLowerer<'a> {
                     );
                 }
             }
-            TirPattern::Literal(_) | TirPattern::Enum { .. } => {
-                // Literal/Enum patterns don't bind anything, just evaluate for side effects
+            TirPattern::Literal(_) | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } => {
+                // Literal/Enum/ConstantValue patterns don't bind anything, just evaluate for side effects
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
             }
             TirPattern::Or(alternatives) => {
@@ -1524,7 +1569,7 @@ impl<'a> PatternLowerer<'a> {
                     );
                 }
             }
-            TirPattern::Literal(_) | TirPattern::Enum { .. } => {
+            TirPattern::Literal(_) | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } => {
                 // Just evaluate for side effects (no bindings)
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
             }
@@ -2069,6 +2114,14 @@ impl<'a> PatternLowerer<'a> {
                     binding_stmts,
                 )
             }
+            TirPattern::ConstantValue { .. } => {
+                // ConstantValue patterns should have been lowered to binding + guard
+                // before reaching here, but handle gracefully
+                (
+                    TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
+                    binding_stmts,
+                )
+            }
             TirPattern::Or(alternatives) => {
                 // Or pattern: combine conditions with logical OR
                 let mut or_conditions: Vec<TirExpr> = Vec::new();
@@ -2219,6 +2272,48 @@ impl<'a> PatternLowerer<'a> {
                             self.literal_eq_condition(temp_index, scrutinee_type_id, &lit, span);
                         arm.pattern = TirPattern::Binding {
                             name: format!("__lit_{temp_index}"),
+                            local_index: temp_index,
+                            type_id: scrutinee_type_id,
+                        };
+                        arm.guard = Some(match arm.guard.take() {
+                            Some(existing) => TirExpr::new(
+                                TirExprKind::Binary {
+                                    op: TirBinaryOp::And,
+                                    left: Box::new(cond),
+                                    right: Box::new(existing),
+                                },
+                                TypeTable::BOOL,
+                                span,
+                            ),
+                            None => cond,
+                        });
+                    }
+                }
+
+                // Lower top-level constant value patterns into binding + guard
+                for arm in arms.iter_mut() {
+                    if let TirPattern::ConstantValue { expr: const_expr } = &arm.pattern {
+                        let span = arm.span;
+                        let temp_index = self.alloc_local(scrutinee_type_id);
+                        let local_expr = TirExpr::new(
+                            TirExprKind::Local {
+                                index: temp_index,
+                                name: format!("__const_{temp_index}"),
+                            },
+                            scrutinee_type_id,
+                            span,
+                        );
+                        let cond = TirExpr::new(
+                            TirExprKind::Binary {
+                                op: TirBinaryOp::Eq,
+                                left: Box::new(local_expr),
+                                right: const_expr.clone(),
+                            },
+                            TypeTable::BOOL,
+                            span,
+                        );
+                        arm.pattern = TirPattern::Binding {
+                            name: format!("__const_{temp_index}"),
                             local_index: temp_index,
                             type_id: scrutinee_type_id,
                         };

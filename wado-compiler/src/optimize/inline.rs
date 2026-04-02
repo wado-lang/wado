@@ -1500,6 +1500,9 @@ fn remap_pattern(
                 .map(|p| remap_pattern(p, param_to_local, local_offset, param_count))
                 .collect(),
         ),
+        TirPattern::ConstantValue { expr } => TirPattern::ConstantValue {
+            expr: expr.clone(),
+        },
     }
 }
 

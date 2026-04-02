@@ -393,6 +393,9 @@ impl Monomorphizer {
                     self.substitute_types_in_pattern(p, substitution, type_table);
                 }
             }
+            TirPattern::ConstantValue { expr } => {
+                expr.type_id = self.substitute_type(expr.type_id, substitution, type_table);
+            }
         }
     }
 }

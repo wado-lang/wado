@@ -1802,6 +1802,23 @@ impl Parser {
             self.advance();
             if name == "_" {
                 Ok(Pattern::Wildcard)
+            } else if self.check(&TokenKind::ColonColon) {
+                // Qualified name: Type::Case, Type::CONST, etc.
+                self.advance();
+                let suffix = self.consume_ident()?;
+                let qualified = format!("{name}::{suffix}");
+                let end_span = self.peek().span;
+                if self.check(&TokenKind::LParen) {
+                    // Qualified variant with bindings: Option::Some(x)
+                    self.parse_variant_pattern(qualified, start_span)
+                } else {
+                    // Qualified name without bindings: Color::Red, i32::MAX
+                    Ok(Pattern::Variant {
+                        variant_name: qualified,
+                        bindings: vec![],
+                        span: start_span.merge(&end_span),
+                    })
+                }
             } else if self.check(&TokenKind::LParen) {
                 // Variant with bindings: Some(x), just(n), etc.
                 self.parse_variant_pattern(name, start_span)

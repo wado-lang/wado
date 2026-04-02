@@ -1,9 +1,3 @@
-// TODO: immutable global variables should be usable as match/matches patterns.
-// Currently they are treated as fresh variable bindings instead of value comparisons,
-// causing all arms to match the first pattern unconditionally.
-
-#![TODO]
-
 global TK_FOO: i32 = 1;
 global TK_BAR: i32 = 2;
 global TK_BAZ: i32 = 3;
@@ -28,6 +22,35 @@ test "matches operator with global constants" {
     let x: i32 = 1;
     assert x matches { TK_FOO };
     assert !(x matches { TK_BAR });
+}
+
+test "or pattern with global constants" {
+    let x: i32 = 1;
+    let y: i32 = 2;
+    let z: i32 = 99;
+    assert x matches { TK_FOO | TK_BAR };
+    assert y matches { TK_FOO | TK_BAR };
+    assert !(z matches { TK_FOO | TK_BAR });
+
+    let label = match y {
+        TK_FOO | TK_BAR => "foo or bar",
+        TK_BAZ => "baz",
+        _ => "other",
+    };
+    assert label == "foo or bar";
+}
+
+test "associated constant patterns" {
+    let x: i32 = 2147483647;
+    assert x matches { i32::MAX };
+    assert !(x matches { i32::MIN });
+
+    let label = match x {
+        i32::MAX => "max",
+        i32::MIN => "min",
+        _ => "other",
+    };
+    assert label == "max";
 }
 
 __DATA__
