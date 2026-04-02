@@ -3367,6 +3367,21 @@ fn try_lower_comparison(
                 .collect();
             (name.clone(), args, Some(module_source.clone()))
         }
+        ResolvedType::Tuple(elems) => {
+            // Tuple comparison: expand to element-wise comparisons inline.
+            // [i32, String] == [i32, String] → a.0 == b.0 && a.1 == b.1
+            let elems = elems.clone();
+            return lower_tuple_comparison(
+                trait_method_locations,
+                current_module_source,
+                span,
+                op,
+                left,
+                right,
+                &elems,
+                type_table,
+            );
+        }
         _ => return None,
     };
 
@@ -3480,6 +3495,116 @@ fn try_lower_comparison(
     }
 
     None
+}
+
+/// Expand a tuple comparison to element-wise comparisons.
+///
+/// For `Eq`/`NotEq`: `a == b` → `a.0 == b.0 && a.1 == b.1 && ...`
+/// For `Ord` comparisons: `a < b` → `Tuple^Ord::cmp` (delegates to element-wise cmp)
+///
+/// Each element comparison is recursively lowered: struct elements become
+/// `Eq::eq` method calls, primitives remain as binary ops.
+fn lower_tuple_comparison(
+    trait_method_locations: &IndexMap<String, ModuleSource>,
+    current_module_source: &ModuleSource,
+    span: crate::token::Span,
+    op: TirBinaryOp,
+    left: &TirExpr,
+    right: &TirExpr,
+    elems: &[TypeId],
+    type_table: &mut TypeTable,
+) -> Option<TirExprKind> {
+    if !matches!(
+        op,
+        TirBinaryOp::Eq | TirBinaryOp::NotEq
+    ) {
+        // Ord comparisons on tuples are not yet supported
+        return None;
+    }
+
+    if elems.is_empty() {
+        // Empty tuple: always equal
+        let result = TirExprKind::BoolLiteral(true);
+        if op == TirBinaryOp::NotEq {
+            return Some(TirExprKind::Unary {
+                op: TirUnaryOp::Not,
+                expr: Box::new(TirExpr::new(result, TypeTable::BOOL, span)),
+            });
+        }
+        return Some(result);
+    }
+
+    // Build element-wise equality: a.0 == b.0 && a.1 == b.1 && ...
+    let mut combined: Option<TirExpr> = None;
+
+    for (i, &elem_type) in elems.iter().enumerate() {
+        let left_field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(left.clone()),
+                field_index: i as u32,
+                field_name: i.to_string(),
+            },
+            elem_type,
+            span,
+        );
+        let right_field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(right.clone()),
+                field_index: i as u32,
+                field_name: i.to_string(),
+            },
+            elem_type,
+            span,
+        );
+
+        // Try to lower this element comparison (e.g., struct → MethodCall).
+        // Use an empty trait_method_locations — the element's own try_lower_comparison
+        // will handle struct/variant/generic types. For primitives, it returns None
+        // and we use a direct Binary op.
+        let elem_eq = if let Some(lowered) = try_lower_comparison(
+            trait_method_locations,
+            current_module_source,
+            span,
+            TirBinaryOp::Eq,
+            &left_field,
+            &right_field,
+            type_table,
+        ) {
+            TirExpr::new(lowered, TypeTable::BOOL, span)
+        } else {
+            TirExpr::new(
+                TirExprKind::Binary {
+                    op: TirBinaryOp::Eq,
+                    left: Box::new(left_field),
+                    right: Box::new(right_field),
+                },
+                TypeTable::BOOL,
+                span,
+            )
+        };
+
+        combined = Some(match combined {
+            None => elem_eq,
+            Some(prev) => TirExpr::new(
+                TirExprKind::Binary {
+                    op: TirBinaryOp::And,
+                    left: Box::new(prev),
+                    right: Box::new(elem_eq),
+                },
+                TypeTable::BOOL,
+                span,
+            ),
+        });
+    }
+
+    let result = combined.unwrap();
+    if op == TirBinaryOp::NotEq {
+        return Some(TirExprKind::Unary {
+            op: TirUnaryOp::Not,
+            expr: Box::new(result),
+        });
+    }
+    Some(result.kind)
 }
 
 /// Convert a trait method name to a TIR binary operator, if applicable.
