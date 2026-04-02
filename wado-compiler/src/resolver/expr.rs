@@ -2649,7 +2649,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Check if a type contains a `TypePack` (variadic pack parameter).
-    fn type_contains_pack(&self, type_id: TypeId) -> bool {
+    pub(super) fn type_contains_pack(&self, type_id: TypeId) -> bool {
         let ty = self.type_table.borrow().get(type_id).clone();
         match ty {
             ResolvedType::TypePack { .. } => true,

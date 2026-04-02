@@ -204,6 +204,7 @@ impl StringCollector {
             }
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {

@@ -457,6 +457,7 @@ fn record_defs_from_expr(expr: &TirExpr, defs: &mut DefMap) {
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::GlobalVarSet { value: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }

@@ -386,6 +386,7 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {

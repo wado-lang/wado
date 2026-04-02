@@ -1620,9 +1620,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 _ => None,
             }
         };
+        // TupleZip with nested TypePacks: treat as variadic so expansion
+        // is deferred to monomorphization when concrete types are known.
+        let is_zip_variadic = matches!(&iterable.kind, TirExprKind::TupleZip { .. })
+            && self.type_contains_pack(iterable_type_id);
 
         if let Some((elems, has_type_pack)) = tuple_info {
-            if has_type_pack {
+            if has_type_pack || is_zip_variadic {
                 assert!(
                     !is_enumerate,
                     "variadic for-of with .enumerate() is not yet supported"
@@ -1695,34 +1699,96 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let unique_id = ctx.next_local;
 
-        // Extract the TypePack type from the tuple elements.
-        // The iterable is Tuple([TypePack{T}]), so element 0 is the TypePack.
-        let type_pack_type = {
+        // Extract the element type for the loop binding.
+        // For direct TypePack: iterable is Tuple([TypePack{T}]), binding type is TypePack.
+        // For TupleZip: iterable is Tuple([Tuple([TypePack, TypePack])]), binding type is the inner tuple.
+        let binding_type = {
             let type_table = self.type_table.borrow();
             match type_table.get(iterable.type_id) {
-                ResolvedType::Tuple(elems) => elems
-                    .iter()
-                    .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                    .copied(),
-                _ => None,
+                ResolvedType::Tuple(elems) => {
+                    // Prefer a direct TypePack element
+                    if let Some(tp) = elems
+                        .iter()
+                        .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
+                    {
+                        *tp
+                    } else {
+                        // For TupleZip: use the first element type (all elements have the same shape)
+                        elems[0]
+                    }
+                }
+                _ => panic!("variadic for-of requires tuple iterable"),
             }
-        }
-        .expect("variadic for-of requires TypePack in tuple elements");
+        };
 
-        // Resolve the body with the binding having the TypePack type
+        // Resolve the body with the binding having the element type
         let binding_name = match &for_of.binding {
             crate::ast::Pattern::Ident(name) => name.clone(),
+            crate::ast::Pattern::Tuple(..) => {
+                // For destructuring patterns like [a, b], use a synthetic name
+                // and resolve the destructuring in the body
+                format!("__pattern_temp_{unique_id}")
+            }
             _ => {
-                panic!("variadic for-of currently only supports simple identifier bindings")
+                panic!("variadic for-of does not support this binding pattern")
             }
         };
 
         let is_mut = for_of.is_mut;
+        let is_destructured = matches!(&for_of.binding, crate::ast::Pattern::Tuple(..));
 
         ctx.enter_scope();
-        let binding_local = ctx.add_local(binding_name.clone(), type_pack_type, is_mut);
+        let binding_local = ctx.add_local(binding_name.clone(), binding_type, is_mut);
 
-        let mut body_stmts = Vec::new();
+        // For destructured bindings (e.g., [a, b]), add the sub-bindings and
+        // prepend destructuring assignments to the body.
+        let mut destruct_stmts = Vec::new();
+        if is_destructured {
+            if let crate::ast::Pattern::Tuple(tp, _) = &for_of.binding {
+                let tt = self.type_table.borrow();
+                let inner_elems = match tt.get(binding_type) {
+                    ResolvedType::Tuple(elems) => elems.clone(),
+                    _ => vec![binding_type],
+                };
+                drop(tt);
+                for (i, pat_elem) in tp.iter().enumerate() {
+                    if let crate::ast::Pattern::Ident(name) = pat_elem {
+                        let elem_type: TypeId = inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                        let local_idx = ctx.add_local(name.clone(), elem_type, is_mut);
+                        let field_access = TirExpr::new(
+                            TirExprKind::FieldAccess {
+                                expr: Box::new(TirExpr::new(
+                                    TirExprKind::Local {
+                                        index: binding_local,
+                                        name: binding_name.clone(),
+                                    },
+                                    binding_type,
+                                    span,
+                                )),
+                                field_index: i as u32,
+                                field_name: i.to_string(),
+                            },
+                            elem_type,
+                            span,
+                        );
+                        destruct_stmts.push(TirStmt::new(
+                            TirStmtKind::Let {
+                                name: name.clone(),
+                                local_index: local_idx,
+                                is_mut,
+                                is_reactive: false,
+                                type_id: elem_type,
+                                value: field_access,
+                                skip_value_copy: false,
+                            },
+                            span,
+                        ));
+                    }
+                }
+            }
+        }
+
+        let mut body_stmts = destruct_stmts;
         for stmt in &for_of.body.stmts {
             body_stmts.extend(self.resolve_stmt(stmt, ctx));
         }

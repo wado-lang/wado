@@ -293,6 +293,7 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_c
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
@@ -672,6 +673,7 @@ fn apply_in_expr(
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }

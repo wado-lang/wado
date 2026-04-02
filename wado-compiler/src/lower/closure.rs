@@ -467,6 +467,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {
@@ -736,6 +737,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {
@@ -987,6 +989,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {
@@ -1353,6 +1356,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {
@@ -1777,7 +1781,8 @@ impl ClosureLowerer {
                     expr.span,
                 )
             }
-            TirExprKind::TupleSpread { expr: inner } => {
+            TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner } => {
                 let new_inner = self.transform_closure_body(
                     inner,
                     captures,
@@ -2232,6 +2237,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => self.fn_param_in_struct_field_expr(inner, fn_param_indices),
@@ -2486,6 +2492,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {
@@ -2670,6 +2677,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {
@@ -3402,7 +3410,8 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::TupleSpread { expr: inner } => TirExpr::new(
+            TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner } => TirExpr::new(
                 TirExprKind::TupleSpread {
                     expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
                 },
@@ -3818,6 +3827,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {
@@ -4195,6 +4205,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => {

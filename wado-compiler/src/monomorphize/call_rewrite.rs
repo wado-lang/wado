@@ -435,6 +435,59 @@ impl Monomorphizer {
                 };
             }
         }
+        // Tuple variadic impl: rewrite Tuple^Eq::eq → Tuple<i32,i32,i32>^Eq::eq
+        if let Some(ref info) = method_func.method_info
+            && info.struct_name == "Tuple"
+        {
+            let mono = method_func.monomorph_info.as_ref();
+            let generic_name = mono
+                .map(|m| m.generic_name.clone())
+                .unwrap_or_else(|| {
+                    MethodName::format_local(
+                        "Tuple",
+                        info.trait_name.as_deref(),
+                        &info.method_name,
+                    )
+                });
+            let impl_type_args = mono
+                .map(|m| m.impl_type_args.clone())
+                .unwrap_or_else(|| {
+                    let mut receiver_type = receiver.type_id;
+                    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+                        type_table.get(receiver_type).clone()
+                    {
+                        receiver_type = inner;
+                    }
+                    if let ResolvedType::Tuple(elems) = type_table.get(receiver_type).clone() {
+                        elems
+                    } else {
+                        vec![]
+                    }
+                });
+            {
+                let key = InstantiationKey {
+                    name: generic_name.clone(),
+                    impl_type_args: impl_type_args.clone(),
+                    method_type_args: vec![],
+                    method_info: None,
+                };
+                if let Some(mangled) = self.functions.instantiated.get(&key) {
+                    let original_method_info = method_func.method_info.clone();
+                    *method_func = FunctionRef {
+                        module_source: self.current_module_source.clone(),
+                        name: mangled.clone(),
+                        monomorph_info: Some(MonomorphInfo {
+                            generic_name,
+                            impl_type_args,
+                            method_type_args: vec![],
+                            is_blanket: false,
+                        }),
+                        method_info: original_method_info,
+                        is_cm_binding: false,
+                    };
+                }
+            }
+        }
     }
 
     /// For implicit generic calls (where `type_args` is empty but the callee was instantiated),

@@ -1,0 +1,43 @@
+test "zip homogeneous" {
+    let a = [1, 2, 3];
+    let b = [4, 5, 6];
+    let mut sum = 0;
+    for let [x, y] of [a, b].zip() {
+        sum = sum + x + y;
+    }
+    assert sum == 21;
+}
+
+test "zip heterogeneous" {
+    let a = [1, "hello"];
+    let b = [2, "world"];
+    let zipped = [a, b].zip();
+    // zipped: [[i32, i32], [String, String]]
+    assert zipped.0.0 == 1;
+    assert zipped.0.1 == 2;
+    assert zipped.1.0 == "hello";
+    assert zipped.1.1 == "world";
+}
+
+test "zip three tuples" {
+    let a = [1, 2];
+    let b = [3, 4];
+    let c = [5, 6];
+    let mut sum = 0;
+    for let [x, y, z] of [a, b, c].zip() {
+        sum = sum + x + y + z;
+    }
+    assert sum == 21;
+}
+
+test "zip single element" {
+    let a = [42];
+    let b = [99];
+    for let [x, y] of [a, b].zip() {
+        assert x == 42;
+        assert y == 99;
+    }
+}
+
+__DATA__
+{"test": {}}

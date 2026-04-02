@@ -1962,6 +1962,13 @@ pub enum TirExprKind {
         expr: Box<TirExpr>,
     },
 
+    /// Transpose a tuple-of-tuples: `[a, b].zip()` → `[[a.0, b.0], [a.1, b.1], ...]`.
+    /// Created by the resolver for the `.zip()` pseudo-method on tuples.
+    /// Expanded during monomorphization once concrete tuple arities are known.
+    TupleZip {
+        expr: Box<TirExpr>,
+    },
+
     /// Type pack expansion: `[..T::method()]` inside a `TupleLiteral`.
     /// Expands at monomorphization to one call per concrete type in the pack:
     /// `[T_0::method(), T_1::method(), ...]`.

@@ -532,6 +532,7 @@ fn collect_param_field_usage_in_expr(
             }
         }
         TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
@@ -1236,6 +1237,7 @@ fn count_field_accesses_in_expr(
             }
         }
         TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
@@ -1885,6 +1887,7 @@ fn compute_sync_fields_in_expr(
         }
         TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
+            | TirExprKind::TupleZip { expr }
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         } => {
@@ -2255,6 +2258,7 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate], ctx: &
     match &mut expr.kind {
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {

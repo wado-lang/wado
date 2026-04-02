@@ -502,6 +502,7 @@ impl FunctionTranslator<'_, '_> {
             | TirExprKind::StructLiteral { .. }
             | TirExprKind::TupleLiteral { .. }
             | TirExprKind::TupleSpread { .. }
+            | TirExprKind::TupleZip { .. }
             | TirExprKind::TypePackExpansion { .. }
             | TirExprKind::Null => true,
 
@@ -691,6 +692,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Local { index, .. } => self.immutable_locals.contains(index),
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } => self.is_source_immutable(inner),
@@ -1724,9 +1726,11 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            TirExprKind::TupleSpread { .. } | TirExprKind::TypePackExpansion { .. } => {
+            TirExprKind::TupleSpread { .. }
+            | TirExprKind::TupleZip { .. }
+            | TirExprKind::TypePackExpansion { .. } => {
                 panic!(
-                    "TupleSpread/TypePackExpansion should have been expanded during monomorphization"
+                    "TupleSpread/TupleZip/TypePackExpansion should have been expanded during monomorphization"
                 )
             }
 
