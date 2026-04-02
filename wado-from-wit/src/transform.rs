@@ -253,7 +253,12 @@ impl<'a> Transformer<'a> {
                 .map_or_else(|| "0.0.0".to_string(), ToString::to_string);
             (namespace, pkg_name, iface_name, version)
         } else {
-            ("unknown".to_string(), "unknown".to_string(), iface_name, "0.0.0".to_string())
+            (
+                "unknown".to_string(),
+                "unknown".to_string(),
+                iface_name,
+                "0.0.0".to_string(),
+            )
         }
     }
 
@@ -626,9 +631,8 @@ impl<'a> Transformer<'a> {
                     } else {
                         // Method/Static: extract just the method name after the dot
                         let raw_method = func_name.split('.').next_back().unwrap_or(func_name);
-                        let method_attr = format!(
-                            "{cm_interface}#{kind_prefix}{resource_wit_name}.{raw_method}"
-                        );
+                        let method_attr =
+                            format!("{cm_interface}#{kind_prefix}{resource_wit_name}.{raw_method}");
                         (method_attr, to_snake_case(raw_method))
                     };
 

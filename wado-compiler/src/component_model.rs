@@ -2517,8 +2517,7 @@ mod tests {
     fn test_register_and_resolve() {
         let mut registry = WasiRegistry::new();
 
-        let wasi =
-            CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
+        let wasi = CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
 
         registry.register(
             "Stdout",
@@ -2595,8 +2594,7 @@ mod tests {
     fn test_interfaces_iteration() {
         let mut registry = WasiRegistry::new();
 
-        let wasi =
-            CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
+        let wasi = CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
 
         registry.register(
             "Stdout",

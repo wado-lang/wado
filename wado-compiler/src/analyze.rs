@@ -196,8 +196,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
                 Item::Effect(effect) => {
                     // Extract effect-level CM import from attributes
-                    let effect_cm_import =
-                        effect.attrs.first().and_then(|a| a.cm_import.clone());
+                    let effect_cm_import = effect.attrs.first().and_then(|a| a.cm_import.clone());
 
                     let kind = SymbolKind::Effect(EffectSymbol {
                         methods: effect.methods.iter().map(|m| m.name.clone()).collect(),

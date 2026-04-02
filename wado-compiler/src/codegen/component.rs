@@ -2563,8 +2563,7 @@ fn import_resource_using_interfaces(
                 };
                 // Use package-qualified names to avoid collision with same-named interfaces
                 // from different packages (e.g., wasi:cli/types vs wasi:filesystem/types).
-                let src_instance_name =
-                    format!("{}-{}", cm_import.package, cm_import.interface);
+                let src_instance_name = format!("{}-{}", cm_import.package, cm_import.interface);
                 let src_instance_type_name = format!("{src_instance_name}-instance-type");
                 if !ctx.has_type(&src_instance_type_name) {
                     // Import the resource-defining interface minimally (just the resource export)
