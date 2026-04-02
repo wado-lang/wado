@@ -2115,12 +2115,7 @@ impl<'a> PatternLowerer<'a> {
                 )
             }
             TirPattern::ConstantValue { .. } => {
-                // ConstantValue patterns should have been lowered to binding + guard
-                // before reaching here, but handle gracefully
-                (
-                    TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
-                    binding_stmts,
-                )
+                panic!("ConstantValue pattern should have been lowered to binding + guard before pattern_to_condition_and_bindings");
             }
             TirPattern::Or(alternatives) => {
                 // Or pattern: combine conditions with logical OR

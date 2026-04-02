@@ -6176,8 +6176,7 @@ impl FunctionTranslator<'_, '_> {
                 result
             }
             TirPattern::ConstantValue { .. } => {
-                // Should have been lowered to binding + guard before WIR translation
-                WirInstr::I32Const(1)
+                panic!("ConstantValue pattern should have been lowered to binding + guard before WIR translation");
             }
         }
     }
