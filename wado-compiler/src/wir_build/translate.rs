@@ -1291,18 +1291,12 @@ impl FunctionTranslator<'_, '_> {
                 module_source,
                 name,
             } => {
-                // Global function references — currently emitting as i32 const placeholder
-                // (TirExprKind::FuncRef is for function references, not global variables)
-                let full_name = if module_source.is_entry_point() {
-                    name.clone()
-                } else {
-                    format!("{module_source}::{name}")
-                };
-                if let Some(func_id) = self.ctx.func_map.get(&full_name) {
-                    WirInstr::I32Const(func_id.index() as i32)
-                } else {
-                    WirInstr::I32Const(0)
-                }
+                // FuncRef should have been converted to a Closure by the closure lowering pass.
+                // If we reach here, it means a FuncRef survived lowering (e.g., external function
+                // not in the module's func_sigs). This is a compiler bug.
+                panic!(
+                    "FuncRef '{module_source}::{name}' was not converted to a Closure during lowering"
+                );
             }
             TirExprKind::GlobalVarGet {
                 module_source,

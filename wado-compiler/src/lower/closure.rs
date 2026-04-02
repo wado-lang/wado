@@ -8,7 +8,8 @@ use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionRef, InlineHint, ResolvedType, TirBlock, TirCapture, TirExpr,
     TirExprKind, TirField, TirFunction, TirImpl, TirMatchArm, TirModule, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -32,6 +33,12 @@ struct CollectedClosure {
 }
 
 // FunctorInfo moved to tir::ClosureFunctor
+
+/// Function signature info for converting `FuncRef` to Closure.
+struct FuncSig {
+    params: Vec<(String, TypeId)>,
+    return_type: TypeId,
+}
 
 /// Key for fn-param specialization: (callee function name, parameter index -> functor type ID)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -96,6 +103,11 @@ impl ClosureLowerer {
 
     /// Lower all closures in a module
     pub(super) fn lower_module(&mut self, module: &mut TirModule) {
+        // Phase 0: Convert FuncRef used as values to zero-capture Closures.
+        // Named functions used as values (e.g., `&double` or `double` passed to fn-type params)
+        // need to become Closure nodes so the existing closure pipeline handles them.
+        self.convert_func_refs_to_closures(module);
+
         // First pass: collect all closures
         // Reset counter for consistent ordering
         self.closure_counter = 0;
@@ -203,6 +215,422 @@ impl ClosureLowerer {
         module
             .functions
             .extend(std::mem::take(&mut self.generated_functions));
+    }
+
+    /// Convert `FuncRef` nodes (used as values, not in Call/MethodCall func positions) to
+    /// zero-capture `Closure` nodes. This enables named functions to be passed as function-type
+    /// arguments (e.g., `apply(double, 21)` or `apply(&double, 21)`).
+    fn convert_func_refs_to_closures(&self, module: &mut TirModule) {
+        // Build a map from function name to (param_types, return_type)
+        let mut func_sigs: IndexMap<String, FuncSig> = IndexMap::default();
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            func_sigs.insert(
+                func.name.clone(),
+                FuncSig {
+                    params: func
+                        .params
+                        .iter()
+                        .map(|p| (p.name.clone(), p.type_id))
+                        .collect(),
+                    return_type: func.return_type,
+                },
+            );
+        }
+        for impl_block in &module.impls {
+            for method in &impl_block.methods {
+                func_sigs.insert(
+                    method.name.clone(),
+                    FuncSig {
+                        params: method
+                            .params
+                            .iter()
+                            .map(|p| (p.name.clone(), p.type_id))
+                            .collect(),
+                        return_type: method.return_type,
+                    },
+                );
+            }
+        }
+
+        let mut type_table = module.type_table.borrow_mut();
+        let module_source = module.module_source.clone();
+
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            if let Some(body) = &mut func.body {
+                Self::convert_func_refs_in_block(body, &func_sigs, &mut type_table, &module_source);
+            }
+        }
+        drop(type_table);
+        for impl_block in &mut module.impls {
+            let mut type_table = module.type_table.borrow_mut();
+            for method in &mut impl_block.methods {
+                if let Some(body) = &mut method.body {
+                    Self::convert_func_refs_in_block(
+                        body,
+                        &func_sigs,
+                        &mut type_table,
+                        &module_source,
+                    );
+                }
+            }
+        }
+    }
+
+    fn convert_func_refs_in_block(
+        block: &mut TirBlock,
+        func_sigs: &IndexMap<String, FuncSig>,
+        type_table: &mut TypeTable,
+        module_source: &ModuleSource,
+    ) {
+        for stmt in &mut block.stmts {
+            Self::convert_func_refs_in_stmt(stmt, func_sigs, type_table, module_source);
+        }
+    }
+
+    fn convert_func_refs_in_stmt(
+        stmt: &mut TirStmt,
+        func_sigs: &IndexMap<String, FuncSig>,
+        type_table: &mut TypeTable,
+        module_source: &ModuleSource,
+    ) {
+        match &mut stmt.kind {
+            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                Self::convert_func_refs_in_expr(value, func_sigs, type_table, module_source);
+            }
+            TirStmtKind::Return { value } => {
+                if let Some(v) = value {
+                    Self::convert_func_refs_in_expr(v, func_sigs, type_table, module_source);
+                }
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                Self::convert_func_refs_in_expr(condition, func_sigs, type_table, module_source);
+                Self::convert_func_refs_in_block(then_block, func_sigs, type_table, module_source);
+                if let Some(else_blk) = else_block {
+                    Self::convert_func_refs_in_block(
+                        else_blk,
+                        func_sigs,
+                        type_table,
+                        module_source,
+                    );
+                }
+            }
+            TirStmtKind::Loop { body, .. } => {
+                Self::convert_func_refs_in_block(body, func_sigs, type_table, module_source);
+            }
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    Self::convert_func_refs_in_expr(v, func_sigs, type_table, module_source);
+                }
+            }
+            TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                Self::convert_func_refs_in_block(block, func_sigs, type_table, module_source);
+            }
+            TirStmtKind::IfLet {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::convert_func_refs_in_expr(scrutinee, func_sigs, type_table, module_source);
+                Self::convert_func_refs_in_block(then_block, func_sigs, type_table, module_source);
+                if let Some(else_blk) = else_block {
+                    Self::convert_func_refs_in_block(
+                        else_blk,
+                        func_sigs,
+                        type_table,
+                        module_source,
+                    );
+                }
+            }
+            TirStmtKind::LetDestructure { value, .. } => {
+                Self::convert_func_refs_in_expr(value, func_sigs, type_table, module_source);
+            }
+            TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => {}
+        }
+    }
+
+    /// Convert a `FuncRef` expression (or `Ref(FuncRef)`) to a zero-capture `Closure`.
+    fn convert_func_refs_in_expr(
+        expr: &mut TirExpr,
+        func_sigs: &IndexMap<String, FuncSig>,
+        type_table: &mut TypeTable,
+        module_source: &ModuleSource,
+    ) {
+        // Handle `&FuncRef` → collapse to Closure (since &fn(...) = fn(...) for GC types)
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: inner,
+        } = &mut expr.kind
+            && matches!(inner.kind, TirExprKind::FuncRef { .. })
+        {
+            Self::convert_func_refs_in_expr(inner, func_sigs, type_table, module_source);
+            // If inner was converted to a Closure, collapse the Ref wrapper.
+            // Function values are GC references, so &fn(...) = fn(...).
+            if matches!(inner.kind, TirExprKind::Closure { .. }) {
+                let inner_owned = std::mem::replace(
+                    inner.as_mut(),
+                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
+                );
+                *expr = inner_owned;
+            }
+            return;
+        }
+
+        // Convert FuncRef to Closure
+        if let TirExprKind::FuncRef {
+            name,
+            module_source: func_module,
+        } = &expr.kind
+        {
+            if let Some(sig) = func_sigs.get(name.as_str()) {
+                let span = expr.span;
+                let func_name = name.clone();
+                let func_module = func_module.clone();
+
+                // Build closure params (synthetic names)
+                let closure_params: Vec<(String, TypeId)> = sig
+                    .params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (_, ty))| (format!("__fn_ref_p{i}"), *ty))
+                    .collect();
+
+                // Build call args: Local references to each closure param
+                let call_args: Vec<CallArg> = closure_params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (name, ty))| {
+                        CallArg::new(
+                            TirExpr::new(
+                                TirExprKind::Local {
+                                    index: i as u32,
+                                    name: name.clone(),
+                                },
+                                *ty,
+                                span,
+                            ),
+                            false,
+                        )
+                    })
+                    .collect();
+
+                // Build the body: Call to the original function
+                let body = TirExpr::new(
+                    TirExprKind::Call {
+                        func: FunctionRef {
+                            module_source: func_module,
+                            name: func_name,
+                            monomorph_info: None,
+                            method_info: None,
+                            is_cm_binding: false,
+                        },
+                        type_args: Vec::new(),
+                        args: call_args,
+                    },
+                    sig.return_type,
+                    span,
+                );
+
+                // Build the function type
+                let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+                let func_type =
+                    type_table.make_function(param_types, sig.return_type, Vec::new(), Vec::new());
+
+                // Replace the FuncRef with a Closure
+                expr.kind = TirExprKind::Closure {
+                    params: closure_params,
+                    body: Box::new(body),
+                    captures: Vec::new(),
+                    functor_id: None,
+                    source_text: None,
+                };
+                expr.type_id = func_type;
+            }
+            return;
+        }
+
+        // Recurse into sub-expressions (but NOT into Call.func / MethodCall.func which are
+        // FunctionRef, not TirExprKind::FuncRef)
+        match &mut expr.kind {
+            TirExprKind::Binary { left, right, .. } => {
+                Self::convert_func_refs_in_expr(left, func_sigs, type_table, module_source);
+                Self::convert_func_refs_in_expr(right, func_sigs, type_table, module_source);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TypePackExpansion {
+                call_expr: inner, ..
+            } => {
+                Self::convert_func_refs_in_expr(inner, func_sigs, type_table, module_source);
+            }
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    Self::convert_func_refs_in_expr(
+                        &mut arg.expr,
+                        func_sigs,
+                        type_table,
+                        module_source,
+                    );
+                }
+            }
+            TirExprKind::CmRawCall { args, .. } => {
+                for arg in args {
+                    Self::convert_func_refs_in_expr(arg, func_sigs, type_table, module_source);
+                }
+            }
+            TirExprKind::MethodCall {
+                receiver, args, ..
+            } => {
+                Self::convert_func_refs_in_expr(receiver, func_sigs, type_table, module_source);
+                for arg in args {
+                    Self::convert_func_refs_in_expr(
+                        &mut arg.expr,
+                        func_sigs,
+                        type_table,
+                        module_source,
+                    );
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                Self::convert_func_refs_in_expr(callee, func_sigs, type_table, module_source);
+                for arg in args {
+                    Self::convert_func_refs_in_expr(arg, func_sigs, type_table, module_source);
+                }
+            }
+            TirExprKind::Closure { body, .. } => {
+                Self::convert_func_refs_in_expr(body, func_sigs, type_table, module_source);
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                Self::convert_func_refs_in_expr(functor, func_sigs, type_table, module_source);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    Self::convert_func_refs_in_expr(
+                        &mut field.value,
+                        func_sigs,
+                        type_table,
+                        module_source,
+                    );
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    Self::convert_func_refs_in_expr(elem, func_sigs, type_table, module_source);
+                }
+            }
+            TirExprKind::Assign { target, value } => {
+                Self::convert_func_refs_in_expr(target, func_sigs, type_table, module_source);
+                Self::convert_func_refs_in_expr(value, func_sigs, type_table, module_source);
+            }
+            TirExprKind::Index {
+                expr: array,
+                index,
+            } => {
+                Self::convert_func_refs_in_expr(array, func_sigs, type_table, module_source);
+                Self::convert_func_refs_in_expr(index, func_sigs, type_table, module_source);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                Self::convert_func_refs_in_expr(condition, func_sigs, type_table, module_source);
+                Self::convert_func_refs_in_block(
+                    then_branch,
+                    func_sigs,
+                    type_table,
+                    module_source,
+                );
+                if let Some(else_blk) = else_branch {
+                    Self::convert_func_refs_in_block(
+                        else_blk,
+                        func_sigs,
+                        type_table,
+                        module_source,
+                    );
+                }
+            }
+            TirExprKind::Block(block) => {
+                Self::convert_func_refs_in_block(block, func_sigs, type_table, module_source);
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                Self::convert_func_refs_in_block(block, func_sigs, type_table, module_source);
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                Self::convert_func_refs_in_expr(scrutinee, func_sigs, type_table, module_source);
+                for arm in arms {
+                    if let Some(guard) = &mut arm.guard {
+                        Self::convert_func_refs_in_expr(
+                            guard,
+                            func_sigs,
+                            type_table,
+                            module_source,
+                        );
+                    }
+                    Self::convert_func_refs_in_expr(
+                        &mut arm.body,
+                        func_sigs,
+                        type_table,
+                        module_source,
+                    );
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(p) = payload {
+                    Self::convert_func_refs_in_expr(p, func_sigs, type_table, module_source);
+                }
+            }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                Self::convert_func_refs_in_expr(value, func_sigs, type_table, module_source);
+            }
+            // Lowered pattern matching nodes
+            TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. } => {
+                Self::convert_func_refs_in_expr(inner, func_sigs, type_table, module_source);
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                Self::convert_func_refs_in_expr(scrutinee, func_sigs, type_table, module_source);
+                for arm in arms {
+                    Self::convert_func_refs_in_block(arm, func_sigs, type_table, module_source);
+                }
+                Self::convert_func_refs_in_block(default, func_sigs, type_table, module_source);
+            }
+            // Terminals - nothing to do
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::FuncRef { .. } // FuncRef not in func_sigs (external) - leave as-is
+            | TirExprKind::GlobalVarGet { .. }
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
+        }
     }
 
     /// Update `local_types` in a function after closure transformation

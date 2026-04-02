@@ -26,15 +26,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if !ident.name.contains("::")
                 && let Some(local) = ctx.lookup(&ident.name)
             {
-                // Check if the local has a function type
-                let local_type = self.type_table.borrow().get(local.type_id).clone();
+                // Check if the local has a function type (possibly behind references)
+                let peeled_type_id = self.type_table.borrow().peel_refs(local.type_id);
+                let peeled_type = self.type_table.borrow().get(peeled_type_id).clone();
                 if let ResolvedType::Function {
                     params: fn_params,
                     return_type,
                     ..
-                } = local_type
+                } = peeled_type
                 {
-                    // This is a closure call!
                     let local_index = local.index;
                     let local_type_id = local.type_id;
                     let fn_return_type = return_type;
@@ -61,8 +61,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         }
                     }
 
-                    // Create closure expression (Local reference)
-                    let closure_expr = TirExpr::new(
+                    // Create callee expression, auto-dereferencing if needed
+                    let local_expr = TirExpr::new(
                         TirExprKind::Local {
                             index: local_index,
                             name: ident.name.clone(),
@@ -70,10 +70,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         local_type_id,
                         ident.span,
                     );
+                    let callee_expr = self.deref_to_value(local_expr, ident.span);
 
                     return TirExpr::new(
                         TirExprKind::IndirectCall {
-                            callee: Box::new(closure_expr),
+                            callee: Box::new(callee_expr),
                             args,
                         },
                         fn_return_type,
@@ -88,15 +89,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Expr::FieldAccess(_field_access) = &call.callee {
             // Resolve the callee expression to get the field type
             let callee_expr = self.resolve_expr(&call.callee, ctx, None);
-            let callee_type = self.type_table.borrow().get(callee_expr.type_id).clone();
+            let peeled_type_id = self.type_table.borrow().peel_refs(callee_expr.type_id);
+            let peeled_type = self.type_table.borrow().get(peeled_type_id).clone();
 
             if let ResolvedType::Function {
                 params: fn_params,
                 return_type,
                 ..
-            } = callee_type
+            } = peeled_type
             {
-                // This is calling a function stored in a field!
                 let fn_return_type = return_type;
 
                 // Resolve arguments with coercion awareness based on function param types
@@ -120,6 +121,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         );
                     }
                 }
+
+                // Auto-dereference if the callee is a reference to a function
+                let callee_expr = self.deref_to_value(callee_expr, call.span);
 
                 return TirExpr::new(
                     TirExprKind::IndirectCall {

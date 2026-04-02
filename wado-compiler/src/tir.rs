@@ -1030,6 +1030,16 @@ impl TypeTable {
         matches!(self.get(base), ResolvedType::Primitive(_))
     }
 
+    /// Peel through Ref/MutRef wrappers to get the underlying type.
+    pub fn peel_refs(&self, mut type_id: TypeId) -> TypeId {
+        loop {
+            match self.get(type_id) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => type_id = *inner,
+                _ => return type_id,
+            }
+        }
+    }
+
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
         self.intern(ResolvedType::Ref(inner))
     }
