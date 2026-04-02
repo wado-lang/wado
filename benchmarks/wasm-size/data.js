@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775132923735,
+  "lastUpdate": 1775136643990,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9695,6 +9695,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/796a6ee15b4b610e1cba8375d6c3531435fbe199"
         },
         "date": 1775132923512,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8b221e4ea3a328a64998e52a00138ed47011cd65",
+          "message": "Merge pull request #757 from wado-lang/claude/panic-return-type-test-ghTZo\n\nFix panic/unreachable as terminal expression in non-unit functions",
+          "timestamp": "2026-04-02T22:27:51+09:00",
+          "tree_id": "614c77e6fb45372808a4716fa390c339fc21a7fb",
+          "url": "https://github.com/wado-lang/wado/commit/8b221e4ea3a328a64998e52a00138ed47011cd65"
+        },
+        "date": 1775136643762,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
