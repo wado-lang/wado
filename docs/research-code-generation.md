@@ -1,14 +1,14 @@
 # Research: Code Generation Approaches
 
 Survey of code generation library designs and techniques.
-Background for improving the codegen experience in the Wado ecosystem (package-gale, wado-from-wit, and future tools).
+Background for improving the codegen experience in the Wado ecosystem (package-gale, wado-from-idl, and future tools).
 
 ## Motivation
 
 Wado's ecosystem has two code generators today:
 
 1. **package-gale** — ANTLR4 `.g4` → self-contained Wado parser (written in Wado)
-2. **wado-from-wit** — WIT → Wado stdlib bindings (written in Rust)
+2. **wado-from-idl** — WIT → Wado stdlib bindings (written in Rust)
 
 Both use the same basic approach: **manual string appending with explicit indentation**.
 This works but scales poorly — `lexer_gen.wado` and `parser_gen.wado` in package-gale are
@@ -66,7 +66,7 @@ field-name-deduplication concern is spread across both modules.
 (mismatched braces, missing semicolons). Bugs are only caught when compiling the generated
 output.
 
-### Pain Points in wado-from-wit
+### Pain Points in wado-from-idl
 
 Less severe because the Rust `writeln!` macro is less noisy and `indent: usize` with
 `"    ".repeat(self.indent)` is cleaner than string-concatenated indentation. But the same
@@ -143,7 +143,7 @@ let output = tokens.to_file_string()?;
 | Ergonomics    | Excellent  | Generator code looks like the output                                                                                                                                 |
 | Performance   | Good       | Compile-time macro expansion; runtime is string concatenation                                                                                                        |
 | Type safety   | Structural | Prevents gross structural errors, not semantic ones                                                                                                                  |
-| Applicability | Limited    | Both `quote` and `genco` are Rust proc macros — **cannot be used in Wado code** (package-gale is written in Wado). Could work for Rust-side tools like wado-from-wit |
+| Applicability | Limited    | Both `quote` and `genco` are Rust proc macros — **cannot be used in Wado code** (package-gale is written in Wado). Could work for Rust-side tools like wado-from-idl |
 
 **Key limitation:** Quasi-quoting requires a macro system. Wado intentionally has no macros.
 A Wado quasi-quoting solution would need to be a language feature (unlikely) or a
@@ -375,7 +375,7 @@ against a template approach.
 A thin abstraction layer over string building that handles indentation automatically and
 provides convenience methods for common patterns.
 
-This is what wado-from-wit already does in Rust (`WadoCodeGenerator` with `indent: usize`
+This is what wado-from-idl already does in Rust (`WadoCodeGenerator` with `indent: usize`
 and `writeln()`), but it can be significantly improved.
 
 ### Design Sketch for Wado

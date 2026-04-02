@@ -1,6 +1,6 @@
-//! E2E tests for wado-from-wit
+//! E2E tests for wado-from-idl
 
-use wado_from_wit::{Transformer, WadoCodeGenerator};
+use wado_from_idl::{Transformer, WadoCodeGenerator};
 use wit_parser::Resolve;
 
 fn parse_wit_and_generate(wit: &str) -> String {

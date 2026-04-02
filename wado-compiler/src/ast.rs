@@ -71,7 +71,7 @@ impl Module {
     }
 
     /// Returns true if the module has the `#![generated]` attribute.
-    /// Indicates machine-generated code (e.g. wado-from-wit, gale).
+    /// Indicates machine-generated code (e.g. wado-from-idl, gale).
     pub fn has_generated(&self) -> bool {
         self.inner_attributes.iter().any(|a| a.name == "generated")
     }
