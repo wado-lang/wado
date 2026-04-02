@@ -3090,8 +3090,8 @@ pub struct WirNames {
 /// Component Model wrapper information.
 #[derive(Debug, Default)]
 pub struct WirComponent {
-    /// WASI interfaces to import.
-    pub wasi_imports: Vec<WirWasiImport>,
+    /// Component Model interfaces to import.
+    pub cm_imports: Vec<WirCmImport>,
     /// Bundled modules (fts, libm).
     pub bundled_modules: Vec<WirBundledModule>,
     /// World exports.
@@ -3100,18 +3100,18 @@ pub struct WirComponent {
     pub memory: WirMemoryConfig,
 }
 
-/// A WASI interface import.
+/// A Component Model interface import.
 #[derive(Debug)]
-pub struct WirWasiImport {
+pub struct WirCmImport {
     /// Interface name (e.g., "wasi:cli/stdout@0.2.0").
     pub interface: String,
     /// Functions imported from this interface.
-    pub functions: Vec<WirWasiFunc>,
+    pub functions: Vec<WirCmFunc>,
 }
 
-/// A function from a WASI interface.
+/// A function from a CM interface.
 #[derive(Debug)]
-pub struct WirWasiFunc {
+pub struct WirCmFunc {
     /// WIT-level function name (e.g., "write-via-stream").
     pub wit_name: String,
     /// Internal function name in the core module.

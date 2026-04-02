@@ -92,8 +92,8 @@ impl WadoCodeGenerator {
                 {
                     return;
                 }
-                if let Some(ref attr) = a.wasi_attr {
-                    self.writeln(&format!("#[wasi(\"{attr}\")]"));
+                if let Some(ref attr) = a.cm_attr {
+                    self.writeln(&format!("#[cm(\"{attr}\")]"));
                 }
                 self.writeln(&format!(
                     "pub type {} = {};",
@@ -106,16 +106,16 @@ impl WadoCodeGenerator {
 
     fn write_enum(&mut self, e: &WadoEnum) {
         self.write_doc_comment(e.doc_comment.as_ref());
-        if let Some(ref attr) = e.wasi_attr {
-            self.writeln(&format!("#[wasi(\"{attr}\")]"));
+        if let Some(ref attr) = e.cm_attr {
+            self.writeln(&format!("#[cm(\"{attr}\")]"));
         }
         self.writeln(&format!("pub enum {} {{", e.name));
         self.indent += 1;
 
         for variant in &e.variants {
             self.write_doc_comment(variant.doc_comment.as_ref());
-            if let Some(ref attr) = variant.wasi_attr {
-                self.writeln(&format!("#[wasi(\"{attr}\")]"));
+            if let Some(ref attr) = variant.cm_attr {
+                self.writeln(&format!("#[cm(\"{attr}\")]"));
             }
             self.writeln(&format!("{},", variant.name));
         }
@@ -126,15 +126,15 @@ impl WadoCodeGenerator {
 
     fn write_flags(&mut self, f: &WadoFlags) {
         self.write_doc_comment(f.doc_comment.as_ref());
-        if let Some(ref attr) = f.wasi_attr {
-            self.writeln(&format!("#[wasi(\"{attr}\")]"));
+        if let Some(ref attr) = f.cm_attr {
+            self.writeln(&format!("#[cm(\"{attr}\")]"));
         }
         self.writeln(&format!("pub flags {} {{", f.name));
         self.indent += 1;
 
         for flag in &f.flags {
             self.write_doc_comment(flag.doc_comment.as_ref());
-            self.writeln(&format!("#[wasi(\"{}\")]", flag.wasi_attr));
+            self.writeln(&format!("#[cm(\"{}\")]", flag.cm_attr));
             self.writeln(&format!("{},", flag.name));
         }
 
@@ -144,15 +144,15 @@ impl WadoCodeGenerator {
 
     fn write_struct(&mut self, s: &WadoStruct) {
         self.write_doc_comment(s.doc_comment.as_ref());
-        if let Some(ref attr) = s.wasi_attr {
-            self.writeln(&format!("#[wasi(\"{attr}\")]"));
+        if let Some(ref attr) = s.cm_attr {
+            self.writeln(&format!("#[cm(\"{attr}\")]"));
         }
         self.writeln(&format!("pub struct {} {{", s.name));
         self.indent += 1;
 
         for field in &s.fields {
             self.write_doc_comment(field.doc_comment.as_ref());
-            self.writeln(&format!("#[wasi(\"{}\")]", field.wasi_attr));
+            self.writeln(&format!("#[cm(\"{}\")]", field.cm_attr));
             self.writeln(&format!(
                 "pub {}: {},",
                 field.name,
@@ -166,16 +166,16 @@ impl WadoCodeGenerator {
 
     fn write_variant(&mut self, v: &WadoVariant) {
         self.write_doc_comment(v.doc_comment.as_ref());
-        if let Some(ref attr) = v.wasi_attr {
-            self.writeln(&format!("#[wasi(\"{attr}\")]"));
+        if let Some(ref attr) = v.cm_attr {
+            self.writeln(&format!("#[cm(\"{attr}\")]"));
         }
         self.writeln(&format!("pub variant {} {{", v.name));
         self.indent += 1;
 
         for case in &v.cases {
             self.write_doc_comment(case.doc_comment.as_ref());
-            if let Some(ref attr) = case.wasi_attr {
-                self.writeln(&format!("#[wasi(\"{attr}\")]"));
+            if let Some(ref attr) = case.cm_attr {
+                self.writeln(&format!("#[cm(\"{attr}\")]"));
             }
             match &case.payload {
                 Some(ty) => self.writeln(&format!("{}({}),", case.name, Self::format_type(ty))),
@@ -189,7 +189,7 @@ impl WadoCodeGenerator {
 
     fn write_resource(&mut self, resource: &WadoResource) {
         self.write_doc_comment(resource.doc_comment.as_ref());
-        self.writeln(&format!("#[wasi(\"{}\")]", resource.wasi_attr));
+        self.writeln(&format!("#[cm(\"{}\")]", resource.cm_attr));
 
         if resource.methods.is_empty() {
             self.writeln(&format!("pub resource {};", resource.name));
@@ -208,7 +208,7 @@ impl WadoCodeGenerator {
 
     fn write_effect(&mut self, effect: &WadoEffect) {
         self.write_doc_comment(effect.doc_comment.as_ref());
-        self.writeln(&format!("#[wasi(\"{}\")]", effect.wasi_interface));
+        self.writeln(&format!("#[cm(\"{}\")]", effect.cm_interface));
         self.writeln(&format!("pub effect {} {{", effect.name));
         self.indent += 1;
 
@@ -222,16 +222,16 @@ impl WadoCodeGenerator {
 
     fn write_function(&mut self, func: &WadoFunction) {
         self.write_doc_comment(func.doc_comment.as_ref());
-        self.writeln(&format!("#[wasi(\"{}\")]", func.wasi_attr));
+        self.writeln(&format!("#[cm(\"{}\")]", func.cm_attr));
 
-        // Emit #[wasi_params] with original WIT kebab-case parameter names
+        // Emit #[cm_params] with original WIT kebab-case parameter names
         if !func.params.is_empty() {
             let wit_names: Vec<String> = func
                 .params
                 .iter()
                 .map(|p| format!("\"{}\"", p.wit_name))
                 .collect();
-            self.writeln(&format!("#[wasi_params({})]", wit_names.join(", ")));
+            self.writeln(&format!("#[cm_params({})]", wit_names.join(", ")));
         }
 
         let params = Self::format_params(&func.params);
@@ -253,7 +253,7 @@ impl WadoCodeGenerator {
     fn write_world(&mut self, world: &WadoWorld) {
         self.write_doc_comment(world.doc_comment.as_ref());
         // Write the canonical WIT world name as an attribute
-        self.writeln(&format!("#[wasi(\"{}\")]", world.canonical_name));
+        self.writeln(&format!("#[cm(\"{}\")]", world.canonical_name));
         self.writeln(&format!("pub world {} {{", world.name));
         self.indent += 1;
 

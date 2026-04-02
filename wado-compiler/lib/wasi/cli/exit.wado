@@ -3,11 +3,11 @@
 // Source files:
 //   - vendor/wasmtime/crates/wasi/src/p3/wit/deps/cli.wit
 
-#[wasi("wasi:cli/exit@0.3.0-rc-2026-03-15")]
+#[cm("wasi:cli/exit@0.3.0-rc-2026-03-15")]
 pub effect Exit {
     /// Exit the current instance and any linked instances.
-    #[wasi("wasi:cli/exit@0.3.0-rc-2026-03-15#exit")]
-    #[wasi_params("status")]
+    #[cm("wasi:cli/exit@0.3.0-rc-2026-03-15#exit")]
+    #[cm_params("status")]
     fn exit(status: Result<(), ()>);
     /// Exit the current instance and any linked instances, reporting the
     /// specified status code to the host.
@@ -17,8 +17,8 @@ pub effect Exit {
     /// 
     /// This function does not return; the effect is analogous to a trap, but
     /// without the connotation that something bad has happened.
-    #[wasi("wasi:cli/exit@0.3.0-rc-2026-03-15#exit-with-code")]
-    #[wasi_params("status-code")]
+    #[cm("wasi:cli/exit@0.3.0-rc-2026-03-15#exit-with-code")]
+    #[cm_params("status-code")]
     fn exit_with_code(status_code: u8);
 }
 

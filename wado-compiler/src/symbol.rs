@@ -6,7 +6,7 @@
 use crate::hashmap::IndexMap;
 use std::ops::Index;
 
-use crate::ast::WasiImport;
+use crate::ast::CmImport;
 use crate::name::ModuleSource;
 use crate::token::Span;
 
@@ -85,8 +85,8 @@ pub struct FunctionSymbol {
     pub effects: Vec<String>,
     /// Whether this is a builtin function (e.g., println from `core::cli`)
     pub is_builtin: bool,
-    /// WASI import metadata if this function maps to a WASI function
-    pub wasi_import: Option<WasiImport>,
+    /// CM import metadata if this function maps to a CM function
+    pub cm_import: Option<CmImport>,
 }
 
 /// Effect symbol data
@@ -94,8 +94,8 @@ pub struct FunctionSymbol {
 pub struct EffectSymbol {
     /// Method names defined in this effect
     pub methods: Vec<String>,
-    /// WASI import metadata if this effect maps to a WASI interface
-    pub wasi_import: Option<WasiImport>,
+    /// CM import metadata if this effect maps to a CM interface
+    pub cm_import: Option<CmImport>,
 }
 
 /// Struct symbol data
@@ -163,8 +163,8 @@ pub struct GlobalSymbol {
 pub struct ResourceSymbol {
     /// Method names defined on this resource
     pub methods: Vec<String>,
-    /// WASI import metadata if this resource maps to a WASI resource
-    pub wasi_import: Option<WasiImport>,
+    /// CM import metadata if this resource maps to a CM resource
+    pub cm_import: Option<CmImport>,
 }
 
 /// World symbol data
@@ -219,12 +219,12 @@ impl Symbol {
         matches!(&self.kind, SymbolKind::Function(f) if f.is_builtin)
     }
 
-    /// Get the WASI import metadata if this symbol has one
-    pub fn wasi_import(&self) -> Option<&WasiImport> {
+    /// Get the CM import metadata if this symbol has one
+    pub fn cm_import(&self) -> Option<&CmImport> {
         match &self.kind {
-            SymbolKind::Function(f) => f.wasi_import.as_ref(),
-            SymbolKind::Effect(e) => e.wasi_import.as_ref(),
-            SymbolKind::Resource(r) => r.wasi_import.as_ref(),
+            SymbolKind::Function(f) => f.cm_import.as_ref(),
+            SymbolKind::Effect(e) => e.cm_import.as_ref(),
+            SymbolKind::Resource(r) => r.cm_import.as_ref(),
             _ => None,
         }
     }
@@ -518,7 +518,7 @@ mod tests {
                 return_type: None,
                 effects: vec!["Stdout".to_string()],
                 is_builtin: true,
-                wasi_import: None,
+                cm_import: None,
             }),
             &core_cli,
             None,
@@ -542,7 +542,7 @@ mod tests {
                 return_type: None,
                 effects: vec![],
                 is_builtin: true,
-                wasi_import: None,
+                cm_import: None,
             }),
             &core_cli,
             None,

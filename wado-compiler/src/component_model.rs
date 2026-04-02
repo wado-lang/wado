@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use wasm_encoder::ValType;
 
-use crate::ast::{GenericType, Type, WasiImport};
+use crate::ast::{CmImport, GenericType, Type};
 use crate::tir::{TypeId, TypeTable};
 
 /// A variant case with both CM and Wado names.
@@ -24,18 +24,18 @@ pub struct CmVariantCase {
     pub payload: Option<Type>,
 }
 
-/// Extract the CM name from a `#[wasi("...")]` attribute.
+/// Extract the CM name from a `#[cm("...")]` attribute.
 ///
 /// Handles two formats:
-/// - Type-level: `#[wasi("wasi:pkg/iface@ver#cm-name")]` → takes the fragment after `#`
-/// - Case-level: `#[wasi("cm-name")]` → uses the whole arg directly
+/// - Type-level: `#[cm("wasi:pkg/iface@ver#cm-name")]` → takes the fragment after `#`
+/// - Case-level: `#[cm("cm-name")]` → uses the whole arg directly
 ///
 /// Preserves acronym casing from the WIT source (e.g., `DNS-timeout`, `TLS-protocol-error`).
-/// Panics if no `#[wasi]` attribute is present — all WASI names must be metadata-driven.
-fn wasi_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
+/// Panics if no `#[cm]` attribute is present — all CM names must be metadata-driven.
+fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
     attrs
         .iter()
-        .find(|a| a.name == "wasi")
+        .find(|a| a.name == "cm")
         .and_then(|a| a.args.first())
         .map(|arg| {
             let s = arg.as_str();
@@ -46,14 +46,14 @@ fn wasi_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String
                 s.to_owned()
             }
         })
-        .unwrap_or_else(|| panic!("missing #[wasi] attribute for WASI name: {wado_name}"))
+        .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
-/// Extract CM parameter names from a `#[wasi_params("param-a", "param-b")]` attribute.
-fn extract_wasi_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
+/// Extract CM parameter names from a `#[cm_params("param-a", "param-b")]` attribute.
+fn extract_cm_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
     attrs
         .iter()
-        .find(|a| a.name == "wasi_params")
+        .find(|a| a.name == "cm_params")
         .map(|a| a.args.iter().map(|arg| arg.as_str().to_string()).collect())
         .unwrap_or_default()
 }
@@ -359,14 +359,14 @@ impl WasiRegistry {
         // Collect resource types from this module
         for item in &module.items {
             if let Item::Resource(resource) = item {
-                // Use the #[wasi] fragment as the CM name (preserves acronym casing like DNS, TLS)
-                let cm_name = wasi_attr_cm_name(&resource.attrs, &resource.name);
-                // Extract source interface path from #[wasi] attribute
-                // Format: #[wasi("wasi:cli/terminal-input@0.3.0-rc-2026-01-06#terminal-input")]
+                // Use the #[cm] fragment as the CM name (preserves acronym casing like DNS, TLS)
+                let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
+                // Extract source interface path from #[cm] attribute
+                // Format: #[cm("wasi:cli/terminal-input@0.3.0-rc-2026-01-06#terminal-input")]
                 let source_interface = resource
                     .attrs
                     .iter()
-                    .find(|a| a.name == "wasi")
+                    .find(|a| a.name == "cm")
                     .and_then(|a| a.args.first())
                     .and_then(|arg| arg.as_str().split('#').next())
                     .unwrap_or("")
@@ -379,13 +379,13 @@ impl WasiRegistry {
         // Collect struct types from this module (e.g., DnsErrorPayload -> DNS-error-payload)
         for item in &module.items {
             if let Item::Struct(struct_def) = item {
-                // Use the #[wasi] fragment as the CM name (preserves acronym casing)
-                let cm_name = wasi_attr_cm_name(&struct_def.attrs, &struct_def.name);
-                // Extract source interface path (part before #) from #[wasi] attribute
+                // Use the #[cm] fragment as the CM name (preserves acronym casing)
+                let cm_name = cm_attr_cm_name(&struct_def.attrs, &struct_def.name);
+                // Extract source interface path (part before #) from #[cm] attribute
                 let source_interface = struct_def
                     .attrs
                     .iter()
-                    .find(|a| a.name == "wasi")
+                    .find(|a| a.name == "cm")
                     .and_then(|a| a.args.first())
                     .and_then(|arg| arg.as_str().split('#').next())
                     .unwrap_or("")
@@ -393,7 +393,7 @@ impl WasiRegistry {
                 let fields: Vec<(String, Type)> = struct_def
                     .fields
                     .iter()
-                    .map(|f| (wasi_attr_cm_name(&f.attrs, &f.name), f.ty.clone()))
+                    .map(|f| (cm_attr_cm_name(&f.attrs, &f.name), f.ty.clone()))
                     .collect();
                 let wado_fields: Vec<(String, String, Type)> = struct_def
                     .fields
@@ -401,7 +401,7 @@ impl WasiRegistry {
                     .map(|f| {
                         (
                             f.name.clone(),
-                            wasi_attr_cm_name(&f.attrs, &f.name),
+                            cm_attr_cm_name(&f.attrs, &f.name),
                             f.ty.clone(),
                         )
                     })
@@ -416,16 +416,16 @@ impl WasiRegistry {
         // Collect flags types from this module
         for item in &module.items {
             if let Item::Flags(flags_def) = item {
-                // Use the #[wasi] fragment as the CM name (preserves acronym casing)
-                let cm_name = wasi_attr_cm_name(
+                // Use the #[cm] fragment as the CM name (preserves acronym casing)
+                let cm_name = cm_attr_cm_name(
                     flags_def.attributes.as_deref().unwrap_or(&[]),
                     &flags_def.name,
                 );
-                // Use per-member #[wasi] attr for CM name
+                // Use per-member #[cm] attr for CM name
                 let member_names: Vec<String> = flags_def
                     .flags
                     .iter()
-                    .map(|m| wasi_attr_cm_name(&m.attrs, &m.name))
+                    .map(|m| cm_attr_cm_name(&m.attrs, &m.name))
                     .collect();
                 self.flags
                     .insert(flags_def.name.clone(), (cm_name, member_names));
@@ -433,24 +433,24 @@ impl WasiRegistry {
         }
 
         // Collect enum types from this module
-        // Use interface path from #[wasi] attribute as key to distinguish same-named enums
+        // Use interface path from #[cm] attribute as key to distinguish same-named enums
         for item in &module.items {
             if let Item::Enum(enum_def) = item {
-                // Use the #[wasi] fragment as the CM name (preserves acronym casing)
-                let cm_name = wasi_attr_cm_name(&enum_def.attrs, &enum_def.name);
-                // Use per-case #[wasi] attr for CM name
+                // Use the #[cm] fragment as the CM name (preserves acronym casing)
+                let cm_name = cm_attr_cm_name(&enum_def.attrs, &enum_def.name);
+                // Use per-case #[cm] attr for CM name
                 let variant_names: Vec<String> = enum_def
                     .cases
                     .iter()
-                    .map(|c| wasi_attr_cm_name(&c.attrs, &c.name))
+                    .map(|c| cm_attr_cm_name(&c.attrs, &c.name))
                     .collect();
 
-                // Extract interface path from #[wasi] attribute if present
-                // Format: #[wasi("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
+                // Extract interface path from #[cm] attribute if present
+                // Format: #[cm("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
                 let interface_path = enum_def
                     .attrs
                     .iter()
-                    .find(|a| a.name == "wasi")
+                    .find(|a| a.name == "cm")
                     .and_then(|a| a.args.first())
                     .and_then(|arg| arg.as_str().split('#').next())
                     .map(str::to_string);
@@ -473,14 +473,14 @@ impl WasiRegistry {
         // Collect variant types from this module (e.g., HeaderError)
         for item in &module.items {
             if let Item::Variant(variant_def) = item {
-                // Use the #[wasi] fragment as the CM name (preserves acronym casing)
-                let cm_name = wasi_attr_cm_name(&variant_def.attrs, &variant_def.name);
+                // Use the #[cm] fragment as the CM name (preserves acronym casing)
+                let cm_name = cm_attr_cm_name(&variant_def.attrs, &variant_def.name);
                 // Store both CM and Wado names for each case
                 let cases: Vec<CmVariantCase> = variant_def
                     .cases
                     .iter()
                     .map(|c| CmVariantCase {
-                        cm_name: wasi_attr_cm_name(&c.attrs, &c.name),
+                        cm_name: cm_attr_cm_name(&c.attrs, &c.name),
                         wado_name: c.name.clone(),
                         payload: c.payload.clone(),
                     })
@@ -493,7 +493,7 @@ impl WasiRegistry {
                 let interface_path = variant_def
                     .attrs
                     .iter()
-                    .find(|a| a.name == "wasi")
+                    .find(|a| a.name == "cm")
                     .and_then(|a| a.args.first())
                     .and_then(|arg| arg.as_str().split('#').next())
                     .map(str::to_string);
@@ -523,9 +523,9 @@ impl WasiRegistry {
         for item in &module.items {
             if let Item::Effect(effect) = item {
                 for method in &effect.methods {
-                    if let Some(wasi) = method.attrs.first().and_then(|a| a.wasi_import.as_ref()) {
-                        // Extract CM param names from #[wasi_params] attribute
-                        let cm_param_names = extract_wasi_params_attr(&method.attrs);
+                    if let Some(wasi) = method.attrs.first().and_then(|a| a.cm_import.as_ref()) {
+                        // Extract CM param names from #[cm_params] attribute
+                        let cm_param_names = extract_cm_params_attr(&method.attrs);
                         let params: Vec<(String, String, Type)> = method
                             .params
                             .iter()
@@ -535,7 +535,7 @@ impl WasiRegistry {
                                     .get(i)
                                     .unwrap_or_else(|| {
                                         panic!(
-                                            "missing #[wasi_params] for param '{}' in {}.{}",
+                                            "missing #[cm_params] for param '{}' in {}.{}",
                                             p.name, effect.name, method.name
                                         )
                                     })
@@ -565,9 +565,9 @@ impl WasiRegistry {
         for item in &module.items {
             if let Item::Resource(resource) = item {
                 for method in &resource.methods {
-                    if let Some(wasi) = method.attrs.first().and_then(|a| a.wasi_import.as_ref()) {
-                        // Extract CM param names from #[wasi_params] attribute
-                        let cm_param_names = extract_wasi_params_attr(&method.attrs);
+                    if let Some(wasi) = method.attrs.first().and_then(|a| a.cm_import.as_ref()) {
+                        // Extract CM param names from #[cm_params] attribute
+                        let cm_param_names = extract_cm_params_attr(&method.attrs);
                         let params: Vec<(String, String, Type)> = method
                             .params
                             .iter()
@@ -577,7 +577,7 @@ impl WasiRegistry {
                                     .get(i)
                                     .unwrap_or_else(|| {
                                         panic!(
-                                            "missing #[wasi_params] for param '{}' in {}.{}",
+                                            "missing #[cm_params] for param '{}' in {}.{}",
                                             p.name, resource.name, method.name
                                         )
                                     })
@@ -794,7 +794,7 @@ impl WasiRegistry {
     pub fn find_interface_for_struct_cm_name(&self, cm_name: &str) -> Option<String> {
         for (wado_name, (struct_cm_name, source_path, _, _)) in &self.structs {
             if struct_cm_name == cm_name || wado_name == cm_name {
-                let wasi = WasiImport::parse(source_path)?;
+                let wasi = CmImport::parse(source_path)?;
                 return Some(wasi.interface);
             }
         }
@@ -934,7 +934,7 @@ impl WasiRegistry {
         &mut self,
         effect_name: &str,
         method_name: &str,
-        wasi: &WasiImport,
+        wasi: &CmImport,
         is_async: bool,
         params: Vec<(String, String, Type)>,
         return_type: Option<Type>,
@@ -1025,7 +1025,7 @@ impl WasiRegistry {
     pub fn interfaces(&self) -> impl Iterator<Item = WasiInterfaceInfo> + '_ {
         self.interfaces.iter().map(|(path, functions)| {
             // Parse the interface path to extract components
-            let wasi = WasiImport::parse(path);
+            let wasi = CmImport::parse(path);
 
             // Check if any function returns a resource type (Option<ResourceName>)
             let resource_type = functions
@@ -1058,7 +1058,7 @@ impl WasiRegistry {
     /// Check if a specific interface is in the registry (by interface name, e.g., "monotonic-clock")
     pub fn has_interface(&self, interface_name: &str) -> bool {
         self.interfaces.keys().any(|path| {
-            if let Some(wasi) = crate::ast::WasiImport::parse(path) {
+            if let Some(wasi) = crate::ast::CmImport::parse(path) {
                 wasi.interface == interface_name
             } else {
                 false
@@ -1080,7 +1080,7 @@ impl WasiRegistry {
     /// Returns None if no wasi:cli interfaces are registered.
     pub fn get_cli_version(&self) -> Option<&str> {
         for path in self.interfaces.keys() {
-            if let Some(wasi) = WasiImport::parse(path)
+            if let Some(wasi) = CmImport::parse(path)
                 && wasi.namespace == "wasi"
                 && wasi.package == "cli"
                 && wasi.version.is_some()
@@ -1100,7 +1100,7 @@ impl WasiRegistry {
     /// Returns the version string from the first interface of that package.
     pub fn get_package_version(&self, package: &str) -> Option<&str> {
         for path in self.interfaces.keys() {
-            if let Some(wasi) = WasiImport::parse(path)
+            if let Some(wasi) = CmImport::parse(path)
                 && wasi.namespace == "wasi"
                 && wasi.package == package
                 && let Some(at_pos) = path.find('@')
@@ -2517,8 +2517,7 @@ mod tests {
     fn test_register_and_resolve() {
         let mut registry = WasiRegistry::new();
 
-        let wasi =
-            WasiImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
+        let wasi = CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
 
         registry.register(
             "Stdout",
@@ -2547,7 +2546,7 @@ mod tests {
 
         // Register stdout
         let stdout_wasi =
-            WasiImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
+            CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
         registry.register(
             "Stdout",
             "write_via_stream",
@@ -2563,7 +2562,7 @@ mod tests {
 
         // Register stderr - different interface, same function name
         let stderr_wasi =
-            WasiImport::parse("wasi:cli/stderr@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
+            CmImport::parse("wasi:cli/stderr@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
         registry.register(
             "Stderr",
             "write_via_stream",
@@ -2595,8 +2594,7 @@ mod tests {
     fn test_interfaces_iteration() {
         let mut registry = WasiRegistry::new();
 
-        let wasi =
-            WasiImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
+        let wasi = CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
 
         registry.register(
             "Stdout",

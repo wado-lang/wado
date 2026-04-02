@@ -4,7 +4,7 @@
 use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AttrArg,
     Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison,
-    ClosureExpr, ClosureParam, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
+    ClosureExpr, ClosureParam, CmImport, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
     Condition, ConditionElement, ContinueStmt, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr,
     ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
     FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
@@ -14,7 +14,7 @@ use crate::ast::{
     StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
     TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -622,9 +622,9 @@ impl Parser {
 
         self.expect(&TokenKind::RBracket)?;
 
-        // Parse WASI import path if this is a wasi attribute
-        let wasi_import = if name == "wasi" {
-            args.first().and_then(|s| WasiImport::parse(s.as_str()))
+        // Parse CM import path if this is a cm attribute
+        let cm_import = if name == "cm" {
+            args.first().and_then(|s| CmImport::parse(s.as_str()))
         } else {
             None
         };
@@ -632,7 +632,7 @@ impl Parser {
         Ok(Attribute {
             name,
             args,
-            wasi_import,
+            cm_import,
             span: start_span,
         })
     }
@@ -3261,7 +3261,7 @@ impl Parser {
     }
 
     fn parse_effect_method(&mut self) -> ParseResult<EffectMethod> {
-        // Parse any attributes on the method (e.g., #[wasi("...")])
+        // Parse any attributes on the method (e.g., #[cm("...")])
         let attrs = self.parse_attributes()?;
 
         let start_span = self.peek().span;
@@ -4574,10 +4574,10 @@ mod tests {
     }
 
     #[test]
-    fn test_effect_with_wasi_attribute() {
+    fn test_effect_with_cm_attribute() {
         let source = r#"
             pub effect Stdout {
-                #[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
+                #[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
                 async fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
             }
         "#;
@@ -4595,14 +4595,14 @@ mod tests {
             assert_eq!(method.attrs.len(), 1);
 
             let attr = &method.attrs[0];
-            assert_eq!(attr.name, "wasi");
-            assert!(attr.wasi_import.is_some());
+            assert_eq!(attr.name, "cm");
+            assert!(attr.cm_import.is_some());
 
-            let wasi = attr.wasi_import.as_ref().unwrap();
-            assert_eq!(wasi.namespace, "wasi");
-            assert_eq!(wasi.package, "cli");
-            assert_eq!(wasi.interface, "stdout");
-            assert_eq!(wasi.function.as_deref(), Some("write-via-stream"));
+            let cm = attr.cm_import.as_ref().unwrap();
+            assert_eq!(cm.namespace, "wasi");
+            assert_eq!(cm.package, "cli");
+            assert_eq!(cm.interface, "stdout");
+            assert_eq!(cm.function.as_deref(), Some("write-via-stream"));
         } else {
             panic!("expected effect declaration");
         }

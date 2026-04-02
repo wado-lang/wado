@@ -4,7 +4,7 @@
 use { println } from "core:cli";
 
 /// Doc comment on enum
-#[wasi("my-enum")]
+#[cm("my-enum")]
 enum Color {
     /// Red case
     Red,
@@ -15,7 +15,7 @@ enum Color {
 }
 
 /// Doc comment on variant
-#[wasi("my-variant")]
+#[cm("my-variant")]
 variant Shape {
     /// Circle with radius
     Circle(f64),
@@ -66,39 +66,39 @@ pub resource Stream {
 }
 
 /// Type alias with attribute preserved
-#[wasi("wasi:http/types#field-name")]
+#[cm("wasi:http/types#field-name")]
 pub type FieldName = String;
 
 /// Type alias with attribute and no visibility
-#[wasi("wasi:http/types#status-code")]
+#[cm("wasi:http/types#status-code")]
 type StatusCode = u16;
 
 /// Enum with attributed cases (no extra blank lines)
-#[wasi("wasi:sockets/types#ip-address-family")]
+#[cm("wasi:sockets/types#ip-address-family")]
 enum IpFamily {
-    #[wasi("ipv4")]
+    #[cm("ipv4")]
     Ipv4,
-    #[wasi("ipv6")]
+    #[cm("ipv6")]
     Ipv6,
 }
 
 /// Variant with attributed cases (no extra blank lines)
-#[wasi("wasi:http/types#scheme")]
+#[cm("wasi:http/types#scheme")]
 variant Scheme {
-    #[wasi("HTTP")]
+    #[cm("HTTP")]
     Http,
-    #[wasi("HTTPS")]
+    #[cm("HTTPS")]
     Https,
-    #[wasi("other")]
+    #[cm("other")]
     Other(String),
 }
 
 /// Struct with attributed fields (no extra blank lines)
-#[wasi("wasi:http/types#dns-error-payload")]
+#[cm("wasi:http/types#dns-error-payload")]
 struct DnsError {
-    #[wasi("rcode")]
+    #[cm("rcode")]
     pub rcode: Option<String>,
-    #[wasi("info-code")]
+    #[cm("info-code")]
     pub info_code: Option<u16>,
 }
 

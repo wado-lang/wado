@@ -15,12 +15,12 @@ use { ErrorCode, Request, Response } from "wasi:http/types.wado";
 /// 
 /// In `wasi:http/middleware` this interface is both exported and imported as
 /// the "downstream" and "upstream" directions of the middleware chain.
-#[wasi("wasi:http/handler@0.3.0-rc-2026-03-15")]
+#[cm("wasi:http/handler@0.3.0-rc-2026-03-15")]
 pub effect Handler {
     /// This function may be called with either an incoming request read from the
     /// network or a request synthesized or forwarded by another component.
-    #[wasi("wasi:http/handler@0.3.0-rc-2026-03-15#handle")]
-    #[wasi_params("request")]
+    #[cm("wasi:http/handler@0.3.0-rc-2026-03-15#handle")]
+    #[cm_params("request")]
     async fn handle(request: Request) -> Result<Response, ErrorCode>;
 }
 

@@ -30,7 +30,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
     let mut ctx = ComponentModelContext::new();
 
     // Generate WASI imports dynamically from registry
-    generate_wasi_imports(&mut builder, &mut ctx, project);
+    generate_cm_imports(&mut builder, &mut ctx, project);
 
     // Type: result unit for run function (needed for task.return)
     let result_unit_type = ctx.register_type("result-unit");
@@ -100,7 +100,7 @@ pub fn build_component(project: &Project, core_module: &[u8], wir_module: &WirMo
                 ),
                 CmStreamPayload::Record(name) => {
                     // Alias the record type from the WASI interface that defines it.
-                    // WASI imports are already generated (generate_wasi_imports runs first),
+                    // WASI imports are already generated (generate_cm_imports runs first),
                     // so we can alias the exported type from the interface instance.
                     let val = if let Some(interface_name) = project
                         .wasi_registry
@@ -641,7 +641,7 @@ fn build_cm_tuple_types(
 
 /// Collect resource type names referenced anywhere in a type tree.
 ///
-/// Used to build the `needed_resources` list for `generate_wasi_imports`.
+/// Used to build the `needed_resources` list for `generate_cm_imports`.
 fn collect_resources_in_type(
     ty: &Type,
     wasi_registry: &crate::component_model::WasiRegistry,
@@ -1254,7 +1254,7 @@ fn emit_world_exports(
 }
 
 /// Generate WASI imports dynamically from the registry.
-fn generate_wasi_imports(
+fn generate_cm_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &Project,
@@ -2349,7 +2349,7 @@ fn import_interfaces_with_resources(
             continue;
         };
 
-        let Some(wasi_import) = crate::ast::WasiImport::parse(source_path) else {
+        let Some(cm_import) = crate::ast::CmImport::parse(source_path) else {
             continue;
         };
 
@@ -2362,7 +2362,7 @@ fn import_interfaces_with_resources(
                 .wasi_registry
                 .has_enum_in_interface(source_path, "ErrorCode");
 
-        let instance_type_name = format!("{}-instance-type", wasi_import.interface);
+        let instance_type_name = format!("{}-instance-type", cm_import.interface);
         let instance_type_idx = ctx.register_type(&instance_type_name);
         #[allow(unused_assignments)]
         let mut local_type_idx = 0u32;
@@ -2412,7 +2412,7 @@ fn import_interfaces_with_resources(
             enc.instance(&instance_type);
         }
 
-        ctx.register_instance(&wasi_import.interface);
+        ctx.register_instance(&cm_import.interface);
         builder.import(
             source_path,
             wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
@@ -2421,19 +2421,19 @@ fn import_interfaces_with_resources(
         let resource_type_name = format!("resource:{resource_cm_name}");
         ctx.register_type(&resource_type_name);
         builder.alias_export(
-            ctx.instance_idx(&wasi_import.interface),
+            ctx.instance_idx(&cm_import.interface),
             resource_cm_name,
             ComponentExportKind::Type,
         );
 
         // Alias error-code at outer scope
         if source_has_error_code {
-            let package = &wasi_import.package;
+            let package = &cm_import.package;
             let error_code_key = format!("{package}-error-code");
             if !ctx.has_type(&error_code_key) {
                 ctx.register_type(&error_code_key);
                 builder.alias_export(
-                    ctx.instance_idx(&wasi_import.interface),
+                    ctx.instance_idx(&cm_import.interface),
                     "error-code",
                     ComponentExportKind::Type,
                 );
@@ -2525,12 +2525,12 @@ fn import_resource_using_interfaces(
         }
 
         // Only handle interfaces that reference resources from other interfaces.
-        // Interfaces with no resources are already handled in generate_wasi_imports.
+        // Interfaces with no resources are already handled in generate_cm_imports.
         if needed_resources.is_empty() {
             continue;
         }
 
-        // Skip if already imported (e.g., previously handled by generate_wasi_imports on a prior build)
+        // Skip if already imported (e.g., previously handled by generate_cm_imports on a prior build)
         let first_func_local_name = supported_functions
             .first()
             .map(|f| f.local_alias_name())
@@ -2558,13 +2558,12 @@ fn import_resource_using_interfaces(
                 else {
                     continue;
                 };
-                let Some(wasi_import) = crate::ast::WasiImport::parse(source_path) else {
+                let Some(cm_import) = crate::ast::CmImport::parse(source_path) else {
                     continue;
                 };
                 // Use package-qualified names to avoid collision with same-named interfaces
                 // from different packages (e.g., wasi:cli/types vs wasi:filesystem/types).
-                let src_instance_name =
-                    format!("{}-{}", wasi_import.package, wasi_import.interface);
+                let src_instance_name = format!("{}-{}", cm_import.package, cm_import.interface);
                 let src_instance_type_name = format!("{src_instance_name}-instance-type");
                 if !ctx.has_type(&src_instance_type_name) {
                     // Import the resource-defining interface minimally (just the resource export)

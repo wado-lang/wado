@@ -281,7 +281,7 @@ The `WasiRegistry` module (`component_model.rs`) collects WASI import informatio
 
 **Purpose:**
 
-- Extract WASI version strings from `#[wasi(...)]` attributes (e.g., `0.3.0-rc-2025-09-16`)
+- Extract WASI version strings from `#[cm(...)]` attributes (e.g., `0.3.0-rc-2025-09-16`)
 - Map effect methods to function names using a unified naming scheme
 - Track which WASI interfaces are used for conditional import generation
 
@@ -336,7 +336,7 @@ Instead of a hardcoded whitelist, interfaces are included based on type support:
 To fully eliminate hardcoded CM structures, the registry would need to:
 
 1. Track WASI types (enums, resources) in addition to effect functions
-2. Parse enum variants from `#[wasi(...)]` annotated enums in wasi/\*.wado
+2. Parse enum variants from `#[cm(...)]` annotated enums in wasi/\*.wado
 3. Generate CM type definitions dynamically from parsed definitions
 
 ### Async Export Functions (`export async fn`)

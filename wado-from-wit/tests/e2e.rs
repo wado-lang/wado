@@ -36,7 +36,7 @@ interface greet {
 
     assert!(output.contains("pub effect Greet {"));
     assert!(output.contains("fn hello(name: String) -> String;"));
-    assert!(output.contains(r#"#[wasi("wasi:example/greet@0.1.0")]"#));
+    assert!(output.contains(r#"#[cm("test:example/greet@0.1.0")]"#));
 }
 
 #[test]

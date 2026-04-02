@@ -187,7 +187,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         return_type: func.return_type.as_ref().map(|_| "unknown".to_string()),
                         effects: func.effects.clone(),
                         is_builtin,
-                        wasi_import: func.attrs.first().and_then(|a| a.wasi_import.clone()),
+                        cm_import: func.attrs.first().and_then(|a| a.cm_import.clone()),
                     });
 
                     self.symbols
@@ -195,13 +195,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Effect(effect) => {
-                    // Extract effect-level WASI import from attributes
-                    let effect_wasi_import =
-                        effect.attrs.first().and_then(|a| a.wasi_import.clone());
+                    // Extract effect-level CM import from attributes
+                    let effect_cm_import = effect.attrs.first().and_then(|a| a.cm_import.clone());
 
                     let kind = SymbolKind::Effect(EffectSymbol {
                         methods: effect.methods.iter().map(|m| m.name.clone()).collect(),
-                        wasi_import: effect_wasi_import,
+                        cm_import: effect_cm_import,
                     });
 
                     self.symbols
@@ -211,14 +210,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     // with the fully qualified name "{Effect}.{method}"
                     // This allows importing them via use statements
                     for method in &effect.methods {
-                        let wasi_import = method.attrs.first().and_then(|a| a.wasi_import.clone());
+                        let cm_import = method.attrs.first().and_then(|a| a.cm_import.clone());
 
                         let func_kind = SymbolKind::Function(FunctionSymbol {
                             params: method.params.iter().map(|p| p.name.clone()).collect(),
                             return_type: method.return_type.as_ref().map(|_| "unknown".to_string()),
                             effects: vec![effect.name.clone()], // Effect methods implicitly require their effect
                             is_builtin: matches!(module_source, ModuleSource::Core { .. }),
-                            wasi_import,
+                            cm_import,
                         });
 
                         // Register as "{Effect}::{method}"
@@ -297,7 +296,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 Item::Resource(resource) => {
                     let kind = SymbolKind::Resource(ResourceSymbol {
                         methods: resource.methods.iter().map(|m| m.name.clone()).collect(),
-                        wasi_import: resource.attrs.first().and_then(|a| a.wasi_import.clone()),
+                        cm_import: resource.attrs.first().and_then(|a| a.cm_import.clone()),
                     });
 
                     self.symbols
@@ -306,14 +305,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     // Register each resource method as a function symbol
                     // with the fully qualified name "{Resource}::{method}"
                     for method in &resource.methods {
-                        let wasi_import = method.attrs.first().and_then(|a| a.wasi_import.clone());
+                        let cm_import = method.attrs.first().and_then(|a| a.cm_import.clone());
 
                         let func_kind = SymbolKind::Function(FunctionSymbol {
                             params: method.params.iter().map(|p| p.name.clone()).collect(),
                             return_type: method.return_type.as_ref().map(|_| "unknown".to_string()),
                             effects: vec![], // Resource methods don't have effect requirements
                             is_builtin: matches!(module_source, ModuleSource::Core { .. }),
-                            wasi_import,
+                            cm_import,
                         });
 
                         // Register as "{Resource}::{method}"
