@@ -257,7 +257,9 @@ fn desugar_pattern(p: &Pattern) -> Pattern {
         Pattern::MutIdent(name) => Pattern::MutIdent(name.clone()),
         Pattern::Literal(lit) => Pattern::Literal(lit.clone()),
         Pattern::Wildcard => Pattern::Wildcard,
-        Pattern::Tuple(patterns, has_rest) => Pattern::Tuple(patterns.iter().map(desugar_pattern).collect(), *has_rest),
+        Pattern::Tuple(patterns, has_rest) => {
+            Pattern::Tuple(patterns.iter().map(desugar_pattern).collect(), *has_rest)
+        }
         Pattern::Variant {
             variant_name,
             bindings,
