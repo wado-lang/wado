@@ -875,6 +875,7 @@ impl String {
     pub fn trim(&self) -> String;
     pub fn to_ascii_lowercase(&self) -> String;
     pub fn to_ascii_uppercase(&self) -> String;
+    pub fn eq_ignore_ascii_case(&self, other: String) -> bool;
     pub fn contains(&self, pat: String) -> bool;
     pub fn starts_with(&self, pat: String) -> bool;
     pub fn ends_with(&self, pat: String) -> bool;
@@ -1189,6 +1190,7 @@ impl char {
     pub fn is_ascii_uppercase(&self) -> bool;
     pub fn to_ascii_lowercase(&self) -> char;
     pub fn to_ascii_uppercase(&self) -> char;
+    pub fn eq_ignore_ascii_case(&self, other: &char) -> bool;
     pub fn is_hexdigit(&self) -> bool;
     pub fn hex_digit_value(&self) -> i32;
 }
