@@ -403,7 +403,9 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     }
 
     w.begin("if best_end <= start");
-    w.line("let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);");
+    w.line(
+        "let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);",
+    );
     w.line("tokens.push(tok);");
     w.line("trivia = [];");
     w.line("lexer.pos = start + 1;");

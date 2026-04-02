@@ -720,7 +720,15 @@ impl String {
         }
         // Encode char to temporary buffer
         let code = ch as u32;
-        let char_len = if code < 0x80 { 1 } else if code < 0x800 { 2 } else if code < 0x10000 { 3 } else { 4 };
+        let char_len = if code < 0x80 {
+            1;
+        } else if code < 0x800 {
+            2;
+        } else if code < 0x10000 {
+            3;
+        } else {
+            4;
+        };
         let new_used = self.used + char_len;
         if new_used > builtin::array_len(self.repr) {
             self.grow(new_used);
@@ -729,7 +737,9 @@ impl String {
         let mut i = self.used - 1;
         while i >= byte_index {
             builtin::array_set_u8(self.repr, i + char_len, builtin::array_get_u8(self.repr, i));
-            if i == 0 { break; }
+            if i == 0 {
+                break;
+            }
             i -= 1;
         }
         // Write encoded char
@@ -771,7 +781,9 @@ impl String {
         let mut i = self.used - 1;
         while i >= byte_index {
             builtin::array_set_u8(self.repr, i + s_len, builtin::array_get_u8(self.repr, i));
-            if i == 0 { break; }
+            if i == 0 {
+                break;
+            }
             i -= 1;
         }
         // Copy inserted string
@@ -784,7 +796,15 @@ impl String {
     pub fn remove(&mut self, byte_index: i32) -> char {
         assert byte_index >= 0 && byte_index < self.used, "index out of bounds";
         let b0 = builtin::array_get_u8(self.repr, byte_index) as u32;
-        let char_len = if b0 < 0x80 { 1 } else if b0 < 0xE0 { 2 } else if b0 < 0xF0 { 3 } else { 4 };
+        let char_len = if b0 < 0x80 {
+            1;
+        } else if b0 < 0xE0 {
+            2;
+        } else if b0 < 0xF0 {
+            3;
+        } else {
+            4;
+        };
         // Decode the character
         let code = if b0 < 0x80 {
             b0;
@@ -1263,16 +1283,16 @@ impl Iterator for StrLinesIter {
                 let len = self.pos - start;
                 let part = builtin::array_new::<u8>(len);
                 builtin::array_copy::<u8>(part, 0, self.repr, start, len);
-                self.pos += 1; // skip \n
+                self.pos += 1;  // skip \n
                 return Option::Some(String::internal_from_utf8_raw(part, len));
             }
             if b == 0x0D {
                 let len = self.pos - start;
                 let part = builtin::array_new::<u8>(len);
                 builtin::array_copy::<u8>(part, 0, self.repr, start, len);
-                self.pos += 1; // skip \r
+                self.pos += 1;  // skip \r
                 if self.pos < self.used && builtin::array_get_u8(self.repr, self.pos) == 0x0A {
-                    self.pos += 1; // skip \n after \r
+                    self.pos += 1;  // skip \n after \r
                 }
                 return Option::Some(String::internal_from_utf8_raw(part, len));
             }

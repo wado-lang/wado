@@ -15,9 +15,12 @@ pub struct NodeData {
 }
 
 pub trait Visitor {
-    fn enter(&mut self, name: &String) {}
-    fn exit(&mut self, name: &String) {}
-    fn token(&mut self, t: &TokenData) {}
+    fn enter(&mut self, name: &String) {
+    }
+    fn exit(&mut self, name: &String) {
+    }
+    fn token(&mut self, t: &TokenData) {
+    }
 }
 
 pub struct Recorder {
@@ -25,8 +28,13 @@ pub struct Recorder {
 }
 
 impl Visitor for Recorder {
-    fn enter(&mut self, name: &String) { self.count += 1; }
-    fn token(&mut self, t: &TokenData) { self.count += 1; }
+    fn enter(&mut self, name: &String) {
+        self.count += 1;
+    }
+
+    fn token(&mut self, t: &TokenData) {
+        self.count += 1;
+    }
 }
 
 pub fn walk_node<V: Visitor>(v: &mut V, node: &NodeData) {

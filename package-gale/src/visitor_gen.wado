@@ -1,13 +1,21 @@
+use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind } from "./ir.wado";
 use {
-    Grammar,
-    ParserRule,
-    Alternative,
-    Element,
-    RepeatElement,
-    LabelElement,
-    RepeatKind,
-} from "./ir.wado";
-use { to_snake_case, to_lower, to_pascal_case, rule_type_name, literal_field_name, strip_suffix, is_simple_cst_group, is_token_only_group, is_single_alt_group, group_variant_type_name, group_field_base_name, group_case_name, token_group_field_name, single_alt_group_field_name, single_alt_group_type_name } from "./gen_util.wado";
+    to_snake_case,
+    to_lower,
+    to_pascal_case,
+    rule_type_name,
+    literal_field_name,
+    strip_suffix,
+    is_simple_cst_group,
+    is_token_only_group,
+    is_single_alt_group,
+    group_variant_type_name,
+    group_field_base_name,
+    group_case_name,
+    token_group_field_name,
+    single_alt_group_field_name,
+    single_alt_group_type_name,
+} from "./gen_util.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
 /// Generate Visitor walk functions and to_tree for a grammar.
@@ -132,7 +140,9 @@ fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GroupCa
 }
 
 fn gen_to_tree_fn(w: &mut CodeWriter, grammar: &Grammar) {
-    if grammar.parser_rules.is_empty() { return; }
+    if grammar.parser_rules.is_empty() {
+        return;
+    }
     let root_rule = &grammar.parser_rules[0];
     let root_type = rule_type_name(&root_rule.name);
 

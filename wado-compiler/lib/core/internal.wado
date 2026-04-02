@@ -68,7 +68,9 @@ pub fn wait_for_subtask(packed: i32) {
         loop {
             let event = ws.wait();
             // payload == 2 means the subtask reached RETURNED state
-            if event.payload == 2 { break; }
+            if event.payload == 2 {
+                break;
+            }
         }
         subtask.drop();
         ws.drop();
