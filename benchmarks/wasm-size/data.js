@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775136643990,
+  "lastUpdate": 1775139883110,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9734,6 +9734,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8b221e4ea3a328a64998e52a00138ed47011cd65"
         },
         "date": 1775136643762,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fe15e410e16367330084bbe513dc17031b41a35d",
+          "message": "Merge pull request #758 from wado-lang/claude/implement-match-constant-pattern-QgUqG\n\nFix expected_type propagation for tuple-to-Array coercion in blocks",
+          "timestamp": "2026-04-02T23:21:47+09:00",
+          "tree_id": "e7c38d5b180d8ffcb54211807f05e29e92561da4",
+          "url": "https://github.com/wado-lang/wado/commit/fe15e410e16367330084bbe513dc17031b41a35d"
+        },
+        "date": 1775139882906,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
