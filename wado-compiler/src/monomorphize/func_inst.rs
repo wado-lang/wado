@@ -3514,10 +3514,7 @@ fn lower_tuple_comparison(
     elems: &[TypeId],
     type_table: &mut TypeTable,
 ) -> Option<TirExprKind> {
-    if !matches!(
-        op,
-        TirBinaryOp::Eq | TirBinaryOp::NotEq
-    ) {
+    if !matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
         // Ord comparisons on tuples are not yet supported
         return None;
     }
