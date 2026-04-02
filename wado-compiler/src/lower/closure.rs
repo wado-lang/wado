@@ -34,7 +34,7 @@ struct CollectedClosure {
 
 // FunctorInfo moved to tir::ClosureFunctor
 
-/// Function signature info for converting FuncRef to Closure.
+/// Function signature info for converting `FuncRef` to Closure.
 struct FuncSig {
     params: Vec<(String, TypeId)>,
     return_type: TypeId,
@@ -228,7 +228,11 @@ impl ClosureLowerer {
             func_sigs.insert(
                 func.name.clone(),
                 FuncSig {
-                    params: func.params.iter().map(|p| (p.name.clone(), p.type_id)).collect(),
+                    params: func
+                        .params
+                        .iter()
+                        .map(|p| (p.name.clone(), p.type_id))
+                        .collect(),
                     return_type: func.return_type,
                 },
             );
@@ -238,7 +242,11 @@ impl ClosureLowerer {
                 func_sigs.insert(
                     method.name.clone(),
                     FuncSig {
-                        params: method.params.iter().map(|p| (p.name.clone(), p.type_id)).collect(),
+                        params: method
+                            .params
+                            .iter()
+                            .map(|p| (p.name.clone(), p.type_id))
+                            .collect(),
                         return_type: method.return_type,
                     },
                 );
@@ -251,12 +259,7 @@ impl ClosureLowerer {
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
             if let Some(body) = &mut func.body {
-                Self::convert_func_refs_in_block(
-                    body,
-                    &func_sigs,
-                    &mut type_table,
-                    &module_source,
-                );
+                Self::convert_func_refs_in_block(body, &func_sigs, &mut type_table, &module_source);
             }
         }
         drop(type_table);
@@ -306,18 +309,8 @@ impl ClosureLowerer {
                 then_block,
                 else_block,
             } => {
-                Self::convert_func_refs_in_expr(
-                    condition,
-                    func_sigs,
-                    type_table,
-                    module_source,
-                );
-                Self::convert_func_refs_in_block(
-                    then_block,
-                    func_sigs,
-                    type_table,
-                    module_source,
-                );
+                Self::convert_func_refs_in_expr(condition, func_sigs, type_table, module_source);
+                Self::convert_func_refs_in_block(then_block, func_sigs, type_table, module_source);
                 if let Some(else_blk) = else_block {
                     Self::convert_func_refs_in_block(
                         else_blk,
@@ -346,12 +339,7 @@ impl ClosureLowerer {
                 ..
             } => {
                 Self::convert_func_refs_in_expr(scrutinee, func_sigs, type_table, module_source);
-                Self::convert_func_refs_in_block(
-                    then_block,
-                    func_sigs,
-                    type_table,
-                    module_source,
-                );
+                Self::convert_func_refs_in_block(then_block, func_sigs, type_table, module_source);
                 if let Some(else_blk) = else_block {
                     Self::convert_func_refs_in_block(
                         else_blk,
@@ -380,20 +368,19 @@ impl ClosureLowerer {
             op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
             expr: inner,
         } = &mut expr.kind
+            && matches!(inner.kind, TirExprKind::FuncRef { .. })
         {
-            if matches!(inner.kind, TirExprKind::FuncRef { .. }) {
-                Self::convert_func_refs_in_expr(inner, func_sigs, type_table, module_source);
-                // If inner was converted to a Closure, collapse the Ref wrapper.
-                // Function values are GC references, so &fn(...) = fn(...).
-                if matches!(inner.kind, TirExprKind::Closure { .. }) {
-                    let inner_owned = std::mem::replace(
-                        inner.as_mut(),
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
-                    );
-                    *expr = inner_owned;
-                }
-                return;
+            Self::convert_func_refs_in_expr(inner, func_sigs, type_table, module_source);
+            // If inner was converted to a Closure, collapse the Ref wrapper.
+            // Function values are GC references, so &fn(...) = fn(...).
+            if matches!(inner.kind, TirExprKind::Closure { .. }) {
+                let inner_owned = std::mem::replace(
+                    inner.as_mut(),
+                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
+                );
+                *expr = inner_owned;
             }
+            return;
         }
 
         // Convert FuncRef to Closure
@@ -453,12 +440,8 @@ impl ClosureLowerer {
 
                 // Build the function type
                 let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-                let func_type = type_table.make_function(
-                    param_types,
-                    sig.return_type,
-                    Vec::new(),
-                    Vec::new(),
-                );
+                let func_type =
+                    type_table.make_function(param_types, sig.return_type, Vec::new(), Vec::new());
 
                 // Replace the FuncRef with a Closure
                 expr.kind = TirExprKind::Closure {

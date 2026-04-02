@@ -1295,8 +1295,7 @@ impl FunctionTranslator<'_, '_> {
                 // If we reach here, it means a FuncRef survived lowering (e.g., external function
                 // not in the module's func_sigs). This is a compiler bug.
                 panic!(
-                    "FuncRef '{}::{}' was not converted to a Closure during lowering",
-                    module_source, name
+                    "FuncRef '{module_source}::{name}' was not converted to a Closure during lowering"
                 );
             }
             TirExprKind::GlobalVarGet {
