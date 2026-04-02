@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775112652911,
+  "lastUpdate": 1775121710278,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9539,6 +9539,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/315187e536831b89b1c378ea5a1fc3c1de43eaf8"
         },
         "date": 1775112652708,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2e4f73a266d2c1c6af8e39802851fa32b372271d",
+          "message": "Merge pull request #753 from wado-lang/dependabot/npm_and_yarn/wado-vscode/npm_and_yarn-52571dc7e9\n\nBump lodash from 4.17.23 to 4.18.1 in /wado-vscode in the npm_and_yarn group across 1 directory",
+          "timestamp": "2026-04-02T18:18:46+09:00",
+          "tree_id": "e57dbcdab882450882ea961dd724b8ec9d931f76",
+          "url": "https://github.com/wado-lang/wado/commit/2e4f73a266d2c1c6af8e39802851fa32b372271d"
+        },
+        "date": 1775121710055,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
