@@ -1,0 +1,35 @@
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    // Same case
+    assert 'A'.eq_ignore_ascii_case(&'A');
+    assert 'a'.eq_ignore_ascii_case(&'a');
+
+    // Different ASCII case
+    assert 'A'.eq_ignore_ascii_case(&'a');
+    assert 'a'.eq_ignore_ascii_case(&'A');
+    assert 'Z'.eq_ignore_ascii_case(&'z');
+    assert 'z'.eq_ignore_ascii_case(&'Z');
+
+    // Non-letter ASCII (must be exact match)
+    assert '0'.eq_ignore_ascii_case(&'0');
+    assert !('0'.eq_ignore_ascii_case(&'1'));
+    assert ' '.eq_ignore_ascii_case(&' ');
+    assert !(' '.eq_ignore_ascii_case(&'!'));
+
+    // Completely different characters
+    assert !('A'.eq_ignore_ascii_case(&'B'));
+    assert !('a'.eq_ignore_ascii_case(&'b'));
+    assert !('A'.eq_ignore_ascii_case(&'z'));
+
+    // Non-ASCII characters (exact match only)
+    assert !('@'.eq_ignore_ascii_case(&'`'));  // '@' | 0x20 == '`', but not alpha
+
+    // Edge cases around letter boundaries
+    assert !('['.eq_ignore_ascii_case(&'{'));  // just after 'Z'/'z'
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

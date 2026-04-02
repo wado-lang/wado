@@ -287,6 +287,17 @@ impl char {
         return *self;
     }
 
+    /// Checks that two characters are an ASCII case-insensitive match.
+    ///
+    /// Equivalent to `to_ascii_lowercase() == other.to_ascii_lowercase()`,
+    /// but implemented branchlessly.
+    pub fn eq_ignore_ascii_case(&self, other: &char) -> bool {
+        let a = *self as u32;
+        let b = *other as u32;
+        let lower_a = a | 32;
+        return lower_a == (b | 32) && (lower_a - 97) < 26 || a == b;
+    }
+
     /// Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
     pub fn is_hexdigit(&self) -> bool {
         let c = *self;
