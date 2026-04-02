@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775121729722,
+  "lastUpdate": 1775127953843,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9617,6 +9617,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/41af89f906898c68105f6f8db9fcf1960d29cb1d"
         },
         "date": 1775121729503,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e6db6a17e2be8c03624a4ac64b651af9f75bce81",
+          "message": "Merge pull request #755 from wado-lang/claude/implement-fn-ref-parameter-fLpJR\n\nfeat: support function references as parameters (&fn type)",
+          "timestamp": "2026-04-02T20:00:28+09:00",
+          "tree_id": "c5aa84f393c84cb553df79812685ef0745001ad7",
+          "url": "https://github.com/wado-lang/wado/commit/e6db6a17e2be8c03624a4ac64b651af9f75bce81"
+        },
+        "date": 1775127953618,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
