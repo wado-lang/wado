@@ -7,41 +7,41 @@ use { IpAddress } from "wasi:sockets/types.wado";
 
 
 /// Lookup error codes.
-#[wasi("wasi:sockets/ip-name-lookup@0.3.0-rc-2026-03-15#error-code")]
+#[cm("wasi:sockets/ip-name-lookup@0.3.0-rc-2026-03-15#error-code")]
 pub variant ErrorCode {
     /// Access denied.
     /// 
     /// POSIX equivalent: EACCES, EPERM
-    #[wasi("access-denied")]
+    #[cm("access-denied")]
     AccessDenied,
     /// `name` is a syntactically invalid domain name or IP address.
     /// 
     /// POSIX equivalent: EINVAL
-    #[wasi("invalid-argument")]
+    #[cm("invalid-argument")]
     InvalidArgument,
     /// Name does not exist or has no suitable associated IP addresses.
     /// 
     /// POSIX equivalent: EAI_NONAME, EAI_NODATA, EAI_ADDRFAMILY
-    #[wasi("name-unresolvable")]
+    #[cm("name-unresolvable")]
     NameUnresolvable,
     /// A temporary failure in name resolution occurred.
     /// 
     /// POSIX equivalent: EAI_AGAIN
-    #[wasi("temporary-resolver-failure")]
+    #[cm("temporary-resolver-failure")]
     TemporaryResolverFailure,
     /// A permanent failure in name resolution occurred.
     /// 
     /// POSIX equivalent: EAI_FAIL
-    #[wasi("permanent-resolver-failure")]
+    #[cm("permanent-resolver-failure")]
     PermanentResolverFailure,
     /// A catch-all for errors not captured by the existing variants.
     /// Implementations can use this to extend the error type without
     /// breaking existing code.
-    #[wasi("other")]
+    #[cm("other")]
     Other(Option<String>),
 }
 
-#[wasi("wasi:sockets/ip-name-lookup@0.3.0-rc-2026-03-15")]
+#[cm("wasi:sockets/ip-name-lookup@0.3.0-rc-2026-03-15")]
 pub effect IpNameLookup {
     /// Resolve an internet host name to a list of IP addresses.
     /// 
@@ -62,8 +62,8 @@ pub effect IpNameLookup {
     /// - <https://man7.org/linux/man-pages/man3/getaddrinfo.3.html>
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
-    #[wasi("wasi:sockets/ip-name-lookup@0.3.0-rc-2026-03-15#resolve-addresses")]
-    #[wasi_params("name")]
+    #[cm("wasi:sockets/ip-name-lookup@0.3.0-rc-2026-03-15#resolve-addresses")]
+    #[cm_params("name")]
     async fn resolve_addresses(name: String) -> Result<Array<IpAddress>, ErrorCode>;
 }
 

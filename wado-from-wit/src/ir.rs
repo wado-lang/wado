@@ -88,7 +88,7 @@ pub enum WadoTypeDef {
 pub struct WadoEnum {
     pub name: String,
     pub doc_comment: Option<String>,
-    pub wasi_attr: Option<String>,
+    pub cm_attr: Option<String>,
     pub variants: Vec<WadoEnumVariant>,
 }
 
@@ -96,15 +96,15 @@ pub struct WadoEnum {
 pub struct WadoEnumVariant {
     pub name: String,
     pub doc_comment: Option<String>,
-    /// Original WIT kebab-case name for the `#[wasi("...")]` attribute
-    pub wasi_attr: Option<String>,
+    /// Original WIT kebab-case name for the `#[cm("...")]` attribute
+    pub cm_attr: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct WadoFlags {
     pub name: String,
     pub doc_comment: Option<String>,
-    pub wasi_attr: Option<String>,
+    pub cm_attr: Option<String>,
     pub flags: Vec<WadoFlagMember>,
 }
 
@@ -112,15 +112,15 @@ pub struct WadoFlags {
 pub struct WadoFlagMember {
     pub name: String,
     pub doc_comment: Option<String>,
-    /// Original WIT kebab-case name for the `#[wasi("...")]` attribute
-    pub wasi_attr: String,
+    /// Original WIT kebab-case name for the `#[cm("...")]` attribute
+    pub cm_attr: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct WadoStruct {
     pub name: String,
     pub doc_comment: Option<String>,
-    pub wasi_attr: Option<String>,
+    pub cm_attr: Option<String>,
     pub fields: Vec<WadoField>,
 }
 
@@ -129,15 +129,15 @@ pub struct WadoField {
     pub name: String,
     pub ty: WadoType,
     pub doc_comment: Option<String>,
-    /// Original WIT kebab-case name for the `#[wasi("...")]` attribute
-    pub wasi_attr: String,
+    /// Original WIT kebab-case name for the `#[cm("...")]` attribute
+    pub cm_attr: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct WadoVariant {
     pub name: String,
     pub doc_comment: Option<String>,
-    pub wasi_attr: Option<String>,
+    pub cm_attr: Option<String>,
     pub cases: Vec<WadoVariantCase>,
 }
 
@@ -146,14 +146,14 @@ pub struct WadoVariantCase {
     pub name: String,
     pub payload: Option<WadoType>,
     pub doc_comment: Option<String>,
-    /// Original WIT kebab-case name for the `#[wasi("...")]` attribute
-    pub wasi_attr: Option<String>,
+    /// Original WIT kebab-case name for the `#[cm("...")]` attribute
+    pub cm_attr: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct WadoNewtype {
     pub name: String,
-    pub wasi_attr: Option<String>,
+    pub cm_attr: Option<String>,
     pub target: WadoType,
 }
 
@@ -161,7 +161,7 @@ pub struct WadoNewtype {
 pub struct WadoResource {
     pub name: String,
     pub doc_comment: Option<String>,
-    pub wasi_attr: String,
+    pub cm_attr: String,
     pub methods: Vec<WadoFunction>,
 }
 
@@ -169,7 +169,7 @@ pub struct WadoResource {
 pub struct WadoEffect {
     pub name: String,
     pub doc_comment: Option<String>,
-    pub wasi_interface: String,
+    pub cm_interface: String,
     pub functions: Vec<WadoFunction>,
 }
 
@@ -177,7 +177,7 @@ pub struct WadoEffect {
 pub struct WadoFunction {
     pub name: String,
     pub doc_comment: Option<String>,
-    pub wasi_attr: String,
+    pub cm_attr: String,
     pub params: Vec<WadoParam>,
     pub return_type: Option<WadoType>,
     pub is_async: bool,
@@ -188,7 +188,7 @@ pub struct WadoFunction {
 pub struct WadoParam {
     pub name: String,
     pub ty: WadoType,
-    /// Original WIT kebab-case name for the `#[wasi_params]` attribute
+    /// Original WIT kebab-case name for the `#[cm_params]` attribute
     pub wit_name: String,
 }
 

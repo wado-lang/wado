@@ -2874,11 +2874,11 @@ assert rw as u32 == 3;
 // They produce a compile error; use bitwise operators (|, &, ^) instead
 ```
 
-Flags are implemented as newtypes over `u32`. Member names can carry `#[wasi("...")]` attributes for WIT/Component Model name mapping:
+Flags are implemented as newtypes over `u32`. Member names can carry `#[cm("...")]` attributes for Component Model name mapping:
 
 ```wado
 pub flags PathFlags {
-    #[wasi("symlink-follow")]
+    #[cm("symlink-follow")]
     SymlinkFollow,
 }
 ```
@@ -4346,23 +4346,23 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 - The `task return` expression is type-checked against the declared return type of the enclosing `export async fn`.
 - The `async` keyword on a function declaration has no effect on callers; Wado is fully colorless. `async` only appears in `export async fn` declarations to signal CM async calling convention at the component boundary.
 
-### Attribute Syntax for WASI Linking
+### Attribute Syntax for Component Model Linking
 
-Use `#[wasi(...)]` attributes to link Wado definitions to WASI interfaces:
+Use `#[cm(...)]` attributes to link Wado definitions to Component Model interfaces:
 
 ```wado
-// Link an effect interface to a WASI interface
-#[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16")]
+// Link an effect interface to a CM interface
+#[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16")]
 pub effect Stdout {
-    #[wasi("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
+    #[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
     fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
 }
 
-// Link a resource to a WASI resource
-#[wasi("wasi:cli/terminal-output@0.3.0-rc-2025-09-16")]
+// Link a resource to a CM resource
+#[cm("wasi:cli/terminal-output@0.3.0-rc-2025-09-16")]
 resource TerminalOutput;
 
-// Link an enum to a WASI enum
+// Link an enum to a CM enum
 pub enum ErrorCode {  // Maps to WIT: enum error-code
     Io,               // Maps to WIT: io
     IllegalByteSequence,  // Maps to WIT: illegal-byte-sequence
@@ -4542,9 +4542,9 @@ fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 
 Marks a function as providing a compiler feature. The compiler uses these flags to enable optimizations and synthesis passes (e.g., `array_append`, `string_append`, `option`, `result`, `default`). Used in `core:prelude` method implementations.
 
-#### `#[wasi("interface@version")]` / `#[wasi_params(...)]`
+#### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
 
-Links Wado definitions (effects, resources, enums) to WASI interfaces. See [Attribute Syntax for WASI Linking](#attribute-syntax-for-wasi-linking).
+Links Wado definitions (effects, resources, enums) to Component Model interfaces. See [Attribute Syntax for Component Model Linking](#attribute-syntax-for-component-model-linking).
 
 ### The "mem" Core Module
 

@@ -41,9 +41,9 @@ impl<'a> Transformer<'a> {
     /// Returns an error if type transformation fails.
     pub fn transform_interface(&self, iface_id: InterfaceId) -> Result<WadoModule> {
         let iface = &self.resolve.interfaces[iface_id];
-        let (pkg_name, iface_name, version) = self.get_interface_path(iface_id);
+        let (namespace, pkg_name, iface_name, version) = self.get_interface_path(iface_id);
 
-        let wasi_interface = format!("wasi:{pkg_name}/{iface_name}@{version}");
+        let cm_interface = format!("{namespace}:{pkg_name}/{iface_name}@{version}");
 
         // Track current interface for cross-interface import detection
         *self.current_interface.borrow_mut() = Some(iface_id);
@@ -53,14 +53,14 @@ impl<'a> Transformer<'a> {
 
         // Transform types
         for (_, type_id) in &iface.types {
-            if let Some(type_def) = self.transform_type_def(*type_id, &wasi_interface)? {
+            if let Some(type_def) = self.transform_type_def(*type_id, &cm_interface)? {
                 module.types.push(type_def);
             }
         }
 
         // Transform resources
         for (_, type_id) in &iface.types {
-            if let Some(resource) = self.transform_resource(*type_id, &wasi_interface)? {
+            if let Some(resource) = self.transform_resource(*type_id, &cm_interface)? {
                 module.resources.push(resource);
             }
         }
@@ -75,14 +75,14 @@ impl<'a> Transformer<'a> {
                     FunctionKind::Freestanding | FunctionKind::AsyncFreestanding
                 )
             })
-            .map(|(name, func)| self.transform_function(name, func, &wasi_interface))
+            .map(|(name, func)| self.transform_function(name, func, &cm_interface))
             .collect::<Result<Vec<_>>>()?;
 
         if !functions.is_empty() {
             module.effects.push(WadoEffect {
                 name: to_upper_camel_case(&iface_name),
                 doc_comment: iface.docs.contents.clone(),
-                wasi_interface,
+                cm_interface,
                 functions,
             });
         }
@@ -238,21 +238,22 @@ impl<'a> Transformer<'a> {
         }
     }
 
-    fn get_interface_path(&self, iface_id: InterfaceId) -> (String, String, String) {
+    fn get_interface_path(&self, iface_id: InterfaceId) -> (String, String, String, String) {
         let iface = &self.resolve.interfaces[iface_id];
         let iface_name = iface.name.clone().unwrap_or_else(|| "unknown".to_string());
 
         if let Some(pkg_id) = iface.package {
             let pkg = &self.resolve.packages[pkg_id];
+            let namespace = pkg.name.namespace.clone();
             let pkg_name = pkg.name.name.clone();
             let version = pkg
                 .name
                 .version
                 .as_ref()
                 .map_or_else(|| "0.0.0".to_string(), ToString::to_string);
-            (pkg_name, iface_name, version)
+            (namespace, pkg_name, iface_name, version)
         } else {
-            ("unknown".to_string(), iface_name, "0.0.0".to_string())
+            ("unknown".to_string(), "unknown".to_string(), iface_name, "0.0.0".to_string())
         }
     }
 
@@ -265,9 +266,9 @@ impl<'a> Transformer<'a> {
         &self,
         name: &str,
         func: &Function,
-        wasi_interface: &str,
+        cm_interface: &str,
     ) -> Result<WadoFunction> {
-        let wasi_attr = format!("{wasi_interface}#{name}");
+        let cm_attr = format!("{cm_interface}#{name}");
 
         let params = self.transform_params(&func.params)?;
         let return_type = self.transform_result(func.result.as_ref())?;
@@ -278,7 +279,7 @@ impl<'a> Transformer<'a> {
         Ok(WadoFunction {
             name: to_snake_case(name),
             doc_comment: func.docs.contents.clone(),
-            wasi_attr,
+            cm_attr,
             params,
             return_type,
             is_async,
@@ -415,7 +416,7 @@ impl<'a> Transformer<'a> {
     fn transform_type_def(
         &self,
         type_id: TypeId,
-        wasi_interface: &str,
+        cm_interface: &str,
     ) -> Result<Option<WadoTypeDef>> {
         let ty = &self.resolve.types[type_id];
 
@@ -425,30 +426,30 @@ impl<'a> Transformer<'a> {
             None => return Ok(None),
         };
 
-        let wasi_attr = format!("{}#{}", wasi_interface, ty.name.as_ref().unwrap());
+        let cm_attr = format!("{}#{}", cm_interface, ty.name.as_ref().unwrap());
         let doc_comment = ty.docs.contents.clone();
 
         let def = match &ty.kind {
             TypeDefKind::Enum(e) => {
-                WadoTypeDef::Enum(Self::transform_enum(e, name, doc_comment, wasi_attr))
+                WadoTypeDef::Enum(Self::transform_enum(e, name, doc_comment, cm_attr))
             }
             TypeDefKind::Flags(f) => {
-                WadoTypeDef::Flags(Self::transform_flags(f, name, doc_comment, wasi_attr))
+                WadoTypeDef::Flags(Self::transform_flags(f, name, doc_comment, cm_attr))
             }
             TypeDefKind::Record(r) => {
-                WadoTypeDef::Struct(self.transform_record(r, name, doc_comment, wasi_attr)?)
+                WadoTypeDef::Struct(self.transform_record(r, name, doc_comment, cm_attr)?)
             }
             TypeDefKind::Variant(v) => {
-                WadoTypeDef::Variant(self.transform_variant(v, name, doc_comment, wasi_attr)?)
+                WadoTypeDef::Variant(self.transform_variant(v, name, doc_comment, cm_attr)?)
             }
             TypeDefKind::Type(inner) => WadoTypeDef::Newtype(WadoNewtype {
                 name,
-                wasi_attr: Some(wasi_attr),
+                cm_attr: Some(cm_attr),
                 target: self.transform_type(*inner)?,
             }),
             TypeDefKind::Tuple(t) => WadoTypeDef::Newtype(WadoNewtype {
                 name,
-                wasi_attr: Some(wasi_attr),
+                cm_attr: Some(cm_attr),
                 target: WadoType::Tuple(
                     t.types
                         .iter()
@@ -458,7 +459,7 @@ impl<'a> Transformer<'a> {
             }),
             TypeDefKind::List(inner) => WadoTypeDef::Newtype(WadoNewtype {
                 name,
-                wasi_attr: Some(wasi_attr),
+                cm_attr: Some(cm_attr),
                 target: WadoType::Array(Box::new(self.transform_type(*inner)?)),
             }),
             _ => return Ok(None),
@@ -470,7 +471,7 @@ impl<'a> Transformer<'a> {
         e: &wit_parser::Enum,
         name: String,
         doc_comment: Option<String>,
-        wasi_attr: String,
+        cm_attr: String,
     ) -> WadoEnum {
         let variants = e
             .cases
@@ -478,13 +479,13 @@ impl<'a> Transformer<'a> {
             .map(|case| WadoEnumVariant {
                 name: to_upper_camel_case(&case.name),
                 doc_comment: case.docs.contents.clone(),
-                wasi_attr: Some(case.name.clone()),
+                cm_attr: Some(case.name.clone()),
             })
             .collect();
         WadoEnum {
             name,
             doc_comment,
-            wasi_attr: Some(wasi_attr),
+            cm_attr: Some(cm_attr),
             variants,
         }
     }
@@ -493,7 +494,7 @@ impl<'a> Transformer<'a> {
         f: &wit_parser::Flags,
         name: String,
         doc_comment: Option<String>,
-        wasi_attr: String,
+        cm_attr: String,
     ) -> WadoFlags {
         let flags = f
             .flags
@@ -501,13 +502,13 @@ impl<'a> Transformer<'a> {
             .map(|flag| WadoFlagMember {
                 name: to_upper_camel_case(&flag.name),
                 doc_comment: flag.docs.contents.clone(),
-                wasi_attr: flag.name.clone(),
+                cm_attr: flag.name.clone(),
             })
             .collect();
         WadoFlags {
             name,
             doc_comment,
-            wasi_attr: Some(wasi_attr),
+            cm_attr: Some(cm_attr),
             flags,
         }
     }
@@ -517,7 +518,7 @@ impl<'a> Transformer<'a> {
         r: &wit_parser::Record,
         name: String,
         doc_comment: Option<String>,
-        wasi_attr: String,
+        cm_attr: String,
     ) -> Result<WadoStruct> {
         let fields = r
             .fields
@@ -527,14 +528,14 @@ impl<'a> Transformer<'a> {
                     name: to_snake_case(&field.name),
                     ty: self.transform_type(field.ty)?,
                     doc_comment: field.docs.contents.clone(),
-                    wasi_attr: field.name.clone(),
+                    cm_attr: field.name.clone(),
                 })
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(WadoStruct {
             name,
             doc_comment,
-            wasi_attr: Some(wasi_attr),
+            cm_attr: Some(cm_attr),
             fields,
         })
     }
@@ -544,7 +545,7 @@ impl<'a> Transformer<'a> {
         v: &wit_parser::Variant,
         name: String,
         doc_comment: Option<String>,
-        wasi_attr: String,
+        cm_attr: String,
     ) -> Result<WadoVariant> {
         let cases = v
             .cases
@@ -554,14 +555,14 @@ impl<'a> Transformer<'a> {
                     name: to_upper_camel_case(&case.name),
                     payload: case.ty.map(|t| self.transform_type(t)).transpose()?,
                     doc_comment: case.docs.contents.clone(),
-                    wasi_attr: Some(case.name.clone()),
+                    cm_attr: Some(case.name.clone()),
                 })
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(WadoVariant {
             name,
             doc_comment,
-            wasi_attr: Some(wasi_attr),
+            cm_attr: Some(cm_attr),
             cases,
         })
     }
@@ -569,7 +570,7 @@ impl<'a> Transformer<'a> {
     fn transform_resource(
         &self,
         type_id: TypeId,
-        wasi_interface: &str,
+        cm_interface: &str,
     ) -> Result<Option<WadoResource>> {
         let ty = &self.resolve.types[type_id];
 
@@ -582,7 +583,7 @@ impl<'a> Transformer<'a> {
             None => return Ok(None),
         };
 
-        let wasi_attr = format!("{}#{}", wasi_interface, ty.name.as_ref().unwrap());
+        let cm_attr = format!("{}#{}", cm_interface, ty.name.as_ref().unwrap());
 
         // Find methods for this resource
         let mut methods = Vec::new();
@@ -619,14 +620,14 @@ impl<'a> Transformer<'a> {
                         // Constructor: wasi attr is "interface#[constructor]resource-name"
                         // Wado name is "new"
                         (
-                            format!("{wasi_interface}#[constructor]{resource_wit_name}"),
+                            format!("{cm_interface}#[constructor]{resource_wit_name}"),
                             "new".to_string(),
                         )
                     } else {
                         // Method/Static: extract just the method name after the dot
                         let raw_method = func_name.split('.').next_back().unwrap_or(func_name);
                         let method_attr = format!(
-                            "{wasi_interface}#{kind_prefix}{resource_wit_name}.{raw_method}"
+                            "{cm_interface}#{kind_prefix}{resource_wit_name}.{raw_method}"
                         );
                         (method_attr, to_snake_case(raw_method))
                     };
@@ -634,7 +635,7 @@ impl<'a> Transformer<'a> {
                     methods.push(WadoFunction {
                         name: method_name,
                         doc_comment: func.docs.contents.clone(),
-                        wasi_attr: method_attr,
+                        cm_attr: method_attr,
                         params: self.transform_params(&func.params)?,
                         return_type: self.transform_result(func.result.as_ref())?,
                         is_async,
@@ -647,7 +648,7 @@ impl<'a> Transformer<'a> {
         Ok(Some(WadoResource {
             name,
             doc_comment: ty.docs.contents.clone(),
-            wasi_attr,
+            cm_attr,
             methods,
         }))
     }

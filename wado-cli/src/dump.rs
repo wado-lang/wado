@@ -508,17 +508,17 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                         .map(|t| format!(" -> {t}"))
                         .unwrap_or_default();
                     let wasi = f
-                        .wasi_import
+                        .cm_import
                         .as_ref()
-                        .map(|w| format!(" [wasi: {}]", w.interface_path()))
+                        .map(|w| format!(" [cm: {}]", w.interface_path()))
                         .unwrap_or_default();
                     format!("fn({}){ret}{effects}{wasi}", f.params.join(", "))
                 }
                 wado_compiler::symbol::SymbolKind::Effect(e) => {
                     let wasi = e
-                        .wasi_import
+                        .cm_import
                         .as_ref()
-                        .map(|w| format!(" [wasi: {}]", w.interface_path()))
+                        .map(|w| format!(" [cm: {}]", w.interface_path()))
                         .unwrap_or_default();
                     format!("effect{{ {} }}{wasi}", e.methods.join(", "))
                 }
@@ -553,9 +553,9 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 }
                 wado_compiler::symbol::SymbolKind::Resource(r) => {
                     let wasi = r
-                        .wasi_import
+                        .cm_import
                         .as_ref()
-                        .map(|w| format!(" [wasi: {}]", w.interface_path()))
+                        .map(|w| format!(" [cm: {}]", w.interface_path()))
                         .unwrap_or_default();
                     format!("resource{{ {} }}{wasi}", r.methods.join(", "))
                 }

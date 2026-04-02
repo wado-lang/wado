@@ -3,7 +3,7 @@
 // Source files:
 //   - vendor/wasmtime/crates/wasi/src/p3/wit/deps/cli.wit
 
-#[wasi("wasi:cli/environment@0.3.0-rc-2026-03-15")]
+#[cm("wasi:cli/environment@0.3.0-rc-2026-03-15")]
 pub effect Environment {
     /// Get the POSIX-style environment variables.
     /// 
@@ -13,14 +13,14 @@ pub effect Environment {
     /// Morally, these are a value import, but until value imports are available
     /// in the component model, this import function should return the same
     /// values each time it is called.
-    #[wasi("wasi:cli/environment@0.3.0-rc-2026-03-15#get-environment")]
+    #[cm("wasi:cli/environment@0.3.0-rc-2026-03-15#get-environment")]
     fn get_environment() -> Array<[String, String]>;
     /// Get the POSIX-style arguments to the program.
-    #[wasi("wasi:cli/environment@0.3.0-rc-2026-03-15#get-arguments")]
+    #[cm("wasi:cli/environment@0.3.0-rc-2026-03-15#get-arguments")]
     fn get_arguments() -> Array<String>;
     /// Return a path that programs should use as their initial current working
     /// directory, interpreting `.` as shorthand for this.
-    #[wasi("wasi:cli/environment@0.3.0-rc-2026-03-15#get-initial-cwd")]
+    #[cm("wasi:cli/environment@0.3.0-rc-2026-03-15#get-initial-cwd")]
     fn get_initial_cwd() -> Option<String>;
 }
 

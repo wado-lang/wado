@@ -4,7 +4,7 @@
 //! and provides export signature information for code generation.
 //!
 //! Worlds are keyed by their fully-qualified name (e.g., "wasi:cli/command",
-//! "wasi:http/service") derived from the `#[wasi("...")]` attribute.
+//! "wasi:http/service") derived from the `#[cm("...")]` attribute.
 
 use crate::hashmap::IndexMap;
 
@@ -105,13 +105,13 @@ pub struct WorldRegistry {
     worlds: IndexMap<String, WorldInfo>,
 }
 
-/// Extract the fully-qualified world name (without version) from `#[wasi("...")]` attribute.
+/// Extract the fully-qualified world name (without version) from `#[cm("...")]` attribute.
 ///
-/// For example, `#[wasi("wasi:cli/command@0.3.0-rc-2026-01-06")]` returns `"wasi:cli/command"`.
+/// For example, `#[cm("wasi:cli/command@0.3.0-rc-2026-01-06")]` returns `"wasi:cli/command"`.
 fn fq_name_from_attrs(attrs: &[crate::ast::Attribute]) -> Option<String> {
     attrs
         .iter()
-        .find(|a| a.name == "wasi")
+        .find(|a| a.name == "cm")
         .and_then(|a| a.args.first())
         .map(|arg| {
             let s = arg.as_str();
@@ -132,7 +132,7 @@ impl WorldRegistry {
 
     /// Register a world from a parsed world declaration.
     ///
-    /// The world is keyed by its fully-qualified name from the `#[wasi("...")]` attribute.
+    /// The world is keyed by its fully-qualified name from the `#[cm("...")]` attribute.
     /// If no attribute is present, the `PascalCase` name is used as fallback.
     pub fn register(&mut self, world: &WorldDecl) {
         let fq_name = fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone());
@@ -197,9 +197,9 @@ mod tests {
             name: "Command".to_string(),
             is_pub: false,
             attrs: vec![Attribute {
-                name: "wasi".to_string(),
+                name: "cm".to_string(),
                 args: vec![ast::AttrArg::Str("wasi:cli/command@0.3.0".to_string())],
-                wasi_import: None,
+                cm_import: None,
                 span: make_span(),
             }],
             imports: vec![],

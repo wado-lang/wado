@@ -149,7 +149,7 @@ pub struct GlobalDecl {
 /// `unparse` can reconstruct the original syntax faithfully.
 ///
 /// Examples:
-/// - `#[wasi("wasi:cli/stdout")]`          → `[Str("wasi:cli/stdout")]`
+/// - `#[cm("wasi:cli/stdout")]`          → `[Str("wasi:cli/stdout")]`
 /// - `#[inline(always)]`                   → `[Ident("always")]`
 /// - `#[serde(rename = "type")]`           → `[KeyValue("rename", "type")]`
 /// - `#[canonical("wasi", "stream-new")]`  → `[Str("wasi"), Str("stream-new")]`
@@ -173,7 +173,7 @@ impl AttrArg {
     }
 }
 
-/// Attribute like #[wasi("...")]
+/// Attribute like #[cm("...")]
 #[derive(Debug, Clone)]
 pub struct Attribute {
     pub name: String,
@@ -183,7 +183,7 @@ pub struct Attribute {
     /// - `#[serde(rename = "type")]`           → `[KeyValue("rename", "type")]`
     /// - `#[serde(default)]`                   → `[Ident("default")]`
     pub args: Vec<AttrArg>,
-    pub wasi_import: Option<WasiImport>,
+    pub cm_import: Option<CmImport>,
     pub span: Span,
 }
 
@@ -212,10 +212,10 @@ impl Attribute {
     }
 }
 
-/// Parsed WASI import path
+/// Parsed Component Model import path
 /// e.g., "wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream"
 #[derive(Debug, Clone)]
-pub struct WasiImport {
+pub struct CmImport {
     /// Namespace (e.g., "wasi")
     pub namespace: String,
     /// Package (e.g., "cli")
@@ -228,13 +228,13 @@ pub struct WasiImport {
     pub function: Option<String>,
 }
 
-impl WasiImport {
-    /// Parse a WASI path string
+impl CmImport {
+    /// Parse a CM import path string
     /// Format: "namespace:package/interface@version#function"
     /// Examples:
     ///   "wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream"
     ///   "wasi:cli/terminal-input@0.3.0-rc-2025-09-16"
-    pub fn parse(s: &str) -> Option<WasiImport> {
+    pub fn parse(s: &str) -> Option<CmImport> {
         // Split by '#' first to extract function name
         let (path, function) = if let Some(pos) = s.rfind('#') {
             (&s[..pos], Some(s[pos + 1..].to_string()))
@@ -255,7 +255,7 @@ impl WasiImport {
         // Split by '/' to extract package and interface
         let (package, interface) = rest.split_once('/')?;
 
-        Some(WasiImport {
+        Some(CmImport {
             namespace: namespace.to_string(),
             package: package.to_string(),
             interface: interface.to_string(),
@@ -1235,7 +1235,7 @@ pub struct StructDecl {
     /// Generic type parameters: `struct Pair<T, U> { ... }`
     pub type_params: Vec<GenericParam>,
     pub fields: Vec<StructField>,
-    /// Attributes like `#[wasi("...")]`
+    /// Attributes like `#[cm("...")]`
     pub attrs: Vec<Attribute>,
     pub span: Span,
 }
@@ -1245,7 +1245,7 @@ pub struct StructField {
     pub name: String,
     pub is_pub: bool,
     pub ty: Type,
-    /// Attributes like `#[wasi("...")]` for CM name override
+    /// Attributes like `#[cm("...")]` for CM name override
     pub attrs: Vec<Attribute>,
     pub span: Span,
 }
@@ -1257,7 +1257,7 @@ pub struct EnumDecl {
     /// Generic type parameters: `enum Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
     pub cases: Vec<EnumCase>,
-    /// Attributes like #[wasi("...")]
+    /// Attributes like #[cm("...")]
     pub attrs: Vec<Attribute>,
     pub span: Span,
 }
@@ -1267,7 +1267,7 @@ pub struct EnumDecl {
 #[derive(Debug, Clone)]
 pub struct EnumCase {
     pub name: String,
-    /// Attributes like `#[wasi("wit-kebab-name")]` for CM name override
+    /// Attributes like `#[cm("wit-kebab-name")]` for CM name override
     pub attrs: Vec<Attribute>,
     pub span: Span,
 }
@@ -1292,7 +1292,7 @@ pub struct FlagsDecl {
 #[derive(Debug, Clone)]
 pub struct FlagsVariant {
     pub name: String,
-    /// Attributes like `#[wasi("wit-kebab-name")]` for CM name override
+    /// Attributes like `#[cm("wit-kebab-name")]` for CM name override
     pub attrs: Vec<Attribute>,
     pub span: Span,
 }
@@ -1311,7 +1311,7 @@ pub struct VariantDecl {
     /// Generic type parameters: `variant Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
     pub cases: Vec<VariantCase>,
-    /// Attributes like `#[wasi("...")]`
+    /// Attributes like `#[cm("...")]`
     pub attrs: Vec<Attribute>,
     pub span: Span,
 }
@@ -1329,7 +1329,7 @@ pub struct VariantCase {
     /// Payload type for this case. None for unit variants like `None`.
     /// At TIR level, unit variants are normalized to have `()` payload.
     pub payload: Option<Type>,
-    /// Attributes like `#[wasi("wit-kebab-name")]` for CM name override
+    /// Attributes like `#[cm("wit-kebab-name")]` for CM name override
     pub attrs: Vec<Attribute>,
     pub span: Span,
 }
