@@ -94,4 +94,4 @@ It may include TODOs on WIP.
 - [Same-Scope Shadowing with Self-Reference](./wep-2026-03-25-same-scope-shadowing.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [Redesign String and Array APIs](./wep-2026-03-29-redesign-string-array-api.md)
-- [Tide — WebIDL Binding Generator](./wep-2026-04-01-tide.md)
+- [WebIDL Binding Generator (`wado-from-idl`)](./wep-2026-04-01-tide.md)
