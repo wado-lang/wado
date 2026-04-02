@@ -272,19 +272,15 @@ impl char {
     /// Converts an ASCII uppercase letter to lowercase. Non-ASCII and
     /// non-uppercase characters are returned unchanged.
     pub fn to_ascii_lowercase(&self) -> char {
-        if *self >= 'A' && *self <= 'Z' {
-            return char::from_u32_unchecked(*self as u32 - 'A' as u32 + 'a' as u32);
-        }
-        return *self;
+        let c = *self as u32;
+        return char::from_u32_unchecked(c | (self.is_ascii_uppercase() as u32 * ('A' as u32 ^ 'a' as u32)));
     }
 
     /// Converts an ASCII lowercase letter to uppercase. Non-ASCII and
     /// non-lowercase characters are returned unchanged.
     pub fn to_ascii_uppercase(&self) -> char {
-        if *self >= 'a' && *self <= 'z' {
-            return char::from_u32_unchecked(*self as u32 - 'a' as u32 + 'A' as u32);
-        }
-        return *self;
+        let c = *self as u32;
+        return char::from_u32_unchecked(c ^ (self.is_ascii_lowercase() as u32 * ('A' as u32 ^ 'a' as u32)));
     }
 
     /// Checks that two characters are an ASCII case-insensitive match.
