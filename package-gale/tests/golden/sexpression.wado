@@ -735,7 +735,7 @@ impl Parser {
 fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     let start = p.peek().span.start;
     let mut item_list: Array<ItemNode> = [];
-    while p.peek_kind() == TK_STRING || p.peek_kind() == TK_SYMBOL || p.peek_kind() == TK_NUMBER || p.peek_kind() == TK_DOT || p.peek_kind() == TK_LPAREN {
+    while p.peek_kind() matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT | TK_LPAREN } {
         let item = parse_item(p)?;
         item_list.push(item);
     }
@@ -776,7 +776,7 @@ fn parse_item_bt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
 fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind == TK_STRING || kind == TK_SYMBOL || kind == TK_NUMBER || kind == TK_DOT {
+    if kind matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT } {
         let atom = parse_atom(p)?;
         return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt0(ItemAlt0 {
             span: Span::new(start, p.last_end()),
@@ -806,7 +806,7 @@ fn parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN, "LPAREN")?;
     let mut item_list: Array<ItemNode> = [];
-    while p.peek_kind() == TK_STRING || p.peek_kind() == TK_SYMBOL || p.peek_kind() == TK_NUMBER || p.peek_kind() == TK_DOT || p.peek_kind() == TK_LPAREN {
+    while p.peek_kind() matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT | TK_LPAREN } {
         let item = parse_item(p)?;
         item_list.push(item);
     }

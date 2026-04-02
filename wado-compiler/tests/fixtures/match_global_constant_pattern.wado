@@ -40,6 +40,86 @@ test "or pattern with global constants" {
     assert label == "foo or bar";
 }
 
+test "global constant in matches then expression in same scope" {
+    // After using TK_FOO in a matches pattern, TK_FOO must still be
+    // accessible as a global constant expression in the then-block.
+    let kind: i32 = 1;
+    if kind matches { TK_FOO | TK_BAR } {
+        assert kind == TK_FOO;
+    }
+}
+
+fn classify(grp_kind: i32) -> String {
+    if grp_kind matches { TK_FOO | TK_BAR } {
+        if grp_kind == TK_FOO {
+            return "foo";
+        }
+        return "bar";
+    } else if grp_kind == TK_BAZ {
+        return "baz";
+    }
+    return "unknown";
+}
+
+test "global constant in matches then expr in if body" {
+    assert classify(1) == "foo";
+    assert classify(2) == "bar";
+    assert classify(3) == "baz";
+    assert classify(99) == "unknown";
+}
+
+// Edge case: global constant used as pattern AND as expression in arm body
+fn match_and_use_in_body(kind: i32) -> i32 {
+    return match kind {
+        TK_FOO => TK_FOO * 10,
+        TK_BAR => TK_BAR * 10,
+        _ => 0,
+    };
+}
+
+test "global constant as pattern and expression in match arm body" {
+    assert match_and_use_in_body(1) == 10;
+    assert match_and_use_in_body(2) == 20;
+    assert match_and_use_in_body(99) == 0;
+}
+
+// Edge case: global constant used in match, then used after the match
+fn match_then_use_after(kind: i32) -> i32 {
+    let result = match kind {
+        TK_FOO => 100,
+        TK_BAR => 200,
+        _ => 0,
+    };
+    // TK_FOO must still be accessible after the match expression
+    return result + TK_FOO;
+}
+
+test "global constant accessible after match expression" {
+    assert match_then_use_after(1) == 101;
+    assert match_then_use_after(2) == 201;
+}
+
+// Edge case: global constant in while-condition matches, used in loop body
+fn while_matches_with_body_use() -> i32 {
+    let mut kind: i32 = 1;
+    let mut sum: i32 = 0;
+    while kind matches { TK_FOO | TK_BAR | TK_BAZ } {
+        sum = sum + kind;
+        if kind == TK_FOO {
+            kind = TK_BAR;
+        } else if kind == TK_BAR {
+            kind = TK_BAZ;
+        } else {
+            kind = 99;
+        }
+    }
+    return sum;
+}
+
+test "while matches with global constant in loop body" {
+    assert while_matches_with_body_use() == 6;
+}
+
 test "associated constant patterns" {
     let x: i32 = 2147483647;
     assert x matches { i32::MAX };
