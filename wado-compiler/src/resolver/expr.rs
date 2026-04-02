@@ -47,7 +47,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
             Expr::Index(index) => self.resolve_index(index, ctx),
             Expr::Block(block) => {
-                let tir_block = self.resolve_block(block, ctx, None);
+                let tir_block = self.resolve_block(block, ctx, expected_type);
                 let type_id = tir_block
                     .stmts
                     .last()
