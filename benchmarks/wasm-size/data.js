@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775139883110,
+  "lastUpdate": 1775150501338,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9773,6 +9773,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fe15e410e16367330084bbe513dc17031b41a35d"
         },
         "date": 1775139882906,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9c96f33facea64a95d136e3c39bb87401e1a2673",
+          "message": "Merge pull request #759 from wado-lang/claude/implement-variadic-trait-bound-XUAom\n\nImplement tuple Eq/NotEq expansion for variadic trait bounds",
+          "timestamp": "2026-04-03T02:18:34+09:00",
+          "tree_id": "26723984427aa279bc28557f25b941dbff0a66ff",
+          "url": "https://github.com/wado-lang/wado/commit/9c96f33facea64a95d136e3c39bb87401e1a2673"
+        },
+        "date": 1775150501112,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
