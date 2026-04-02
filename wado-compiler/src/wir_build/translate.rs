@@ -6176,7 +6176,9 @@ impl FunctionTranslator<'_, '_> {
                 result
             }
             TirPattern::ConstantValue { .. } => {
-                panic!("ConstantValue pattern should have been lowered to binding + guard before WIR translation");
+                panic!(
+                    "ConstantValue pattern should have been lowered to binding + guard before WIR translation"
+                );
             }
         }
     }
@@ -6451,7 +6453,10 @@ impl FunctionTranslator<'_, '_> {
                     }
                 }
             }
-            TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } => {
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Enum { .. }
+            | TirPattern::ConstantValue { .. } => {
                 // No bindings needed
             }
             TirPattern::Tuple(sub_patterns) => {
@@ -7106,7 +7111,10 @@ impl FunctionTranslator<'_, '_> {
 fn pattern_has_bindings(pattern: &TirPattern) -> bool {
     match pattern {
         TirPattern::Binding { .. } => true,
-        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } => false,
+        TirPattern::Wildcard
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::ConstantValue { .. } => false,
         TirPattern::Variant { bindings, .. } => bindings.iter().any(pattern_has_bindings),
         TirPattern::Tuple(subs) => subs.iter().any(pattern_has_bindings),
         TirPattern::Struct { fields, .. } => {

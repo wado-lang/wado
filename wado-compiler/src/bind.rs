@@ -344,12 +344,10 @@ fn condition_references_var(condition: &crate::ast::Condition, name: &str) -> bo
 fn collect_top_level_bare_idents(pattern: &crate::ast::Pattern) -> Vec<String> {
     match pattern {
         crate::ast::Pattern::Ident(name) => vec![name.clone()],
-        crate::ast::Pattern::Or(alternatives) => {
-            alternatives
-                .iter()
-                .flat_map(collect_top_level_bare_idents)
-                .collect()
-        }
+        crate::ast::Pattern::Or(alternatives) => alternatives
+            .iter()
+            .flat_map(collect_top_level_bare_idents)
+            .collect(),
         _ => vec![],
     }
 }

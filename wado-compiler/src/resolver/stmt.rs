@@ -949,35 +949,34 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
                 // Check if the identifier refers to an immutable global constant
                 if !matches!(pattern, Pattern::MutIdent(_)) {
-                    if let Some(&(ty, mutable)) = self.current_module_globals.get(name) {
-                        if !mutable {
-                            return TirPattern::ConstantValue {
-                                expr: Box::new(TirExpr::new(
-                                    TirExprKind::GlobalVarGet {
-                                        module_source: self.current_module_source.clone(),
-                                        name: name.clone(),
-                                    },
-                                    ty,
-                                    span,
-                                )),
-                            };
-                        }
+                    if let Some(&(ty, mutable)) = self.current_module_globals.get(name)
+                        && !mutable
+                    {
+                        return TirPattern::ConstantValue {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::GlobalVarGet {
+                                    module_source: self.current_module_source.clone(),
+                                    name: name.clone(),
+                                },
+                                ty,
+                                span,
+                            )),
+                        };
                     }
                     if let Some((source_module, original_name, ty, mutable)) =
                         self.imported_globals.get(name)
+                        && !*mutable
                     {
-                        if !*mutable {
-                            return TirPattern::ConstantValue {
-                                expr: Box::new(TirExpr::new(
-                                    TirExprKind::GlobalVarGet {
-                                        module_source: source_module.clone(),
-                                        name: original_name.clone(),
-                                    },
-                                    *ty,
-                                    span,
-                                )),
-                            };
-                        }
+                        return TirPattern::ConstantValue {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::GlobalVarGet {
+                                    module_source: source_module.clone(),
+                                    name: original_name.clone(),
+                                },
+                                *ty,
+                                span,
+                            )),
+                        };
                     }
                 }
                 let is_mut = matches!(pattern, Pattern::MutIdent(_));
@@ -2154,7 +2153,10 @@ fn collect_pattern_bindings_with_index_inner(
                 collect_pattern_bindings_with_index_inner(first, out);
             }
         }
-        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } => {}
+        TirPattern::Wildcard
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::ConstantValue { .. } => {}
     }
 }
 
@@ -2186,6 +2188,9 @@ fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) {
                 remap_pattern_local(p, from, to);
             }
         }
-        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } => {}
+        TirPattern::Wildcard
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::ConstantValue { .. } => {}
     }
 }

@@ -368,13 +368,19 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Tuple(sub_patterns) => sub_patterns.iter().any(|p| {
                 matches!(
                     p,
-                    TirPattern::Literal(_) | TirPattern::Variant { .. } | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. }
+                    TirPattern::Literal(_)
+                        | TirPattern::Variant { .. }
+                        | TirPattern::Enum { .. }
+                        | TirPattern::ConstantValue { .. }
                 )
             }),
             TirPattern::Struct { fields, .. } => fields.iter().any(|f| {
                 matches!(
                     f.pattern,
-                    TirPattern::Literal(_) | TirPattern::Variant { .. } | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. }
+                    TirPattern::Literal(_)
+                        | TirPattern::Variant { .. }
+                        | TirPattern::Enum { .. }
+                        | TirPattern::ConstantValue { .. }
                 )
             }),
             _ => false,
@@ -2115,7 +2121,9 @@ impl<'a> PatternLowerer<'a> {
                 )
             }
             TirPattern::ConstantValue { .. } => {
-                panic!("ConstantValue pattern should have been lowered to binding + guard before pattern_to_condition_and_bindings");
+                panic!(
+                    "ConstantValue pattern should have been lowered to binding + guard before pattern_to_condition_and_bindings"
+                );
             }
             TirPattern::Or(alternatives) => {
                 // Or pattern: combine conditions with logical OR
