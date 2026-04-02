@@ -76,17 +76,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ctx.active_labels.push(lb.label.clone());
 
                 ctx.enter_scope();
-                let tir_block = self.resolve_block(&lb.block, ctx, None);
+                let tir_block = self.resolve_block(&lb.block, ctx, expected_type);
                 ctx.exit_scope();
 
                 ctx.active_labels.pop();
                 let target = ctx.labeled_block_targets.pop().unwrap();
 
-                let result_type = if target.break_types.is_empty() {
-                    TypeTable::UNIT
-                } else {
+                let result_type = if !target.break_types.is_empty() {
                     // TODO: type unification for multiple breaks
                     target.break_types[0]
+                } else if let Some(ty) = expected_type {
+                    ty
+                } else {
+                    TypeTable::UNIT
                 };
 
                 TirExpr::new(

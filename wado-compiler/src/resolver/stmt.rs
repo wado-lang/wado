@@ -47,6 +47,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     stmts.extend(self.resolve_if_stmt_with_expected(if_stmt, ctx, expected_type));
                     continue;
                 }
+                if let Stmt::Match(match_expr) = s {
+                    let tir = self.resolve_match_expr(match_expr, ctx, expected_type);
+                    stmts.push(TirStmt::new(TirStmtKind::Expr(tir), match_expr.span));
+                    continue;
+                }
+                if let Stmt::LabeledBlock(labeled_block) = s {
+                    stmts.push(self.resolve_labeled_block_with_expected(
+                        labeled_block,
+                        ctx,
+                        expected_type,
+                    ));
+                    continue;
+                }
             }
             stmts.extend(self.resolve_stmt(s, ctx));
         }
@@ -89,9 +102,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         labeled_block: &ast::LabeledBlockStmt,
         ctx: &mut FunctionContext,
     ) -> TirStmt {
+        self.resolve_labeled_block_with_expected(labeled_block, ctx, None)
+    }
+
+    fn resolve_labeled_block_with_expected(
+        &mut self,
+        labeled_block: &ast::LabeledBlockStmt,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirStmt {
         ctx.active_labels.push(labeled_block.label.clone());
         // resolve_block already handles scope entry/exit
-        let block = self.resolve_block(&labeled_block.block, ctx, None);
+        let block = self.resolve_block(&labeled_block.block, ctx, expected_type);
         ctx.active_labels.pop();
 
         TirStmt::new(
