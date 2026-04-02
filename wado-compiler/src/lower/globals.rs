@@ -569,7 +569,7 @@ fn renumber_locals_in_stmt(stmt: &mut TirStmt, offset: u32) {
 fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
     match pattern {
         TirPattern::Binding { local_index, .. } => *local_index += offset,
-        TirPattern::Tuple(patterns) => {
+        TirPattern::Tuple(patterns, _) => {
             for p in patterns {
                 renumber_locals_in_pattern(p, offset);
             }

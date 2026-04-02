@@ -162,9 +162,13 @@ pub fn strip_suffix(s: &String, suffix: &String) -> String {
 }
 
 pub fn is_simple_cst_group(alts: &Array<Alternative>) -> bool {
-    if alts.len() < 2 { return false; }
+    if alts.len() < 2 {
+        return false;
+    }
     for let alt of alts {
-        if alt.elements.len() != 1 { return false; }
+        if alt.elements.len() != 1 {
+            return false;
+        }
         if let RuleRef(_) = alt.elements[0] {
             // ok
         } else {
@@ -177,7 +181,9 @@ pub fn is_simple_cst_group(alts: &Array<Alternative>) -> bool {
 pub fn group_variant_type_name(alts: &Array<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i > 0 { result.push_str("Or"); }
+        if i > 0 {
+            result.push_str("Or");
+        }
         if let RuleRef(name) = &alts[i].elements[0] {
             result.push_str(&to_pascal_case(name));
         }
@@ -189,7 +195,9 @@ pub fn group_variant_type_name(alts: &Array<Alternative>) -> String {
 pub fn group_field_base_name(alts: &Array<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i > 0 { result.push_str("_or_"); }
+        if i > 0 {
+            result.push_str("_or_");
+        }
         if let RuleRef(name) = &alts[i].elements[0] {
             result.push_str(&to_snake_case(name));
         }
@@ -208,9 +216,13 @@ pub fn group_case_name(alt: &Alternative) -> String {
 /// A token-only group: multiple alternatives, each with a single TokenRef or Literal.
 /// Example: (K_INSERT | K_REPLACE)
 pub fn is_token_only_group(alts: &Array<Alternative>) -> bool {
-    if alts.len() < 2 { return false; }
+    if alts.len() < 2 {
+        return false;
+    }
     for let alt of alts {
-        if alt.elements.len() != 1 { return false; }
+        if alt.elements.len() != 1 {
+            return false;
+        }
         if let TokenRef(_) | Literal(_) = alt.elements[0] {
             // ok
         } else {
@@ -223,7 +235,9 @@ pub fn is_token_only_group(alts: &Array<Alternative>) -> bool {
 /// A single-alternative multi-element group: exactly 1 alt with 2+ elements.
 /// Example: (',' pair), (';'+ sql_stmt)
 pub fn is_single_alt_group(alts: &Array<Alternative>) -> bool {
-    if alts.len() != 1 { return false; }
+    if alts.len() != 1 {
+        return false;
+    }
     return alts[0].elements.len() >= 2;
 }
 
@@ -260,7 +274,9 @@ pub fn single_alt_group_type_name(alt: &Alternative) -> String {
 pub fn single_alt_group_field_name(alt: &Alternative) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
-        if i > 0 { result.push_str("_"); }
+        if i > 0 {
+            result.push_str("_");
+        }
         result.push_str(&element_base_name(&alt.elements[i]));
     }
     return result;
@@ -271,7 +287,9 @@ pub fn single_alt_group_field_name(alt: &Alternative) -> String {
 pub fn token_group_field_name(alts: &Array<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i > 0 { result.push_str("_or_"); }
+        if i > 0 {
+            result.push_str("_or_");
+        }
         result.push_str(&element_base_name(&alts[i].elements[0]));
     }
     return result;

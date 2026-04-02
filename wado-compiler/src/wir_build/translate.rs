@@ -5748,7 +5748,7 @@ impl FunctionTranslator<'_, '_> {
         let value_instr = self.maybe_value_copy(value, value_instr);
 
         match pattern {
-            TirPattern::Tuple(patterns) => {
+            TirPattern::Tuple(patterns, _) => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, value.type_id);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
                     let mut instrs = Vec::new();
@@ -5846,7 +5846,7 @@ impl FunctionTranslator<'_, '_> {
                     TirPattern::Wildcard
                         | TirPattern::Binding { .. }
                         | TirPattern::Struct { .. }
-                        | TirPattern::Tuple(_)
+                        | TirPattern::Tuple(_, _)
                 ) && arm.guard.is_none();
                 // When the pattern is trivially true (Binding/Wildcard) and a guard
                 // is present, we fold into a single If instead of nested 2-level If,
@@ -5926,7 +5926,7 @@ impl FunctionTranslator<'_, '_> {
                 TirPattern::Wildcard
                     | TirPattern::Binding { .. }
                     | TirPattern::Struct { .. }
-                    | TirPattern::Tuple(_)
+                    | TirPattern::Tuple(_, _)
             );
 
             if is_irrefutable && arm.guard.is_none() {
@@ -6156,7 +6156,7 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32Const(0)
                 }
             }
-            TirPattern::Tuple(_) | TirPattern::Struct { .. } => {
+            TirPattern::Tuple(_, _) | TirPattern::Struct { .. } => {
                 // Tuple/struct patterns: always irrefutable
                 WirInstr::I32Const(1)
             }
@@ -6377,7 +6377,7 @@ impl FunctionTranslator<'_, '_> {
                                     value: Box::new(value),
                                 });
                             }
-                        } else if let TirPattern::Tuple(sub_patterns) = binding {
+                        } else if let TirPattern::Tuple(sub_patterns, _) = binding {
                             // Tuple payload: payload_i is a ref to a tuple struct.
                             // Extract each tuple field into the corresponding local.
                             if let Some(tuple_type_id) =
@@ -6453,7 +6453,7 @@ impl FunctionTranslator<'_, '_> {
             | TirPattern::ConstantValue { .. } => {
                 // No bindings needed
             }
-            TirPattern::Tuple(sub_patterns) => {
+            TirPattern::Tuple(sub_patterns, _) => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
                     let element_types =
@@ -7110,7 +7110,7 @@ fn pattern_has_bindings(pattern: &TirPattern) -> bool {
         | TirPattern::Enum { .. }
         | TirPattern::ConstantValue { .. } => false,
         TirPattern::Variant { bindings, .. } => bindings.iter().any(pattern_has_bindings),
-        TirPattern::Tuple(subs) => subs.iter().any(pattern_has_bindings),
+        TirPattern::Tuple(subs, _) => subs.iter().any(pattern_has_bindings),
         TirPattern::Struct { fields, .. } => {
             fields.iter().any(|f| pattern_has_bindings(&f.pattern))
         }

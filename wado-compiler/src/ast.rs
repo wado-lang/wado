@@ -1043,7 +1043,7 @@ pub enum Pattern {
     MutIdent(String),
     Literal(Literal),
     Wildcard,
-    Tuple(Vec<Pattern>),
+    Tuple(Vec<Pattern>, /* has_rest */ bool),
     /// Variant pattern: `Some(x)` or `None`
     Variant {
         variant_name: String,

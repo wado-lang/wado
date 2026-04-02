@@ -257,7 +257,9 @@ fn desugar_pattern(p: &Pattern) -> Pattern {
         Pattern::MutIdent(name) => Pattern::MutIdent(name.clone()),
         Pattern::Literal(lit) => Pattern::Literal(lit.clone()),
         Pattern::Wildcard => Pattern::Wildcard,
-        Pattern::Tuple(patterns) => Pattern::Tuple(patterns.iter().map(desugar_pattern).collect()),
+        Pattern::Tuple(patterns, has_rest) => {
+            Pattern::Tuple(patterns.iter().map(desugar_pattern).collect(), *has_rest)
+        }
         Pattern::Variant {
             variant_name,
             bindings,
@@ -1575,11 +1577,12 @@ fn strip_ns_from_pattern(pattern: Pattern, ctx: &DesugarContext) -> Pattern {
                 span,
             }
         }
-        Pattern::Tuple(patterns) => Pattern::Tuple(
+        Pattern::Tuple(patterns, has_rest) => Pattern::Tuple(
             patterns
                 .into_iter()
                 .map(|p| strip_ns_from_pattern(p, ctx))
                 .collect(),
+            has_rest,
         ),
         _ => pattern,
     }

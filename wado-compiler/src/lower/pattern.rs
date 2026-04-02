@@ -330,7 +330,7 @@ impl<'a> PatternLowerer<'a> {
     ) -> bool {
         // Pattern must be a flat tuple with only Binding or Wildcard
         let patterns = match pattern {
-            TirPattern::Tuple(patterns) => patterns,
+            TirPattern::Tuple(patterns, _) => patterns,
             _ => return false,
         };
 
@@ -365,7 +365,7 @@ impl<'a> PatternLowerer<'a> {
     /// Check if a pattern contains any refutable sub-patterns that need extraction.
     fn pattern_has_refutable_sub_patterns(pattern: &TirPattern) -> bool {
         match pattern {
-            TirPattern::Tuple(sub_patterns) => sub_patterns.iter().any(|p| {
+            TirPattern::Tuple(sub_patterns, _) => sub_patterns.iter().any(|p| {
                 matches!(
                     p,
                     TirPattern::Literal(_)
@@ -408,7 +408,7 @@ impl<'a> PatternLowerer<'a> {
         let mut body_prefix_stmts: Vec<TirStmt> = Vec::new();
 
         match &mut arm.pattern {
-            TirPattern::Tuple(sub_patterns) => {
+            TirPattern::Tuple(sub_patterns, _) => {
                 let element_types = match type_table.get(scrutinee_type) {
                     ResolvedType::Tuple(types) => types.clone(),
                     _ => vec![TypeTable::UNKNOWN; sub_patterns.len()],
@@ -1065,7 +1065,7 @@ impl<'a> PatternLowerer<'a> {
         // Match ergonomics for let patterns: if the value is a reference type
         // but the pattern is a compound (tuple/struct), deref the value first.
         let value = match pattern {
-            TirPattern::Tuple(_) | TirPattern::Struct { .. } => {
+            TirPattern::Tuple(_, _) | TirPattern::Struct { .. } => {
                 let mut current = value;
                 loop {
                     match type_table.get(current.type_id).clone() {
@@ -1087,7 +1087,7 @@ impl<'a> PatternLowerer<'a> {
         };
 
         match pattern {
-            TirPattern::Tuple(sub_patterns) => {
+            TirPattern::Tuple(sub_patterns, _) => {
                 // Allocate temp local for the tuple
                 let tuple_temp_index = self.alloc_local(value.type_id);
                 let tuple_temp_name = self.next_temp_name();
@@ -1392,7 +1392,7 @@ impl<'a> PatternLowerer<'a> {
                 );
                 out.push(let_stmt);
             }
-            TirPattern::Tuple(sub_patterns) => {
+            TirPattern::Tuple(sub_patterns, _) => {
                 // Nested tuple - allocate temp and recurse
                 let tuple_temp_index = self.alloc_local(value.type_id);
                 let tuple_temp_name = self.next_temp_name();
@@ -2037,7 +2037,7 @@ impl<'a> PatternLowerer<'a> {
                     binding_stmts,
                 )
             }
-            TirPattern::Tuple(sub_patterns) => {
+            TirPattern::Tuple(sub_patterns, _) => {
                 // Extract tuple element types
                 let scrutinee_type_id = scrutinee.type_id;
                 let element_types = match type_table.get(scrutinee_type_id) {

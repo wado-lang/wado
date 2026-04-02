@@ -323,7 +323,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let_stmt.span,
                 )
             }
-            ast::Pattern::Tuple(_) => {
+            ast::Pattern::Tuple(_, _) => {
                 // Tuple destructuring: let [a, b] = tuple_expr;
                 let tir_pattern = self.resolve_let_pattern(
                     &let_stmt.pattern,
@@ -430,7 +430,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     fn check_irrefutable_pattern(&mut self, pattern: &ast::Pattern, span: Span) -> bool {
         match pattern {
             Pattern::Ident(_) | Pattern::MutIdent(_) | Pattern::Wildcard => true,
-            Pattern::Tuple(patterns) => patterns
+            Pattern::Tuple(patterns, _) => patterns
                 .iter()
                 .all(|p| self.check_irrefutable_pattern(p, span)),
             Pattern::Struct { fields, .. } => fields
@@ -493,7 +493,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Match ergonomics for let patterns: peel references from the type
         // when the pattern is a compound (tuple/struct) pattern.
         let (peeled_type, ref_binding) = match pattern {
-            ast::Pattern::Tuple(_) | ast::Pattern::Struct { .. } => {
+            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
                 let mut current = type_id;
                 let mut rb = RefBinding::None;
                 while let resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) =
@@ -550,7 +550,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     type_id: binding_type,
                 }
             }
-            ast::Pattern::Tuple(patterns) => {
+            ast::Pattern::Tuple(patterns, has_rest) => {
                 // Get element types from the tuple type
                 let elem_types = {
                     let type_table = self.type_table.borrow();
@@ -568,7 +568,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 };
 
                 // Check length
-                if patterns.len() != elem_types.len() {
+                if *has_rest {
+                    if patterns.len() > elem_types.len() {
+                        let _ = self.logger.error(TypeError::TypeMismatch {
+                            expected: format!("tuple with at least {} elements", patterns.len()),
+                            found: format!("tuple with {} elements", elem_types.len()),
+                            span,
+                        });
+                    }
+                } else if patterns.len() != elem_types.len() {
                     let _ = self.logger.error(TypeError::TypeMismatch {
                         expected: format!("tuple with {} elements", elem_types.len()),
                         found: format!("pattern with {} elements", patterns.len()),
@@ -589,7 +597,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     })
                     .collect();
 
-                TirPattern::Tuple(tir_patterns)
+                TirPattern::Tuple(tir_patterns, *has_rest)
             }
             ast::Pattern::Struct {
                 type_name,
@@ -1057,7 +1065,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 };
                 TirPattern::Literal(tir_lit)
             }
-            Pattern::Tuple(patterns) => {
+            Pattern::Tuple(patterns, has_rest) => {
                 // For tuple patterns, extract element types
                 let element_types = if let ResolvedType::Tuple(types) =
                     self.type_table.borrow().get(scrutinee_type).clone()
@@ -1076,7 +1084,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     )
                     .map(|(p, &ty)| self.resolve_if_pattern_inner(p, ty, ctx, span, ref_binding))
                     .collect();
-                TirPattern::Tuple(resolved)
+                TirPattern::Tuple(resolved, *has_rest)
             }
             Pattern::Variant {
                 variant_name,
@@ -1788,7 +1796,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             span,
                         ));
                     }
-                    Pattern::Tuple(_) | Pattern::Struct { .. } => {
+                    Pattern::Tuple(_, _) | Pattern::Struct { .. } => {
                         let tir_pattern = self.resolve_let_pattern(
                             &for_of.binding,
                             elem_type,
@@ -2133,7 +2141,7 @@ fn collect_pattern_bindings_with_index_inner(
         } => {
             out.push((name.clone(), *local_index, *type_id));
         }
-        TirPattern::Tuple(patterns) => {
+        TirPattern::Tuple(patterns, _) => {
             for p in patterns {
                 collect_pattern_bindings_with_index_inner(p, out);
             }
@@ -2168,7 +2176,7 @@ fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) {
                 *local_index = to;
             }
         }
-        TirPattern::Tuple(patterns) => {
+        TirPattern::Tuple(patterns, _) => {
             for p in patterns {
                 remap_pattern_local(p, from, to);
             }

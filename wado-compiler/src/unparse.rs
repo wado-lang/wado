@@ -2255,13 +2255,19 @@ impl<'a> Unparser<'a> {
             }
             Pattern::Literal(lit) => self.unparse_literal(lit),
             Pattern::Wildcard => self.output.push('_'),
-            Pattern::Tuple(patterns) => {
+            Pattern::Tuple(patterns, has_rest) => {
                 self.output.push('[');
                 for (i, p) in patterns.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
                     self.unparse_pattern(p);
+                }
+                if *has_rest {
+                    if !patterns.is_empty() {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str("..");
                 }
                 self.output.push(']');
             }
@@ -2331,13 +2337,19 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(name);
             }
             Pattern::Wildcard => self.output.push('_'),
-            Pattern::Tuple(patterns) => {
+            Pattern::Tuple(patterns, has_rest) => {
                 self.output.push('[');
                 for (i, p) in patterns.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
                     self.unparse_let_pattern(p);
+                }
+                if *has_rest {
+                    if !patterns.is_empty() {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str("..");
                 }
                 self.output.push(']');
             }
@@ -3298,13 +3310,19 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
         }
         Pattern::Literal(lit) => unparse_literal_into(lit, output),
         Pattern::Wildcard => output.push('_'),
-        Pattern::Tuple(pats) => {
+        Pattern::Tuple(pats, has_rest) => {
             output.push('[');
             for (i, p) in pats.iter().enumerate() {
                 if i > 0 {
                     output.push_str(", ");
                 }
                 unparse_pattern_into(p, output);
+            }
+            if *has_rest {
+                if !pats.is_empty() {
+                    output.push_str(", ");
+                }
+                output.push_str("..");
             }
             output.push(']');
         }
@@ -4015,13 +4033,19 @@ impl<'a> TirUnparser<'a> {
                     self.output.push_str("null");
                 }
             },
-            TirPattern::Tuple(patterns) => {
+            TirPattern::Tuple(patterns, has_rest) => {
                 self.output.push('[');
                 for (i, p) in patterns.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
                     self.unparse_tir_pattern(p);
+                }
+                if *has_rest {
+                    if !patterns.is_empty() {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str("..");
                 }
                 self.output.push(']');
             }
@@ -4557,13 +4581,19 @@ impl<'a> TirUnparser<'a> {
                     TirLiteralPattern::Null => self.output.push_str("null"),
                 }
             }
-            TirPattern::Tuple(patterns) => {
+            TirPattern::Tuple(patterns, has_rest) => {
                 self.output.push('(');
                 for (i, p) in patterns.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
                     self.unparse_pattern(p);
+                }
+                if *has_rest {
+                    if !patterns.is_empty() {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str("..");
                 }
                 self.output.push(')');
             }

@@ -83,9 +83,12 @@ pub struct CstNode {
 /// Visitor trait for walking typed CST nodes.
 /// Default methods are no-ops; override to add behavior.
 pub trait Visitor {
-    fn enter_rule(&mut self, name: &String, span: &Span) {}
-    fn exit_rule(&mut self, name: &String, span: &Span) {}
-    fn visit_token(&mut self, token: &Token) {}
+    fn enter_rule(&mut self, name: &String, span: &Span) {
+    }
+    fn exit_rule(&mut self, name: &String, span: &Span) {
+    }
+    fn visit_token(&mut self, token: &Token) {
+    }
 }
 
 /// TreeRecorder is a Visitor that records events for building a CstNode tree.
@@ -134,7 +137,9 @@ fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
         *pos += 1;
         let mut children: Array<CstChild> = [];
         loop {
-            if *pos >= events.len() { break; }
+            if *pos >= events.len() {
+                break;
+            }
             let ev = events[*pos];
             if let Exit = ev {
                 *pos += 1;

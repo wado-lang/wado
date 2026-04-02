@@ -90,9 +90,9 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
             let child = strip_dead_consume(c.child);
             if let Backtrack(_) = child {
                 // Consuming prefix didn't help — return Backtrack with original alts.
-                child
+                child;
             } else {
-                PredictionNode::Consume(ConsumeNode { element: c.element, child })
+                PredictionNode::Consume(ConsumeNode { element: c.element, child });
             }
         },
         Dispatch(d) => {
@@ -103,7 +103,7 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
                     child: strip_dead_consume(b.child),
                 });
             }
-            PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches })
+            PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches });
         },
         _ => node,
     };
@@ -217,7 +217,11 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
                     let mut stv: Array<String> = [];
                     if !ctx.rule_is_single_token(&inner_name, &mut stv) && c.return_stack.len() < 1 {
                         let inner_rule = ctx.find_rule(&inner_name);
-                        let inner_alt_count = if let Some(r) = inner_rule { r.alternatives.len() } else { 0 };
+                        let inner_alt_count = if let Some(r) = inner_rule {
+                            r.alternatives.len();
+                        } else {
+                            0;
+                        };
                         if inner_alt_count <= 8 {
                             entered = true;
                             let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
@@ -244,7 +248,12 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
                 }
             }
             if !entered {
-                results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack });
+                results.push(SllConfig {
+                    alt_index: c.alt_index,
+                    elements: c.elements,
+                    pos: c.pos + 1,
+                    return_stack: c.return_stack,
+                });
             }
         }
         // Also try skipping: advance past all consecutive nullables non-recursively.
@@ -252,7 +261,12 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
         while skip_pos < c.elements.len() && is_nullable(&c.elements[skip_pos]) {
             let mut v: Array<String> = [];
             if first_contains(&ctx.first_of_element(&c.elements[skip_pos], &mut v), token) {
-                results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
+                results.push(SllConfig {
+                    alt_index: c.alt_index,
+                    elements: c.elements,
+                    pos: skip_pos + 1,
+                    return_stack: c.return_stack,
+                });
             }
             skip_pos += 1;
         }
@@ -260,26 +274,51 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
             let skipped_elem = &c.elements[skip_pos];
             if let TokenRef(name) = skipped_elem {
                 if `TK_{name}` == *token {
-                    results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
+                    results.push(SllConfig {
+                        alt_index: c.alt_index,
+                        elements: c.elements,
+                        pos: skip_pos + 1,
+                        return_stack: c.return_stack,
+                    });
                 }
             } else if let Literal(text) = skipped_elem {
                 if literal_const_name(&text) == *token {
-                    results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
+                    results.push(SllConfig {
+                        alt_index: c.alt_index,
+                        elements: c.elements,
+                        pos: skip_pos + 1,
+                        return_stack: c.return_stack,
+                    });
                 }
             } else if let RuleRef(name) = skipped_elem {
                 let mut v: Array<String> = [];
                 if first_contains(&ctx.first_of_rule(&name, &mut v), token) {
                     let mut stv: Array<String> = [];
                     if ctx.rule_is_single_token(&name, &mut stv) {
-                        results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
+                        results.push(SllConfig {
+                            alt_index: c.alt_index,
+                            elements: c.elements,
+                            pos: skip_pos + 1,
+                            return_stack: c.return_stack,
+                        });
                     } else {
-                        results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: -1, return_stack: c.return_stack });
+                        results.push(SllConfig {
+                            alt_index: c.alt_index,
+                            elements: c.elements,
+                            pos: -1,
+                            return_stack: c.return_stack,
+                        });
                     }
                 }
             } else {
                 let mut v: Array<String> = [];
                 if first_contains(&ctx.first_of_element(skipped_elem, &mut v), token) {
-                    results.push(SllConfig { alt_index: c.alt_index, elements: c.elements, pos: skip_pos + 1, return_stack: c.return_stack });
+                    results.push(SllConfig {
+                        alt_index: c.alt_index,
+                        elements: c.elements,
+                        pos: skip_pos + 1,
+                        return_stack: c.return_stack,
+                    });
                 }
             }
         }
@@ -289,13 +328,23 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
     // Terminal: if token matches, advance past this element.
     if let TokenRef(name) = elem {
         if `TK_{name}` == *token {
-            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
+            return [SllConfig {
+                    alt_index: c.alt_index,
+                    elements: c.elements,
+                    pos: c.pos + 1,
+                    return_stack: c.return_stack,
+                }];
         }
         return [];
     }
     if let Literal(text) = elem {
         if literal_const_name(&text) == *token {
-            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
+            return [SllConfig {
+                    alt_index: c.alt_index,
+                    elements: c.elements,
+                    pos: c.pos + 1,
+                    return_stack: c.return_stack,
+                }];
         }
         return [];
     }
@@ -312,7 +361,12 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
         let mut st_visiting: Array<String> = [];
         if ctx.rule_is_single_token(&name, &mut st_visiting) {
             // Single-token rule: safe to advance, element position == token position.
-            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
+            return [SllConfig {
+                    alt_index: c.alt_index,
+                    elements: c.elements,
+                    pos: c.pos + 1,
+                    return_stack: c.return_stack,
+                }];
         }
         // Multi-token rule: token matches FIRST but we can't advance past it.
         // Return config with pos = -1 as a sentinel meaning "opaque match".
@@ -328,7 +382,12 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
             str_set_insert_all(&mut group_first, &af);
         }
         if group_first.contains(*token) {
-            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
+            return [SllConfig {
+                    alt_index: c.alt_index,
+                    elements: c.elements,
+                    pos: c.pos + 1,
+                    return_stack: c.return_stack,
+                }];
         }
         return [];
     }
@@ -340,7 +399,12 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
         inner_first = ctx.first_of_element(&rep.element, &mut visiting);
         if first_contains(&inner_first, token) {
             // Advance past the repeat element (simplified: treat as consuming 1 token).
-            return [SllConfig { alt_index: c.alt_index, elements: c.elements, pos: c.pos + 1, return_stack: c.return_stack }];
+            return [SllConfig {
+                    alt_index: c.alt_index,
+                    elements: c.elements,
+                    pos: c.pos + 1,
+                    return_stack: c.return_stack,
+                }];
         }
         return [];
     }
@@ -821,7 +885,7 @@ fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
                     return false;
                 }
             }
-            true
+            true;
         },
         // Consume nodes: check same element kind and recurse on child.
         [Consume(ca), Consume(cb)] => element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child),
@@ -1922,16 +1986,7 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext
 /// (e.g. `(K_IF K_NOT K_EXISTS)?`), uses multi-token lookahead condition.
 /// For groups starting with rule refs (e.g. `(database_name '.')?`), uses
 /// backtracking to restore position on failure while still capturing fields.
-fn gen_storable_optional(
-    w: &mut CodeWriter,
-    inner: &Element,
-    ctx: &mut GenContext,
-    first: &Array<String>,
-    name_counts: &mut Array<[String, i32]>,
-    type_str: &String,
-    opt_name: &String,
-    field_name: &String,
-) {
+fn gen_storable_optional(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, first: &Array<String>, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
     let la_depth = optional_lookahead_depth(inner);
     if la_depth >= 1 {
         // Multi-token lookahead: safe to use ? since tokens are confirmed
@@ -1971,15 +2026,7 @@ fn gen_storable_optional(
 /// computes a lookahead signature for each, and generates an if/else-if chain.
 /// Each branch parses the relevant elements and constructs the struct with
 /// null for absent optional fields.
-fn gen_storable_optional_with_lookahead(
-    w: &mut CodeWriter,
-    inner: &Element,
-    ctx: &mut GenContext,
-    name_counts: &mut Array<[String, i32]>,
-    type_str: &String,
-    opt_name: &String,
-    field_name: &String,
-) {
+fn gen_storable_optional_with_lookahead(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
     if let Group(alts) = inner {
         if alts.len() != 1 {
             return;
@@ -2078,16 +2125,7 @@ fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &m
 ///       }
 ///       result
 ///   } else { null };
-fn gen_storable_optional_with_backtrack(
-    w: &mut CodeWriter,
-    inner: &Element,
-    ctx: &mut GenContext,
-    first: &Array<String>,
-    name_counts: &mut Array<[String, i32]>,
-    type_str: &String,
-    opt_name: &String,
-    field_name: &String,
-) {
+fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, first: &Array<String>, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
     w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(first)}`);
 
     let saved = dedup_name(&"opt_saved", name_counts);
@@ -2486,16 +2524,18 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                             let r_var = dedup_name(&"opt_r", name_counts);
                             w.line(`let {r_var} = {fn_name}(p);`);
                             w.line(`if let Err(_) = {r_var} \{ p.pos = {saved}; break {bt_label}; \}`);
-                            w.line(`{opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({r_var}.unwrap()));`);
+                            w.line(
+                                `{opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({r_var}.unwrap()));`,
+                            );
                             w.line(`{done} = true;`);
-                            w.end(); // label
-                            w.end(); // if !done
+                            w.end();  // label
+                            w.end();  // if !done
                         }
                     }
                 }
             }
         }
-        w.end(); // if/else if chain
+        w.end();  // if/else if chain
 
         w.begin(`if let None = {opt_var}`);
         let first_alt_name = group_case_name(&alts[0]);
@@ -2580,14 +2620,14 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
                         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved}; break {bt_label}; \}`);
                         w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{case_name}({r_var}.unwrap()));`);
                         w.line(`{done} = true;`);
-                        w.end(); // label
-                        w.end(); // if !done
+                        w.end();  // label
+                        w.end();  // if !done
                     }
                 }
             }
         }
     }
-    w.end(); // if/else if chain
+    w.end();  // if/else if chain
 
     w.line(`let {var_name} = {inner_var};`);
 }
