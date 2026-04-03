@@ -1,0 +1,11 @@
+use lib from "./sub/cross_module_struct_tuple_field_lib.wado";
+
+test "access tuple field from non-imported struct" {
+    let tagged = lib::make_tagged();
+    let [x, y] = tagged.coords;
+    assert x == 10;
+    assert y == 20;
+}
+
+__DATA__
+{"test": {}}
