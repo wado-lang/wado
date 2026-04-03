@@ -191,7 +191,7 @@ impl BuiltinRegistry {
                     .collect();
                 type_table
                     .borrow_mut()
-                    .intern(ResolvedType::Tuple(element_types))
+                    .make_tuple(element_types)
             }
             _ => TypeTable::UNIT, // Other types default to UNIT
         }

@@ -3584,12 +3584,12 @@ fn flat_types_from_type_id_into(
                     out.push(cm_abi::CmValType::I32); // ptr
                     out.push(cm_abi::CmValType::I32); // len
                 }
+                "Tuple" => {
+                    for &elem in type_args {
+                        flat_types_from_type_id_into(elem, out, tir_modules, type_table);
+                    }
+                }
                 _ => out.push(cm_abi::CmValType::I32),
-            }
-        }
-        ResolvedType::Tuple(elems) => {
-            for &elem in elems {
-                flat_types_from_type_id_into(elem, out, tir_modules, type_table);
             }
         }
         ResolvedType::Newtype { base_type, .. } => {
@@ -4203,10 +4203,9 @@ fn synthesize_lift_from_flat_params(
             // Tuple: lift each element from consecutive flat params
             let mut total_consumed = 0;
             let mut elem_exprs = Vec::new();
-            let elem_type_ids = match type_table.get(target_type_id) {
-                crate::tir::ResolvedType::Tuple(ids) => ids.clone(),
-                _ => vec![target_type_id; elems.len()],
-            };
+            let elem_type_ids = type_table
+                .as_tuple(target_type_id)
+                .unwrap_or_else(|| vec![target_type_id; elems.len()]);
 
             for (i, elem_ty) in elems.iter().enumerate() {
                 let elem_tid = elem_type_ids.get(i).copied().unwrap_or(TypeTable::I32);
@@ -6829,10 +6828,7 @@ fn replace_wasi_derived_type_recursive(
         }
         Type::Tuple(elems) => {
             // Get the user's tuple field types
-            let tt = type_table.borrow();
-            if let crate::tir::ResolvedType::Tuple(user_elems) = tt.get(user_type) {
-                let user_elems = user_elems.clone();
-                drop(tt);
+            if let Some(user_elems) = type_table.borrow().as_tuple(user_type) {
                 for (wasi_elem, &user_elem) in elems.iter().zip(user_elems.iter()) {
                     replace_wasi_derived_type_recursive(adapter, wasi_elem, user_elem, type_table);
                 }

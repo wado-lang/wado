@@ -946,11 +946,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     Self::collect_cross_module_deps(*arg, type_table, out);
                 }
             }
-            ResolvedType::Tuple(elems) => {
-                for elem in elems {
-                    Self::collect_cross_module_deps(*elem, type_table, out);
-                }
-            }
             _ => {}
         }
     }

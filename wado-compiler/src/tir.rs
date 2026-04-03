@@ -196,13 +196,6 @@ impl SubstitutionContext {
                 let new_inner = self.substitute(inner, type_table);
                 type_table.make_mut_ref(new_inner)
             }
-            ResolvedType::Tuple(elems) => {
-                let new_elems: Vec<TypeId> = elems
-                    .iter()
-                    .map(|&e| self.substitute(e, type_table))
-                    .collect();
-                type_table.make_tuple(new_elems)
-            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -399,7 +392,6 @@ pub enum ResolvedType {
         /// Positional indices of parameters the function may store.
         stores: Vec<u32>,
     },
-    Tuple(Vec<TypeId>),
     Reactive(TypeId),
     /// Type parameter (e.g., `T` in `struct Box<T>`)
     /// Used before monomorphization; should be substituted with concrete types
@@ -836,7 +828,31 @@ impl TypeTable {
     }
 
     pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
-        self.intern(ResolvedType::Tuple(elements))
+        let module_source = self
+            .tuple_module_source
+            .clone()
+            .unwrap_or_else(|| ModuleSource::core("prelude"));
+        self.intern(ResolvedType::GenericInstance {
+            name: "Tuple".to_string(),
+            module_source,
+            type_args: elements,
+        })
+    }
+
+    /// Check if a type is a tuple (GenericInstance with name "Tuple").
+    pub fn is_tuple(&self, id: TypeId) -> bool {
+        matches!(self.get(id), ResolvedType::GenericInstance { name, .. } if name == "Tuple")
+    }
+
+    /// If the type is a tuple, return its element types.
+    pub fn as_tuple(&self, id: TypeId) -> Option<Vec<TypeId>> {
+        if let ResolvedType::GenericInstance { name, type_args, .. } = self.get(id)
+            && name == "Tuple"
+        {
+            Some(type_args.clone())
+        } else {
+            None
+        }
     }
 
     pub fn make_function(
@@ -976,8 +992,7 @@ impl TypeTable {
 
     /// Find a tuple type with the given element types.
     pub fn find_tuple(&self, elems: &[TypeId]) -> Option<TypeId> {
-        let key = ResolvedType::Tuple(elems.to_vec());
-        self.intern_map.get(&key).copied()
+        self.find_generic_instance("Tuple", elems)
     }
 
     /// Find a generic instance type with the given name and type args.
@@ -1295,7 +1310,6 @@ impl TypeTable {
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::Reactive(inner) => self.contains_unknown(*inner),
-            ResolvedType::Tuple(elems) => elems.iter().any(|e| self.contains_unknown(*e)),
             ResolvedType::Function {
                 params,
                 return_type,
@@ -1324,7 +1338,6 @@ impl TypeTable {
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::Reactive(inner) => self.contains_type_param(*inner),
-            ResolvedType::Tuple(elems) => elems.iter().any(|e| self.contains_type_param(*e)),
             ResolvedType::Function {
                 params,
                 return_type,
@@ -1351,10 +1364,6 @@ impl TypeTable {
             ResolvedType::Error => "error".to_string(),
             ResolvedType::BuiltinArray(elem) => {
                 format!("builtin::array<{}>", self.type_name(*elem))
-            }
-            ResolvedType::Tuple(elems) => {
-                let elem_names: Vec<String> = elems.iter().map(|e| self.type_name(*e)).collect();
-                format!("[{}]", elem_names.join(", "))
             }
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::Enum { name, .. } => name.clone(),
@@ -1393,7 +1402,11 @@ impl TypeTable {
                 name, type_args, ..
             } => {
                 let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
-                format!("{}<{}>", name, arg_names.join(", "))
+                if name == "Tuple" {
+                    format!("[{}]", arg_names.join(", "))
+                } else {
+                    format!("{}<{}>", name, arg_names.join(", "))
+                }
             }
             ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
             ResolvedType::TypePack { name, .. } => format!("..{name}"),
@@ -1449,13 +1462,6 @@ impl TypeTable {
     pub fn mangle_type_name_resolving_newtypes(&self, id: TypeId) -> String {
         let base = self.resolve_newtype_base(id);
         match self.get(base) {
-            ResolvedType::Tuple(elems) => {
-                let names: Vec<String> = elems
-                    .iter()
-                    .map(|e| self.mangle_type_name_resolving_newtypes(*e))
-                    .collect();
-                crate::name::mangle_tuple_type(&names)
-            }
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
@@ -1479,17 +1485,6 @@ impl TypeTable {
     pub fn resolve_newtypes_deep(&mut self, id: TypeId) -> TypeId {
         let base = self.resolve_newtype_base(id);
         match self.get(base).clone() {
-            ResolvedType::Tuple(elems) => {
-                let resolved: Vec<TypeId> = elems
-                    .iter()
-                    .map(|e| self.resolve_newtypes_deep(*e))
-                    .collect();
-                if resolved == elems {
-                    base
-                } else {
-                    self.make_tuple(resolved)
-                }
-            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -1524,19 +1519,6 @@ impl TypeTable {
     pub fn resolve_newtypes_deep_readonly(&self, id: TypeId) -> TypeId {
         let base = self.resolve_newtype_base(id);
         match self.get(base) {
-            ResolvedType::Tuple(elems) => {
-                let resolved: Vec<TypeId> = elems
-                    .iter()
-                    .map(|e| self.resolve_newtypes_deep_readonly(*e))
-                    .collect();
-                if resolved == *elems {
-                    base
-                } else if let Some(existing) = self.find_tuple(&resolved) {
-                    existing
-                } else {
-                    id // Can't create new type, return original
-                }
-            }
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
@@ -1576,7 +1558,6 @@ impl TypeTable {
                 ..
             } => base.clone(),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
-            ResolvedType::Tuple(_) => "Tuple".to_string(),
             _ => self.mangle_type_name(id),
         }
     }
@@ -1623,14 +1604,7 @@ impl TypeTable {
     pub fn find_type_args_by_mangled_name(&self, mangled_name: &str) -> Option<Vec<TypeId>> {
         for tid in self.iter_type_ids() {
             if self.mangle_type_name(tid) == mangled_name {
-                return self.generic_type_args(tid).or_else(|| {
-                    // For Tuple types, the "type args" are the element types
-                    if let ResolvedType::Tuple(elems) = self.get(tid) {
-                        Some(elems.clone())
-                    } else {
-                        None
-                    }
-                });
+                return self.generic_type_args(tid);
             }
         }
         None
@@ -1663,11 +1637,6 @@ impl TypeTable {
                     name: name.clone(),
                     args,
                 }
-            }
-            ResolvedType::Tuple(elems) => {
-                let elem_names: Vec<String> =
-                    elems.iter().map(|t| self.mangle_type_name(*t)).collect();
-                TypeNameInfo::Tuple(elem_names)
             }
             ResolvedType::Function {
                 params,

@@ -142,8 +142,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Special case: tuple literal with Tuple type annotation
             if let ast::Expr::TupleLiteral(tuple_lit) = ast_value {
                 {
-                    let target_resolved = self.type_table.borrow().get(target_type).clone();
-                    if let ResolvedType::Tuple(expected_elem_types) = target_resolved {
+                    let tuple_elems = self.type_table.borrow().as_tuple(target_type);
+                    if let Some(expected_elem_types) = tuple_elems {
                         let elements: Vec<TirExpr> = tuple_lit
                             .elements
                             .iter()
@@ -579,8 +579,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Get element types from the tuple type
                 let elem_types = {
                     let type_table = self.type_table.borrow();
-                    if let ResolvedType::Tuple(elem_types) = type_table.get(type_id) {
-                        elem_types.clone()
+                    if let Some(elem_types) = type_table.as_tuple(type_id) {
+                        elem_types
                     } else {
                         // Error: expected tuple type
                         let _ = self.logger.error(TypeError::TypeMismatch {
@@ -1140,8 +1140,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Pattern::Tuple(patterns, has_rest) => {
                 // For tuple patterns, extract element types
-                let element_types = if let ResolvedType::Tuple(types) =
-                    self.type_table.borrow().get(scrutinee_type).clone()
+                let element_types = if let Some(types) =
+                    self.type_table.borrow().as_tuple(scrutinee_type)
                 {
                     types
                 } else {
@@ -1608,14 +1608,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Check if it's a tuple type
         let tuple_info = {
             let type_table = self.type_table.borrow();
-            match type_table.get(iterable_type_id) {
-                ResolvedType::Tuple(elems) => {
-                    let has_type_pack = elems
-                        .iter()
-                        .any(|e| matches!(type_table.get(*e), ResolvedType::TypePack { .. }));
-                    Some((elems.clone(), has_type_pack))
-                }
-                _ => None,
+            if let Some(elems) = type_table.as_tuple(iterable_type_id) {
+                let has_type_pack = elems
+                    .iter()
+                    .any(|e| matches!(type_table.get(*e), ResolvedType::TypePack { .. }));
+                Some((elems, has_type_pack))
+            } else {
+                None
             }
         };
         // TupleZip with nested TypePacks: treat as variadic so expansion
@@ -1702,20 +1701,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // For TupleZip: iterable is Tuple([Tuple([TypePack, TypePack])]), binding type is the inner tuple.
         let binding_type = {
             let type_table = self.type_table.borrow();
-            match type_table.get(iterable.type_id) {
-                ResolvedType::Tuple(elems) => {
-                    // Prefer a direct TypePack element
-                    if let Some(tp) = elems
-                        .iter()
-                        .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                    {
-                        *tp
-                    } else {
-                        // For TupleZip: use the first element type (all elements have the same shape)
-                        elems[0]
-                    }
+            if let Some(elems) = type_table.as_tuple(iterable.type_id) {
+                // Prefer a direct TypePack element
+                if let Some(tp) = elems
+                    .iter()
+                    .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
+                {
+                    *tp
+                } else {
+                    // For TupleZip: use the first element type (all elements have the same shape)
+                    elems[0]
                 }
-                _ => panic!("variadic for-of requires tuple iterable"),
+            } else {
+                panic!("variadic for-of requires tuple iterable")
             }
         };
 
@@ -1742,12 +1740,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // prepend destructuring assignments to the body.
         let mut destruct_stmts = Vec::new();
         if is_destructured && let crate::ast::Pattern::Tuple(tp, _) = &for_of.binding {
-            let tt = self.type_table.borrow();
-            let inner_elems = match tt.get(binding_type) {
-                ResolvedType::Tuple(elems) => elems.clone(),
-                _ => vec![binding_type],
-            };
-            drop(tt);
+            let inner_elems = self
+                .type_table
+                .borrow()
+                .as_tuple(binding_type)
+                .unwrap_or_else(|| vec![binding_type]);
             for (i, pat_elem) in tp.iter().enumerate() {
                 if let crate::ast::Pattern::Ident(name) = pat_elem {
                     let elem_type: TypeId =

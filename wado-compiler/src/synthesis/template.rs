@@ -871,8 +871,8 @@ fn trait_fmt_call(
         ResolvedType::Unit => {
             vec![write_str_stmt("()", fmt, tt, span)]
         }
-        ResolvedType::Tuple(ref elements) => {
-            let elements = elements.clone();
+        ResolvedType::GenericInstance { ref name, ref type_args, .. } if name == "Tuple" => {
+            let elements = type_args.clone();
             let mut stmts = Vec::new();
             stmts.push(write_str_stmt("[", fmt.clone(), tt, span));
             for (i, elem_type) in elements.iter().enumerate() {

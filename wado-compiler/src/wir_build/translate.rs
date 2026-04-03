@@ -473,7 +473,6 @@ impl FunctionTranslator<'_, '_> {
                 !(name == "Box" && module_source.is_core_internal())
             }
             ResolvedType::Variant { .. } => true,
-            ResolvedType::Tuple(elements) => !elements.is_empty(),
             _ => false,
         }
     }
@@ -6460,12 +6459,10 @@ impl FunctionTranslator<'_, '_> {
             TirPattern::Tuple(sub_patterns, _) => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
-                    let element_types =
-                        if let ResolvedType::Tuple(elements) = self.type_table.get(scrut_type) {
-                            elements.clone()
-                        } else {
-                            vec![]
-                        };
+                    let element_types = self
+                        .type_table
+                        .as_tuple(scrut_type)
+                        .unwrap_or_default();
                     for (i, sub_pattern) in sub_patterns.iter().enumerate() {
                         let field_name_str = format!("{i}");
                         let field_result_ty = self.struct_field_wir_type(type_id, &field_name_str);

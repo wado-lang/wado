@@ -738,6 +738,26 @@ fn analyze_expr(
                         name,
                         type_args,
                         module_source: _,
+                    } if name == "Tuple" => {
+                        // Tuple method call (e.g., Tuple<f64,f64>^Inspect::inspect)
+                        // Synthesized as non-monomorphized methods with struct_name "Tuple<f64,f64>"
+                        let type_arg_names: Vec<String> = type_args
+                            .iter()
+                            .map(|t| type_table.mangle_type_name(*t))
+                            .collect();
+                        let mangled_struct = mangle_generic_name("Tuple", &type_arg_names);
+                        let method_id = FunctionId::Method(MethodName::new(
+                            current_module.clone(),
+                            mangled_struct,
+                            trait_name,
+                            method_name,
+                        ));
+                        analysis.callees.insert(method_id);
+                    }
+                    ResolvedType::GenericInstance {
+                        name,
+                        type_args,
+                        module_source: _,
                     } => {
                         // Generic instance method call (e.g., Box<i32>.get())
                         let type_arg_names: Vec<String> = type_args
@@ -791,22 +811,6 @@ fn analyze_expr(
                         let method_id = FunctionId::Method(MethodName::new(
                             module_source,
                             name,
-                            trait_name,
-                            method_name,
-                        ));
-                        analysis.callees.insert(method_id);
-                    }
-                    ResolvedType::Tuple(elems) => {
-                        // Tuple method call (e.g., Tuple<f64,f64>^Inspect::inspect)
-                        // Synthesized as non-monomorphized methods with struct_name "Tuple<f64,f64>"
-                        let type_arg_names: Vec<String> = elems
-                            .iter()
-                            .map(|t| type_table.mangle_type_name(*t))
-                            .collect();
-                        let mangled_struct = mangle_generic_name("Tuple", &type_arg_names);
-                        let method_id = FunctionId::Method(MethodName::new(
-                            current_module.clone(),
-                            mangled_struct,
                             trait_name,
                             method_name,
                         ));
@@ -1702,11 +1706,6 @@ fn collect_type_dependencies(
         ResolvedType::GenericResource { type_args, .. } => {
             for &arg in type_args {
                 collect_type_transitive(arg, type_table, reachable);
-            }
-        }
-        ResolvedType::Tuple(elements) => {
-            for elem in elements {
-                collect_type_transitive(*elem, type_table, reachable);
             }
         }
         ResolvedType::Function {

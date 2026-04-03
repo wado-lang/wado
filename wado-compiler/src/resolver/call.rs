@@ -1113,7 +1113,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .collect();
                 self.type_table
                     .borrow_mut()
-                    .intern(ResolvedType::Tuple(resolved))
+                    .make_tuple(resolved)
             }
             _ => TypeTable::UNIT,
         }

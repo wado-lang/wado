@@ -450,11 +450,7 @@ impl Monomorphizer {
                 {
                     receiver_type = inner;
                 }
-                if let ResolvedType::Tuple(elems) = type_table.get(receiver_type).clone() {
-                    elems
-                } else {
-                    vec![]
-                }
+                type_table.as_tuple(receiver_type).unwrap_or_default()
             });
             {
                 let key = InstantiationKey {

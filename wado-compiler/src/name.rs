@@ -1197,8 +1197,6 @@ pub enum TypeNameInfo {
     Generic { name: String, args: Vec<String> },
     /// Option<T> with inner type name
     Option(String),
-    /// A tuple type with element type names
-    Tuple(Vec<String>),
     /// A function type with param count and return type name
     Function {
         param_count: usize,
@@ -1226,7 +1224,6 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
         TypeNameInfo::Named(name) => name,
         TypeNameInfo::Generic { name, args } => mangle_generic_name(&name, &args),
         TypeNameInfo::Option(inner) => mangle_option_type(&inner),
-        TypeNameInfo::Tuple(elems) => mangle_tuple_type(&elems),
         TypeNameInfo::Function {
             param_count,
             return_type,
@@ -1268,15 +1265,6 @@ pub fn mangle_method_generic(struct_name: &str, type_args: &[String], method_nam
 /// - `mangle_fn_type(0, "String")` → `"Fn<0,String>"`
 pub fn mangle_fn_type(param_count: usize, ret_type: &str) -> String {
     format!("Fn<{param_count},{ret_type}>")
-}
-
-/// Build a tuple type name from element type names.
-///
-/// Examples:
-/// - `mangle_tuple_type(&["i32", "String"])` → `"Tuple<i32,String>"`
-/// - `mangle_tuple_type(&["i32"])` → `"Tuple<i32>"`
-pub fn mangle_tuple_type(elem_types: &[String]) -> String {
-    format!("Tuple<{}>", elem_types.join(","))
 }
 
 /// Build an Option type name from inner type name.

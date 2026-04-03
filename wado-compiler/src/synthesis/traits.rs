@@ -633,7 +633,7 @@ fn generate_inspect_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
         match resolved {
-            ResolvedType::Tuple(_) => {
+            ResolvedType::GenericInstance { ref name, .. } if name == "Tuple" => {
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             ResolvedType::Function {
@@ -2082,7 +2082,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         }
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
-        if let ResolvedType::Tuple(_) = resolved {
+        if matches!(resolved, ResolvedType::GenericInstance { ref name, .. } if name == "Tuple") {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
         } else {
             // Function types, opaque types: delegate to Inspect
@@ -3347,10 +3347,6 @@ fn decompose_type_for_method_name(
             let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
             (name.clone(), false, args)
         }
-        ResolvedType::Tuple(elems) => {
-            let args = elems.iter().map(|t| tt.mangle_type_name(*t)).collect();
-            ("Tuple".to_string(), false, args)
-        }
         ResolvedType::Function {
             params,
             return_type,
@@ -3436,11 +3432,11 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
 
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
-            ResolvedType::Tuple(elems) => {
-                if !elems.iter().all(|e| is_concrete(*e)) {
+            ResolvedType::GenericInstance { name, type_args, .. } if name == "Tuple" => {
+                if !type_args.iter().all(|e| is_concrete(*e)) {
                     return None;
                 }
-                let args = elems.iter().map(|e| tt.mangle_type_name(*e)).collect();
+                let args = type_args.iter().map(|e| tt.mangle_type_name(*e)).collect();
                 Some((*id, "Tuple".to_string(), args))
             }
             ResolvedType::Function {

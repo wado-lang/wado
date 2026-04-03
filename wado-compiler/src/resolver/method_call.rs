@@ -82,9 +82,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
-            // Tuple types use "Tuple" as the struct name for method/trait impl lookup,
-            // matching how impl<..T> Trait for [..T] is indexed under "Tuple".
-            ResolvedType::Tuple(_) => ("Tuple".to_string(), self.current_module_source.clone()),
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 self.current_module_source.clone(),
@@ -97,8 +94,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     Some(type_args)
                 }
-                // Tuple types: element types are the type args for variadic impl matching
-                ResolvedType::Tuple(elems) if !elems.is_empty() => Some(elems),
                 _ => None,
             };
 
@@ -261,15 +256,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Tuple.len() is a compile-time constant — return immediately without a function call.
         if method_call.method == "len"
-            && matches!(
-                self.type_table.borrow().get(base_type_id),
-                ResolvedType::Tuple(_)
-            )
+            && self.type_table.borrow().is_tuple(base_type_id)
         {
-            let len = match self.type_table.borrow().get(base_type_id) {
-                ResolvedType::Tuple(elems) => elems.len() as i64,
-                _ => unreachable!(),
-            };
+            let len = self.type_table.borrow().as_tuple(base_type_id).unwrap().len() as i64;
             return TirExpr::new(
                 TirExprKind::IntLiteral {
                     value: len as u64,
@@ -283,10 +272,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Tuple.zip() transposes a tuple-of-tuples.
         // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
         if method_call.method == "zip"
-            && matches!(
-                self.type_table.borrow().get(base_type_id),
-                ResolvedType::Tuple(_)
-            )
+            && self.type_table.borrow().is_tuple(base_type_id)
         {
             let has_type_pack = self.type_contains_pack(base_type_id);
             if has_type_pack {
@@ -300,16 +286,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 );
             }
             // Concrete tuples: expand inline now.
-            let outer_elems = match self.type_table.borrow().get(base_type_id) {
-                ResolvedType::Tuple(elems) => elems.clone(),
-                _ => unreachable!(),
-            };
+            let outer_elems = self.type_table.borrow().as_tuple(base_type_id).unwrap();
             let inner_arities: Vec<Vec<TypeId>> = outer_elems
                 .iter()
-                .map(|e| match self.type_table.borrow().get(*e) {
-                    ResolvedType::Tuple(inner) => inner.clone(),
-                    _ => unreachable!(),
-                })
+                .map(|e| self.type_table.borrow().as_tuple(*e).unwrap())
                 .collect();
             let arity = inner_arities[0].len();
             let num_rows = outer_elems.len();
@@ -512,14 +492,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .collect();
                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                 (mangled, name, type_arg_names, Some(type_args))
-            }
-            ResolvedType::Tuple(elems) => {
-                let type_arg_names: Vec<String> = elems
-                    .iter()
-                    .map(|t| self.type_table.borrow().mangle_type_name(*t))
-                    .collect();
-                let receiver = format!("Tuple<{}>", type_arg_names.join(","));
-                (receiver, "Tuple".to_string(), type_arg_names, Some(elems))
             }
             _ => {
                 let name = self

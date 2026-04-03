@@ -182,14 +182,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
             | ResolvedType::Variant { name, .. } => (name.clone(), None),
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } => (
-                name.clone(),
-                if type_args.is_empty() {
-                    None
-                } else {
-                    Some(type_args.clone())
-                },
-            ),
+            } => {
+                if name == "Tuple" {
+                    // Tuples implement a trait when all elements implement it
+                    let elems = type_args.clone();
+                    return elems
+                        .iter()
+                        .all(|e| self.type_implements_trait(*e, trait_name));
+                }
+                (
+                    name.clone(),
+                    if type_args.is_empty() {
+                        None
+                    } else {
+                        Some(type_args.clone())
+                    },
+                )
+            }
             ResolvedType::Ref(inner) => {
                 // References always implement Eq via ref.eq (identity comparison)
                 if trait_name == "Eq" {
@@ -212,13 +221,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return true;
                 }
                 return self.type_implements_trait(inner_id, trait_name);
-            }
-            ResolvedType::Tuple(elems) => {
-                // Tuples implement a trait when all elements implement it
-                let elems = elems.clone();
-                return elems
-                    .iter()
-                    .all(|e| self.type_implements_trait(*e, trait_name));
             }
             ResolvedType::AssocTypeProjection { bounds, .. } => {
                 // An associated type projection T::Assoc implements a trait if

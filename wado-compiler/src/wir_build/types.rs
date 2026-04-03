@@ -47,10 +47,6 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
             .iter()
             .flat_map(|a| get_type_dependencies(type_table, *a))
             .collect(),
-        ResolvedType::Tuple(elems) => elems
-            .iter()
-            .flat_map(|e| get_type_dependencies(type_table, *e))
-            .collect(),
         _ => vec![],
     }
 }
@@ -573,7 +569,9 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
         let type_table = &*tir_mod.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             let resolved = type_table.get(type_id);
-            if let ResolvedType::Tuple(elements) = resolved {
+            if let ResolvedType::GenericInstance { name, type_args: elements, .. } = resolved
+                && name == "Tuple"
+            {
                 if ctx.tuple_type_map.contains_key(elements) {
                     continue;
                 }
@@ -1328,7 +1326,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 for tir_mod in ctx.project.tir_modules.values() {
                     let type_table = &*tir_mod.type_table.borrow();
                     for type_id in type_table.iter_type_ids() {
-                        if let ResolvedType::Tuple(elements) = type_table.get(type_id)
+                        if let ResolvedType::GenericInstance { name, type_args: elements, .. } = type_table.get(type_id)
+                            && name == "Tuple"
                             && field_idx < elements.len()
                         {
                             // Check if this tuple maps to the same WIR type

@@ -85,17 +85,6 @@ impl Monomorphizer {
                     type_table.make_mut_ref(new_inner_id)
                 }
             }
-            ResolvedType::Tuple(elem_ids) => {
-                let new_elem_ids: Vec<TypeId> = elem_ids
-                    .iter()
-                    .map(|&id| self.rewrite_type_id(id, type_table))
-                    .collect();
-                if new_elem_ids == elem_ids {
-                    type_id
-                } else {
-                    type_table.make_tuple(new_elem_ids)
-                }
-            }
             // Handle GenericInstance types that weren't in the direct substitution map
             // This can happen when function substitution creates new GenericInstance types
             // with different TypeIds for the type arguments
@@ -104,10 +93,20 @@ impl Monomorphizer {
                 module_source,
                 type_args,
             } => {
-                // Skip Array - it has special codegen handling and should remain
+                // Skip Array and Tuple - they have special codegen handling and should remain
                 // as GenericInstance, not be rewritten to Struct
-                if name == "Array" {
-                    return type_id;
+                if name == "Array" || name == "Tuple" {
+                    let new_args: Vec<TypeId> = type_args
+                        .iter()
+                        .map(|&id| self.rewrite_type_id(id, type_table))
+                        .collect();
+                    return if new_args == type_args {
+                        type_id
+                    } else if name == "Tuple" {
+                        type_table.make_tuple(new_args)
+                    } else {
+                        type_table.make_generic_instance(name, module_source, new_args)
+                    };
                 }
 
                 // Build the mangled name using type names (not TypeIds)
@@ -209,34 +208,6 @@ impl Monomorphizer {
                 let new_inner = self.substitute_type(inner, substitution, type_table);
                 type_table.make_mut_ref(new_inner)
             }
-            ResolvedType::Tuple(elems) => {
-                let mut new_elems: Vec<TypeId> = Vec::new();
-                for &e in &elems {
-                    match type_table.get(e).clone() {
-                        ResolvedType::TypePack { index, name } => {
-                            // Splice: the substituted type for a pack is a tuple; expand its elements
-                            let &pack_type = substitution.get(&index).unwrap_or_else(|| {
-                                panic!(
-                                    "TypePack `..{name}` (index {index}) not found in substitution map"
-                                )
-                            });
-                            match type_table.get(pack_type).clone() {
-                                ResolvedType::Tuple(pack_elems) => {
-                                    new_elems.extend_from_slice(&pack_elems);
-                                }
-                                _ => {
-                                    // Single type (not a tuple) — treat as one-element pack
-                                    new_elems.push(pack_type);
-                                }
-                            }
-                        }
-                        _ => {
-                            new_elems.push(self.substitute_type(e, substitution, type_table));
-                        }
-                    }
-                }
-                type_table.make_tuple(new_elems)
-            }
             ResolvedType::Function {
                 params,
                 return_type,
@@ -291,6 +262,33 @@ impl Monomorphizer {
                     }
                     // If not found, just return the original type_id
                     return type_id;
+                }
+
+                // Tuples need TypePack expansion: splice pack elements into the type args
+                if name == "Tuple" {
+                    let mut new_elems: Vec<TypeId> = Vec::new();
+                    for &e in &type_args {
+                        match type_table.get(e).clone() {
+                            ResolvedType::TypePack { index, name: pack_name } => {
+                                let &pack_type =
+                                    substitution.get(&index).unwrap_or_else(|| {
+                                        panic!(
+                                            "TypePack `..{pack_name}` (index {index}) not found in substitution map"
+                                        )
+                                    });
+                                if let Some(pack_elems) = type_table.as_tuple(pack_type) {
+                                    new_elems.extend_from_slice(&pack_elems);
+                                } else {
+                                    new_elems.push(pack_type);
+                                }
+                            }
+                            _ => {
+                                new_elems
+                                    .push(self.substitute_type(e, substitution, type_table));
+                            }
+                        }
+                    }
+                    return type_table.make_tuple(new_elems);
                 }
 
                 // Recursively substitute in nested generic instances
