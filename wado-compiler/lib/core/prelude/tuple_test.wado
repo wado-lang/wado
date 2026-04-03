@@ -1,0 +1,108 @@
+// Eq tests
+
+test "eq homogeneous" {
+    let a = [1, 2, 3];
+    let b = [1, 2, 3];
+    let c = [1, 2, 4];
+    assert a == b;
+    assert a != c;
+}
+
+test "eq heterogeneous" {
+    let a = [1, "hello", true];
+    let b = [1, "hello", true];
+    let c = [1, "world", true];
+    assert a == b;
+    assert a != c;
+}
+
+test "eq nested tuple" {
+    let a = [[1, 2], [3, 4]];
+    let b = [[1, 2], [3, 4]];
+    let c = [[1, 2], [3, 5]];
+    assert a == b;
+    assert a != c;
+}
+
+test "eq empty" {
+    let a: [] = [];
+    let b: [] = [];
+    assert a == b;
+}
+
+test "eq single" {
+    let a = [42];
+    let b = [42];
+    let c = [99];
+    assert a == b;
+    assert a != c;
+}
+
+test "eq with struct" {
+    let a = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    let b = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    let c = [Point { x: 1, y: 2 }, Point { x: 3, y: 5 }];
+    assert a == b;
+    assert a != c;
+}
+
+// Ord tests
+
+test "ord homogeneous" {
+    let a = [1, 2, 3];
+    let b = [1, 2, 4];
+    assert a < b;
+    assert b > a;
+    assert a <= b;
+    assert b >= a;
+    assert a <= a;
+    assert a >= a;
+}
+
+test "ord first element decides" {
+    let a = [1, 100];
+    let b = [2, 0];
+    assert a < b;
+}
+
+test "ord lexicographic" {
+    let a = [1, 2, 3];
+    let b = [1, 2, 4];
+    let c = [1, 3, 0];
+    assert a < b;
+    assert a < c;
+    assert b < c;
+}
+
+test "ord equal tuples" {
+    let a = [1, 2, 3];
+    let b = [1, 2, 3];
+    assert !(a < b);
+    assert !(a > b);
+    assert a <= b;
+    assert a >= b;
+}
+
+test "ord single element" {
+    let a = [10];
+    let b = [20];
+    assert a < b;
+    assert b > a;
+}
+
+test "ord with strings" {
+    let a = [1, "apple"];
+    let b = [1, "banana"];
+    assert a < b;
+}
+
+test "ord nested tuple" {
+    let a = [[1, 2], [3, 4]];
+    let b = [[1, 2], [3, 5]];
+    assert a < b;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
