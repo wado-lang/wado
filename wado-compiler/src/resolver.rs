@@ -273,15 +273,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
-        self.all_struct_fields
-            .get(module_source)
-            .and_then(|m| m.get(name))
+        // Prefer the flat map (module-local, up-to-date TypeIds) over all_struct_fields
+        // (built early in orchestration with potentially stale TypeIds).
+        // Fall back to all_struct_fields for cross-module lookups where the flat map
+        // doesn't have an entry with matching module_source.
+        self.struct_fields
+            .get(name)
+            .filter(|info| info.module_source == *module_source)
             .or_else(|| {
-                // Fallback: if all_struct_fields is not yet populated (early init),
-                // try the flat map but only if module_source matches.
-                self.struct_fields
-                    .get(name)
-                    .filter(|info| info.module_source == *module_source)
+                self.all_struct_fields
+                    .get(module_source)
+                    .and_then(|m| m.get(name))
             })
     }
 
