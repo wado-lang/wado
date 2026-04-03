@@ -232,10 +232,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .collect();
                     self.enum_cases.insert(
                         enum_decl.name.clone(),
-                        EnumInfo {
-                            module_source: self.current_module_source.clone(),
-                            cases,
-                        },
+                        EnumInfo::new(self.current_module_source.clone(), cases),
                     );
                 }
                 Item::Flags(flags_decl) => {

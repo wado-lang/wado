@@ -56,6 +56,25 @@ pub(super) struct EnumCaseData {
 pub(super) struct EnumInfo {
     pub(super) module_source: ModuleSource,
     pub(super) cases: Vec<EnumCaseData>,
+    /// O(1) lookup from case name to discriminant index
+    pub(super) case_index: crate::hashmap::IndexMap<String, u32>,
+}
+
+impl EnumInfo {
+    pub(super) fn new(module_source: ModuleSource, cases: Vec<EnumCaseData>) -> Self {
+        let case_index = cases.iter().map(|c| (c.name.clone(), c.index)).collect();
+        Self {
+            module_source,
+            cases,
+            case_index,
+        }
+    }
+
+    /// O(1) case lookup by name
+    pub(super) fn find_case(&self, name: &str) -> Option<&EnumCaseData> {
+        let &idx = self.case_index.get(name)?;
+        self.cases.iter().find(|c| c.index == idx)
+    }
 }
 
 /// Flags member data: name and bitmask value

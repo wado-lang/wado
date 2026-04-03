@@ -799,17 +799,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Try looking up in loaded modules
         if !callee_module.is_entry_point() {
             // Clone the return type AST and type params to avoid borrow issues
-            let func_info = self.loaded_modules.get(callee_module).and_then(|module| {
-                module.items.iter().find_map(|item| {
-                    if let Item::Function(func) = item
-                        && func.name == func_name
-                    {
-                        Some((func.return_type.clone(), func.type_params.clone()))
-                    } else {
-                        None
-                    }
-                })
-            });
+            let func_info = Self::lookup_func_in_loaded_module(
+                self.loaded_modules,
+                &self.loaded_module_func_indices,
+                callee_module,
+                func_name,
+            )
+            .map(|func| (func.return_type.clone(), func.type_params.clone()));
 
             if let Some((ty, type_params)) = func_info
                 && let Some(return_type_ast) = ty
@@ -1211,18 +1207,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Builtin functions: look up param types from core:builtin module
                     if prefix == "builtin" {
                         let module_source = ModuleSource::builtin();
-                        if let Some(module) = self.loaded_modules.get(&module_source) {
-                            let params: Option<Vec<_>> = module.items.iter().find_map(|item| {
-                                if let Item::Function(func) = item
-                                    && func.name == suffix
-                                {
-                                    return Some(func.params.clone());
-                                }
-                                None
-                            });
-                            if let Some(params) = params {
-                                return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
-                            }
+                        let params = Self::lookup_func_in_loaded_module(
+                            self.loaded_modules,
+                            &self.loaded_module_func_indices,
+                            &module_source,
+                            suffix,
+                        )
+                        .map(|func| func.params.clone());
+                        if let Some(params) = params {
+                            return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
                         }
                     }
 
@@ -1232,15 +1225,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Check if it's a local function (defined in this module)
                 if self.function_return_types.contains_key(&ident.name) {
                     // Clone params and type_params to avoid borrow issues
-                    let func_info: Option<(Vec<ast::Param>, Vec<ast::GenericParam>)> =
-                        self.current_module_items.iter().find_map(|item| {
-                            if let Item::Function(func) = item
-                                && func.name == ident.name
-                            {
-                                return Some((func.params.clone(), func.type_params.clone()));
-                            }
-                            None
-                        });
+                    let func_info: Option<(Vec<ast::Param>, Vec<ast::GenericParam>)> = self
+                        .lookup_current_func(&ident.name)
+                        .map(|func| (func.params.clone(), func.type_params.clone()));
 
                     if let Some((params, type_params)) = func_info {
                         // Set up type params so resolve_type can find pack params
@@ -1267,19 +1254,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
 
                 // Check imported functions
-                if let Some(symbol) = self.symbols.lookup(&ident.name)
-                    && let Some(module) = self.loaded_modules.get(&symbol.module_source)
-                {
-                    // Clone params to avoid borrow issues
-                    let params: Option<Vec<_>> = module.items.iter().find_map(|item| {
-                        if let Item::Function(func) = item
-                            && func.name == symbol.name
-                        {
-                            return Some(func.params.clone());
-                        }
-                        None
-                    });
-
+                if let Some(symbol) = self.symbols.lookup(&ident.name) {
+                    let src = symbol.module_source.clone();
+                    let name = symbol.name.clone();
+                    let params = Self::lookup_func_in_loaded_module(
+                        self.loaded_modules,
+                        &self.loaded_module_func_indices,
+                        &src,
+                        &name,
+                    )
+                    .map(|func| func.params.clone());
                     if let Some(params) = params {
                         return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
                     }
@@ -1304,34 +1288,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Local function
-        if self.function_return_types.contains_key(&ident.name) {
-            let result: Option<Vec<bool>> = self.current_module_items.iter().find_map(|item| {
-                if let Item::Function(func) = item
-                    && func.name == ident.name
-                {
-                    return Some(func.params.iter().map(|p| p.is_mut).collect());
-                }
-                None
-            });
-            if let Some(is_muts) = result {
-                return is_muts;
-            }
+        if self.function_return_types.contains_key(&ident.name)
+            && let Some(func) = self.lookup_current_func(&ident.name)
+        {
+            return func.params.iter().map(|p| p.is_mut).collect();
         }
 
         // Imported function
-        if let Some(symbol) = self.symbols.lookup(&ident.name)
-            && let Some(module) = self.loaded_modules.get(&symbol.module_source)
-        {
-            let result: Option<Vec<bool>> = module.items.iter().find_map(|item| {
-                if let Item::Function(func) = item
-                    && func.name == symbol.name
-                {
-                    return Some(func.params.iter().map(|p| p.is_mut).collect());
-                }
-                None
-            });
-            if let Some(is_muts) = result {
-                return is_muts;
+        if let Some(symbol) = self.symbols.lookup(&ident.name) {
+            let src = symbol.module_source.clone();
+            let name = symbol.name.clone();
+            if let Some(func) = Self::lookup_func_in_loaded_module(
+                self.loaded_modules,
+                &self.loaded_module_func_indices,
+                &src,
+                &name,
+            ) {
+                return func.params.iter().map(|p| p.is_mut).collect();
             }
         }
 
@@ -1398,7 +1371,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             // Also check current module items
             if found.is_none() {
-                'outer2: for item in &self.current_module_items {
+                'outer2: for item in self.current_module_items {
                     if let Item::Impl(impl_block) = item
                         && Self::get_type_name_static(&impl_block.ty) == struct_name
                     {
@@ -1482,27 +1455,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>)> =
             if self.function_return_types.contains_key(&ident.name) {
-                self.current_module_items.iter().find_map(|item| {
-                    if let Item::Function(func) = item
-                        && func.name == ident.name
-                    {
-                        Some((func.type_params.clone(), func.params.clone()))
-                    } else {
-                        None
-                    }
-                })
-            } else if let Some(symbol) = self.symbols.lookup(&ident.name)
-                && let Some(module) = self.loaded_modules.get(&symbol.module_source)
-            {
-                module.items.iter().find_map(|item| {
-                    if let Item::Function(func) = item
-                        && func.name == symbol.name
-                    {
-                        Some((func.type_params.clone(), func.params.clone()))
-                    } else {
-                        None
-                    }
-                })
+                self.lookup_current_func(&ident.name)
+                    .map(|func| (func.type_params.clone(), func.params.clone()))
+            } else if let Some(symbol) = self.symbols.lookup(&ident.name) {
+                let src = symbol.module_source.clone();
+                let name = symbol.name.clone();
+                Self::lookup_func_in_loaded_module(
+                    self.loaded_modules,
+                    &self.loaded_module_func_indices,
+                    &src,
+                    &name,
+                )
+                .map(|func| (func.type_params.clone(), func.params.clone()))
             } else {
                 None
             };

@@ -1247,9 +1247,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                     // Look up the enum case index
                     if let Some(enum_info) = self.enum_cases.get(name) {
-                        if let Some(case_data) =
-                            enum_info.cases.iter().find(|c| c.name == *variant_name)
-                        {
+                        if let Some(case_data) = enum_info.find_case(variant_name) {
                             return TirPattern::Enum {
                                 enum_type: scrutinee_type,
                                 case_name: variant_name.clone(),

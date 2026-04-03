@@ -409,7 +409,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Check for enum case: Color::Red (enums have no payload)
             if let Some(enum_info) = self.enum_cases.get(prefix)
-                && let Some(case_data) = enum_info.cases.iter().find(|c| c.name == suffix)
+                && let Some(case_data) = enum_info.find_case(suffix)
             {
                 // Create enum type
                 let enum_type = self
@@ -509,7 +509,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .and_then(|maps| maps.enum_cases.get(type_name))
                     .cloned();
                 if let Some(enum_info) = ns_enum
-                    && let Some(case_data) = enum_info.cases.iter().find(|c| c.name == case_name)
+                    && let Some(case_data) = enum_info.find_case(case_name)
                 {
                     let enum_type = self
                         .type_table
@@ -3144,7 +3144,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Search current module items
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && check_impl(impl_block)
             {

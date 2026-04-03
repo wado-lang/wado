@@ -116,10 +116,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .or_default()
                             .insert(
                                 enum_decl.name.clone(),
-                                EnumInfo {
-                                    module_source: module_source.clone(),
-                                    cases: Vec::new(),
-                                },
+                                EnumInfo::new(module_source.clone(), Vec::new()),
                             );
                     }
                     Item::Resource(resource_decl) => {
@@ -396,10 +393,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .or_default()
                             .insert(
                                 enum_decl.name.clone(),
-                                EnumInfo {
-                                    module_source: module_source.clone(),
-                                    cases,
-                                },
+                                EnumInfo::new(module_source.clone(), cases),
                             );
                     }
                     Item::Flags(flags_decl) => {
@@ -537,6 +531,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             &resource_type_names,
             logger,
         )?;
+
+        // Pre-build function name → index maps for all loaded modules (O(1) lookup)
+        let all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>> = modules
+            .iter()
+            .map(|(src, module)| (src.clone(), Self::build_func_index(&module.items)))
+            .collect();
 
         // Second pass: resolve each module with per-module function_return_types and imports
         let _span = logger.span("resolve/modules");
@@ -681,7 +681,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 logger,
                 current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"), // Set in resolve_module
                 entry_module_source: entry_module_source.clone(),
-                current_module_items: Vec::new(), // Set in resolve_module
+                current_module_items: &[], // Set in resolve_module
                 effect_sources: IndexMap::default(), // Populated per-module in resolve_module
                 current_effect_params: IndexSet::default(),
                 trait_ctx: super::trait_env::TraitContext::default(),
@@ -703,6 +703,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 trait_check_stack: RefCell::new(Vec::new()),
                 method_info_cache: IndexMap::default(),
                 pending_anonymous_structs: Vec::new(),
+                current_module_func_index: IndexMap::default(), // Built in resolve_module
+                loaded_module_func_indices: all_module_func_indices.clone(),
             };
             // known_type_names_cache is pre-computed globally; no per-module rebuild needed
 
