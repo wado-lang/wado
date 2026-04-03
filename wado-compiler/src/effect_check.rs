@@ -471,6 +471,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 }
             }
             TirExprKind::TupleSpread { expr }
+            | TirExprKind::TupleZip { expr }
             | TirExprKind::TypePackExpansion {
                 call_expr: expr, ..
             } => {

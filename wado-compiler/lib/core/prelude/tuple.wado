@@ -41,6 +41,16 @@ impl<..T: InspectAlt> InspectAlt for [..T] {
     }
 }
 
+/// Eq for tuples: element-wise equality using .zip().
+impl<..T: Eq> Eq for [..T] {
+    fn eq(&self, other: &Self) -> bool {
+        for let [a, b] of [*self, *other].zip() {
+            if a != b { return false; }
+        }
+        return true;
+    }
+}
+
 /// Display for tuples: same as Inspect (tuples have no user-facing format).
 impl<..T: Display> Display for [..T] {
     fn fmt(&self, f: &mut Formatter) {

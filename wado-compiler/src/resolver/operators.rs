@@ -160,6 +160,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                ResolvedType::Tuple(_) => Some("Tuple".to_string()),
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(*base_type);
@@ -263,11 +264,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
 
-            // TypeParam with trait bounds: emit trait method calls for comparison operators.
+            // TypeParam/TypePack with trait bounds: emit trait method calls for comparison operators.
             // Monomorphization substitutes T with the concrete type and either resolves
             // the method call normally, or converts back to a binary op for primitives.
-            if let ResolvedType::TypeParam { name, .. } = &left_type
-                && let Some(bounds) = self.trait_ctx.type_param_bounds.get(name).cloned()
+            let type_param_name = match &left_type {
+                ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => {
+                    Some(name.clone())
+                }
+                _ => None,
+            };
+            if let Some(name) = type_param_name
+                && let Some(bounds) = self.trait_ctx.type_param_bounds.get(&name).cloned()
             {
                 let bound_names: Vec<String> = bounds.iter().map(|b| b.name.clone()).collect();
                 if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq)
@@ -278,7 +285,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         left,
                         right,
                         &info,
-                        name,
+                        &name,
                         "Eq",
                         binary.op == BinaryOp::NotEq,
                         true,
@@ -295,7 +302,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         left,
                         right,
                         &info,
-                        name,
+                        &name,
                         "Ord",
                         binary.op,
                         true,

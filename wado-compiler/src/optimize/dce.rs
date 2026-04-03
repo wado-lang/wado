@@ -888,6 +888,7 @@ fn analyze_expr(
         }
         TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TupleZip { expr }
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         } => {
@@ -1481,6 +1482,7 @@ fn collect_types_from_expr(
         }
         TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TupleZip { expr }
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         } => {
@@ -2005,6 +2007,7 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }

@@ -284,6 +284,7 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {

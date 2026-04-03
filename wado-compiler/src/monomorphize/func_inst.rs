@@ -638,6 +638,62 @@ impl Monomorphizer {
                     );
                     self.try_queue_function(key, mangled);
                 }
+
+                // Tuple variadic impl: receiver is a tuple type, method is on "Tuple"
+                // (e.g., Tuple^Eq::eq from variadic `impl<..T: Eq> Eq for [..T]`)
+                // The resolver already creates monomorph_info with the generic name and
+                // impl_type_args (the concrete tuple element types).
+                if let Some(ref info) = method_func.method_info
+                    && info.struct_name == "Tuple"
+                {
+                    let mono = method_func.monomorph_info.as_ref();
+                    let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
+                        MethodName::format_local(
+                            "Tuple",
+                            info.trait_name.as_deref(),
+                            &info.method_name,
+                        )
+                    });
+                    let impl_type_args =
+                        mono.map(|m| m.impl_type_args.clone()).unwrap_or_else(|| {
+                            let mut receiver_type = receiver.type_id;
+                            while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+                                type_table.get(receiver_type).clone()
+                            {
+                                receiver_type = inner;
+                            }
+                            if let ResolvedType::Tuple(elems) =
+                                type_table.get(receiver_type).clone()
+                            {
+                                elems
+                            } else {
+                                vec![]
+                            }
+                        });
+                    {
+                        if let Some(generic_func_rc) = generic_functions.get(&generic_name) {
+                            let generic_func = generic_func_rc.borrow();
+                            let method_info = generic_func.method_info.clone();
+                            let impl_type_params_count = generic_func.impl_type_params.len();
+                            let impl_type_params: Vec<crate::tir::TirTypeParam> =
+                                generic_func.impl_type_params.clone();
+                            drop(generic_func);
+                            let key = InstantiationKey {
+                                name: generic_name,
+                                impl_type_args,
+                                method_type_args: vec![],
+                                method_info,
+                            };
+                            let mangled = self.method_instantiation_name_inner(
+                                &key,
+                                type_table,
+                                impl_type_params_count,
+                                &impl_type_params,
+                            );
+                            self.try_queue_function(key, mangled);
+                        }
+                    }
+                }
             }
             _ => {}
         }
@@ -1544,8 +1600,7 @@ impl Monomorphizer {
                     local_types,
                 );
             }
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner } => {
+            TirExprKind::FieldAccess { expr: inner, .. } => {
                 self.substitute_types_in_expr(
                     inner,
                     substitution,
@@ -1553,6 +1608,86 @@ impl Monomorphizer {
                     local_count,
                     local_types,
                 );
+            }
+            TirExprKind::TupleSpread { expr: inner } => {
+                self.substitute_types_in_expr(
+                    inner,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
+            }
+            TirExprKind::TupleZip { expr: zip_inner } => {
+                self.substitute_types_in_expr(
+                    zip_inner,
+                    substitution,
+                    type_table,
+                    local_count,
+                    local_types,
+                );
+                // After substitution, expand to transposed TupleLiteral.
+                // Inner expr type: [[A0, A1, ...], [B0, B1, ...], ...]
+                // Result: [[A0, B0, ...], [A1, B1, ...], ...]
+                let inner_expr = zip_inner.as_ref().clone();
+                let span = expr.span;
+                let outer_elems = match type_table.get(inner_expr.type_id) {
+                    ResolvedType::Tuple(elems) => elems.clone(),
+                    _ => return,
+                };
+                let inner_arities: Vec<Vec<TypeId>> = outer_elems
+                    .iter()
+                    .filter_map(|e| match type_table.get(*e) {
+                        ResolvedType::Tuple(inner) => Some(inner.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                if inner_arities.is_empty() || inner_arities.len() != outer_elems.len() {
+                    return;
+                }
+                let arity = inner_arities[0].len();
+                let num_rows = outer_elems.len();
+                let mut col_exprs = Vec::with_capacity(arity);
+                for col in 0..arity {
+                    let mut row_exprs = Vec::with_capacity(num_rows);
+                    for (row, row_types) in inner_arities.iter().enumerate() {
+                        let row_access = TirExpr::new(
+                            TirExprKind::FieldAccess {
+                                expr: Box::new(inner_expr.clone()),
+                                field_index: row as u32,
+                                field_name: row.to_string(),
+                            },
+                            outer_elems[row],
+                            span,
+                        );
+                        let cell = TirExpr::new(
+                            TirExprKind::FieldAccess {
+                                expr: Box::new(row_access),
+                                field_index: col as u32,
+                                field_name: col.to_string(),
+                            },
+                            row_types[col],
+                            span,
+                        );
+                        row_exprs.push(cell);
+                    }
+                    let col_types: Vec<TypeId> = inner_arities.iter().map(|row| row[col]).collect();
+                    let col_tuple_type = type_table.make_tuple(col_types);
+                    col_exprs.push(TirExpr::new(
+                        TirExprKind::TupleLiteral {
+                            elements: row_exprs,
+                        },
+                        col_tuple_type,
+                        span,
+                    ));
+                }
+                // Compute the correct transposed type from the column tuple types
+                let transposed_types: Vec<TypeId> = col_exprs.iter().map(|e| e.type_id).collect();
+                let transposed_type = type_table.make_tuple(transposed_types);
+                expr.kind = TirExprKind::TupleLiteral {
+                    elements: col_exprs,
+                };
+                expr.type_id = transposed_type;
             }
             TirExprKind::TypePackExpansion {
                 call_expr,
@@ -1865,11 +2000,11 @@ impl Monomorphizer {
             | TirExprKind::BytesLiteral(_)
             | TirExprKind::Null
             | TirExprKind::Unit
-            | TirExprKind::Local { .. }
             | TirExprKind::FuncRef { .. }
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => {}
+            | TirExprKind::EnumConstruct { .. }
+            | TirExprKind::Local { .. } => {}
             TirExprKind::TemplateString { parts } => {
                 for part in parts {
                     if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
@@ -2224,15 +2359,125 @@ impl Monomorphizer {
             // Override the TypePack → elem_type (instead of TypePack → tuple type)
             let mut elem_body = body.clone();
             if let Some(pack_idx) = pack_index {
-                let mut elem_substitution = substitution.clone();
-                elem_substitution.insert(pack_idx, elem_type);
-                self.substitute_types_in_block(
-                    &mut elem_body,
-                    &elem_substitution,
-                    type_table,
-                    local_count,
-                    local_types,
-                );
+                // Detect destructured zip patterns: body starts with Let stmts
+                // whose values are FieldAccess on the binding local
+                // (e.g., `let a = binding.0; let b = binding.1;`).
+                let destruct_count = body
+                    .stmts
+                    .iter()
+                    .take_while(|s| {
+                        if let TirStmtKind::Let { value, .. } = &s.kind
+                            && let TirExprKind::FieldAccess { expr: inner, .. } = &value.kind
+                            && let TirExprKind::Local { index, .. } = &inner.kind
+                        {
+                            return *index == binding_local_idx;
+                        }
+                        false
+                    })
+                    .count();
+
+                if destruct_count > 0 {
+                    // For destructured zip patterns, substitute_type's Tuple splicing
+                    // corrupts the pair type Tuple([TypePack, TypePack]) → Tuple([T0,T1,...,T0,T1,...]).
+                    // Instead, generate fresh destructured Let stmts with correct field types
+                    // from elem_type, and only substitute the remaining user body stmts.
+                    let pair_fields = match type_table.get(elem_type) {
+                        ResolvedType::Tuple(fields) => fields.clone(),
+                        _ => vec![elem_type],
+                    };
+
+                    // The body_pack_type is the individual field type (e.g., [i32, i32] → i32).
+                    // For non-tuple field types this is just the field type itself.
+                    let body_pack_type = pair_fields[0];
+
+                    // Replace the destructured stmts with fresh ones that have correct types.
+                    let mut fresh_destruct_stmts = Vec::with_capacity(destruct_count);
+                    for (j, orig_stmt) in elem_body.stmts[..destruct_count].iter().enumerate() {
+                        if let TirStmtKind::Let {
+                            name,
+                            local_index,
+                            is_mut,
+                            is_reactive,
+                            value: orig_value,
+                            ..
+                        } = &orig_stmt.kind
+                        {
+                            let field_type = pair_fields.get(j).copied().unwrap_or(body_pack_type);
+                            // Update local_types for this local
+                            let idx = *local_index as usize;
+                            if idx < local_types.len() {
+                                local_types[idx] = field_type;
+                            }
+                            let binding_ref = TirExpr::new(
+                                TirExprKind::Local {
+                                    index: binding_local_idx,
+                                    name: b_name.clone(),
+                                },
+                                elem_type,
+                                span,
+                            );
+                            let field_access = TirExpr::new(
+                                TirExprKind::FieldAccess {
+                                    expr: Box::new(binding_ref),
+                                    field_index: if let TirExprKind::FieldAccess {
+                                        field_index,
+                                        ..
+                                    } = &orig_value.kind
+                                    {
+                                        *field_index
+                                    } else {
+                                        j as u32
+                                    },
+                                    field_name: j.to_string(),
+                                },
+                                field_type,
+                                span,
+                            );
+                            fresh_destruct_stmts.push(TirStmt::new(
+                                TirStmtKind::Let {
+                                    name: name.clone(),
+                                    local_index: *local_index,
+                                    is_mut: *is_mut,
+                                    is_reactive: *is_reactive,
+                                    type_id: field_type,
+                                    value: field_access,
+                                    skip_value_copy: false,
+                                },
+                                span,
+                            ));
+                        }
+                    }
+
+                    // Extract only the user body stmts (after destructuring)
+                    let user_stmts: Vec<TirStmt> =
+                        elem_body.stmts.drain(destruct_count..).collect();
+                    let mut user_body = TirBlock::new(user_stmts, span);
+
+                    // Substitute user body with field type (not pair type)
+                    let mut elem_substitution = substitution.clone();
+                    elem_substitution.insert(pack_idx, body_pack_type);
+                    self.substitute_types_in_block(
+                        &mut user_body,
+                        &elem_substitution,
+                        type_table,
+                        local_count,
+                        local_types,
+                    );
+
+                    // Reassemble: fresh destructured stmts + substituted user body
+                    elem_body.stmts = fresh_destruct_stmts;
+                    elem_body.stmts.extend(user_body.stmts);
+                } else {
+                    let mut elem_substitution = substitution.clone();
+                    elem_substitution.insert(pack_idx, elem_type);
+                    self.substitute_types_in_block(
+                        &mut elem_body,
+                        &elem_substitution,
+                        type_table,
+                        local_count,
+                        local_types,
+                    );
+                }
             } else {
                 // Fallback: substitute with original and rewrite manually
                 self.substitute_types_in_block(
@@ -3367,20 +3612,9 @@ fn try_lower_comparison(
                 .collect();
             (name.clone(), args, Some(module_source.clone()))
         }
-        ResolvedType::Tuple(elems) => {
-            // Tuple comparison: expand to element-wise comparisons inline.
-            // [i32, String] == [i32, String] → a.0 == b.0 && a.1 == b.1
-            let elems = elems.clone();
-            return lower_tuple_comparison(
-                trait_method_locations,
-                current_module_source,
-                span,
-                op,
-                left,
-                right,
-                &elems,
-                type_table,
-            );
+        ResolvedType::Tuple(_) => {
+            // Tuple Eq is provided by variadic impl in core:prelude/tuple.wado
+            return None;
         }
         _ => return None,
     };
@@ -3495,113 +3729,6 @@ fn try_lower_comparison(
     }
 
     None
-}
-
-/// Expand a tuple comparison to element-wise comparisons.
-///
-/// For `Eq`/`NotEq`: `a == b` → `a.0 == b.0 && a.1 == b.1 && ...`
-/// For `Ord` comparisons: `a < b` → `Tuple^Ord::cmp` (delegates to element-wise cmp)
-///
-/// Each element comparison is recursively lowered: struct elements become
-/// `Eq::eq` method calls, primitives remain as binary ops.
-fn lower_tuple_comparison(
-    trait_method_locations: &IndexMap<String, ModuleSource>,
-    current_module_source: &ModuleSource,
-    span: crate::token::Span,
-    op: TirBinaryOp,
-    left: &TirExpr,
-    right: &TirExpr,
-    elems: &[TypeId],
-    type_table: &mut TypeTable,
-) -> Option<TirExprKind> {
-    if !matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
-        // Ord comparisons on tuples are not yet supported
-        return None;
-    }
-
-    if elems.is_empty() {
-        // Empty tuple: always equal
-        let result = TirExprKind::BoolLiteral(true);
-        if op == TirBinaryOp::NotEq {
-            return Some(TirExprKind::Unary {
-                op: TirUnaryOp::Not,
-                expr: Box::new(TirExpr::new(result, TypeTable::BOOL, span)),
-            });
-        }
-        return Some(result);
-    }
-
-    // Build element-wise equality: a.0 == b.0 && a.1 == b.1 && ...
-    let mut combined: Option<TirExpr> = None;
-
-    for (i, &elem_type) in elems.iter().enumerate() {
-        let left_field = TirExpr::new(
-            TirExprKind::FieldAccess {
-                expr: Box::new(left.clone()),
-                field_index: i as u32,
-                field_name: i.to_string(),
-            },
-            elem_type,
-            span,
-        );
-        let right_field = TirExpr::new(
-            TirExprKind::FieldAccess {
-                expr: Box::new(right.clone()),
-                field_index: i as u32,
-                field_name: i.to_string(),
-            },
-            elem_type,
-            span,
-        );
-
-        // Try to lower this element comparison (e.g., struct → MethodCall).
-        // Use an empty trait_method_locations — the element's own try_lower_comparison
-        // will handle struct/variant/generic types. For primitives, it returns None
-        // and we use a direct Binary op.
-        let elem_eq = if let Some(lowered) = try_lower_comparison(
-            trait_method_locations,
-            current_module_source,
-            span,
-            TirBinaryOp::Eq,
-            &left_field,
-            &right_field,
-            type_table,
-        ) {
-            TirExpr::new(lowered, TypeTable::BOOL, span)
-        } else {
-            TirExpr::new(
-                TirExprKind::Binary {
-                    op: TirBinaryOp::Eq,
-                    left: Box::new(left_field),
-                    right: Box::new(right_field),
-                },
-                TypeTable::BOOL,
-                span,
-            )
-        };
-
-        combined = Some(match combined {
-            None => elem_eq,
-            Some(prev) => TirExpr::new(
-                TirExprKind::Binary {
-                    op: TirBinaryOp::And,
-                    left: Box::new(prev),
-                    right: Box::new(elem_eq),
-                },
-                TypeTable::BOOL,
-                span,
-            ),
-        });
-    }
-
-    let result = combined.unwrap();
-    if op == TirBinaryOp::NotEq {
-        return Some(TirExprKind::Unary {
-            op: TirUnaryOp::Not,
-            expr: Box::new(result),
-        });
-    }
-    Some(result.kind)
 }
 
 /// Convert a trait method name to a TIR binary operator, if applicable.

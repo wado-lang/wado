@@ -122,6 +122,7 @@ fn precompute_modified_expr(
             }
             if let TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } = &target.kind
@@ -138,6 +139,7 @@ fn precompute_modified_expr(
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }
@@ -387,6 +389,7 @@ fn collect_modified_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
             }
             if let TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
+            | TirExprKind::TupleZip { expr: inner }
             | TirExprKind::TypePackExpansion {
                 call_expr: inner, ..
             } = &target.kind
@@ -403,6 +406,7 @@ fn collect_modified_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }
@@ -624,6 +628,7 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }
@@ -959,6 +964,7 @@ fn forward_in_expr(
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         }

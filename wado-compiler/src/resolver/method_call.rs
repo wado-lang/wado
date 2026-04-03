@@ -280,6 +280,82 @@ impl<H: CompilerHost> Resolver<'_, H> {
             );
         }
 
+        // Tuple.zip() transposes a tuple-of-tuples.
+        // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
+        if method_call.method == "zip"
+            && matches!(
+                self.type_table.borrow().get(base_type_id),
+                ResolvedType::Tuple(_)
+            )
+        {
+            let has_type_pack = self.type_contains_pack(base_type_id);
+            if has_type_pack {
+                // TypePack present: defer expansion to monomorphization.
+                return TirExpr::new(
+                    TirExprKind::TupleZip {
+                        expr: Box::new(receiver),
+                    },
+                    return_type,
+                    method_call.span,
+                );
+            }
+            // Concrete tuples: expand inline now.
+            let outer_elems = match self.type_table.borrow().get(base_type_id) {
+                ResolvedType::Tuple(elems) => elems.clone(),
+                _ => unreachable!(),
+            };
+            let inner_arities: Vec<Vec<TypeId>> = outer_elems
+                .iter()
+                .map(|e| match self.type_table.borrow().get(*e) {
+                    ResolvedType::Tuple(inner) => inner.clone(),
+                    _ => unreachable!(),
+                })
+                .collect();
+            let arity = inner_arities[0].len();
+            let num_rows = outer_elems.len();
+            let mut col_exprs = Vec::with_capacity(arity);
+            for col in 0..arity {
+                let mut row_exprs = Vec::with_capacity(num_rows);
+                for (row, row_types) in inner_arities.iter().enumerate() {
+                    let row_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(receiver.clone()),
+                            field_index: row as u32,
+                            field_name: row.to_string(),
+                        },
+                        outer_elems[row],
+                        method_call.span,
+                    );
+                    let cell = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(row_access),
+                            field_index: col as u32,
+                            field_name: col.to_string(),
+                        },
+                        row_types[col],
+                        method_call.span,
+                    );
+                    row_exprs.push(cell);
+                }
+                let col_types: Vec<TypeId> = inner_arities.iter().map(|row| row[col]).collect();
+                let col_tuple_type = self.type_table.borrow_mut().make_tuple(col_types);
+                col_exprs.push(TirExpr::new(
+                    TirExprKind::TupleLiteral {
+                        elements: row_exprs,
+                    },
+                    col_tuple_type,
+                    method_call.span,
+                ));
+            }
+            return TirExpr::new(
+                TirExprKind::TupleLiteral {
+                    elements: col_exprs,
+                },
+                return_type,
+                method_call.span,
+            );
+        }
+
         // Static methods (no self parameter) cannot be called with instance method syntax.
         // e.g., `obj.static_method()` should be `Type::static_method()` instead.
         if self_kind == ast::SelfKind::None {

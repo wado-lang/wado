@@ -338,6 +338,7 @@ fn mark_local_as_fully_modified(expr: &TirExpr, modified: &mut ModifiedVars) {
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
@@ -554,6 +555,7 @@ fn collect_modified_vars_in_expr(
         }
         TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TupleZip { expr }
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         } => {
@@ -684,6 +686,7 @@ fn is_loop_invariant(expr: &TirExpr, modified_vars: &IndexSet<u32>) -> bool {
         // Field access is invariant if the base expression is invariant
         TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TupleZip { expr }
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         } => is_loop_invariant(expr, modified_vars),
@@ -855,6 +858,7 @@ fn collect_licm_ref_bindings_in_expr(
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
@@ -1410,6 +1414,7 @@ fn find_hoist_candidates_in_expr(
             }
         }
         TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
@@ -1723,6 +1728,7 @@ fn replace_hoisted_in_expr(
     match &mut expr.kind {
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {

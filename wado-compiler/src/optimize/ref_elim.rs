@@ -123,6 +123,7 @@ fn analyze_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, RefInfo>) {
         // The use is acceptable (field-access-only), so we DON'T mark it as non-eliminable.
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
@@ -330,6 +331,7 @@ fn transform_expr(expr: &mut TirExpr, eliminable: &IndexMap<u32, RefInfo>) {
     match &mut expr.kind {
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
@@ -674,6 +676,7 @@ fn check_deref_only_uses_in_expr(expr: &TirExpr, refs: &mut IndexMap<u32, DerefO
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
@@ -919,6 +922,7 @@ fn rewrite_deref_only_refs_in_expr(
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => rewrite_deref_only_refs_in_expr(inner, eliminable),

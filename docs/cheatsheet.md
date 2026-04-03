@@ -484,7 +484,7 @@ let t = [42, "hello", true];
 for let v of t {
     println(`{v}`);
 }
-// break, continue, and return are not allowed inside tuple for-of
+// break and continue are not allowed inside tuple for-of
 
 // Infinite loop
 loop {

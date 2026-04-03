@@ -427,7 +427,50 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         is_ref_impl: false,
                     });
                 }
-                // For non-len methods, use "Tuple" as struct name to search trait impls
+                if method_name == "zip" {
+                    // .zip() on a tuple-of-tuples: transpose the elements.
+                    // [[A, B], [C, D]].zip() → [[A, C], [B, D]]
+                    // Constraint: all inner elements must be tuples with the same arity.
+                    if elems.is_empty() {
+                        return None;
+                    }
+                    let inner_arities: Vec<Vec<TypeId>> = elems
+                        .iter()
+                        .filter_map(|e| match self.type_table.borrow().get(*e) {
+                            ResolvedType::Tuple(inner) => Some(inner.clone()),
+                            _ => None,
+                        })
+                        .collect();
+                    if inner_arities.len() != elems.len() {
+                        return None; // not all elements are tuples
+                    }
+                    let arity = inner_arities[0].len();
+                    if !inner_arities.iter().all(|a| a.len() == arity) {
+                        return None; // mismatched arities
+                    }
+                    // Build transposed tuple type: for each column, collect one element from each row.
+                    // When TypePacks are present (variadic impl), the actual transposed
+                    // type will be computed during monomorphization; the type here is
+                    // approximate but sufficient for type checking.
+                    let mut transposed = Vec::with_capacity(arity);
+                    for col in 0..arity {
+                        let col_types: Vec<TypeId> =
+                            inner_arities.iter().map(|row| row[col]).collect();
+                        let col_tuple = self.type_table.borrow_mut().make_tuple(col_types);
+                        transposed.push(col_tuple);
+                    }
+                    let return_type = self.type_table.borrow_mut().make_tuple(transposed);
+                    return Some(MethodInfo {
+                        return_type,
+                        self_kind: ast::SelfKind::Ref,
+                        param_types: vec![],
+                        param_is_mut: vec![],
+                        inherited_from_base: None,
+                        cm_name: None,
+                        is_ref_impl: false,
+                    });
+                }
+                // For non-len/zip methods, use "Tuple" as struct name to search trait impls
                 ("Tuple".to_string(), None, Some(elems.clone()), None)
             }
             _ => return None,
