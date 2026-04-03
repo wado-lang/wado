@@ -34,11 +34,6 @@ struct Array<i32> {  // Array<T> with T=i32
     mut used: i32,
 }
 
-struct FrozenMapBuilder<i32> {  // FrozenMapBuilder<T> with T=i32
-    mut keys: ref Array<String>,
-    mut values: ref Array<i32>,
-}
-
 struct FrozenMap<i32> {  // FrozenMap<T> with T=i32
     mut keys: ref Array<String>,
     mut values: ref Array<i32>,
@@ -141,7 +136,6 @@ import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn run() with Stdout {
-    let __local_0: ref FrozenMapBuilder<i32>;
     let m: ref FrozenMap<i32>;
     let __v0_2: i32;
     let __cond_3: bool;
@@ -151,7 +145,6 @@ fn run() with Stdout {
     let __cond_9: bool;
     let v_10: i32;
     let __cond_12: bool;
-    let __local_13: ref FrozenMapBuilder<i32>;
     let m2: ref FrozenMap<i32>;
     let __v0_15: i32;
     let __cond_16: bool;
@@ -170,7 +163,6 @@ fn run() with Stdout {
     let __local_41: ref String;
     let __local_44: ref String;
     let __local_47: ref String;
-    let __local_49: ref FrozenMapBuilder<i32>;
     let __local_51: ref Array<String>;
     let __local_55: ref Formatter;
     let __local_60: ref Formatter;
@@ -184,32 +176,32 @@ fn run() with Stdout {
     let __local_98: ref Array<i32>;
     let __local_106: ref String;
     let __local_109: ref String;
-    let __local_111: ref FrozenMapBuilder<i32>;
     let __local_113: ref Array<String>;
     let __local_117: ref Formatter;
     let __local_122: ref Formatter;
+    let __local_125: ref Array<String>;
+    let __local_126: ref Array<i32>;
+    let __local_127: ref Array<String>;
+    let __local_128: ref Array<i32>;
     m = __kv_lit: block -> ref FrozenMap<i32> {
-        __local_0 = FrozenMapBuilder<i32> { keys: ref.as_non_null(__seq_lit: block -> ref Array<String> {
+        __local_125 = __seq_lit: block -> ref Array<String> {
             __local_32 = Array<String> { repr: builtin::array_new<ref String>(0), used: 0 };
             break __seq_lit: __local_32;
-        }), values: ref.as_non_null(__seq_lit: block -> ref Array<i32> {
+        };
+        __local_126 = __seq_lit: block -> ref Array<i32> {
             __local_33 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
             break __seq_lit: __local_33;
-        }) };
-        __local_41 = String { repr: array.new_data<u8>("x"), used: 1 };
-        Array<String>::push(__local_0.keys, __local_41);
-        Array<i32>::push(__local_0.values, 10);
-        __local_44 = String { repr: array.new_data<u8>("y"), used: 1 };
-        Array<String>::push(__local_0.keys, __local_44);
-        Array<i32>::push(__local_0.values, 20);
-        __local_47 = String { repr: array.new_data<u8>("z"), used: 1 };
-        Array<String>::push(__local_0.keys, __local_47);
-        Array<i32>::push(__local_0.values, 30);
-        __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_12: block -> ref FrozenMap<i32> {
-            __local_49 = value_copy FrozenMapBuilder<i32>(__local_0);
-            break __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_12: FrozenMap<i32> { keys: __local_49.keys, values: __local_49.values };
         };
-        break __kv_lit;
+        __local_41 = String { repr: array.new_data<u8>("x"), used: 1 };
+        Array<String>::push(__local_125, __local_41);
+        Array<i32>::push(__local_126, 10);
+        __local_44 = String { repr: array.new_data<u8>("y"), used: 1 };
+        Array<String>::push(__local_125, __local_44);
+        Array<i32>::push(__local_126, 20);
+        __local_47 = String { repr: array.new_data<u8>("z"), used: 1 };
+        Array<String>::push(__local_125, __local_47);
+        Array<i32>::push(__local_126, 30);
+        break __kv_lit: FrozenMap<i32> { keys: __local_125, values: __local_126 };
     };
     __v0_2 = __inline_Array_String___len_14: block -> i32 {
         __local_51 = m.keys;
@@ -356,24 +348,21 @@ condition: v == 30
         };
     };
     m2 = __kv_lit: block -> ref FrozenMap<i32> {
-        __local_13 = FrozenMapBuilder<i32> { keys: ref.as_non_null(__seq_lit: block -> ref Array<String> {
+        __local_127 = __seq_lit: block -> ref Array<String> {
             __local_97 = Array<String> { repr: builtin::array_new<ref String>(0), used: 0 };
             break __seq_lit: __local_97;
-        }), values: ref.as_non_null(__seq_lit: block -> ref Array<i32> {
+        };
+        __local_128 = __seq_lit: block -> ref Array<i32> {
             __local_98 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
             break __seq_lit: __local_98;
-        }) };
-        __local_106 = String { repr: array.new_data<u8>("a"), used: 1 };
-        Array<String>::push(__local_13.keys, __local_106);
-        Array<i32>::push(__local_13.values, 1);
-        __local_109 = String { repr: array.new_data<u8>("b"), used: 1 };
-        Array<String>::push(__local_13.keys, __local_109);
-        Array<i32>::push(__local_13.values, 2);
-        __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_52: block -> ref FrozenMap<i32> {
-            __local_111 = value_copy FrozenMapBuilder<i32>(__local_13);
-            break __inline_FrozenMapBuilder_i32__KeyValueLiteralBuilder__build_52: FrozenMap<i32> { keys: __local_111.keys, values: __local_111.values };
         };
-        break __kv_lit;
+        __local_106 = String { repr: array.new_data<u8>("a"), used: 1 };
+        Array<String>::push(__local_127, __local_106);
+        Array<i32>::push(__local_128, 1);
+        __local_109 = String { repr: array.new_data<u8>("b"), used: 1 };
+        Array<String>::push(__local_127, __local_109);
+        Array<i32>::push(__local_128, 2);
+        break __kv_lit: FrozenMap<i32> { keys: __local_127, values: __local_128 };
     };
     __v0_15 = __inline_Array_String___len_54: block -> i32 {
         __local_113 = m2.keys;
@@ -758,8 +747,6 @@ fn Array<String>::grow(self) {
 
 fn FrozenMap<i32>::get(self, key) {
     let i: i32;
-    let __local_5: i32;
-    let __local_7: i32;
     let _licm_keys_8: ref Array<String>;
     let _licm_values_9: ref Array<i32>;
     let _licm_used_10: i32;
@@ -778,17 +765,13 @@ fn FrozenMap<i32>::get(self, key) {
             if (i < _licm_used_10) == 0 {
                 break b40;
             };
-            if String^Eq::eq(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
-                __local_5 = i;
-                break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_11, __local_5);
-            }, key) {
+            if String^Eq::eq(builtin::array_get<ref String>(_licm_repr_11, i), key) {
                 return 0; __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
-                    __local_7 = i;
-                    if __local_7 >= _licm_used_12 {
+                    if i >= _licm_used_12 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_13, __local_7);
+                    break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_13, i);
                 };
             };
             i = i + 1;

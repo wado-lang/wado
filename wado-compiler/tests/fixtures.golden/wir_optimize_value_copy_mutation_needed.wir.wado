@@ -104,17 +104,15 @@ fn run() with Stdout {
     let __local_2: ref Formatter;
     let __local_3: ref String;
     let __local_4: ref Formatter;
-    let __local_10: ref Point;
     let __local_11: ref Point;
     p = Point { x: 1, y: 2 };
     "core:cli/println"(__tmpl: block -> ref String {
         __local_1 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         i32::fmt_decimal(__inline_modify_copy_5: block -> i32 {
-            __local_10 = p;
-            __local_11 = value_copy Point(__local_10);
+            __local_11 = value_copy Point(p);
             __local_11.x = 99;
-            break __inline_modify_copy_5: __local_10.x + __local_11.x;
+            break __inline_modify_copy_5: p.x + __local_11.x;
         }, __local_2);
         break __tmpl: __local_1;
     });

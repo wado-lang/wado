@@ -2458,8 +2458,6 @@ fn short(f) {
     let d: u64;
     let __local_22: i32;
     let __local_23: i32;
-    let __local_24: i32;
-    let __local_25: i32;
     let __local_26: u64;
     let __local_27: u64;
     let __local_29: u64;
@@ -2497,14 +2495,10 @@ fn short(f) {
     };
     max_m = m + (1_i64 << builtin::i64_extend_i32_s(z - 1));
     odd = builtin::i32_wrap_i64((m >>u builtin::i64_extend_i32_s(z)) & 1_i64);
-    lp = __inline_log2_pow10_2: block -> i32 {
-        __local_24 = p;
-        break __inline_log2_pow10_2: (__local_24 * 108853) >> 15;
-    };
+    lp = (p * 108853) >> 15;
     let __sroa_pm_hi: u64;
     let __sroa_pm_lo: u64;
-    __local_25 = p;
-    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(__local_25);
+    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(p);
     s = 0 - ((e + lp) + 3);
     dmin = __inline_unrounded_ceil_4: block -> u64 {
         __local_26 = __inline_unrounded_nudge_5: block -> u64 {
@@ -2561,8 +2555,6 @@ fn short32(f) {
     let d: u64;
     let __local_22: i32;
     let __local_23: i32;
-    let __local_24: i32;
-    let __local_25: i32;
     let __local_26: u64;
     let __local_27: u64;
     let __local_29: u64;
@@ -2600,14 +2592,10 @@ fn short32(f) {
     };
     max_m = m + (1_i64 << builtin::i64_extend_i32_s(z - 1));
     odd = builtin::i32_wrap_i64((m >>u builtin::i64_extend_i32_s(z)) & 1_i64);
-    lp = __inline_log2_pow10_2: block -> i32 {
-        __local_24 = p;
-        break __inline_log2_pow10_2: (__local_24 * 108853) >> 15;
-    };
+    lp = (p * 108853) >> 15;
     let __sroa_pm_hi: u64;
     let __sroa_pm_lo: u64;
-    __local_25 = p;
-    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(__local_25);
+    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(p);
     s = 0 - ((e + lp) + 3);
     dmin = __inline_unrounded_ceil_4: block -> u64 {
         __local_26 = __inline_unrounded_nudge_5: block -> u64 {
@@ -2653,26 +2641,20 @@ fn trim_zeros(x, p) {
     let d2: u64;
     let d1b: u64;
     let __local_17: u64;
-    let __local_19: u64;
     let __local_21: i64;
     let __local_22: u64;
-    let __local_24: u64;
     let __local_26: i64;
     let __local_27: u64;
-    let __local_29: u64;
     let __local_31: i64;
     let __local_32: u64;
-    let __local_34: u64;
     let __local_36: i64;
     let __local_37: u64;
-    let __local_39: u64;
     let __local_41: i64;
     xv = x;
     pv = p;
     d1 = __inline_rotate_right_0: block -> u64 {
         __local_17 = __inline_u64_mul_1: block -> u64 {
-            __local_19 = xv;
-            multivalue_bind [__local_21, _] = i64.mul_wide_u(__local_19, -3689348814741910323_i64);
+            multivalue_bind [__local_21, _] = i64.mul_wide_u(xv, -3689348814741910323_i64);
             break __inline_u64_mul_1: __local_21;
         };
         break __inline_rotate_right_0: (__local_17 >>u 1_i64) | (__local_17 << 63_i64);
@@ -2685,8 +2667,7 @@ fn trim_zeros(x, p) {
     };
     d8 = __inline_rotate_right_2: block -> u64 {
         __local_22 = __inline_u64_mul_3: block -> u64 {
-            __local_24 = xv;
-            multivalue_bind [__local_26, _] = i64.mul_wide_u(__local_24, -4078282918271054303_i64);
+            multivalue_bind [__local_26, _] = i64.mul_wide_u(xv, -4078282918271054303_i64);
             break __inline_u64_mul_3: __local_26;
         };
         break __inline_rotate_right_2: (__local_22 >>u 8_i64) | (__local_22 << 56_i64);
@@ -2697,8 +2678,7 @@ fn trim_zeros(x, p) {
     };
     d4 = __inline_rotate_right_4: block -> u64 {
         __local_27 = __inline_u64_mul_5: block -> u64 {
-            __local_29 = xv;
-            multivalue_bind [__local_31, _] = i64.mul_wide_u(__local_29, -3276141747490816367_i64);
+            multivalue_bind [__local_31, _] = i64.mul_wide_u(xv, -3276141747490816367_i64);
             break __inline_u64_mul_5: __local_31;
         };
         break __inline_rotate_right_4: (__local_27 >>u 4_i64) | (__local_27 << 60_i64);
@@ -2709,8 +2689,7 @@ fn trim_zeros(x, p) {
     };
     d2 = __inline_rotate_right_6: block -> u64 {
         __local_32 = __inline_u64_mul_7: block -> u64 {
-            __local_34 = xv;
-            multivalue_bind [__local_36, _] = i64.mul_wide_u(__local_34, -8116567392432202711_i64);
+            multivalue_bind [__local_36, _] = i64.mul_wide_u(xv, -8116567392432202711_i64);
             break __inline_u64_mul_7: __local_36;
         };
         break __inline_rotate_right_6: (__local_32 >>u 2_i64) | (__local_32 << 62_i64);
@@ -2721,8 +2700,7 @@ fn trim_zeros(x, p) {
     };
     d1b = __inline_rotate_right_8: block -> u64 {
         __local_37 = __inline_u64_mul_9: block -> u64 {
-            __local_39 = xv;
-            multivalue_bind [__local_41, _] = i64.mul_wide_u(__local_39, -3689348814741910323_i64);
+            multivalue_bind [__local_41, _] = i64.mul_wide_u(xv, -3689348814741910323_i64);
             break __inline_u64_mul_9: __local_41;
         };
         break __inline_rotate_right_8: (__local_37 >>u 1_i64) | (__local_37 << 63_i64);
@@ -2737,7 +2715,6 @@ fn trim_zeros(x, p) {
 fn write_digits_at(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
-    let index: i32;
     let value: u8;
     let _licm_repr_9: ref array<u8>;
     v = val;
@@ -2748,9 +2725,8 @@ fn write_digits_at(buf, offset, val, nd) {
             if (idx >= offset) == 0 {
                 break b184;
             };
-            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, index, value);
+            builtin::array_set_u8(_licm_repr_9, idx, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l185;
@@ -2986,11 +2962,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
 fn check_special(f) {
     let bits: i64;
     let is_neg: bool;
-    let __local_6: f64;
-    bits = __inline_f64__to_bits_0: block -> i64 {
-        __local_6 = f;
-        break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(__local_6);
-    };
+    bits = builtin::i64_reinterpret_f64(f);
     if bits == 0_i64 {
         return 1; 0; 1;
     };
@@ -3035,7 +3007,6 @@ fn parse(d, p) {
     let u: u64;
     let shift: u64;
     let __local_14: i32;
-    let __local_16: u64;
     b = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
     lp = (p * 108853) >> 15;
     e = __inline_i32__min_2: block -> i32 {
@@ -3051,10 +3022,7 @@ fn parse(d, p) {
     shift = builtin::i64_extend_i32_u(u >=u 36028797018963966_i64);
     u = (u >>u shift) | (u & 1_i64);
     e = e - builtin::i32_wrap_i64(shift);
-    return pack64(__inline_unrounded_round_4: block -> u64 {
-        __local_16 = u;
-        break __inline_unrounded_round_4: ((__local_16 + 1_i64) + ((__local_16 >>u 2_i64) & 1_i64)) >>u 2_i64;
-    }, 0 - e);
+    return pack64(((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64, 0 - e);
 }
 
 fn parse_text(s) {
@@ -3084,7 +3052,6 @@ fn parse_text(s) {
     let exp_start: i32;
     let eff_p: i32;
     let val: f64;
-    let __local_32: i32;
     let __local_34: i32;
     let __local_36: i32;
     let __local_38: i32;
@@ -3094,20 +3061,6 @@ fn parse_text(s) {
     let __local_46: i32;
     let __local_48: i32;
     let __local_50: i32;
-    let __local_52: i32;
-    let __local_54: i32;
-    let __local_56: i32;
-    let __local_58: i32;
-    let __local_60: i32;
-    let __local_62: i32;
-    let __local_64: i32;
-    let __local_66: i32;
-    let __local_68: i32;
-    let __local_70: i32;
-    let __local_72: i32;
-    let __local_74: i32;
-    let __local_76: i32;
-    let __local_78: i32;
     let _licm_repr_79: ref array<u8>;
     let _licm_repr_80: ref array<u8>;
     let _licm_repr_81: ref array<u8>;
@@ -3128,10 +3081,7 @@ fn parse_text(s) {
         return 1; 0;
     };
     remaining = len - i;
-    c0 = __inline_String__get_byte_2: block -> u8 {
-        __local_32 = i;
-        break __inline_String__get_byte_2: builtin::array_get_u8(s.repr, __local_32);
-    };
+    c0 = builtin::array_get_u8(s.repr, i);
     if if if c0 == 105 -> i32 {
         1;
     } else {
@@ -3271,26 +3221,17 @@ fn parse_text(s) {
         block {
             l243: loop {
                 if if if i < len -> i32 {
-                    __inline_String__get_byte_12: block -> u8 {
-                        __local_52 = i;
-                        break __inline_String__get_byte_12: builtin::array_get_u8(_licm_repr_79, __local_52);
-                    } >=u 48;
+                    builtin::array_get_u8(_licm_repr_79, i) >=u 48;
                 } else {
                     0;
                 } -> i32 {
-                    __inline_String__get_byte_13: block -> u8 {
-                        __local_54 = i;
-                        break __inline_String__get_byte_13: builtin::array_get_u8(_licm_repr_79, __local_54);
-                    } <=u 57;
+                    builtin::array_get_u8(_licm_repr_79, i) <=u 57;
                 } else {
                     0;
                 } == 0 {
                     break __for_0;
                 };
-                d = (d * 10_i64) + builtin::i64_extend_i32_u((__inline_String__get_byte_14: block -> u8 {
-                    __local_56 = i;
-                    break __inline_String__get_byte_14: builtin::array_get_u8(_licm_repr_79, __local_56);
-                } - 48) & 255);
+                d = (d * 10_i64) + builtin::i64_extend_i32_u((builtin::array_get_u8(_licm_repr_79, i) - 48) & 255);
                 i = i + 1;
                 continue l243;
             };
@@ -3298,10 +3239,7 @@ fn parse_text(s) {
     };
     int_digits = i - digit_start;
     if if i < len -> i32 {
-        __inline_String__get_byte_15: block -> u8 {
-            __local_58 = i;
-            break __inline_String__get_byte_15: builtin::array_get_u8(s.repr, __local_58);
-        } == 46;
+        builtin::array_get_u8(s.repr, i) == 46;
     } else {
         0;
     } {
@@ -3315,26 +3253,17 @@ fn parse_text(s) {
             block {
                 l251: loop {
                     if if if i < len -> i32 {
-                        __inline_String__get_byte_16: block -> u8 {
-                            __local_60 = i;
-                            break __inline_String__get_byte_16: builtin::array_get_u8(_licm_repr_80, __local_60);
-                        } >=u 48;
+                        builtin::array_get_u8(_licm_repr_80, i) >=u 48;
                     } else {
                         0;
                     } -> i32 {
-                        __inline_String__get_byte_17: block -> u8 {
-                            __local_62 = i;
-                            break __inline_String__get_byte_17: builtin::array_get_u8(_licm_repr_80, __local_62);
-                        } <=u 57;
+                        builtin::array_get_u8(_licm_repr_80, i) <=u 57;
                     } else {
                         0;
                     } == 0 {
                         break __for_1;
                     };
-                    d = (d * 10_i64) + builtin::i64_extend_i32_u((__inline_String__get_byte_18: block -> u8 {
-                        __local_64 = i;
-                        break __inline_String__get_byte_18: builtin::array_get_u8(_licm_repr_80, __local_64);
-                    } - 48) & 255);
+                    d = (d * 10_i64) + builtin::i64_extend_i32_u((builtin::array_get_u8(_licm_repr_80, i) - 48) & 255);
                     frac = frac + 1;
                     i = i + 1;
                     continue l251;
@@ -3355,16 +3284,10 @@ fn parse_text(s) {
     };
     p = 0;
     if if i < len -> i32 {
-        if __inline_String__get_byte_19: block -> u8 {
-            __local_66 = i;
-            break __inline_String__get_byte_19: builtin::array_get_u8(s.repr, __local_66);
-        } == 101 -> i32 {
+        if builtin::array_get_u8(s.repr, i) == 101 -> i32 {
             1;
         } else {
-            __inline_String__get_byte_20: block -> u8 {
-                __local_68 = i;
-                break __inline_String__get_byte_20: builtin::array_get_u8(s.repr, __local_68);
-            } == 69;
+            builtin::array_get_u8(s.repr, i) == 69;
         };
     } else {
         0;
@@ -3372,16 +3295,10 @@ fn parse_text(s) {
         i = i + 1;
         exp_sign = 1;
         if i < len {
-            if __inline_String__get_byte_21: block -> u8 {
-                __local_70 = i;
-                break __inline_String__get_byte_21: builtin::array_get_u8(s.repr, __local_70);
-            } == 45 {
+            if builtin::array_get_u8(s.repr, i) == 45 {
                 exp_sign = -1;
                 i = i + 1;
-            } else if __inline_String__get_byte_22: block -> u8 {
-                __local_72 = i;
-                break __inline_String__get_byte_22: builtin::array_get_u8(s.repr, __local_72);
-            } == 43 {
+            } else if builtin::array_get_u8(s.repr, i) == 43 {
                 i = i + 1;
             };
         };
@@ -3398,26 +3315,17 @@ fn parse_text(s) {
             block {
                 l267: loop {
                     if if if i < len -> i32 {
-                        __inline_String__get_byte_23: block -> u8 {
-                            __local_74 = i;
-                            break __inline_String__get_byte_23: builtin::array_get_u8(_licm_repr_81, __local_74);
-                        } >=u 48;
+                        builtin::array_get_u8(_licm_repr_81, i) >=u 48;
                     } else {
                         0;
                     } -> i32 {
-                        __inline_String__get_byte_24: block -> u8 {
-                            __local_76 = i;
-                            break __inline_String__get_byte_24: builtin::array_get_u8(_licm_repr_81, __local_76);
-                        } <=u 57;
+                        builtin::array_get_u8(_licm_repr_81, i) <=u 57;
                     } else {
                         0;
                     } == 0 {
                         break __for_2;
                     };
-                    p = (p * 10) + ((__inline_String__get_byte_25: block -> u8 {
-                        __local_78 = i;
-                        break __inline_String__get_byte_25: builtin::array_get_u8(_licm_repr_81, __local_78);
-                    } - 48) & 255);
+                    p = (p * 10) + ((builtin::array_get_u8(_licm_repr_81, i) - 48) & 255);
                     i = i + 1;
                     continue l267;
                 };
@@ -4212,7 +4120,6 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     let __local_42: i32;
     let __local_43: ref String;
     let __local_44: i64;
-    let __local_47: i32;
     let __local_48: ref String;
     let __local_49: ref String;
     let __local_50: i32;
@@ -4289,10 +4196,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             if (scan_pos < _licm_used_90) == 0 {
                 break b364;
             };
-            sb = __inline_String__get_byte_5: block -> u8 {
-                __local_47 = scan_pos;
-                break __inline_String__get_byte_5: builtin::array_get_u8(_licm_repr_91, __local_47);
-            };
+            sb = builtin::array_get_u8(_licm_repr_91, scan_pos);
             if if sb == 34 -> i32 {
                 1;
             } else {
@@ -4640,7 +4544,6 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
 fn "core:json/JsonDeserializer::has_exp_or_dot"(raw) {  // from core:json
     let i: i32;
     let b: i32;
-    let __local_6: i32;
     let _licm_used_7: i32;
     let _licm_repr_8: ref array<u8>;
     __for_4: block {
@@ -4652,10 +4555,7 @@ fn "core:json/JsonDeserializer::has_exp_or_dot"(raw) {  // from core:json
                 if (i < _licm_used_7) == 0 {
                     break __for_4;
                 };
-                b = __inline_String__get_byte_1: block -> u8 {
-                    __local_6 = i;
-                    break __inline_String__get_byte_1: builtin::array_get_u8(_licm_repr_8, __local_6);
-                };
+                b = builtin::array_get_u8(_licm_repr_8, i);
                 if if if b == 46 -> i32 {
                     1;
                 } else {
@@ -4687,7 +4587,6 @@ fn "core:json/JsonDeserializer::parse_i64_from"(self, raw, start) {  // from cor
     let __local_13: ref String;
     let __local_15: ref String;
     let __local_17: ref String;
-    let __local_23: i32;
     let __local_24: ref String;
     let _licm_repr_26: ref array<u8>;
     has_exp = "core:json/JsonDeserializer::has_exp_or_dot"(raw);
@@ -4729,10 +4628,7 @@ fn "core:json/JsonDeserializer::parse_i64_from"(self, raw, start) {  // from cor
             if (idx < len) == 0 {
                 break b423;
             };
-            b = __inline_String__get_byte_6: block -> u8 {
-                __local_23 = idx;
-                break __inline_String__get_byte_6: builtin::array_get_u8(_licm_repr_26, __local_23);
-            };
+            b = builtin::array_get_u8(_licm_repr_26, idx);
             if if b < 48 -> i32 {
                 1;
             } else {
@@ -4768,7 +4664,6 @@ fn "core:json/JsonDeserializer::parse_u64_from"(self, raw, start) {  // from cor
     let __local_18: ref String;
     let __local_21: ref String;
     let __local_23: ref String;
-    let __local_27: i32;
     let __local_28: ref String;
     let _licm_repr_30: ref array<u8>;
     if if raw.used > 0 -> i32 {
@@ -4817,10 +4712,7 @@ fn "core:json/JsonDeserializer::parse_u64_from"(self, raw, start) {  // from cor
             if (idx < len) == 0 {
                 break b435;
             };
-            b = __inline_String__get_byte_9: block -> u8 {
-                __local_27 = idx;
-                break __inline_String__get_byte_9: builtin::array_get_u8(_licm_repr_30, __local_27);
-            };
+            b = builtin::array_get_u8(_licm_repr_30, idx);
             if if b < 48 -> i32 {
                 1;
             } else {

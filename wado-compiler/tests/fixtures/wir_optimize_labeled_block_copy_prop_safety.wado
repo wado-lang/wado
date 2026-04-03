@@ -1,0 +1,31 @@
+// Test: labeled block copy propagation safety
+//
+// Verifies that the labeled block copy propagation does NOT eliminate copies
+// when the target is mutable (value snapshot semantics must be preserved).
+
+fn append_bang(mut s: String) -> String {
+    s.push_str("!");
+    return s;
+}
+
+fn increment(mut n: i32) -> i32 {
+    n += 1;
+    return n;
+}
+
+export fn run() with Stdout {
+    // Mutable string parameter: copy must be preserved
+    let greeting = "hello";
+    assert append_bang(greeting) == "hello!";
+    assert greeting == "hello";
+
+    // Mutable int parameter: copy must be preserved
+    let x = 5;
+    assert increment(x) == 6;
+    assert x == 5;
+}
+
+__DATA__
+{
+    "stdout": ""
+}
