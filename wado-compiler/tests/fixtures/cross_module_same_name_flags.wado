@@ -1,0 +1,16 @@
+// Two modules define flags Perms with different members.
+// Each module's Perms type must remain distinct.
+
+use { Perms, has_read } from "./sub/cross_module_same_name_flags_a.wado";
+use { Perms as PermsB, has_create } from "./sub/cross_module_same_name_flags_b.wado";
+
+test "cross-module same-name flags" {
+    let rw = Perms::Read | Perms::Write;
+    assert has_read(rw);
+
+    let cd = PermsB::Create | PermsB::Delete;
+    assert has_create(cd);
+}
+
+__DATA__
+{"test": {}}

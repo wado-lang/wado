@@ -232,11 +232,22 @@ fn register_struct(
     // definition module and the entry module. Only register the first occurrence.
     // Only applies to monomorphized structs — non-mono structs with the same name
     // from different modules (e.g., two modules defining `Pair`) are distinct types.
-    if tir_struct.monomorph_info.is_some()
-        && let Some(existing) = ctx.lookup_struct_by_name(&tir_struct.name).cloned()
-    {
-        ctx.struct_type_map.insert(struct_name, existing);
-        return;
+    // Check that the existing type comes from the same base generic definition
+    // to avoid conflating same-named generics from different modules.
+    if let Some(ref mono) = tir_struct.monomorph_info {
+        // Find the defining module of the base generic struct
+        let base_module = type_table
+            .find_struct_module_source(&mono.generic_name)
+            .unwrap_or(module_source.clone());
+        // Check if we already registered this monomorphized struct from the same base module
+        if let Some((existing_base_module, existing_id)) =
+            ctx.mono_struct_dedup.get(&tir_struct.name)
+        {
+            if *existing_base_module == base_module {
+                ctx.struct_type_map.insert(struct_name, existing_id.clone());
+                return;
+            }
+        }
     }
     // Also check with newtypes resolved: e.g., Array<Tuple<FieldName,FieldValue>> should
     // reuse the existing Array<Tuple<String,Array<u8>>> when FieldName/FieldValue are newtypes.
@@ -319,7 +330,16 @@ fn register_struct(
         }),
     );
 
-    ctx.struct_type_map.insert(struct_name, type_id);
+    ctx.struct_type_map.insert(struct_name, type_id.clone());
+
+    // Record in mono dedup map for cross-module deduplication
+    if let Some(ref mono) = tir_struct.monomorph_info {
+        let base_module = type_table
+            .find_struct_module_source(&mono.generic_name)
+            .unwrap_or(module_source.clone());
+        ctx.mono_struct_dedup
+            .insert(tir_struct.name.clone(), (base_module, type_id));
+    }
 }
 
 /// Register a single variant type.

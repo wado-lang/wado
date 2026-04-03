@@ -1,0 +1,18 @@
+// Two modules define generic fn wrap<T> with different implementations.
+// Each module's wrap must be monomorphized independently.
+
+use { wrap as wrap_a } from "./sub/cross_module_same_name_fn_a.wado";
+use { wrap as wrap_b } from "./sub/cross_module_same_name_fn_b.wado";
+
+test "cross-module same-name generic functions" {
+    let a = wrap_a::<i32>(42);
+    assert a.0 == 42;
+    assert a.1 == 1;
+
+    let b = wrap_b::<i32>(42);
+    assert b.0 == 42;
+    assert b.1 == 2;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,16 @@
+// Two modules define variant Status with different cases.
+// Each module's Status type must remain distinct.
+
+use { make_active, status_value } from "./sub/cross_module_same_name_variant_a.wado";
+use { make_ok, status_msg } from "./sub/cross_module_same_name_variant_b.wado";
+
+test "cross-module same-name variants" {
+    let a = make_active(42);
+    assert status_value(a) == 42;
+
+    let b = make_ok("hello");
+    assert status_msg(b) == "hello";
+}
+
+__DATA__
+{"test": {}}

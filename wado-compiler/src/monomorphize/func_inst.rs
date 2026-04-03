@@ -190,6 +190,7 @@ impl Monomorphizer {
                 if !type_args.is_empty() && generic_functions.contains_key(&qualified_func_name) {
                     let key = InstantiationKey {
                         name: qualified_func_name.clone(),
+                        module_source: self.current_module_source.clone(),
                         impl_type_args: vec![],
                         method_type_args: type_args.clone(),
                         method_info: func.method_info.clone(),
@@ -214,6 +215,7 @@ impl Monomorphizer {
                         {
                             let key = InstantiationKey {
                                 name: qualified_func_name.clone(),
+                                module_source: self.current_module_source.clone(),
                                 impl_type_args: vec![],
                                 method_type_args: inferred,
                                 method_info: func.method_info.clone(),
@@ -267,6 +269,7 @@ impl Monomorphizer {
                                 let method_info = generic_func.method_info.clone();
                                 let key = InstantiationKey {
                                     name: generic_method_name,
+                                    module_source: self.current_module_source.clone(),
                                     impl_type_args: impl_type_args.clone(),
                                     method_type_args,
                                     method_info,
@@ -338,6 +341,7 @@ impl Monomorphizer {
                                     });
                                 let key = InstantiationKey {
                                     name: full_method_name.clone(),
+                                    module_source: self.current_module_source.clone(),
                                     impl_type_args: vec![],
                                     method_type_args: type_args.clone(),
                                     method_info: Some(method_info),
@@ -409,6 +413,7 @@ impl Monomorphizer {
                                             );
                                             let key = InstantiationKey {
                                                 name: generic_method_name.clone(),
+                                                module_source: self.current_module_source.clone(),
                                                 impl_type_args: impl_type_args.clone(),
                                                 method_type_args: type_args.clone(),
                                                 method_info: Some(method_info),
@@ -479,6 +484,7 @@ impl Monomorphizer {
                                 let method_info = generic_func.method_info.clone();
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
+                                    module_source: self.current_module_source.clone(),
                                     impl_type_args: impl_type_args.clone(),
                                     method_type_args: method_type_args_for_key,
                                     method_info,
@@ -540,6 +546,7 @@ impl Monomorphizer {
                                 let method_info = generic_func.method_info.clone();
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
+                                    module_source: self.current_module_source.clone(),
                                     impl_type_args: impl_type_args.clone(),
                                     method_type_args: method_type_args_for_key,
                                     method_info,
@@ -625,6 +632,7 @@ impl Monomorphizer {
                     };
                     let key = InstantiationKey {
                         name: mono.generic_name.clone(),
+                        module_source: self.current_module_source.clone(),
                         impl_type_args: impl_ta,
                         method_type_args: method_ta,
                         method_info,
@@ -677,6 +685,7 @@ impl Monomorphizer {
                             drop(generic_func);
                             let key = InstantiationKey {
                                 name: generic_name,
+                                module_source: self.current_module_source.clone(),
                                 impl_type_args,
                                 method_type_args: vec![],
                                 method_info,

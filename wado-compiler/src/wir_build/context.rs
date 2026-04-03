@@ -44,6 +44,10 @@ pub struct WirContext<'a> {
     pub array_type_by_name: IndexMap<String, WirTypeId>,
     /// Map from tuple element `TypeIds` to `WirTypeId`.
     pub tuple_type_map: IndexMap<Vec<TypeId>, WirTypeId>,
+    /// Dedup map for monomorphized structs: mangled name → (base_module, WirTypeId).
+    /// Prevents registering the same monomorphized struct multiple times from different
+    /// processing modules while still distinguishing same-named generics from different modules.
+    pub mono_struct_dedup: IndexMap<String, (ModuleSource, WirTypeId)>,
     /// Map from variant qualified name to `WirTypeId`.
     pub variant_type_map: IndexMap<String, WirTypeId>,
     /// Variant case type info: case WIR type index → (variant WIR type index, case index).
@@ -162,6 +166,7 @@ impl<'a> WirContext<'a> {
             array_type_map: IndexMap::default(),
             array_type_by_name: IndexMap::default(),
             tuple_type_map: IndexMap::default(),
+            mono_struct_dedup: IndexMap::default(),
             variant_type_map: IndexMap::default(),
             variant_case_info: IndexMap::default(),
             functions: Vec::new(),
@@ -241,6 +246,20 @@ impl<'a> WirContext<'a> {
             .iter()
             .find(|(k, _)| k.name == name)
             .map(|(_, v)| v)
+    }
+
+    /// Look up a struct by name, but only match if the existing entry's module_source
+    /// matches the given base module. This prevents conflating same-named generics
+    /// from different modules (e.g., two modules both defining `Wrapper<T>`).
+    pub fn lookup_struct_by_name_and_base_module(
+        &self,
+        name: &str,
+        base_module: &ModuleSource,
+    ) -> Option<WirTypeId> {
+        self.struct_type_map
+            .iter()
+            .find(|(k, _)| k.name == name && &k.module_source == base_module)
+            .map(|(_, v)| v.clone())
     }
 
     // === Function Registration ===
@@ -467,8 +486,14 @@ impl<'a> WirContext<'a> {
                         type_id: type_id.clone(),
                         nullable: false,
                     }
+                } else if let Some(type_id) = self.lookup_struct_by_name_and_base_module(name, module_source) {
+                    // Fallback: try matching by name and base module
+                    WirType::Ref {
+                        type_id: type_id.clone(),
+                        nullable: false,
+                    }
                 } else if let Some(type_id) = self.lookup_struct_by_name(name) {
-                    // Fallback: monomorphized structs may have a different module_source
+                    // Last resort fallback for cases like Box types
                     WirType::Ref {
                         type_id: type_id.clone(),
                         nullable: false,
@@ -562,8 +587,16 @@ impl<'a> WirContext<'a> {
                         type_id: tid.clone(),
                         nullable: false,
                     }
-                } else if let Some(tid) = self.lookup_struct_by_name(&mangled) {
+                } else if let Some(tid) = self.lookup_struct_by_name_and_base_module(&mangled, module_source) {
                     // Fallback: monomorphized structs may have a different module_source
+                    // but same base module
+                    WirType::Ref {
+                        type_id: tid.clone(),
+                        nullable: false,
+                    }
+                } else if let Some(tid) = self.lookup_struct_by_name(&mangled) {
+                    // Last resort fallback for cases where module_source is unavailable
+                    // (e.g., Box types from boxing pass)
                     WirType::Ref {
                         type_id: tid.clone(),
                         nullable: false,

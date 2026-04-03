@@ -136,7 +136,7 @@ impl Monomorphizer {
     ) {
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance {
-                name, type_args, ..
+                name, module_source, type_args,
             } = type_table.get(id)
             {
                 // Skip empty type_args (invalid generic instances)
@@ -164,6 +164,7 @@ impl Monomorphizer {
                 if all_concrete {
                     let key = crate::tir::InstantiationKey {
                         name: name.clone(),
+                        module_source: module_source.clone(),
                         impl_type_args: type_args.clone(),
                         method_type_args: vec![],
                         method_info: None, // Struct instantiation,

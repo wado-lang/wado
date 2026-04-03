@@ -717,11 +717,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Clone fields to avoid borrow issues
                 let fields_clone = self.struct_fields.get(&name).cloned();
                 if let Some(struct_info) = fields_clone {
-                    for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
-                        if fname == field_name {
-                            // Substitute type parameters with concrete types
-                            let concrete_type = self.substitute_type_params(*ftype, &type_args);
-                            return (index as u32, concrete_type);
+                    if struct_info.module_source == module_source {
+                        for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
+                            if fname == field_name {
+                                // Substitute type parameters with concrete types
+                                let concrete_type =
+                                    self.substitute_type_params(*ftype, &type_args);
+                                return (index as u32, concrete_type);
+                            }
+                        }
+                    } else {
+                        // Name collision: look up field from the source module's pre-resolved
+                        // struct fields (all_struct_fields) which have type params already resolved.
+                        if let Some(source_fields) = self.all_struct_fields.get(&module_source)
+                            && let Some(source_info) = source_fields.get(&name)
+                        {
+                            for (index, (fname, ftype, _)) in
+                                source_info.fields.iter().enumerate()
+                            {
+                                if fname == field_name {
+                                    let concrete_type =
+                                        self.substitute_type_params(*ftype, &type_args);
+                                    return (index as u32, concrete_type);
+                                }
+                            }
                         }
                     }
                 }
