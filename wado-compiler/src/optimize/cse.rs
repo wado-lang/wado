@@ -46,7 +46,12 @@ fn cse_function(func: &mut TirFunction) -> bool {
         return false;
     };
     let mut changed = false;
-    cse_in_block(body, &mut func.local_count, &mut func.local_types, &mut changed);
+    cse_in_block(
+        body,
+        &mut func.local_count,
+        &mut func.local_types,
+        &mut changed,
+    );
     changed
 }
 
@@ -117,7 +122,7 @@ enum CseKey {
     },
 }
 
-/// Try to build a CseKey from a TIR expression (only for pure expressions).
+/// Try to build a `CseKey` from a TIR expression (only for pure expressions).
 fn expr_to_key(expr: &TirExpr) -> Option<CseKey> {
     match &expr.kind {
         TirExprKind::Binary { left, op, right } => {
@@ -135,7 +140,7 @@ fn expr_to_key(expr: &TirExpr) -> Option<CseKey> {
     }
 }
 
-/// Collect all locals referenced in a CseKey.
+/// Collect all locals referenced in a `CseKey`.
 fn key_locals(key: &CseKey, locals: &mut IndexSet<u32>) {
     match key {
         CseKey::Binary { left, right, .. } => {
@@ -226,7 +231,7 @@ fn cse_loop_body(
             // Replace the expression in the guard condition
             let cse_local_expr_kind = TirExprKind::Local {
                 index: cse_local_idx,
-                name: cse_local_name.clone(),
+                name: cse_local_name,
             };
             replace_matching_expr(&mut body.stmts[0], key, &cse_local_expr_kind, *type_id);
 
@@ -306,9 +311,9 @@ fn stmt_modifies_any(stmt: &TirStmt, locals: &IndexSet<u32>) -> bool {
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             block_modifies_any(body, locals)
         }
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => value
-            .as_ref()
-            .is_some_and(|v| expr_modifies_any(v, locals)),
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            value.as_ref().is_some_and(|v| expr_modifies_any(v, locals))
+        }
         TirStmtKind::IfLet {
             scrutinee,
             then_block,
@@ -334,10 +339,10 @@ fn block_modifies_any(block: &TirBlock, locals: &IndexSet<u32>) -> bool {
 fn expr_modifies_any(expr: &TirExpr, locals: &IndexSet<u32>) -> bool {
     match &expr.kind {
         TirExprKind::Assign { target, value } => {
-            if let TirExprKind::Local { index, .. } = &target.kind {
-                if locals.contains(index) {
-                    return true;
-                }
+            if let TirExprKind::Local { index, .. } = &target.kind
+                && locals.contains(index)
+            {
+                return true;
             }
             expr_modifies_any(target, locals) || expr_modifies_any(value, locals)
         }
@@ -387,7 +392,9 @@ fn stmt_contains_expr(stmt: &TirStmt, key: &CseKey) -> bool {
         } => {
             expr_contains(condition, key)
                 || block_contains(then_block, key)
-                || else_block.as_ref().is_some_and(|eb| block_contains(eb, key))
+                || else_block
+                    .as_ref()
+                    .is_some_and(|eb| block_contains(eb, key))
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             block_contains(body, key)
@@ -403,7 +410,9 @@ fn stmt_contains_expr(stmt: &TirStmt, key: &CseKey) -> bool {
         } => {
             expr_contains(scrutinee, key)
                 || block_contains(then_block, key)
-                || else_block.as_ref().is_some_and(|eb| block_contains(eb, key))
+                || else_block
+                    .as_ref()
+                    .is_some_and(|eb| block_contains(eb, key))
         }
         TirStmtKind::Continue => false,
         TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => false,
@@ -477,7 +486,7 @@ fn replace_matching_expr(
     match &mut stmt.kind {
         TirStmtKind::Expr(e) => replace_in_expr(e, key, replacement, type_id),
         TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
-            replace_in_expr(value, key, replacement, type_id)
+            replace_in_expr(value, key, replacement, type_id);
         }
         TirStmtKind::If {
             condition,
@@ -526,12 +535,7 @@ fn replace_in_block(
     }
 }
 
-fn replace_in_expr(
-    expr: &mut TirExpr,
-    key: &CseKey,
-    replacement: &TirExprKind,
-    type_id: TypeId,
-) {
+fn replace_in_expr(expr: &mut TirExpr, key: &CseKey, replacement: &TirExprKind, type_id: TypeId) {
     if expr_to_key(expr).as_ref() == Some(key) {
         expr.kind = replacement.clone();
         expr.type_id = type_id;

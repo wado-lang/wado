@@ -121,17 +121,14 @@ fn run() with Stdout {
     let __local_4: ref String;
     let __local_7: ref JsonSerializer;
     let __local_15: ref JsonSerializer;
-    let __local_22: ref Option<i32>;
-    let __local_23: ref Option<i32>;
     let __local_24: i32;
     let __local_25: i32;
     ser = JsonSerializer { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
     some_val = Option<i32>::Some { discriminant: 0, payload_0: 42 };
     drop(__inline_Option_i32__Serialize__serialize_JsonSerializer__2: block -> ref null SerializeError {
-        __local_22 = some_val;
         __local_7 = ser;
-        if ref.test Option<i32>::Some(__local_22) {
-            __local_24 = ref.cast Option<i32>::Some(__local_22).payload_0;
+        if ref.test Option<i32>::Some(some_val) {
+            __local_24 = ref.cast Option<i32>::Some(some_val).payload_0;
             break __inline_Option_i32__Serialize__serialize_JsonSerializer__2: JsonSerializer^Serializer::serialize_i32(__local_7.buf, __local_24);
         };
         __inline_JsonSerializer_Serializer__serialize_null_4: block -> ref null SerializeError {
@@ -157,10 +154,9 @@ fn run() with Stdout {
     ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
     none_val = Option<i32> { 1 };
     drop(__inline_Option_i32__Serialize__serialize_JsonSerializer__6: block -> ref null SerializeError {
-        __local_23 = none_val;
         __local_15 = ser;
-        if ref.test Option<i32>::Some(__local_23) {
-            __local_25 = ref.cast Option<i32>::Some(__local_23).payload_0;
+        if ref.test Option<i32>::Some(none_val) {
+            __local_25 = ref.cast Option<i32>::Some(none_val).payload_0;
             break __inline_Option_i32__Serialize__serialize_JsonSerializer__6: JsonSerializer^Serializer::serialize_i32(__local_15.buf, __local_25);
         };
         __inline_JsonSerializer_Serializer__serialize_null_8: block -> ref null SerializeError {

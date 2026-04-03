@@ -171,7 +171,6 @@ import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:
 
 fn find_key_index(keys, key) {
     let i: i32;
-    let __local_5: i32;
     let _licm_used_6: i32;
     let _licm_repr_7: ref array<String>;
     i = 0;
@@ -181,12 +180,11 @@ fn find_key_index(keys, key) {
         l1: loop {
             if if i < _licm_used_6 -> i32 {
                 String^Ord::cmp(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
-                    __local_5 = i;
-                    if __local_5 >= _licm_used_6 {
+                    if i >= _licm_used_6 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_7, __local_5);
+                    break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_7, i);
                 }, key) == 0;
             } else {
                 0;
@@ -382,8 +380,6 @@ fn array_index_inline_loop() with Stdout {
     let __local_8: ref Formatter;
     let __local_9: ref String;
     let __local_10: ref Formatter;
-    let __local_26: i32;
-    let index: i32;
     let value: i32;
     let __local_48: ref Formatter;
     let __local_55: ref Formatter;
@@ -406,10 +402,7 @@ fn array_index_inline_loop() with Stdout {
                 if (i_3 < _licm_used_67) == 0 {
                     break __for_2;
                 };
-                sum = sum + __inline_Array_i32__IndexValue__index_value_9: block -> i32 {
-                    __local_26 = i_3;
-                    break __inline_Array_i32__IndexValue__index_value_9: builtin::array_get<i32>(_licm_repr_68, __local_26);
-                };
+                sum = sum + builtin::array_get<i32>(_licm_repr_68, i_3);
                 i_3 = i_3 + 1;
                 continue l13;
             };
@@ -439,13 +432,12 @@ fn array_index_inline_loop() with Stdout {
                 if (i_6 < 3) == 0 {
                     break __for_3;
                 };
-                index = i_6;
                 value = i_6 * 10;
-                if index >= _licm_used_69 {
+                if i_6 >= _licm_used_69 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                builtin::array_set<i32>(_licm_repr_70, index, value);
+                builtin::array_set<i32>(_licm_repr_70, i_6, value);
                 i_6 = i_6 + 1;
                 continue l16;
             };
@@ -874,7 +866,6 @@ fn Tree<String>::check(self) {
 
 fn Node<String>::find_index(self, key) {
     let i: i32;
-    let __local_5: i32;
     let _licm_keys_6: ref Array<String>;
     let _licm_used_7: i32;
     let _licm_repr_8: ref array<String>;
@@ -886,12 +877,11 @@ fn Node<String>::find_index(self, key) {
         l58: loop {
             if if i < _licm_used_7 -> i32 {
                 String^Ord::cmp(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
-                    __local_5 = i;
-                    if __local_5 >= _licm_used_7 {
+                    if i >= _licm_used_7 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_8, __local_5);
+                    break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_8, i);
                 }, key) == 0;
             } else {
                 0;
@@ -908,7 +898,6 @@ fn Node<String>::find_index(self, key) {
 fn Node<String>::is_full(self, max_keys) {
     let count: i32;
     let i: i32;
-    let __local_6: i32;
     let _licm_keys_7: ref Array<String>;
     let _licm_deleted_8: ref Array<bool>;
     let _licm_used_9: i32;
@@ -928,12 +917,11 @@ fn Node<String>::is_full(self, max_keys) {
                     break __for_1;
                 };
                 if __inline_Array_bool__IndexValue__index_value_1: block -> bool {
-                    __local_6 = i;
-                    if __local_6 >= _licm_used_10 {
+                    if i >= _licm_used_10 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_11, __local_6);
+                    break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_11, i);
                 } == 0 {
                     count = count + 1;
                 };
@@ -948,7 +936,6 @@ fn Node<String>::is_full(self, max_keys) {
 fn Node<String>::count_active(self) {
     let count: i32;
     let i: i32;
-    let __local_5: i32;
     let _licm_keys_6: ref Array<String>;
     let _licm_deleted_7: ref Array<bool>;
     let _licm_used_8: i32;
@@ -968,12 +955,11 @@ fn Node<String>::count_active(self) {
                     break __for_0;
                 };
                 if __inline_Array_bool__IndexValue__index_value_1: block -> bool {
-                    __local_5 = i;
-                    if __local_5 >= _licm_used_9 {
+                    if i >= _licm_used_9 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_10, __local_5);
+                    break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_10, i);
                 } == 0 {
                     count = count + 1;
                 };

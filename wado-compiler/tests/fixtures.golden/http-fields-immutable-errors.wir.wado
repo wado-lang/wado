@@ -1276,17 +1276,19 @@ fn __cm_binding__Fields_set(self, name, value) {
     let __vresult: ref "wasi:http/types.wado/HeaderError";
     let __disc_15: i32;
     let __option_result: ref null String;
-    let __local_18: ref Array<Array<u8>>;
-    let __local_19: i32;
     let __local_21: ref array<u8>;
     let __local_22: i32;
     let __local_25: i32;
     let __local_26: i32;
     let __local_27: ref array<u8>;
+    let _licm_used_28: i32;
+    let _licm_repr_29: ref array<Array<u8>>;
     __name_packed = "core:internal/cm_lower_string"(name);
     __value_len = value.used;
     __value_base = "mem/realloc"(0, 0, 4, __value_len * 8);
     __value_i = 0;
+    _licm_used_28 = value.used;
+    _licm_repr_29 = value.repr;
     b63: block {
         l64: loop {
             if __value_i >= __value_len {
@@ -1294,13 +1296,11 @@ fn __cm_binding__Fields_set(self, name, value) {
             };
             __value_addr = __value_base + (__value_i * 8);
             __value_elem = __inline_Array_Array_u8___IndexValue__index_value_1: block -> ref Array<u8> {
-                __local_18 = value_copy Array<Array<u8>>(value);
-                __local_19 = __value_i;
-                if __local_19 >= __local_18.used {
+                if __value_i >= _licm_used_28 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_Array_u8___IndexValue__index_value_1: builtin::array_get<ref Array<u8>>(__local_18.repr, __local_19);
+                break __inline_Array_Array_u8___IndexValue__index_value_1: builtin::array_get<ref Array<u8>>(_licm_repr_29, __value_i);
             };
             __elem_packed = __inline_cm_lower_array_u8_2: block -> i64 {
                 __local_21 = __value_elem.repr;

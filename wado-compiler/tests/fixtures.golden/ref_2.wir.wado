@@ -150,9 +150,7 @@ import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:
 
 fn double_all(arr) {
     let i: i32;
-    let index: i32;
     let value: i32;
-    let __local_7: i32;
     let _licm_used_8: i32;
     let _licm_repr_9: ref array<i32>;
     __for_0: block {
@@ -164,12 +162,8 @@ fn double_all(arr) {
                 if (i < _licm_used_8) == 0 {
                     break __for_0;
                 };
-                index = i;
-                value = __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
-                    __local_7 = i;
-                    break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_9, __local_7);
-                } * 2;
-                builtin::array_set<i32>(_licm_repr_9, index, value);
+                value = builtin::array_get<i32>(_licm_repr_9, i) * 2;
+                builtin::array_set<i32>(_licm_repr_9, i, value);
                 i = i + 1;
                 continue l1;
             };
@@ -207,7 +201,6 @@ fn process(arr, input, count) {
     let val: u8;
     let dist: i32;
     let src: i32;
-    let __local_8: i32;
     let __local_13: i32;
     let _licm_used_14: i32;
     let _licm_repr_15: ref array<u8>;
@@ -220,12 +213,11 @@ fn process(arr, input, count) {
                 break b8;
             };
             val = __inline_Array_u8__IndexValue__index_value_0: block -> u8 {
-                __local_8 = i;
-                if __local_8 >= _licm_used_14 {
+                if i >= _licm_used_14 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_0: builtin::array_get<u8>(_licm_repr_15, __local_8);
+                break __inline_Array_u8__IndexValue__index_value_0: builtin::array_get<u8>(_licm_repr_15, i);
             };
             if val <u 128 {
                 Array<u8>::push(arr, val);
@@ -265,7 +257,6 @@ fn ref_mut_array_ops() with Stdout {
     let __local_7: ref String;
     let __local_8: ref Formatter;
     let arr: ref Array<i32>;
-    let __local_39: i32;
     let _licm_used_42: i32;
     let _licm_repr_43: ref array<i32>;
     nums = __seq_lit: block -> ref Array<i32> {
@@ -310,10 +301,7 @@ fn ref_mut_array_ops() with Stdout {
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
-                    i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_21: block -> i32 {
-                        __local_39 = i;
-                        break __inline_Array_i32__IndexValue__index_value_21: builtin::array_get<i32>(_licm_repr_43, __local_39);
-                    }, __local_8);
+                    i32::fmt_decimal(builtin::array_get<i32>(_licm_repr_43, i), __local_8);
                     break __tmpl: __local_7;
                 });
                 i = i + 1;
@@ -512,7 +500,6 @@ fn ref_mut_array_append_complex_test() with Stdout {
     let __local_6: ref Formatter;
     let __local_7: ref String;
     let __local_8: ref Formatter;
-    let __local_36: i32;
     let _licm_used_39: i32;
     let _licm_repr_40: ref array<u8>;
     out = __seq_lit: block -> ref Array<u8> {
@@ -547,10 +534,7 @@ fn ref_mut_array_append_complex_test() with Stdout {
                 "core:cli/println"(__tmpl: block -> ref String {
                     __local_7 = String { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
-                    i32::fmt_decimal(__inline_Array_u8__IndexValue__index_value_19: block -> u8 {
-                        __local_36 = i;
-                        break __inline_Array_u8__IndexValue__index_value_19: builtin::array_get<u8>(_licm_repr_40, __local_36);
-                    }, __local_8);
+                    i32::fmt_decimal(builtin::array_get<u8>(_licm_repr_40, i), __local_8);
                     break __tmpl: __local_7;
                 });
                 i = i + 1;

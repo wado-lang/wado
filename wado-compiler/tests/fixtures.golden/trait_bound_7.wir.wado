@@ -517,8 +517,6 @@ fn Holder<i32>::min(self) {
     let m: i32;
     let i: i32;
     let __local_3: ref Array<i32>;
-    let __local_7: i32;
-    let __local_9: i32;
     let _licm_items_10: ref Array<i32>;
     let _licm_used_11: i32;
     let _licm_repr_12: ref array<i32>;
@@ -540,14 +538,8 @@ fn Holder<i32>::min(self) {
                 if (i < _licm_used_11) == 0 {
                     break __for_0;
                 };
-                if i32^Ord::cmp(__inline_Array_i32__IndexValue__index_value_2: block -> i32 {
-                    __local_7 = i;
-                    break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_12, __local_7);
-                }, m) == 0 {
-                    m = __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
-                        __local_9 = i;
-                        break __inline_Array_i32__IndexValue__index_value_3: builtin::array_get<i32>(_licm_repr_12, __local_9);
-                    };
+                if i32^Ord::cmp(builtin::array_get<i32>(_licm_repr_12, i), m) == 0 {
+                    m = builtin::array_get<i32>(_licm_repr_12, i);
                 };
                 i = i + 1;
                 continue l35;

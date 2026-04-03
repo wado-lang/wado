@@ -108,7 +108,6 @@ fn sum_le(limit) {
     let i: i32;
     let __local_4: i32;
     let __local_6: ref array<i32>;
-    let __local_8: i32;
     let _licm_repr_10: ref array<i32>;
     arr = __inline_Array_i32___filled_0: block -> ref Array<i32> {
         __local_4 = limit + 1;
@@ -125,10 +124,7 @@ fn sum_le(limit) {
                 if (i <= limit) == 0 {
                     break __for_0;
                 };
-                sum = sum + __inline_Array_i32__IndexValue__index_value_1: block -> i32 {
-                    __local_8 = i;
-                    break __inline_Array_i32__IndexValue__index_value_1: builtin::array_get<i32>(_licm_repr_10, __local_8);
-                };
+                sum = sum + builtin::array_get<i32>(_licm_repr_10, i);
                 i = i + 1;
                 continue l1;
             };

@@ -279,8 +279,6 @@ fn array_index_inline_nested() with Stdout {
     let __local_6: ref String;
     let __local_7: ref Formatter;
     let __local_8: ref String;
-    let __local_38: i32;
-    let __local_40: i32;
     let __sroa_node_keys: ref Array<String>;
     let __sroa_node_values: ref Array<i32>;
     let __sroa_node_deleted: ref Array<bool>;
@@ -313,20 +311,18 @@ fn array_index_inline_nested() with Stdout {
                     break __for_1;
                 };
                 if __inline_Array_bool__IndexValue__index_value_19: block -> bool {
-                    __local_38 = i;
-                    if __local_38 >= _licm_used_53 {
+                    if i >= _licm_used_53 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_bool__IndexValue__index_value_19: builtin::array_get<bool>(_licm_repr_54, __local_38);
+                    break __inline_Array_bool__IndexValue__index_value_19: builtin::array_get<bool>(_licm_repr_54, i);
                 } == 0 {
                     sum = sum + __inline_Array_i32__IndexValue__index_value_20: block -> i32 {
-                        __local_40 = i;
-                        if __local_40 >= _licm_used_55 {
+                        if i >= _licm_used_55 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         };
-                        break __inline_Array_i32__IndexValue__index_value_20: builtin::array_get<i32>(_licm_repr_56, __local_40);
+                        break __inline_Array_i32__IndexValue__index_value_20: builtin::array_get<i32>(_licm_repr_56, i);
                     };
                 };
                 i = i + 1;
@@ -722,7 +718,6 @@ fn Array<i32>::grow(self) {
 fn Container<String>::count_flagged(self) {
     let count: i32;
     let i: i32;
-    let __local_5: i32;
     let _licm_markers_6: ref Array<bool>;
     let _licm_used_7: i32;
     let _licm_repr_8: ref array<bool>;
@@ -737,10 +732,7 @@ fn Container<String>::count_flagged(self) {
                 if (i < _licm_used_7) == 0 {
                     break __for_0;
                 };
-                if __inline_Array_bool__IndexValue__index_value_1: block -> bool {
-                    __local_5 = i;
-                    break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_8, __local_5);
-                } {
+                if builtin::array_get<bool>(_licm_repr_8, i) {
                     count = count + 1;
                 };
                 i = i + 1;

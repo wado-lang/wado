@@ -2485,7 +2485,6 @@ fn String::from_utf8<Array<u8>>(bytes) {
     let b1_8: u8;
     let b2_9: u8;
     let b3: u8;
-    let __local_20: u32;
     builder = String { repr: builtin::array_new<u8>(8), used: 0 };
     iter = "core:allocator/ArrayIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
     b184: block {
@@ -2627,10 +2626,7 @@ fn String::from_utf8<Array<u8>>(bytes) {
                 } else {
                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: byte out of range"), used: 32 } };
                 };
-                String::push(builder, __inline_char__from_u32_unchecked_2: block -> char {
-                    __local_20 = code;
-                    break __inline_char__from_u32_unchecked_2: __local_20;
-                });
+                String::push(builder, code);
             } else {
                 break b184;
             };

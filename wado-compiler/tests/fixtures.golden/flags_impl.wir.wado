@@ -105,18 +105,12 @@ import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn run() with Stdout {
-    let __v0_1: bool;
-    let __v0_3: bool;
     let __v0_5: bool;
     let __v0_8: bool;
     let __cond_9: bool;
     let __v0_10: bool;
     let __v0_12: bool;
     let __cond_13: bool;
-    let __local_14: ref String;
-    let __local_15: ref Formatter;
-    let __local_16: ref String;
-    let __local_17: ref Formatter;
     let __local_18: ref String;
     let __local_19: ref Formatter;
     let __local_20: ref String;
@@ -125,10 +119,6 @@ fn run() with Stdout {
     let __local_23: ref Formatter;
     let __local_24: ref String;
     let __local_25: ref Formatter;
-    let __local_31: ref Formatter;
-    let __local_36: ref Formatter;
-    let __local_43: ref Formatter;
-    let __local_48: ref Formatter;
     let __local_56: ref Formatter;
     let __local_61: ref Formatter;
     let __local_68: ref Formatter;
@@ -137,84 +127,10 @@ fn run() with Stdout {
     let __local_85: ref Formatter;
     let __local_93: ref Formatter;
     let __local_98: ref Formatter;
-    let __local_101: u32;
-    let __local_102: u32;
     let __local_103: u32;
     let __local_104: u32;
     let __local_105: u32;
     let __local_106: u32;
-    __v0_1 = __inline_Perms__has_read_2: block -> bool {
-        __local_101 = 3;
-        break __inline_Perms__has_read_2: 1;
-    };
-    if __v0_1 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_14 = String { repr: builtin::array_new<u8>(131), used: 0 };
-            String::push_str(__local_14, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_14, 114);
-            String::push(__local_14, 117);
-            String::push(__local_14, 110);
-            String::push(__local_14, 32);
-            String::push(__local_14, 97);
-            String::push(__local_14, 116);
-            String::push(__local_14, 32);
-            String::push_str(__local_14, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/flags_impl.wado"), used: 44 });
-            String::push(__local_14, 58);
-            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
-            __local_31 = __local_15;
-            i32::fmt_decimal(31, __local_31);
-            String::push_str(__local_14, String { repr: array.new_data<u8>("
-condition: rw.has_read()
-"), used: 26 });
-            String::push_str(__local_14, String { repr: array.new_data<u8>("rw.has_read(): "), used: 15 });
-            __local_15 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_14 };
-            __local_36 = __local_15;
-            Formatter::pad(__local_36, if __v0_1 -> ref String {
-                String { repr: array.new_data<u8>("true"), used: 4 };
-            } else {
-                String { repr: array.new_data<u8>("false"), used: 5 };
-            });
-            String::push(__local_14, 10);
-            break __tmpl: __local_14;
-        });
-        unreachable;
-    };
-    __v0_3 = __inline_Perms__has_write_10: block -> bool {
-        __local_102 = 3;
-        break __inline_Perms__has_write_10: 1;
-    };
-    if __v0_3 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_16 = String { repr: builtin::array_new<u8>(133), used: 0 };
-            String::push_str(__local_16, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_16, 114);
-            String::push(__local_16, 117);
-            String::push(__local_16, 110);
-            String::push(__local_16, 32);
-            String::push(__local_16, 97);
-            String::push(__local_16, 116);
-            String::push(__local_16, 32);
-            String::push_str(__local_16, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/flags_impl.wado"), used: 44 });
-            String::push(__local_16, 58);
-            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
-            __local_43 = __local_17;
-            i32::fmt_decimal(32, __local_43);
-            String::push_str(__local_16, String { repr: array.new_data<u8>("
-condition: rw.has_write()
-"), used: 27 });
-            String::push_str(__local_16, String { repr: array.new_data<u8>("rw.has_write(): "), used: 16 });
-            __local_17 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
-            __local_48 = __local_17;
-            Formatter::pad(__local_48, if __v0_3 -> ref String {
-                String { repr: array.new_data<u8>("true"), used: 4 };
-            } else {
-                String { repr: array.new_data<u8>("false"), used: 5 };
-            });
-            String::push(__local_16, 10);
-            break __tmpl: __local_16;
-        });
-        unreachable;
-    };
     __v0_5 = __inline_Perms_HasRead__check_read_18: block -> bool {
         __local_105 = 3;
         break __inline_Perms_HasRead__check_read_18: 1;
@@ -410,13 +326,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l14: loop {
+            l10: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l14;
+                continue l10;
             };
         };
     };
@@ -505,13 +421,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l20: loop {
+            l16: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l20;
+                continue l16;
             };
         };
     };
@@ -528,14 +444,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l24: loop {
+                l20: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l24;
+                    continue l20;
                 };
             };
         };
@@ -645,13 +561,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l36: loop {
+            l32: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::push(_licm_buf_4, c);
                 i = i + 1;
-                continue l36;
+                continue l32;
             };
         };
     };
