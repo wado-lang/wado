@@ -51,6 +51,17 @@ impl<..T: Eq> Eq for [..T] {
     }
 }
 
+/// Ord for tuples: lexicographic comparison using .zip().
+impl<..T: Ord> Ord for [..T] {
+    fn cmp(&self, other: &Self) -> Ordering {
+        for let [a, b] of [*self, *other].zip() {
+            let ord = a.cmp(&b);
+            if ord != Ordering::Equal { return ord; }
+        }
+        return Ordering::Equal;
+    }
+}
+
 /// Display for tuples: same as Inspect (tuples have no user-facing format).
 impl<..T: Display> Display for [..T] {
     fn fmt(&self, f: &mut Formatter) {

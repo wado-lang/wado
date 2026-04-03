@@ -3613,7 +3613,8 @@ fn try_lower_comparison(
             (name.clone(), args, Some(module_source.clone()))
         }
         ResolvedType::Tuple(_) => {
-            // Tuple Eq is provided by variadic impl in core:prelude/tuple.wado
+            // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
+            // and already lowered to method calls by the resolver.
             return None;
         }
         _ => return None,
