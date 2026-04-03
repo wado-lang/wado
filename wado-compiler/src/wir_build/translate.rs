@@ -466,11 +466,18 @@ impl FunctionTranslator<'_, '_> {
             ResolvedType::GenericInstance {
                 name,
                 module_source,
-                ..
+                type_args,
             } => {
                 // Internal Box<T> types are GC reference cells for primitive boxing.
                 // They should share the heap object on assignment, not deep-copy.
-                !(name == "Box" && module_source.is_core_internal())
+                if name == "Box" && module_source.is_core_internal() {
+                    return false;
+                }
+                // Empty tuples (unit-like) don't need value copy.
+                if name == "Tuple" && type_args.is_empty() {
+                    return false;
+                }
+                true
             }
             ResolvedType::Variant { .. } => true,
             _ => false,
