@@ -1,0 +1,26 @@
+// TODO: Two modules defining the same generic struct name should not collide.
+// Currently ICEs because mangled names don't include module_source.
+// Fix requires including module_source in GenericInstance mangled names.
+#![TODO]
+
+use { make_wrapper } from "./sub/cross_module_same_name_helper.wado";
+
+// Local Wrapper<T> with a completely different layout
+struct Wrapper<T> {
+    pub value: T,
+    pub tag: i32,
+}
+
+test "cross-module same-name generic structs" {
+    // Remote Wrapper<i32> — has field "inner"
+    let remote = make_wrapper(42);
+    assert remote.inner == 42;
+
+    // Local Wrapper<i32> — has fields "value" and "tag"
+    let local = Wrapper { value: 100, tag: 1 };
+    assert local.value == 100;
+    assert local.tag == 1;
+}
+
+__DATA__
+{"test": {}}

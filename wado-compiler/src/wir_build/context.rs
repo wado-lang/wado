@@ -513,6 +513,42 @@ impl<'a> WirContext<'a> {
             }
             ResolvedType::GenericInstance {
                 name,
+                type_args: elements,
+                module_source,
+            } if TypeTable::is_tuple_type(name, module_source) => {
+                if let Some(type_id) = self.tuple_type_map.get(elements) {
+                    WirType::Ref {
+                        type_id: type_id.clone(),
+                        nullable: false,
+                    }
+                } else {
+                    // Cross-module TypeId mismatch: fall back to matching by element WIR types.
+                    let elem_wir_types: Vec<WirType> = elements
+                        .iter()
+                        .map(|e| self.type_id_to_wir_type(type_table, *e))
+                        .collect();
+                    let found = self.tuple_type_map.iter().find(|(key_elems, _)| {
+                        key_elems.len() == elem_wir_types.len()
+                            && key_elems
+                                .iter()
+                                .zip(elem_wir_types.iter())
+                                .all(|(k, w)| self.type_id_to_wir_type(type_table, *k) == *w)
+                    });
+                    if let Some((_, type_id)) = found {
+                        WirType::Ref {
+                            type_id: type_id.clone(),
+                            nullable: false,
+                        }
+                    } else {
+                        WirType::AbstractRef {
+                            heap_type: crate::wir::WirAbstractHeapType::Struct,
+                            nullable: false,
+                        }
+                    }
+                }
+            }
+            ResolvedType::GenericInstance {
+                name,
                 module_source,
                 type_args,
             } => {
@@ -641,40 +677,6 @@ impl<'a> WirContext<'a> {
                     WirType::AbstractRef {
                         heap_type: crate::wir::WirAbstractHeapType::Struct,
                         nullable: false,
-                    }
-                }
-            }
-            ResolvedType::Tuple(elements) => {
-                if let Some(type_id) = self.tuple_type_map.get(elements) {
-                    WirType::Ref {
-                        type_id: type_id.clone(),
-                        nullable: false,
-                    }
-                } else {
-                    // Cross-module TypeId mismatch: the tuple was created in one
-                    // module's TypeTable but the tuple_type_map uses TypeIds from
-                    // another module. Fall back to matching by element WIR types.
-                    let elem_wir_types: Vec<WirType> = elements
-                        .iter()
-                        .map(|e| self.type_id_to_wir_type(type_table, *e))
-                        .collect();
-                    let found = self.tuple_type_map.iter().find(|(key_elems, _)| {
-                        key_elems.len() == elem_wir_types.len()
-                            && key_elems
-                                .iter()
-                                .zip(elem_wir_types.iter())
-                                .all(|(k, w)| self.type_id_to_wir_type(type_table, *k) == *w)
-                    });
-                    if let Some((_, type_id)) = found {
-                        WirType::Ref {
-                            type_id: type_id.clone(),
-                            nullable: false,
-                        }
-                    } else {
-                        WirType::AbstractRef {
-                            heap_type: crate::wir::WirAbstractHeapType::Struct,
-                            nullable: false,
-                        }
                     }
                 }
             }

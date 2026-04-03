@@ -1123,9 +1123,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ResolvedType::GenericInstance { type_args, .. } => type_args
                 .iter()
                 .any(|t| self.type_contains_params(*t, type_table)),
-            ResolvedType::Tuple(elems) => elems
-                .iter()
-                .any(|t| self.type_contains_params(*t, type_table)),
             _ => false,
         }
     }

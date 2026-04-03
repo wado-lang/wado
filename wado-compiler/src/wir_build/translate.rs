@@ -466,14 +466,20 @@ impl FunctionTranslator<'_, '_> {
             ResolvedType::GenericInstance {
                 name,
                 module_source,
-                ..
+                type_args,
             } => {
                 // Internal Box<T> types are GC reference cells for primitive boxing.
                 // They should share the heap object on assignment, not deep-copy.
-                !(name == "Box" && module_source.is_core_internal())
+                if name == "Box" && module_source.is_core_internal() {
+                    return false;
+                }
+                // Empty tuples (unit-like) don't need value copy.
+                if TypeTable::is_tuple_type(name, module_source) && type_args.is_empty() {
+                    return false;
+                }
+                true
             }
             ResolvedType::Variant { .. } => true,
-            ResolvedType::Tuple(elements) => !elements.is_empty(),
             _ => false,
         }
     }
@@ -6460,12 +6466,7 @@ impl FunctionTranslator<'_, '_> {
             TirPattern::Tuple(sub_patterns, _) => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
-                    let element_types =
-                        if let ResolvedType::Tuple(elements) = self.type_table.get(scrut_type) {
-                            elements.clone()
-                        } else {
-                            vec![]
-                        };
+                    let element_types = self.type_table.as_tuple(scrut_type).unwrap_or_default();
                     for (i, sub_pattern) in sub_patterns.iter().enumerate() {
                         let field_name_str = format!("{i}");
                         let field_result_ty = self.struct_field_wir_type(type_id, &field_name_str);

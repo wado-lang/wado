@@ -181,15 +181,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. } => (name.clone(), None),
             ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => (
-                name.clone(),
-                if type_args.is_empty() {
-                    None
-                } else {
-                    Some(type_args.clone())
-                },
-            ),
+                name,
+                module_source,
+                type_args,
+            } => {
+                if TypeTable::is_tuple_type(name, module_source) {
+                    // Tuples implement a trait when all elements implement it
+                    let elems = type_args.clone();
+                    return elems
+                        .iter()
+                        .all(|e| self.type_implements_trait(*e, trait_name));
+                }
+                (
+                    name.clone(),
+                    if type_args.is_empty() {
+                        None
+                    } else {
+                        Some(type_args.clone())
+                    },
+                )
+            }
             ResolvedType::Ref(inner) => {
                 // References always implement Eq via ref.eq (identity comparison)
                 if trait_name == "Eq" {
@@ -212,13 +223,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return true;
                 }
                 return self.type_implements_trait(inner_id, trait_name);
-            }
-            ResolvedType::Tuple(elems) => {
-                // Tuples implement a trait when all elements implement it
-                let elems = elems.clone();
-                return elems
-                    .iter()
-                    .all(|e| self.type_implements_trait(*e, trait_name));
             }
             ResolvedType::AssocTypeProjection { bounds, .. } => {
                 // An associated type projection T::Assoc implements a trait if

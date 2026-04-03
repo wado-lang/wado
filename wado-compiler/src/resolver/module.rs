@@ -459,7 +459,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Type::Generic(generic) => generic.name.clone(),
             Type::Reference(_) => "&".to_string(),
             Type::MutReference(_) => "&mut".to_string(),
-            Type::Tuple(_) => "Tuple".to_string(),
+            Type::Tuple(_) => TypeTable::TUPLE_TYPE_NAME.to_string(),
             _ => "Unknown".to_string(),
         }
     }
@@ -470,7 +470,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Type::Generic(generic) => generic.name.clone(),
             Type::Reference(_) => "&".to_string(),
             Type::MutReference(_) => "&mut".to_string(),
-            Type::Tuple(_) => "Tuple".to_string(),
+            Type::Tuple(_) => TypeTable::TUPLE_TYPE_NAME.to_string(),
             Type::Function(func_type) => {
                 // Build function type string: "fn(T1, T2) -> R"
                 let param_strs: Vec<String> = func_type

@@ -643,13 +643,16 @@ impl Monomorphizer {
                 // (e.g., Tuple^Eq::eq from variadic `impl<..T: Eq> Eq for [..T]`)
                 // The resolver already creates monomorph_info with the generic name and
                 // impl_type_args (the concrete tuple element types).
+                // TODO: LocalMethodName.struct_name does not carry module_source,
+                // so we cannot use TypeTable::is_tuple_type here. This is safe because
+                // only built-in tuples use TUPLE_TYPE_NAME as struct_name in method info.
                 if let Some(ref info) = method_func.method_info
-                    && info.struct_name == "Tuple"
+                    && info.struct_name == TypeTable::TUPLE_TYPE_NAME
                 {
                     let mono = method_func.monomorph_info.as_ref();
                     let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
                         MethodName::format_local(
-                            "Tuple",
+                            TypeTable::TUPLE_TYPE_NAME,
                             info.trait_name.as_deref(),
                             &info.method_name,
                         )
@@ -662,13 +665,7 @@ impl Monomorphizer {
                             {
                                 receiver_type = inner;
                             }
-                            if let ResolvedType::Tuple(elems) =
-                                type_table.get(receiver_type).clone()
-                            {
-                                elems
-                            } else {
-                                vec![]
-                            }
+                            type_table.as_tuple(receiver_type).unwrap_or_default()
                         });
                     {
                         if let Some(generic_func_rc) = generic_functions.get(&generic_name) {
@@ -1492,8 +1489,7 @@ impl Monomorphizer {
                     let old_elements = std::mem::take(elements);
                     for elem in old_elements {
                         if let TirExprKind::TupleSpread { ref expr } = elem.kind {
-                            let inner_type = type_table.get(expr.type_id).clone();
-                            if let ResolvedType::Tuple(inner_elems) = inner_type {
+                            if let Some(inner_elems) = type_table.as_tuple(expr.type_id) {
                                 for (i, &elem_type) in inner_elems.iter().enumerate() {
                                     elements.push(TirExpr::new(
                                         TirExprKind::FieldAccess {
@@ -1522,10 +1518,9 @@ impl Monomorphizer {
                             };
                             let concrete_pack =
                                 self.substitute_type(pack_type_id, substitution, type_table);
-                            let pack_elems = match type_table.get(concrete_pack) {
-                                ResolvedType::Tuple(elems) => elems.clone(),
-                                _ => vec![concrete_pack],
-                            };
+                            let pack_elems = type_table
+                                .as_tuple(concrete_pack)
+                                .unwrap_or_else(|| vec![concrete_pack]);
                             for &elem_type in &pack_elems {
                                 let mut elem_call = call_expr.as_ref().clone();
                                 // Per-element substitution: pack → single element type.
@@ -1631,16 +1626,13 @@ impl Monomorphizer {
                 // Result: [[A0, B0, ...], [A1, B1, ...], ...]
                 let inner_expr = zip_inner.as_ref().clone();
                 let span = expr.span;
-                let outer_elems = match type_table.get(inner_expr.type_id) {
-                    ResolvedType::Tuple(elems) => elems.clone(),
-                    _ => return,
+                let outer_elems = match type_table.as_tuple(inner_expr.type_id) {
+                    Some(elems) => elems,
+                    None => return,
                 };
                 let inner_arities: Vec<Vec<TypeId>> = outer_elems
                     .iter()
-                    .filter_map(|e| match type_table.get(*e) {
-                        ResolvedType::Tuple(inner) => Some(inner.clone()),
-                        _ => None,
-                    })
+                    .filter_map(|e| type_table.as_tuple(*e))
                     .collect();
                 if inner_arities.is_empty() || inner_arities.len() != outer_elems.len() {
                     return;
@@ -2265,18 +2257,18 @@ impl Monomorphizer {
 
         // Get the concrete tuple elements
         let iterable_type = iterable.type_id;
-        let elements = match type_table.get(iterable_type) {
-            ResolvedType::Tuple(elems) => elems.clone(),
-            other => {
-                panic!("VariadicForOf: expected concrete Tuple after substitution, got {other:?}");
-            }
-        };
+        let elements = type_table.as_tuple(iterable_type).unwrap_or_else(|| {
+            panic!(
+                "VariadicForOf: expected concrete Tuple after substitution, got {:?}",
+                type_table.get(iterable_type)
+            );
+        });
 
         // Find the TypePack index in the substitution map so we can override it per element
         let pack_index = {
             let mut found = None;
             for (&idx, &tid) in substitution {
-                if tid == iterable_type || matches!(type_table.get(tid), ResolvedType::Tuple(_)) {
+                if tid == iterable_type || type_table.is_tuple(tid) {
                     found = Some(idx);
                     break;
                 }
@@ -2381,10 +2373,9 @@ impl Monomorphizer {
                     // corrupts the pair type Tuple([TypePack, TypePack]) → Tuple([T0,T1,...,T0,T1,...]).
                     // Instead, generate fresh destructured Let stmts with correct field types
                     // from elem_type, and only substitute the remaining user body stmts.
-                    let pair_fields = match type_table.get(elem_type) {
-                        ResolvedType::Tuple(fields) => fields.clone(),
-                        _ => vec![elem_type],
-                    };
+                    let pair_fields = type_table
+                        .as_tuple(elem_type)
+                        .unwrap_or_else(|| vec![elem_type]);
 
                     // The body_pack_type is the individual field type (e.g., [i32, i32] → i32).
                     // For non-tuple field types this is just the field type itself.
@@ -3606,16 +3597,16 @@ fn try_lower_comparison(
             module_source,
             ..
         } => {
+            if TypeTable::is_tuple_type(name, module_source) {
+                // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
+                // and already lowered to method calls by the resolver.
+                return None;
+            }
             let args: Vec<String> = type_args
                 .iter()
                 .map(|&t| type_table.mangle_type_name(t))
                 .collect();
             (name.clone(), args, Some(module_source.clone()))
-        }
-        ResolvedType::Tuple(_) => {
-            // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
-            // and already lowered to method calls by the resolver.
-            return None;
         }
         _ => return None,
     };

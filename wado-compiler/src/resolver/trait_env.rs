@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::ast::{self, Item, Module, Type};
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
-use crate::tir::TypeId;
+use crate::tir::{TypeId, TypeTable};
 
 use super::types::TypeError;
 
@@ -161,7 +161,7 @@ impl TraitEnv {
                     }
                     Item::TupleTypeDecl(_) => {
                         type_decl_index
-                            .entry("Tuple".to_string())
+                            .entry(TypeTable::TUPLE_TYPE_NAME.to_string())
                             .or_insert_with(|| module_source.clone());
                     }
                     _ => {}
@@ -282,7 +282,7 @@ fn classify_position(
         }
         // Tuples are local if the current crate owns them (via `pub type [..T];`)
         Type::Tuple(_) => {
-            if type_decl_index.contains_key("Tuple") {
+            if type_decl_index.contains_key(TypeTable::TUPLE_TYPE_NAME) {
                 PositionKind::LocalType
             } else {
                 PositionKind::ForeignType
@@ -415,7 +415,7 @@ fn get_type_name_static(ty: &ast::Type) -> String {
         ast::Type::Generic(generic) => generic.name.clone(),
         ast::Type::Reference(_) => "&".to_string(),
         ast::Type::MutReference(_) => "&mut".to_string(),
-        ast::Type::Tuple(_) => "Tuple".to_string(),
+        ast::Type::Tuple(_) => TypeTable::TUPLE_TYPE_NAME.to_string(),
         _ => "Unknown".to_string(),
     }
 }

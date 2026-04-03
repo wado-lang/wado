@@ -211,13 +211,6 @@ impl Monomorphizer {
                     .collect();
                 Some(mangle_generic_name(name, &args))
             }
-            ResolvedType::Tuple(elems) => {
-                let args: Vec<String> = elems
-                    .iter()
-                    .map(|t| type_table.mangle_type_name(*t))
-                    .collect();
-                Some(mangle_generic_name("Tuple", &args))
-            }
             ResolvedType::BuiltinArray(elem) => {
                 let arg = type_table.mangle_type_name(*elem);
                 Some(mangle_generic_name("Array", &[arg]))
@@ -249,7 +242,6 @@ impl Monomorphizer {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => Some((name.clone(), type_args.clone())),
-            ResolvedType::Tuple(elems) => Some(("Tuple".to_string(), elems.clone())),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.get_struct_info_from_type(*inner, type_table)
             }

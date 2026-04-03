@@ -189,9 +189,7 @@ impl BuiltinRegistry {
                     .iter()
                     .map(|t| Self::resolve_type(t, type_params, type_table))
                     .collect();
-                type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Tuple(element_types))
+                type_table.borrow_mut().make_tuple(element_types)
             }
             _ => TypeTable::UNIT, // Other types default to UNIT
         }

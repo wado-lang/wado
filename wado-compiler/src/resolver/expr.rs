@@ -681,23 +681,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
             }
-            // Tuple field access (numeric field names: 0, 1, 2, ...)
-            ResolvedType::Tuple(elements) => {
-                if let Ok(index) = field_name.parse::<usize>() {
-                    if index < elements.len() {
-                        return (index as u32, elements[index]);
-                    }
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
-                        message: format!(
-                            "tuple index {} out of bounds, tuple has {} elements",
-                            index,
-                            elements.len()
-                        ),
-                        span,
-                    });
-                    return (0, TypeTable::UNKNOWN);
-                }
-            }
             // Reference types - look through to inner type
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.lookup_field_type(inner, field_name, span);
@@ -707,10 +690,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 return self.lookup_field_type(base_type, field_name, span);
             }
             // Generic instance - look up field from generic struct definition
-            // and substitute type parameters with concrete type args
+            // and substitute type parameters with concrete type args.
+            // Tuples use numeric field access (0, 1, 2, ...).
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                module_source,
+                type_args,
             } => {
+                // Tuple field access (numeric field names: 0, 1, 2, ...)
+                if TypeTable::is_tuple_type(&name, &module_source)
+                    && let Ok(index) = field_name.parse::<usize>()
+                {
+                    if index < type_args.len() {
+                        return (index as u32, type_args[index]);
+                    }
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message: format!(
+                            "tuple index {} out of bounds, tuple has {} elements",
+                            index,
+                            type_args.len()
+                        ),
+                        span,
+                    });
+                    return (0, TypeTable::UNKNOWN);
+                }
                 // Clone fields to avoid borrow issues
                 let fields_clone = self.struct_fields.get(&name).cloned();
                 if let Some(struct_info) = fields_clone {
@@ -863,29 +866,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let new_inner = self.substitute_type_params(inner, type_args);
                 self.type_table.borrow_mut().make_mut_ref(new_inner)
             }
-            ResolvedType::Tuple(elems) => {
-                // Expand TypePack elements: splice the pack's concrete types into the tuple
-                let mut new_elems: Vec<TypeId> = Vec::new();
-                for &e in &elems {
-                    let e_type = self.type_table.borrow().get(e).clone();
-                    if let ResolvedType::TypePack { index, .. } = e_type {
-                        // The substituted type for a pack is a tuple; expand its elements
-                        if let Some(&pack_type) = type_args.get(index as usize) {
-                            let pack_resolved = self.type_table.borrow().get(pack_type).clone();
-                            if let ResolvedType::Tuple(pack_elems) = pack_resolved {
-                                new_elems.extend_from_slice(&pack_elems);
-                            } else {
-                                new_elems.push(pack_type);
-                            }
-                        } else {
-                            new_elems.push(e);
-                        }
-                    } else {
-                        new_elems.push(self.substitute_type_params(e, type_args));
-                    }
-                }
-                self.type_table.borrow_mut().make_tuple(new_elems)
-            }
             ResolvedType::GenericResource {
                 name,
                 module_source,
@@ -908,14 +888,40 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 module_source,
                 type_args: inner_args,
             } => {
-                // Recursively substitute in nested generic instances
-                let new_args: Vec<TypeId> = inner_args
-                    .iter()
-                    .map(|&arg| self.substitute_type_params(arg, type_args))
-                    .collect();
-                self.type_table
-                    .borrow_mut()
-                    .make_generic_instance(name, module_source, new_args)
+                if TypeTable::is_tuple_type(&name, &module_source) {
+                    // Expand TypePack elements: splice the pack's concrete types into the tuple
+                    let mut new_elems: Vec<TypeId> = Vec::new();
+                    for &e in &inner_args {
+                        let e_type = self.type_table.borrow().get(e).clone();
+                        if let ResolvedType::TypePack { index, .. } = e_type {
+                            if let Some(&pack_type) = type_args.get(index as usize) {
+                                if let Some(pack_elems) =
+                                    self.type_table.borrow().as_tuple(pack_type)
+                                {
+                                    new_elems.extend_from_slice(&pack_elems);
+                                } else {
+                                    new_elems.push(pack_type);
+                                }
+                            } else {
+                                new_elems.push(e);
+                            }
+                        } else {
+                            new_elems.push(self.substitute_type_params(e, type_args));
+                        }
+                    }
+                    self.type_table.borrow_mut().make_tuple(new_elems)
+                } else {
+                    // Recursively substitute in nested generic instances
+                    let new_args: Vec<TypeId> = inner_args
+                        .iter()
+                        .map(|&arg| self.substitute_type_params(arg, type_args))
+                        .collect();
+                    self.type_table.borrow_mut().make_generic_instance(
+                        name,
+                        module_source,
+                        new_args,
+                    )
+                }
             }
             ResolvedType::AssocTypeProjection {
                 param_id,
@@ -1016,17 +1022,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     )
                 }
             }
-            ResolvedType::Tuple(elems) => {
-                let new_elems: Vec<TypeId> = elems
-                    .iter()
-                    .map(|&e| self.substitute_type_params_by_map(e, map))
-                    .collect();
-                if new_elems == elems {
-                    type_id
-                } else {
-                    self.type_table.borrow_mut().make_tuple(new_elems)
-                }
-            }
             _ => type_id,
         }
     }
@@ -1047,7 +1042,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
-        if let ResolvedType::Tuple(elements) = base_type {
+        if let ResolvedType::GenericInstance {
+            ref name,
+            ref module_source,
+            type_args: ref elements,
+        } = base_type
+            && TypeTable::is_tuple_type(name, module_source)
+        {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
                 value: ast::Literal::Number(repr),
@@ -2517,59 +2518,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // incorrect mappings (like K -> K).
                 type_param_map.entry(expected).or_insert(actual);
             }
-            // Generic instance: unify type arguments recursively
+            // Tuple types with type pack: e.g., [A, ..T, B] matched against [i32, String, f64, bool]
+            // Must come before the generic GenericInstance arm to match first.
             (
                 ResolvedType::GenericInstance {
                     name: expected_name,
-                    type_args: expected_args,
-                    ..
+                    module_source: expected_module_source,
+                    type_args: expected_elems,
                 },
                 ResolvedType::GenericInstance {
                     name: actual_name,
-                    type_args: actual_args,
-                    ..
+                    module_source: actual_module_source,
+                    type_args: actual_elems,
                 },
-            ) if expected_name == actual_name && expected_args.len() == actual_args.len() => {
-                for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
-                    self.unify_types_for_inference(exp_arg, act_arg, type_param_map);
-                }
-            }
-            // Array<K> (GenericInstance) with Tuple (homogeneous) - infer K from tuple element type
-            (
-                ResolvedType::GenericInstance {
-                    name,
-                    type_args: expected_args,
-                    ..
-                },
-                ResolvedType::Tuple(actual_elems),
-            ) if name == "Array" && expected_args.len() == 1 && !actual_elems.is_empty() => {
-                // Check if all tuple elements have the same type
-                let first_elem_type = actual_elems[0];
-                let all_same = actual_elems.iter().all(|&e| e == first_elem_type);
-                if all_same {
-                    // Unify Array's element type param with the tuple's element type
-                    self.unify_types_for_inference(
-                        expected_args[0],
-                        first_elem_type,
-                        type_param_map,
-                    );
-                }
-            }
-            // Array types (Wado's Array<T>)
-            (
-                ResolvedType::BuiltinArray(expected_elem),
-                ResolvedType::BuiltinArray(actual_elem),
-            ) => {
-                self.unify_types_for_inference(*expected_elem, *actual_elem, type_param_map);
-            }
-            // Ref types
-            (ResolvedType::Ref(expected_inner), ResolvedType::Ref(actual_inner))
-            | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
-                self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
-            }
-            // Tuple types with type pack: e.g., [A, ..T, B] matched against [i32, String, f64, bool]
-            (ResolvedType::Tuple(expected_elems), ResolvedType::Tuple(actual_elems))
-                if expected_elems.iter().any(|e| {
+            ) if TypeTable::is_tuple_type(expected_name, expected_module_source)
+                && TypeTable::is_tuple_type(actual_name, actual_module_source)
+                && expected_elems.iter().any(|e| {
                     matches!(
                         self.type_table.borrow().get(*e),
                         ResolvedType::TypePack { .. }
@@ -2617,13 +2581,63 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .or_insert(pack_tuple);
                 }
             }
-            // Tuple types (exact match)
-            (ResolvedType::Tuple(expected_elems), ResolvedType::Tuple(actual_elems))
-                if expected_elems.len() == actual_elems.len() =>
-            {
-                for (&exp, &act) in expected_elems.iter().zip(actual_elems.iter()) {
-                    self.unify_types_for_inference(exp, act, type_param_map);
+            // Generic instance (including tuples): unify type arguments recursively
+            (
+                ResolvedType::GenericInstance {
+                    name: expected_name,
+                    type_args: expected_args,
+                    ..
+                },
+                ResolvedType::GenericInstance {
+                    name: actual_name,
+                    type_args: actual_args,
+                    ..
+                },
+            ) if expected_name == actual_name && expected_args.len() == actual_args.len() => {
+                for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
+                    self.unify_types_for_inference(exp_arg, act_arg, type_param_map);
                 }
+            }
+            // Array<K> (GenericInstance) with Tuple (homogeneous) - infer K from tuple element type
+            (
+                ResolvedType::GenericInstance {
+                    name,
+                    type_args: expected_args,
+                    ..
+                },
+                ResolvedType::GenericInstance {
+                    name: actual_name,
+                    module_source: actual_module_source,
+                    type_args: actual_elems,
+                },
+            ) if name == "Array"
+                && TypeTable::is_tuple_type(actual_name, actual_module_source)
+                && expected_args.len() == 1
+                && !actual_elems.is_empty() =>
+            {
+                // Check if all tuple elements have the same type
+                let first_elem_type = actual_elems[0];
+                let all_same = actual_elems.iter().all(|&e| e == first_elem_type);
+                if all_same {
+                    // Unify Array's element type param with the tuple's element type
+                    self.unify_types_for_inference(
+                        expected_args[0],
+                        first_elem_type,
+                        type_param_map,
+                    );
+                }
+            }
+            // Array types (Wado's Array<T>)
+            (
+                ResolvedType::BuiltinArray(expected_elem),
+                ResolvedType::BuiltinArray(actual_elem),
+            ) => {
+                self.unify_types_for_inference(*expected_elem, *actual_elem, type_param_map);
+            }
+            // Ref types
+            (ResolvedType::Ref(expected_inner), ResolvedType::Ref(actual_inner))
+            | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
+                self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
             }
             // Function types: unify param types and return type
             (
@@ -2653,7 +2667,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let ty = self.type_table.borrow().get(type_id).clone();
         match ty {
             ResolvedType::TypePack { .. } => true,
-            ResolvedType::Tuple(elems) => elems.iter().any(|e| self.type_contains_pack(*e)),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } if TypeTable::is_tuple_type(&name, &module_source) => {
+                type_args.iter().any(|e| self.type_contains_pack(*e))
+            }
             _ => false,
         }
     }
@@ -2706,7 +2726,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             elem.span(),
                         ));
                     }
-                } else if let ResolvedType::Tuple(inner_elems) = spread_type {
+                } else if let ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args: inner_elems,
+                } = spread_type
+                    && TypeTable::is_tuple_type(&name, &module_source)
+                {
                     // For concrete tuples, expand inline via FieldAccess.
                     // If the expression is non-trivial (not a local), bind it to a
                     // temporary to ensure single evaluation.

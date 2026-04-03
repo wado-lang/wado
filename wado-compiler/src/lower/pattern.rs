@@ -353,9 +353,9 @@ impl<'a> PatternLowerer<'a> {
         }
 
         // Check if return type is a tuple (multi-value return)
-        let elem_types = match type_table.get(value.type_id) {
-            ResolvedType::Tuple(types) => types,
-            _ => return false,
+        let elem_types = match type_table.as_tuple(value.type_id) {
+            Some(types) => types,
+            None => return false,
         };
 
         // Verify pattern length matches tuple element count
@@ -409,10 +409,9 @@ impl<'a> PatternLowerer<'a> {
 
         match &mut arm.pattern {
             TirPattern::Tuple(sub_patterns, _) => {
-                let element_types = match type_table.get(scrutinee_type) {
-                    ResolvedType::Tuple(types) => types.clone(),
-                    _ => vec![TypeTable::UNKNOWN; sub_patterns.len()],
-                };
+                let element_types = type_table
+                    .as_tuple(scrutinee_type)
+                    .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
 
                 for (i, sub) in sub_patterns.iter_mut().enumerate() {
                     let elem_type = element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
@@ -1108,13 +1107,9 @@ impl<'a> PatternLowerer<'a> {
                 out.push(tuple_let);
 
                 // Get element types
-                let elem_types = if let ResolvedType::Tuple(types) =
-                    type_table.get(type_table.get_local_type(tuple_temp_index, &self.local_types))
-                {
-                    types.clone()
-                } else {
-                    vec![TypeTable::UNKNOWN; sub_patterns.len()]
-                };
+                let elem_types = type_table
+                    .as_tuple(type_table.get_local_type(tuple_temp_index, &self.local_types))
+                    .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
 
                 // Create Let for each element
                 for (i, (sub_pattern, elem_type)) in
@@ -1411,13 +1406,9 @@ impl<'a> PatternLowerer<'a> {
                 );
                 out.push(tuple_let);
 
-                let elem_types = if let ResolvedType::Tuple(types) =
-                    type_table.get(type_table.get_local_type(tuple_temp_index, &self.local_types))
-                {
-                    types.clone()
-                } else {
-                    vec![TypeTable::UNKNOWN; sub_patterns.len()]
-                };
+                let elem_types = type_table
+                    .as_tuple(type_table.get_local_type(tuple_temp_index, &self.local_types))
+                    .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
 
                 for (i, (sub_pattern, elem_type)) in
                     sub_patterns.iter().zip(elem_types.iter()).enumerate()
@@ -2040,10 +2031,9 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Tuple(sub_patterns, _) => {
                 // Extract tuple element types
                 let scrutinee_type_id = scrutinee.type_id;
-                let element_types = match type_table.get(scrutinee_type_id) {
-                    ResolvedType::Tuple(types) => types.clone(),
-                    _ => vec![TypeTable::UNKNOWN; sub_patterns.len()],
-                };
+                let element_types = type_table
+                    .as_tuple(scrutinee_type_id)
+                    .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
 
                 // Allocate a temp for the scrutinee so we can access fields
                 let tuple_temp_index = self.alloc_local(scrutinee_type_id);

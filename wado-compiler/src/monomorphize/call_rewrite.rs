@@ -436,12 +436,19 @@ impl Monomorphizer {
             }
         }
         // Tuple variadic impl: rewrite Tuple^Eq::eq → Tuple<i32,i32,i32>^Eq::eq
+        // TODO: LocalMethodName.struct_name does not carry module_source,
+        // so we cannot use TypeTable::is_tuple_type here. This is safe because
+        // only built-in tuples use TUPLE_TYPE_NAME as struct_name in method info.
         if let Some(ref info) = method_func.method_info
-            && info.struct_name == "Tuple"
+            && info.struct_name == TypeTable::TUPLE_TYPE_NAME
         {
             let mono = method_func.monomorph_info.as_ref();
             let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
-                MethodName::format_local("Tuple", info.trait_name.as_deref(), &info.method_name)
+                MethodName::format_local(
+                    TypeTable::TUPLE_TYPE_NAME,
+                    info.trait_name.as_deref(),
+                    &info.method_name,
+                )
             });
             let impl_type_args = mono.map(|m| m.impl_type_args.clone()).unwrap_or_else(|| {
                 let mut receiver_type = receiver.type_id;
@@ -450,11 +457,7 @@ impl Monomorphizer {
                 {
                     receiver_type = inner;
                 }
-                if let ResolvedType::Tuple(elems) = type_table.get(receiver_type).clone() {
-                    elems
-                } else {
-                    vec![]
-                }
+                type_table.as_tuple(receiver_type).unwrap_or_default()
             });
             {
                 let key = InstantiationKey {

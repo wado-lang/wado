@@ -286,7 +286,6 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
         | ResolvedType::GenericInstance { module_source, .. }
         | ResolvedType::Enum { module_source, .. }
         | ResolvedType::Variant { module_source, .. } => Some(module_source.clone()),
-        ResolvedType::Tuple(_) => Some(ModuleSource::core("serde")),
         _ => None,
     }
 }

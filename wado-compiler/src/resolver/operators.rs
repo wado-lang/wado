@@ -160,7 +160,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
-                ResolvedType::Tuple(_) => Some("Tuple".to_string()),
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(*base_type);

@@ -633,7 +633,11 @@ fn generate_inspect_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
         match resolved {
-            ResolvedType::Tuple(_) => {
+            ResolvedType::GenericInstance {
+                ref name,
+                ref module_source,
+                ..
+            } if TypeTable::is_tuple_type(name, module_source) => {
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             ResolvedType::Function {
@@ -2082,7 +2086,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         }
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
-        if let ResolvedType::Tuple(_) = resolved {
+        if matches!(resolved, ResolvedType::GenericInstance { ref name, ref module_source, .. } if TypeTable::is_tuple_type(name, module_source))
+        {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
         } else {
             // Function types, opaque types: delegate to Inspect
@@ -2864,7 +2869,10 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
     // Parameterized types (function types, opaque types) — Display fallback
     // Tuples: Display is provided by variadic impl in core:prelude/tuple.wado
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        if base_name == "Tuple" {
+        // TODO: collect_parameterized_types returns only base_name without module_source,
+        // so we cannot use TypeTable::is_tuple_type here. This is safe because
+        // collect_parameterized_types only returns TUPLE_TYPE_NAME for actual tuple types.
+        if base_name == TypeTable::TUPLE_TYPE_NAME {
             continue;
         }
         let mangled = format_parameterized_name(&base_name, &type_arg_names);
@@ -3347,10 +3355,6 @@ fn decompose_type_for_method_name(
             let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
             (name.clone(), false, args)
         }
-        ResolvedType::Tuple(elems) => {
-            let args = elems.iter().map(|t| tt.mangle_type_name(*t)).collect();
-            ("Tuple".to_string(), false, args)
-        }
         ResolvedType::Function {
             params,
             return_type,
@@ -3436,12 +3440,16 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
 
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
-            ResolvedType::Tuple(elems) => {
-                if !elems.iter().all(|e| is_concrete(*e)) {
+            ResolvedType::GenericInstance {
+                name,
+                type_args,
+                module_source,
+            } if TypeTable::is_tuple_type(name, module_source) => {
+                if !type_args.iter().all(|e| is_concrete(*e)) {
                     return None;
                 }
-                let args = elems.iter().map(|e| tt.mangle_type_name(*e)).collect();
-                Some((*id, "Tuple".to_string(), args))
+                let args = type_args.iter().map(|e| tt.mangle_type_name(*e)).collect();
+                Some((*id, TypeTable::TUPLE_TYPE_NAME.to_string(), args))
             }
             ResolvedType::Function {
                 params,
