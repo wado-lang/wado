@@ -1781,8 +1781,7 @@ impl ClosureLowerer {
                     expr.span,
                 )
             }
-            TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner } => {
+            TirExprKind::TupleSpread { expr: inner } | TirExprKind::TupleZip { expr: inner } => {
                 let new_inner = self.transform_closure_body(
                     inner,
                     captures,
@@ -3410,14 +3409,15 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner } => TirExpr::new(
-                TirExprKind::TupleSpread {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
+            TirExprKind::TupleSpread { expr: inner } | TirExprKind::TupleZip { expr: inner } => {
+                TirExpr::new(
+                    TirExprKind::TupleSpread {
+                        expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
             TirExprKind::TypePackExpansion {
                 call_expr: inner,
                 pack_type_id,

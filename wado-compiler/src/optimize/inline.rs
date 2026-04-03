@@ -30,7 +30,7 @@ fn count_expr(expr: &TirExpr) -> usize {
         }
         TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
-            | TirExprKind::TupleZip { expr }
+        | TirExprKind::TupleZip { expr }
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         } => count_expr(expr),
@@ -369,7 +369,7 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         }
         TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
-            | TirExprKind::TupleZip { expr }
+        | TirExprKind::TupleZip { expr }
         | TirExprKind::TypePackExpansion {
             call_expr: expr, ..
         } => {
@@ -2203,7 +2203,7 @@ fn inline_calls_in_expr(
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {

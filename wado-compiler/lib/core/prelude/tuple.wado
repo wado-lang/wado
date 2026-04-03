@@ -44,11 +44,10 @@ impl<..T: InspectAlt> InspectAlt for [..T] {
 /// Eq for tuples: element-wise equality using .zip().
 impl<..T: Eq> Eq for [..T] {
     fn eq(&self, other: &Self) -> bool {
-        let mut result = true;
         for let [a, b] of [*self, *other].zip() {
-            if a != b { result = false; }
+            if a != b { return false; }
         }
-        return result;
+        return true;
     }
 }
 

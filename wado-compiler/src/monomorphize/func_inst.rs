@@ -647,18 +647,15 @@ impl Monomorphizer {
                     && info.struct_name == "Tuple"
                 {
                     let mono = method_func.monomorph_info.as_ref();
-                    let generic_name = mono
-                        .map(|m| m.generic_name.clone())
-                        .unwrap_or_else(|| {
-                            MethodName::format_local(
-                                "Tuple",
-                                info.trait_name.as_deref(),
-                                &info.method_name,
-                            )
-                        });
-                    let impl_type_args = mono
-                        .map(|m| m.impl_type_args.clone())
-                        .unwrap_or_else(|| {
+                    let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
+                        MethodName::format_local(
+                            "Tuple",
+                            info.trait_name.as_deref(),
+                            &info.method_name,
+                        )
+                    });
+                    let impl_type_args =
+                        mono.map(|m| m.impl_type_args.clone()).unwrap_or_else(|| {
                             let mut receiver_type = receiver.type_id;
                             while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
                                 type_table.get(receiver_type).clone()
@@ -674,13 +671,10 @@ impl Monomorphizer {
                             }
                         });
                     {
-                        if let Some(generic_func_rc) =
-                            generic_functions.get(&generic_name)
-                        {
+                        if let Some(generic_func_rc) = generic_functions.get(&generic_name) {
                             let generic_func = generic_func_rc.borrow();
                             let method_info = generic_func.method_info.clone();
-                            let impl_type_params_count =
-                                generic_func.impl_type_params.len();
+                            let impl_type_params_count = generic_func.impl_type_params.len();
                             let impl_type_params: Vec<crate::tir::TirTypeParam> =
                                 generic_func.impl_type_params.clone();
                             drop(generic_func);
@@ -1648,9 +1642,7 @@ impl Monomorphizer {
                         _ => None,
                     })
                     .collect();
-                if inner_arities.is_empty()
-                    || inner_arities.len() != outer_elems.len()
-                {
+                if inner_arities.is_empty() || inner_arities.len() != outer_elems.len() {
                     return;
                 }
                 let arity = inner_arities[0].len();
@@ -1679,8 +1671,7 @@ impl Monomorphizer {
                         );
                         row_exprs.push(cell);
                     }
-                    let col_types: Vec<TypeId> =
-                        inner_arities.iter().map(|row| row[col]).collect();
+                    let col_types: Vec<TypeId> = inner_arities.iter().map(|row| row[col]).collect();
                     let col_tuple_type = type_table.make_tuple(col_types);
                     col_exprs.push(TirExpr::new(
                         TirExprKind::TupleLiteral {
@@ -1691,8 +1682,7 @@ impl Monomorphizer {
                     ));
                 }
                 // Compute the correct transposed type from the column tuple types
-                let transposed_types: Vec<TypeId> =
-                    col_exprs.iter().map(|e| e.type_id).collect();
+                let transposed_types: Vec<TypeId> = col_exprs.iter().map(|e| e.type_id).collect();
                 let transposed_type = type_table.make_tuple(transposed_types);
                 expr.kind = TirExprKind::TupleLiteral {
                     elements: col_exprs,
@@ -2376,12 +2366,11 @@ impl Monomorphizer {
                     .stmts
                     .iter()
                     .take_while(|s| {
-                        if let TirStmtKind::Let { value, .. } = &s.kind {
-                            if let TirExprKind::FieldAccess { expr: inner, .. } = &value.kind {
-                                if let TirExprKind::Local { index, .. } = &inner.kind {
-                                    return *index == binding_local_idx;
-                                }
-                            }
+                        if let TirStmtKind::Let { value, .. } = &s.kind
+                            && let TirExprKind::FieldAccess { expr: inner, .. } = &value.kind
+                            && let TirExprKind::Local { index, .. } = &inner.kind
+                        {
+                            return *index == binding_local_idx;
                         }
                         false
                     })
@@ -2431,7 +2420,8 @@ impl Monomorphizer {
                                 TirExprKind::FieldAccess {
                                     expr: Box::new(binding_ref),
                                     field_index: if let TirExprKind::FieldAccess {
-                                        field_index, ..
+                                        field_index,
+                                        ..
                                     } = &orig_value.kind
                                     {
                                         *field_index

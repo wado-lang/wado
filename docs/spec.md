@@ -510,7 +510,7 @@ for let v of t {
 }
 ```
 
-`break`, `continue`, and `return` are not allowed inside a tuple for-of body because the loop is unrolled at compile time into sequential blocks. `.enumerate()` is supported and provides a compile-time index.
+`break` and `continue` are not allowed inside a tuple for-of body because the loop is unrolled at compile time into sequential blocks and these have no natural target. `return` is allowed and exits the enclosing function. `.enumerate()` is supported and provides a compile-time index.
 
 ### Infinite Loop
 

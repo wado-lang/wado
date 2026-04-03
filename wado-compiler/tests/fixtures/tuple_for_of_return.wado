@@ -1,5 +1,5 @@
-// return inside tuple for-of is a compile error
-fn foo() -> i32 {
+// return inside tuple for-of is allowed (exits the enclosing function)
+fn find_string() -> i32 {
     let t = [1, "hello"];
     for let v of t {
         return 0;
@@ -8,8 +8,8 @@ fn foo() -> i32 {
 }
 
 export fn run() {
-    foo();
+    assert find_string() == 0;
 }
 
 __DATA__
-{"compile_error": "return"}
+{"stdout": ""}

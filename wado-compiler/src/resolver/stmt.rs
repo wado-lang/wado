@@ -1743,47 +1743,46 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // For destructured bindings (e.g., [a, b]), add the sub-bindings and
         // prepend destructuring assignments to the body.
         let mut destruct_stmts = Vec::new();
-        if is_destructured {
-            if let crate::ast::Pattern::Tuple(tp, _) = &for_of.binding {
-                let tt = self.type_table.borrow();
-                let inner_elems = match tt.get(binding_type) {
-                    ResolvedType::Tuple(elems) => elems.clone(),
-                    _ => vec![binding_type],
-                };
-                drop(tt);
-                for (i, pat_elem) in tp.iter().enumerate() {
-                    if let crate::ast::Pattern::Ident(name) = pat_elem {
-                        let elem_type: TypeId = inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                        let local_idx = ctx.add_local(name.clone(), elem_type, is_mut);
-                        let field_access = TirExpr::new(
-                            TirExprKind::FieldAccess {
-                                expr: Box::new(TirExpr::new(
-                                    TirExprKind::Local {
-                                        index: binding_local,
-                                        name: binding_name.clone(),
-                                    },
-                                    binding_type,
-                                    span,
-                                )),
-                                field_index: i as u32,
-                                field_name: i.to_string(),
-                            },
-                            elem_type,
-                            span,
-                        );
-                        destruct_stmts.push(TirStmt::new(
-                            TirStmtKind::Let {
-                                name: name.clone(),
-                                local_index: local_idx,
-                                is_mut,
-                                is_reactive: false,
-                                type_id: elem_type,
-                                value: field_access,
-                                skip_value_copy: false,
-                            },
-                            span,
-                        ));
-                    }
+        if is_destructured && let crate::ast::Pattern::Tuple(tp, _) = &for_of.binding {
+            let tt = self.type_table.borrow();
+            let inner_elems = match tt.get(binding_type) {
+                ResolvedType::Tuple(elems) => elems.clone(),
+                _ => vec![binding_type],
+            };
+            drop(tt);
+            for (i, pat_elem) in tp.iter().enumerate() {
+                if let crate::ast::Pattern::Ident(name) = pat_elem {
+                    let elem_type: TypeId =
+                        inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                    let local_idx = ctx.add_local(name.clone(), elem_type, is_mut);
+                    let field_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::Local {
+                                    index: binding_local,
+                                    name: binding_name.clone(),
+                                },
+                                binding_type,
+                                span,
+                            )),
+                            field_index: i as u32,
+                            field_name: i.to_string(),
+                        },
+                        elem_type,
+                        span,
+                    );
+                    destruct_stmts.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name: name.clone(),
+                            local_index: local_idx,
+                            is_mut,
+                            is_reactive: false,
+                            type_id: elem_type,
+                            value: field_access,
+                            skip_value_copy: false,
+                        },
+                        span,
+                    ));
                 }
             }
         }
@@ -2193,8 +2192,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         match stmt {
             Stmt::Break(b) => Some(("break", b.span)),
             Stmt::Continue(c) => Some(("continue", c.span)),
-            Stmt::Return(r) => Some(("return", r.span)),
-            Stmt::TaskReturn(t) => Some(("task return", t.span)),
+            // return and task return are allowed — they exit the enclosing function,
+            // which is well-defined even in compile-time-expanded blocks.
+            Stmt::Return(_) | Stmt::TaskReturn(_) => None,
             // Recurse into blocks that don't introduce a new loop/function scope
             Stmt::If(if_stmt) => {
                 if let Some(found) = Self::find_control_flow_in_block(&if_stmt.then_block) {

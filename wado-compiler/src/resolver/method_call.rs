@@ -337,8 +337,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     );
                     row_exprs.push(cell);
                 }
-                let col_types: Vec<TypeId> =
-                    inner_arities.iter().map(|row| row[col]).collect();
+                let col_types: Vec<TypeId> = inner_arities.iter().map(|row| row[col]).collect();
                 let col_tuple_type = self.type_table.borrow_mut().make_tuple(col_types);
                 col_exprs.push(TirExpr::new(
                     TirExprKind::TupleLiteral {

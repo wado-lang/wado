@@ -1558,7 +1558,7 @@ fn transform_lb_in_expr(
         | TirExprKind::Cast { .. }
         | TirExprKind::FieldAccess { .. }
         | TirExprKind::TupleSpread { .. }
-            | TirExprKind::TupleZip { .. }
+        | TirExprKind::TupleZip { .. }
         | TirExprKind::TypePackExpansion { .. }
         | TirExprKind::Assign { .. }
         | TirExprKind::Index { .. }
