@@ -881,13 +881,7 @@ impl StructName {
 
 impl fmt::Display for StructName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.module_source {
-            ModuleSource::EntryPoint { .. } => write!(f, "{}", self.name),
-            ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
-            ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
-            ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
-            ModuleSource::Remote { url } => write!(f, "{}/{}", url, self.name),
-        }
+        write!(f, "{}/{}", self.module_source, self.name)
     }
 }
 
