@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775177039062,
+  "lastUpdate": 1775182844051,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9890,6 +9890,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e9419b64559ebc5de121123fc96033c7aeb52780"
         },
         "date": 1775177038841,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ff7935be10f3edfb7e9a335560aea24a4bdd3238",
+          "message": "Merge pull request #762 from wado-lang/claude/tuple-ord-implementation-cTJNq\n\nAdd Ord trait implementation for tuples",
+          "timestamp": "2026-04-03T11:17:35+09:00",
+          "tree_id": "1d02adac066ebf2c8c0d8d50844798baa5a01333",
+          "url": "https://github.com/wado-lang/wado/commit/ff7935be10f3edfb7e9a335560aea24a4bdd3238"
+        },
+        "date": 1775182843822,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
