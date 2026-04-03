@@ -41,7 +41,7 @@ impl<..T: InspectAlt> InspectAlt for [..T] {
     }
 }
 
-/// Eq for tuples: element-wise equality using .zip().
+/// Eq for tuples: element-wise equality.
 impl<..T: Eq> Eq for [..T] {
     fn eq(&self, other: &Self) -> bool {
         for let [a, b] of [*self, *other].zip() {
@@ -51,7 +51,7 @@ impl<..T: Eq> Eq for [..T] {
     }
 }
 
-/// Ord for tuples: lexicographic comparison using .zip().
+/// Ord for tuples: lexicographic comparison.
 impl<..T: Ord> Ord for [..T] {
     fn cmp(&self, other: &Self) -> Ordering {
         for let [a, b] of [*self, *other].zip() {
