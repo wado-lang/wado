@@ -2161,6 +2161,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     .collect();
                 type_table.make_tuple(elem_types)
             }
+            // TODO: Function, ClosureType, etc. are not yet handled — returning UNKNOWN
+            // causes stale/wrong TypeIds in all_struct_fields when used as struct field types.
             _ => TypeTable::UNKNOWN,
         }
     }
