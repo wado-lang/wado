@@ -50,7 +50,16 @@ pub struct LexerRule {
     pub name: String,
     pub is_fragment: bool,
     pub skip: bool,
+    pub mode: String,
+    pub push_mode: Option<String>,
+    pub pop_mode: bool,
     pub body: Array<LexerAlt>,
+}
+
+impl LexerRule {
+    pub fn new(name: String, is_fragment: bool, skip: bool, body: Array<LexerAlt>) -> LexerRule {
+        return LexerRule { name, is_fragment, skip, mode: "DEFAULT_MODE", push_mode: null, pop_mode: false, body };
+    }
 }
 
 /// LexerAlt is one alternative in a lexer rule.
@@ -73,6 +82,7 @@ pub variant LexerElement {
 pub struct LexerRepeatElement {
     pub kind: RepeatKind,
     pub element: LexerElement,
+    pub non_greedy: bool,
 }
 
 pub struct LexerNotElement {
@@ -99,4 +109,53 @@ impl CharRange {
     pub fn range(start: char, end: char) -> CharRange {
         return CharRange { start, end };
     }
+}
+
+pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
+    if grammars.len() == 1 {
+        return grammars[0];
+    }
+    let mut name = grammars[0].name;
+    let mut parser_rules: Array<ParserRule> = [];
+    let mut lexer_rules: Array<LexerRule> = [];
+    for let g of grammars {
+        for let r of g.parser_rules {
+            parser_rules.push(r);
+        }
+        for let r of g.lexer_rules {
+            lexer_rules.push(r);
+        }
+    }
+    // Derive common name by stripping Lexer/Parser suffix
+    if name.len() > 5 {
+        let chars: Array<char> = name.chars().collect();
+        let len = chars.len();
+        if len >= 6 {
+            let mut suffix = String::with_capacity(6);
+            for let mut i = len - 6; i < len; i += 1 {
+                suffix.push(chars[i]);
+            }
+            if suffix == "Parser" {
+                let mut base = String::with_capacity(len - 6);
+                for let mut i = 0; i < len - 6; i += 1 {
+                    base.push(chars[i]);
+                }
+                name = base;
+            }
+        }
+        if len >= 5 {
+            let mut suffix = String::with_capacity(5);
+            for let mut i = len - 5; i < len; i += 1 {
+                suffix.push(chars[i]);
+            }
+            if suffix == "Lexer" {
+                let mut base = String::with_capacity(len - 5);
+                for let mut i = 0; i < len - 5; i += 1 {
+                    base.push(chars[i]);
+                }
+                name = base;
+            }
+        }
+    }
+    return Grammar { name, parser_rules, lexer_rules };
 }

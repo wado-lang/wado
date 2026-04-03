@@ -10,6 +10,7 @@ use {
     LexerElement,
     CharClass,
     CharRange,
+    merge_grammars,
 } from "../ir.wado";
 use { parse } from "./parser.wado";
 
@@ -67,6 +68,101 @@ test "parse sexpression.g4" {
     assert g.lexer_rules.len() == 9;
     assert g.lexer_rules[1].name == "WHITESPACE";
     assert g.lexer_rules[1].skip == true;
+}
+
+test "parse css3Lexer.g4" {
+    let input = #include_str("../../tests/grammars/css3Lexer.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "css3Lexer";
+    assert g.parser_rules.is_empty();
+    assert g.lexer_rules.len() > 20;
+    // First rule: OpenBracket
+    assert g.lexer_rules[0].name == "OpenBracket";
+    assert g.lexer_rules[0].mode == "DEFAULT_MODE";
+}
+
+test "parse css3Parser.g4" {
+    let input = #include_str("../../tests/grammars/css3Parser.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "css3Parser";
+    assert g.lexer_rules.is_empty();
+    assert g.parser_rules.len() > 10;
+    assert g.parser_rules[0].name == "stylesheet";
+}
+
+test "parse HTMLLexer.g4" {
+    let input = #include_str("../../tests/grammars/HTMLLexer.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "HTMLLexer";
+    assert g.parser_rules.is_empty();
+    // Check modes
+    assert g.lexer_rules[0].name == "HTML_COMMENT";
+    assert g.lexer_rules[0].mode == "DEFAULT_MODE";
+    // TAG_CLOSE is in TAG mode
+    let mut found_tag_close = false;
+    for let rule of g.lexer_rules {
+        if rule.name == "TAG_CLOSE" {
+            assert rule.mode == "TAG";
+            assert rule.pop_mode == true;
+            found_tag_close = true;
+        }
+        if rule.name == "TAG_OPEN" {
+            assert rule.mode == "DEFAULT_MODE";
+            if let Some(pm) = rule.push_mode {
+                assert pm == "TAG";
+            } else {
+                panic("TAG_OPEN should have pushMode(TAG)");
+            }
+        }
+        if rule.name == "SCRIPT_BODY" {
+            assert rule.mode == "SCRIPT";
+            assert rule.pop_mode == true;
+        }
+    }
+    assert found_tag_close;
+}
+
+test "parse HTMLParser.g4" {
+    let input = #include_str("../../tests/grammars/HTMLParser.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "HTMLParser";
+    assert g.lexer_rules.is_empty();
+    assert g.parser_rules.len() > 5;
+    assert g.parser_rules[0].name == "htmlDocument";
+}
+
+test "merge css3 grammars" {
+    let lexer_g = parse(#include_str("../../tests/grammars/css3Lexer.g4")).unwrap();
+    let parser_g = parse(#include_str("../../tests/grammars/css3Parser.g4")).unwrap();
+    let merged = merge_grammars([lexer_g, parser_g]);
+    assert merged.name == "css3";
+    assert merged.lexer_rules.len() > 20;
+    assert merged.parser_rules.len() > 10;
+}
+
+test "merge HTML grammars" {
+    let lexer_g = parse(#include_str("../../tests/grammars/HTMLLexer.g4")).unwrap();
+    let parser_g = parse(#include_str("../../tests/grammars/HTMLParser.g4")).unwrap();
+    let merged = merge_grammars([lexer_g, parser_g]);
+    assert merged.name == "HTML";
+    assert merged.lexer_rules.len() > 10;
+    assert merged.parser_rules.len() > 5;
 }
 
 test "parse calculator.g4" {

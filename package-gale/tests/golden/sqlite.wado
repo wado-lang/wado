@@ -5955,33 +5955,36 @@ fn try_multiline_comment(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '*' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_27 = pos;
-        rep_27: {
-            if pos >= chars.len() { break rep_27; }
-            pos += 1;
-            continue;
+        let ng_saved_27 = pos;
+        let mut ng_exit_27 = false;
+        ng_27: {
+            let alts_saved_28 = pos;
+            let mut alts_ok_28 = false;
+            alts_28_0: {
+                pos = alts_saved_28;
+                if pos >= chars.len() || chars[pos] != '*' { break alts_28_0; }
+                pos += 1;
+                if pos >= chars.len() || chars[pos] != '/' { break alts_28_0; }
+                pos += 1;
+                alts_ok_28 = true;
+            }
+            if !alts_ok_28 {
+                alts_28_1: {
+                    pos = alts_saved_28;
+                    if pos < chars.len() { break alts_28_1; }
+                    alts_ok_28 = true;
+                }
+            }
+            if !alts_ok_28 { break ng_27; }
+            ng_exit_27 = true;
         }
-        pos = rep_saved_27;
-        break;
-    }
-    let alts_saved_28 = pos;
-    let mut alts_ok_28 = false;
-    alts_28_0: {
-        pos = alts_saved_28;
-        if pos >= chars.len() || chars[pos] != '*' { break alts_28_0; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != '/' { break alts_28_0; }
-        pos += 1;
-        alts_ok_28 = true;
-    }
-    if !alts_ok_28 {
-        alts_28_1: {
-            pos = alts_saved_28;
-            if pos < chars.len() { break alts_28_1; }
-            alts_ok_28 = true;
+        if ng_exit_27 {
+            break;
         }
+        pos = ng_saved_27;
+        if pos >= chars.len() { return -1; }
+        pos += 1;
     }
-    if !alts_ok_28 { return -1; }
     return pos;
 }
 

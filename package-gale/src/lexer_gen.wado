@@ -191,8 +191,21 @@ fn gen_lexer_alts(w: &mut CodeWriter, alts: &Array<LexerAlt>, all_rules: &Array<
 }
 
 fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &Array<LexerRule>, fail_action: &String) {
-    for let elem of alt.elements {
-        gen_lexer_elem(w, &elem, all_rules, fail_action);
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        let elem = &alt.elements[i];
+        if let Repeat(rep) = elem {
+            if rep.non_greedy {
+                // Build a sub-alt from remaining elements
+                let mut rest_elems: Array<LexerElement> = [];
+                for let mut j = i + 1; j < alt.elements.len(); j += 1 {
+                    rest_elems.push(alt.elements[j]);
+                }
+                let rest_alt = LexerAlt { elements: rest_elems };
+                gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action);
+                return;
+            }
+        }
+        gen_lexer_elem(w, elem, all_rules, fail_action);
     }
 }
 
@@ -311,6 +324,37 @@ fn gen_lexer_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, all_rules: &Ar
     }
 }
 
+fn gen_lexer_non_greedy_repeat(
+    w: &mut CodeWriter,
+    rep: &LexerRepeatElement,
+    rest: &LexerAlt,
+    all_rules: &Array<LexerRule>,
+    fail_action: &String,
+) {
+    let id = w.next_id();
+    let label = `ng_{id}`;
+    // For Plus, match at least one element first
+    if let Plus = rep.kind {
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action);
+    }
+    // Loop: try matching the rest first (non-greedy), otherwise consume one more
+    w.begin("loop");
+    // Try exit: match rest of elements
+    w.line(`let ng_saved_{id} = pos;`);
+    w.line(`let mut ng_exit_{id} = false;`);
+    w.begin(`{label}:`);
+    gen_lexer_alt_seq(w, rest, all_rules, `break {label}`);
+    w.line(`ng_exit_{id} = true;`);
+    w.end();
+    w.begin(`if ng_exit_{id}`);
+    w.line("break;");
+    w.end();
+    // Exit failed, restore pos and consume one element
+    w.line(`pos = ng_saved_{id};`);
+    gen_lexer_elem(w, &rep.element, all_rules, fail_action);
+    w.end();
+}
+
 fn gen_lexer_not(w: &mut CodeWriter, not_elem: &LexerNotElement, all_rules: &Array<LexerRule>, fail_action: &String) {
     if let CharClass(cc) = not_elem.element {
         let flipped = CharClass {
@@ -373,7 +417,57 @@ fn lit_try_fn_name(const_name: &String) -> String {
     return result;
 }
 
+fn has_modes(lexer_rules: &Array<LexerRule>) -> bool {
+    for let rule of lexer_rules {
+        if rule.mode != "DEFAULT_MODE" {
+            return true;
+        }
+        if let Some(_) = rule.push_mode {
+            return true;
+        }
+        if rule.pop_mode {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn collect_mode_names(lexer_rules: &Array<LexerRule>) -> Array<String> {
+    let mut modes: Array<String> = ["DEFAULT_MODE"];
+    for let rule of lexer_rules {
+        if !str_in_list(&modes, &rule.mode) {
+            modes.push(rule.mode);
+        }
+        if let Some(pm) = rule.push_mode {
+            if !str_in_list(&modes, &pm) {
+                modes.push(pm);
+            }
+        }
+    }
+    return modes;
+}
+
+fn str_in_list(list: &Array<String>, s: &String) -> bool {
+    for let item of list {
+        if *item == *s {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn mode_index(modes: &Array<String>, name: &String) -> i32 {
+    for let mut i = 0; i < modes.len(); i += 1 {
+        if modes[i] == *name {
+            return i;
+        }
+    }
+    return 0;
+}
+
 fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>) {
+    let use_modes = has_modes(lexer_rules);
+
     let mut f = FnSpec::new("tokenize");
     f.set_pub();
     f.add_param("input", "&String");
@@ -382,23 +476,75 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.line("let mut lexer = Lexer::new(input);");
     w.line("let mut tokens: Array<Token> = [];");
     w.line("let mut trivia: Array<Token> = [];");
+
+    let mut modes: Array<String> = [];
+    if use_modes {
+        modes = collect_mode_names(lexer_rules);
+        w.line("let mut mode_stack: Array<i32> = [];");
+        w.line("let mut current_mode: i32 = 0;");
+    }
+
     w.begin("while !lexer.at_end()");
     w.line("let start = lexer.pos;");
     w.line("let mut best_end: i32 = -1;");
     w.line("let mut best_kind: i32 = TK_ERROR;");
     w.line("let mut end: i32 = -1;");
 
-    for let lit of lit_tokens {
-        let fn_name = lit_try_fn_name(&lit.const_name);
-        w.line(`end = {fn_name}(&lexer.chars, start);`);
-        w.line(`if end > best_end \{ best_end = end; best_kind = {lit.const_name}; \}`);
+    if use_modes {
+        w.line("let mut best_push_mode: i32 = -1;");
+        w.line("let mut best_pop_mode = false;");
     }
 
-    for let rule of lexer_rules {
-        if !rule.is_fragment {
-            let fn_name = `try_{to_lower(&rule.name)}`;
+    if use_modes {
+        // Generate mode dispatch
+        for let mut mi = 0; mi < modes.len(); mi += 1 {
+            if mi == 0 {
+                w.begin(`if current_mode == {mi}`);
+            } else {
+                w.else_begin(`else if current_mode == {mi}`);
+            }
+            // Literal tokens only in default mode
+            if mi == 0 {
+                for let lit of lit_tokens {
+                    let fn_name = lit_try_fn_name(&lit.const_name);
+                    w.line(`end = {fn_name}(&lexer.chars, start);`);
+                    w.line(`if end > best_end \{ best_end = end; best_kind = {lit.const_name}; best_push_mode = -1; best_pop_mode = false; \}`);
+                }
+            }
+            for let rule of lexer_rules {
+                if !rule.is_fragment && rule.mode == modes[mi] {
+                    let fn_name = `try_{to_lower(&rule.name)}`;
+                    w.line(`end = {fn_name}(&lexer.chars, start);`);
+                    let mut extra = String::with_capacity(64);
+                    if let Some(pm) = rule.push_mode {
+                        let pm_idx = mode_index(&modes, &pm);
+                        extra.push_str(` best_push_mode = {pm_idx};`);
+                    } else {
+                        extra.push_str(" best_push_mode = -1;");
+                    }
+                    if rule.pop_mode {
+                        extra.push_str(" best_pop_mode = true;");
+                    } else {
+                        extra.push_str(" best_pop_mode = false;");
+                    }
+                    w.line(`if end > best_end \{ best_end = end; best_kind = TK_{rule.name};{extra} \}`);
+                }
+            }
+        }
+        w.end();  // mode dispatch
+    } else {
+        // No modes — simple dispatch
+        for let lit of lit_tokens {
+            let fn_name = lit_try_fn_name(&lit.const_name);
             w.line(`end = {fn_name}(&lexer.chars, start);`);
-            w.line(`if end > best_end \{ best_end = end; best_kind = TK_{rule.name}; \}`);
+            w.line(`if end > best_end \{ best_end = end; best_kind = {lit.const_name}; \}`);
+        }
+        for let rule of lexer_rules {
+            if !rule.is_fragment {
+                let fn_name = `try_{to_lower(&rule.name)}`;
+                w.line(`end = {fn_name}(&lexer.chars, start);`);
+                w.line(`if end > best_end \{ best_end = end; best_kind = TK_{rule.name}; \}`);
+            }
         }
     }
 
@@ -437,6 +583,24 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.line("tokens.push(tok);");
     w.line("trivia = [];");
     w.end();
+
+    if use_modes {
+        w.begin("if best_push_mode >= 0");
+        w.line("mode_stack.push(current_mode);");
+        w.line("current_mode = best_push_mode;");
+        w.line("best_push_mode = -1;");
+        w.end();
+        w.begin("if best_pop_mode");
+        w.begin("if mode_stack.is_empty()");
+        w.line("current_mode = 0;");
+        w.else_begin("else");
+        w.line("current_mode = mode_stack[mode_stack.len() - 1];");
+        w.line("mode_stack.pop();");
+        w.end();
+        w.line("best_pop_mode = false;");
+        w.end();
+    }
+
     w.line("lexer.pos = best_end;");
     w.end();  // else
     w.end();  // while
