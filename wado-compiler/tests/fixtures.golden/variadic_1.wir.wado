@@ -148,7 +148,7 @@ type "functype/__cm_export____test_12_nested_call" = fn();
 
 type "functype/__cm_export____test_13_nested_call_single" = fn();
 
-type "functype/collect_for_of<Tuple<i32,String,bool>>" = fn(ref "tuple/[i32, String, bool]") -> ref "tuple/[i32, String, bool]";
+type "functype/collect_for_of<#Tuple<i32,String,bool>>" = fn(ref "tuple/[i32, String, bool]") -> ref "tuple/[i32, String, bool]";
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
@@ -235,9 +235,9 @@ fn __test_0_identity_mixed_types() {
     let __local_29: ref Formatter;
     let __local_36: ref Formatter;
     let __local_41: ref Formatter;
-    a = __inline_identity_Tuple_i32_String_bool___2: block -> ref "tuple/[i32, String, bool]" {
+    a = __inline_identity__Tuple_i32_String_bool___2: block -> ref "tuple/[i32, String, bool]" {
         __local_14 = "tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 };
-        break __inline_identity_Tuple_i32_String_bool___2: __local_14;
+        break __inline_identity__Tuple_i32_String_bool___2: __local_14;
     };
     __v0_1 = 1;
     __cond_2 = __v0_1 == 1;
@@ -348,9 +348,9 @@ fn __test_1_identity_single_element() {
     let __local_6: ref "tuple/[i32]";
     let __local_10: ref Formatter;
     let __local_15: ref Formatter;
-    drop(__inline_identity_Tuple_i32___2: block -> ref "tuple/[i32]" {
+    drop(__inline_identity__Tuple_i32___2: block -> ref "tuple/[i32]" {
         __local_6 = "tuple/[i32]" { 0: 42 };
-        break __inline_identity_Tuple_i32___2: __local_6;
+        break __inline_identity__Tuple_i32___2: __local_6;
     });
     __v0 = 42;
     __cond = __v0 == 42;
@@ -406,9 +406,9 @@ fn __test_2_identity_homogeneous() {
     let __local_34: ref Formatter;
     let __local_40: ref Formatter;
     let __local_45: ref Formatter;
-    drop(__inline_identity_Tuple_i32_i32_i32___2: block -> ref "tuple/[i32, i32, i32]" {
+    drop(__inline_identity__Tuple_i32_i32_i32___2: block -> ref "tuple/[i32, i32, i32]" {
         __local_14 = "tuple/[i32, i32, i32]" { 0: 1, 1: 2, 2: 3 };
-        break __inline_identity_Tuple_i32_i32_i32___2: __local_14;
+        break __inline_identity__Tuple_i32_i32_i32___2: __local_14;
     });
     __v0_1 = 1;
     __cond_2 = __v0_1 == 1;
@@ -529,10 +529,10 @@ fn __test_3_append_to_pack() {
     let __local_42: ref Formatter;
     let __local_45: ref String;
     let __local_46: bool;
-    result = __inline_append_Tuple_String_bool__i32__2: block -> ref "tuple/[String, bool, i32]" {
+    result = __inline_append__Tuple_String_bool__i32__2: block -> ref "tuple/[String, bool, i32]" {
         __local_45 = String { repr: array.new_data<u8>("hello"), used: 5 };
         __local_46 = 1;
-        break __inline_append_Tuple_String_bool__i32__2: "tuple/[String, bool, i32]" { 0: __local_45, 1: 1, 2: 42 };
+        break __inline_append__Tuple_String_bool__i32__2: "tuple/[String, bool, i32]" { 0: __local_45, 1: 1, 2: 42 };
     };
     __v0_1 = result.0;
     __cond_2 = String^Eq::eq(__v0_1, String { repr: array.new_data<u8>("hello"), used: 5 });
@@ -638,10 +638,10 @@ fn __test_4_append_single_element_pack() {
     let __local_20: ref Formatter;
     let __local_26: ref Formatter;
     let __local_30: i32;
-    single = __inline_append_Tuple_i32__String__2: block -> ref "tuple/[i32, String]" {
+    single = __inline_append__Tuple_i32__String__2: block -> ref "tuple/[i32, String]" {
         __local_30 = 1;
         __local_11 = String { repr: array.new_data<u8>("end"), used: 3 };
-        break __inline_append_Tuple_i32__String__2: "tuple/[i32, String]" { 0: 1, 1: __local_11 };
+        break __inline_append__Tuple_i32__String__2: "tuple/[i32, String]" { 0: 1, 1: __local_11 };
     };
     __v0_1 = 1;
     __cond_2 = __v0_1 == 1;
@@ -707,7 +707,7 @@ fn __test_5_wrap_in_option() {
     let __local_9: ref Formatter;
     let __local_27: ref Formatter;
     let __sroa_t_1: ref String;
-    __fused___inline_wrap_in_option_Tuple_i32_String___2: block {
+    __fused___inline_wrap_in_option__Tuple_i32_String___2: block {
         __sroa_t_1 = String { repr: array.new_data<u8>("hello"), used: 5 };
         __v0 = __sroa_t_1;
         __cond = String^Eq::eq(__v0, String { repr: array.new_data<u8>("hello"), used: 5 });
@@ -740,7 +740,7 @@ condition: t.1 == \"hello\"
             });
             unreachable;
         };
-        break __fused___inline_wrap_in_option_Tuple_i32_String___2;
+        break __fused___inline_wrap_in_option__Tuple_i32_String___2;
     };
 }
 
@@ -765,10 +765,10 @@ fn __test_6_prepend_mixed_params() {
     let __local_42: ref Formatter;
     let __local_45: ref String;
     let __local_46: bool;
-    result = __inline_prepend_i32_Tuple_String_bool___2: block -> ref "tuple/[i32, String, bool]" {
+    result = __inline_prepend_i32__Tuple_String_bool___2: block -> ref "tuple/[i32, String, bool]" {
         __local_45 = String { repr: array.new_data<u8>("hello"), used: 5 };
         __local_46 = 1;
-        break __inline_prepend_i32_Tuple_String_bool___2: "tuple/[i32, String, bool]" { 0: 42, 1: __local_45, 2: 1 };
+        break __inline_prepend_i32__Tuple_String_bool___2: "tuple/[i32, String, bool]" { 0: 42, 1: __local_45, 2: 1 };
     };
     __v0_1 = 42;
     __cond_2 = __v0_1 == 42;
@@ -861,9 +861,9 @@ condition: result.2 == true
 
 fn __test_7_empty_pack_identity() {
     let __local_2: ref "tuple/[]";
-    drop(__inline_identity_Tuple__2: block -> ref "tuple/[]" {
+    drop(__inline_identity__Tuple__2: block -> ref "tuple/[]" {
         __local_2 = "tuple/[]" {  };
-        break __inline_identity_Tuple__2: __local_2;
+        break __inline_identity__Tuple__2: __local_2;
     });
 }
 
@@ -897,10 +897,10 @@ fn __test_9_surround_with_middle() {
     let __local_58: ref Formatter;
     let __local_61: ref String;
     let __local_62: bool;
-    result = __inline_surround_i32_Tuple_String_bool__i32__2: block -> ref "tuple/[i32, String, bool, i32]" {
+    result = __inline_surround_i32__Tuple_String_bool__i32__2: block -> ref "tuple/[i32, String, bool, i32]" {
         __local_61 = String { repr: array.new_data<u8>("hello"), used: 5 };
         __local_62 = 1;
-        break __inline_surround_i32_Tuple_String_bool__i32__2: "tuple/[i32, String, bool, i32]" { 0: 1, 1: __local_61, 2: 1, 3: 99 };
+        break __inline_surround_i32__Tuple_String_bool__i32__2: "tuple/[i32, String, bool, i32]" { 0: 1, 1: __local_61, 2: 1, 3: 99 };
     };
     __v0_1 = 1;
     __cond_2 = __v0_1 == 1;
@@ -1033,10 +1033,10 @@ fn __test_10_surround_empty_middle() {
     let __local_12: ref String;
     let __local_16: ref Formatter;
     let __local_23: ref Formatter;
-    empty_mid = __inline_surround_String_Tuple_String__2: block -> ref "tuple/[String, String]" {
+    empty_mid = __inline_surround_String__Tuple_String__2: block -> ref "tuple/[String, String]" {
         __local_10 = String { repr: array.new_data<u8>("start"), used: 5 };
         __local_12 = String { repr: array.new_data<u8>("end"), used: 3 };
-        break __inline_surround_String_Tuple_String__2: "tuple/[String, String]" { 0: __local_10, 1: __local_12 };
+        break __inline_surround_String__Tuple_String__2: "tuple/[String, String]" { 0: __local_10, 1: __local_12 };
     };
     __v0_1 = empty_mid.0;
     __cond_2 = String^Eq::eq(__v0_1, String { repr: array.new_data<u8>("start"), used: 5 });
@@ -1095,7 +1095,7 @@ condition: empty_mid.1 == \"end\"
 }
 
 fn __test_11_for_of_variadic() {
-    drop(collect_for_of<Tuple<i32,String,bool>>("tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 }));
+    drop(collect_for_of<#Tuple<i32,String,bool>>("tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 }));
 }
 
 fn __test_12_nested_call() {
@@ -1118,9 +1118,9 @@ fn __test_12_nested_call() {
     let __local_30: ref Formatter;
     let __local_37: ref Formatter;
     let __local_42: ref Formatter;
-    a = __inline_double_wrap_Tuple_i32_String_bool___2: block -> ref "tuple/[i32, String, bool]" {
+    a = __inline_double_wrap__Tuple_i32_String_bool___2: block -> ref "tuple/[i32, String, bool]" {
         __local_14 = "tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 };
-        break __inline_double_wrap_Tuple_i32_String_bool___2: __local_14;
+        break __inline_double_wrap__Tuple_i32_String_bool___2: __local_14;
     };
     __v0_1 = 1;
     __cond_2 = __v0_1 == 1;
@@ -1231,9 +1231,9 @@ fn __test_13_nested_call_single() {
     let __local_6: ref "tuple/[i32]";
     let __local_11: ref Formatter;
     let __local_16: ref Formatter;
-    drop(__inline_double_wrap_Tuple_i32___2: block -> ref "tuple/[i32]" {
+    drop(__inline_double_wrap__Tuple_i32___2: block -> ref "tuple/[i32]" {
         __local_6 = "tuple/[i32]" { 0: 42 };
-        break __inline_double_wrap_Tuple_i32___2: __local_6;
+        break __inline_double_wrap__Tuple_i32___2: __local_6;
     });
     __v0 = 42;
     __cond = __v0 == 42;
@@ -1306,9 +1306,9 @@ fn __cm_export____test_6_prepend_mixed_params() {
 
 fn __cm_export____test_7_empty_pack_identity() {
     let __local_2: ref "tuple/[]";
-    drop(__inline_identity_Tuple__3: block -> ref "tuple/[]" {
+    drop(__inline_identity__Tuple__3: block -> ref "tuple/[]" {
         __local_2 = "tuple/[]" {  };
-        break __inline_identity_Tuple__3: __local_2;
+        break __inline_identity__Tuple__3: __local_2;
     });
     "wasi/task-return"(0);
 }
@@ -1328,7 +1328,7 @@ fn __cm_export____test_10_surround_empty_middle() {
 }
 
 fn __cm_export____test_11_for_of_variadic() {
-    drop(collect_for_of<Tuple<i32,String,bool>>("tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 }));
+    drop(collect_for_of<#Tuple<i32,String,bool>>("tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 }));
     "wasi/task-return"(0);
 }
 
@@ -1342,7 +1342,7 @@ fn __cm_export____test_13_nested_call_single() {
     "wasi/task-return"(0);
 }
 
-fn collect_for_of<Tuple<i32,String,bool>>(items) {
+fn collect_for_of<#Tuple<i32,String,bool>>(items) {
     let __local_1: ref Array<String>;
     let result: ref Array<String>;
     let __v0_4: ref String;

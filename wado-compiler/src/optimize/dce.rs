@@ -745,7 +745,8 @@ fn analyze_expr(
                             .iter()
                             .map(|t| type_table.mangle_type_name(*t))
                             .collect();
-                        let mangled_struct = mangle_generic_name(TypeTable::TUPLE_TYPE_NAME, &type_arg_names);
+                        let mangled_struct =
+                            mangle_generic_name(TypeTable::TUPLE_TYPE_NAME, &type_arg_names);
                         let method_id = FunctionId::Method(MethodName::new(
                             current_module.clone(),
                             mangled_struct,

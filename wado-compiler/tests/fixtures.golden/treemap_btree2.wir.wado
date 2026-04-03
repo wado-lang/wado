@@ -35,7 +35,7 @@ struct [String, i32] {
     mut 1: i32,
 }
 
-array array<Tuple<String,i32>> (mut ref "tuple/[String, i32]");
+array array<#Tuple<String,i32>> (mut ref "tuple/[String, i32]");
 
 array array<String> (mut ref String);
 
@@ -45,8 +45,8 @@ array array<bool> (mut bool);
 
 array array<i32> (mut i32);
 
-struct ArrayIter<Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,i32>
-    mut repr: ref array<Tuple<String,i32>>,
+struct ArrayIter<#Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=#Tuple<String,i32>
+    mut repr: ref array<#Tuple<String,i32>>,
     mut used: i32,
     mut index: i32,
 }
@@ -71,8 +71,8 @@ struct Array<String> {  // Array<T> with T=String
     mut used: i32,
 }
 
-struct Array<Tuple<String,i32>> {  // Array<T> with T=Tuple<String,i32>
-    mut repr: ref array<Tuple<String,i32>>,
+struct Array<#Tuple<String,i32>> {  // Array<T> with T=#Tuple<String,i32>
+    mut repr: ref array<#Tuple<String,i32>>,
     mut used: i32,
 }
 
@@ -186,15 +186,15 @@ type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
 type "functype/TreeMap<String,i32>::needs_compaction" = fn(ref TreeMap<String,i32>) -> bool;
 
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> ref null "tuple/[String, i32]";
+type "functype/ArrayIter<#Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<#Tuple<String,i32>>") -> ref null "tuple/[String, i32]";
 
-type "functype/TreeMap<String,i32>::iter" = fn(ref TreeMap<String,i32>) -> ref Array<Tuple<String,i32>>;
+type "functype/TreeMap<String,i32>::iter" = fn(ref TreeMap<String,i32>) -> ref Array<#Tuple<String,i32>>;
 
-type "functype/TreeMap<String,i32>::collect_entries" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, ref Array<Tuple<String,i32>>);
+type "functype/TreeMap<String,i32>::collect_entries" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, ref Array<#Tuple<String,i32>>);
 
-type "functype/Array<Tuple<String,i32>>::push" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
+type "functype/Array<#Tuple<String,i32>>::push" = fn(ref Array<#Tuple<String,i32>>, ref "tuple/[String, i32]");
 
-type "functype/Array<Tuple<String,i32>>::grow" = fn(ref Array<Tuple<String,i32>>);
+type "functype/Array<#Tuple<String,i32>>::grow" = fn(ref Array<#Tuple<String,i32>>);
 
 type "functype/TreeMap<String,i32>::delete_in_node" = fn(ref TreeMap<String,i32>, ref BTreeNode<String,i32>, ref String) -> bool;
 
@@ -252,13 +252,13 @@ import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:
 
 fn run() with Stdout {
     let map: ref TreeMap<String,i32>;
-    let entries: ref Array<Tuple<String,i32>>;
-    let __iter_2: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
+    let entries: ref Array<#Tuple<String,i32>>;
+    let __iter_2: ref "core:allocator/ArrayIter<#Tuple<String,i32>>";
     let entry_3: ref "tuple/[String, i32]";
     let key_4: ref String;
     let value_5: i32;
-    let final_entries: ref Array<Tuple<String,i32>>;
-    let __iter_7: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
+    let final_entries: ref Array<#Tuple<String,i32>>;
+    let __iter_7: ref "core:allocator/ArrayIter<#Tuple<String,i32>>";
     let entry_8: ref "tuple/[String, i32]";
     let key_9: ref String;
     let value_10: i32;
@@ -374,10 +374,10 @@ fn run() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("
 === Iteration (sorted) ==="), used: 27 });
     entries = TreeMap<String,i32>::iter(map);
-    __iter_2 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: entries.repr, used: entries.used, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<#Tuple<String,i32>>" { repr: entries.repr, used: entries.used, index: 0 };
     b1: block {
         l2: loop {
-            __pattern_temp_0_29 = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_2);
+            __pattern_temp_0_29 = ArrayIter<#Tuple<String,i32>>^Iterator::next(__iter_2);
             if ref.is_null(__pattern_temp_0_29) == 0 {
                 entry_3 = ref.as_non_null(__pattern_temp_0_29);
                 key_4 = entry_3.0;
@@ -431,10 +431,10 @@ fn run() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("
 === Final iteration ==="), used: 24 });
     final_entries = TreeMap<String,i32>::iter(map);
-    __iter_7 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: final_entries.repr, used: final_entries.used, index: 0 };
+    __iter_7 = "core:allocator/ArrayIter<#Tuple<String,i32>>" { repr: final_entries.repr, used: final_entries.used, index: 0 };
     b6: block {
         l7: loop {
-            __pattern_temp_1 = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_7);
+            __pattern_temp_1 = ArrayIter<#Tuple<String,i32>>^Iterator::next(__iter_7);
             if ref.is_null(__pattern_temp_1) == 0 {
                 entry_8 = ref.as_non_null(__pattern_temp_1);
                 key_9 = entry_8.0;
@@ -1087,7 +1087,7 @@ fn TreeMap<String,i32>::needs_compaction(self) {
     };
 }
 
-fn ArrayIter<Tuple<String,i32>>^Iterator::next(self) {
+fn ArrayIter<#Tuple<String,i32>>^Iterator::next(self) {
     let item: ref "tuple/[String, i32]";
     if self.index >= self.used {
         return ref.null none;
@@ -1098,12 +1098,12 @@ fn ArrayIter<Tuple<String,i32>>^Iterator::next(self) {
 }
 
 fn TreeMap<String,i32>::iter(self) {
-    let __local_1: ref Array<Tuple<String,i32>>;
-    let result: ref Array<Tuple<String,i32>>;
+    let __local_1: ref Array<#Tuple<String,i32>>;
+    let result: ref Array<#Tuple<String,i32>>;
     let root: ref BTreeNode<String,i32>;
     let __pattern_temp_0: ref null BTreeNode<String,i32>;
-    result = __seq_lit: block -> ref Array<Tuple<String,i32>> {
-        __local_1 = Array<Tuple<String,i32>> { repr: builtin::array_new<ref "tuple/[String, i32]">(0), used: 0 };
+    result = __seq_lit: block -> ref Array<#Tuple<String,i32>> {
+        __local_1 = Array<#Tuple<String,i32>> { repr: builtin::array_new<ref "tuple/[String, i32]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
     __pattern_temp_0 = value_copy Option<BTreeNode<String,i32>>(self.root);
@@ -1177,7 +1177,7 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
                 };
                 break __inline_Array_bool__IndexValue__index_value_3: builtin::array_get<bool>(_licm_repr_26, __local_9);
             } == 0 {
-                Array<Tuple<String,i32>>::push(result, "tuple/[String, i32]" { 0: ref.as_non_null(__inline_Array_String__IndexValue__index_value_4: block -> ref String {
+                Array<#Tuple<String,i32>>::push(result, "tuple/[String, i32]" { 0: ref.as_non_null(__inline_Array_String__IndexValue__index_value_4: block -> ref String {
                     __local_11 = i;
                     break __inline_Array_String__IndexValue__index_value_4: builtin::array_get<ref String>(_licm_repr_27, __local_11);
                 }), 1: __inline_Array_i32__IndexValue__index_value_5: block -> i32 {
@@ -1213,21 +1213,21 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
     };
 }
 
-fn Array<Tuple<String,i32>>::push(self, value) {
+fn Array<#Tuple<String,i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<Tuple<String,i32>>::grow(self);
+        Array<#Tuple<String,i32>>::grow(self);
     };
     builtin::array_set<ref "tuple/[String, i32]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<Tuple<String,i32>>::grow(self) {
+fn Array<#Tuple<String,i32>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<Tuple<String,i32>>;
-    let old_repr: ref array<Tuple<String,i32>>;
+    let new_repr: ref array<#Tuple<String,i32>>;
+    let old_repr: ref array<#Tuple<String,i32>>;
     let used: i32;
     let i: i32;
     let __local_7: i32;

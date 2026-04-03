@@ -35,17 +35,17 @@ struct [i32, String, bool] {
     mut 2: bool,
 }
 
-struct [Tuple<i32,String,bool>, Tuple<i32,String,bool>] {
+struct [#Tuple<i32,String,bool>, #Tuple<i32,String,bool>] {
     mut 0: ref "tuple/[i32, String, bool]",
     mut 1: ref "tuple/[i32, String, bool]",
 }
 
-struct [Tuple<i32>, Tuple<i32>] {
+struct [#Tuple<i32>, #Tuple<i32>] {
     mut 0: ref "tuple/[i32]",
     mut 1: ref "tuple/[i32]",
 }
 
-struct [Tuple<i32,String>, Tuple<i32,String>] {
+struct [#Tuple<i32,String>, #Tuple<i32,String>] {
     mut 0: ref "tuple/[i32, String]",
     mut 1: ref "tuple/[i32, String]",
 }
@@ -102,11 +102,11 @@ type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> b
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/Tuple<i32,String,bool>^Eq::eq" = fn(ref "tuple/[i32, String, bool]", ref "tuple/[i32, String, bool]") -> bool;
+type "functype/#Tuple<i32,String,bool>^Eq::eq" = fn(ref "tuple/[i32, String, bool]", ref "tuple/[i32, String, bool]") -> bool;
 
-type "functype/Tuple<i32>^Eq::eq" = fn(ref "tuple/[i32]", ref "tuple/[i32]") -> bool;
+type "functype/#Tuple<i32>^Eq::eq" = fn(ref "tuple/[i32]", ref "tuple/[i32]") -> bool;
 
-type "functype/Tuple<i32,String>^Eq::eq" = fn(ref "tuple/[i32, String]", ref "tuple/[i32, String]") -> bool;
+type "functype/#Tuple<i32,String>^Eq::eq" = fn(ref "tuple/[i32, String]", ref "tuple/[i32, String]") -> bool;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -204,10 +204,10 @@ fn run() {
     let __local_142: ref "tuple/[i32, String, bool]";
     let __local_146: ref Formatter;
     let __local_151: ref Formatter;
-    __v0_0 = __inline_all_equal_Tuple_i32_String___2: block -> bool {
+    __v0_0 = __inline_all_equal__Tuple_i32_String___2: block -> bool {
         __local_37 = "tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 } };
         __local_38 = "tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 } };
-        break __inline_all_equal_Tuple_i32_String___2: Tuple<i32,String>^Eq::eq(__local_37, __local_38);
+        break __inline_all_equal__Tuple_i32_String___2: #Tuple<i32,String>^Eq::eq(__local_37, __local_38);
     };
     if __v0_0 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -241,10 +241,10 @@ condition: all_equal([1, \"hello\"], [1, \"hello\"])
         });
         unreachable;
     };
-    __v0_2 = __inline_all_equal_Tuple_i32_String___10: block -> bool {
+    __v0_2 = __inline_all_equal__Tuple_i32_String___10: block -> bool {
         __local_50 = "tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 } };
         __local_51 = "tuple/[i32, String]" { 0: 2, 1: String { repr: array.new_data<u8>("hello"), used: 5 } };
-        break __inline_all_equal_Tuple_i32_String___10: Tuple<i32,String>^Eq::eq(__local_50, __local_51);
+        break __inline_all_equal__Tuple_i32_String___10: #Tuple<i32,String>^Eq::eq(__local_50, __local_51);
     };
     __cond_3 = __v0_2 == 0;
     if __cond_3 == 0 {
@@ -279,10 +279,10 @@ condition: !all_equal([1, \"hello\"], [2, \"hello\"])
         });
         unreachable;
     };
-    __v0_4 = __inline_all_equal_Tuple_i32_String___18: block -> bool {
+    __v0_4 = __inline_all_equal__Tuple_i32_String___18: block -> bool {
         __local_63 = "tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 } };
         __local_64 = "tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("world"), used: 5 } };
-        break __inline_all_equal_Tuple_i32_String___18: Tuple<i32,String>^Eq::eq(__local_63, __local_64);
+        break __inline_all_equal__Tuple_i32_String___18: #Tuple<i32,String>^Eq::eq(__local_63, __local_64);
     };
     __cond_5 = __v0_4 == 0;
     if __cond_5 == 0 {
@@ -317,10 +317,10 @@ condition: !all_equal([1, \"hello\"], [1, \"world\"])
         });
         unreachable;
     };
-    __v0_6 = __inline_not_equal_Tuple_i32_String___26: block -> bool {
+    __v0_6 = __inline_not_equal__Tuple_i32_String___26: block -> bool {
         __local_76 = "tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 } };
         __local_77 = "tuple/[i32, String]" { 0: 2, 1: String { repr: array.new_data<u8>("hello"), used: 5 } };
-        break __inline_not_equal_Tuple_i32_String___26: Tuple<i32,String>^Eq::eq(__local_76, __local_77) == 0;
+        break __inline_not_equal__Tuple_i32_String___26: #Tuple<i32,String>^Eq::eq(__local_76, __local_77) == 0;
     };
     if __v0_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -354,10 +354,10 @@ condition: not_equal([1, \"hello\"], [2, \"hello\"])
         });
         unreachable;
     };
-    __v0_8 = __inline_not_equal_Tuple_i32_String___34: block -> bool {
+    __v0_8 = __inline_not_equal__Tuple_i32_String___34: block -> bool {
         __local_89 = "tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 } };
         __local_90 = "tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 } };
-        break __inline_not_equal_Tuple_i32_String___34: Tuple<i32,String>^Eq::eq(__local_89, __local_90) == 0;
+        break __inline_not_equal__Tuple_i32_String___34: #Tuple<i32,String>^Eq::eq(__local_89, __local_90) == 0;
     };
     __cond_9 = __v0_8 == 0;
     if __cond_9 == 0 {
@@ -392,10 +392,10 @@ condition: !not_equal([1, \"hello\"], [1, \"hello\"])
         });
         unreachable;
     };
-    __v0_10 = __inline_all_equal_Tuple_i32___42: block -> bool {
+    __v0_10 = __inline_all_equal__Tuple_i32___42: block -> bool {
         __local_102 = "tuple/[i32]" { 0: 42 };
         __local_103 = "tuple/[i32]" { 0: 42 };
-        break __inline_all_equal_Tuple_i32___42: Tuple<i32>^Eq::eq(__local_102, __local_103);
+        break __inline_all_equal__Tuple_i32___42: #Tuple<i32>^Eq::eq(__local_102, __local_103);
     };
     if __v0_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -429,10 +429,10 @@ condition: all_equal([42], [42])
         });
         unreachable;
     };
-    __v0_12 = __inline_all_equal_Tuple_i32___50: block -> bool {
+    __v0_12 = __inline_all_equal__Tuple_i32___50: block -> bool {
         __local_115 = "tuple/[i32]" { 0: 42 };
         __local_116 = "tuple/[i32]" { 0: 99 };
-        break __inline_all_equal_Tuple_i32___50: Tuple<i32>^Eq::eq(__local_115, __local_116);
+        break __inline_all_equal__Tuple_i32___50: #Tuple<i32>^Eq::eq(__local_115, __local_116);
     };
     __cond_13 = __v0_12 == 0;
     if __cond_13 == 0 {
@@ -467,10 +467,10 @@ condition: !all_equal([42], [99])
         });
         unreachable;
     };
-    __v0_14 = __inline_all_equal_Tuple_i32_String_bool___58: block -> bool {
+    __v0_14 = __inline_all_equal__Tuple_i32_String_bool___58: block -> bool {
         __local_128 = "tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("a"), used: 1 }, 2: 1 };
         __local_129 = "tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("a"), used: 1 }, 2: 1 };
-        break __inline_all_equal_Tuple_i32_String_bool___58: Tuple<i32,String,bool>^Eq::eq(__local_128, __local_129);
+        break __inline_all_equal__Tuple_i32_String_bool___58: #Tuple<i32,String,bool>^Eq::eq(__local_128, __local_129);
     };
     if __v0_14 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -504,10 +504,10 @@ condition: all_equal([1, \"a\", true], [1, \"a\", true])
         });
         unreachable;
     };
-    __v0_16 = __inline_all_equal_Tuple_i32_String_bool___66: block -> bool {
+    __v0_16 = __inline_all_equal__Tuple_i32_String_bool___66: block -> bool {
         __local_141 = "tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("a"), used: 1 }, 2: 1 };
         __local_142 = "tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("a"), used: 1 }, 2: 0 };
-        break __inline_all_equal_Tuple_i32_String_bool___66: Tuple<i32,String,bool>^Eq::eq(__local_141, __local_142);
+        break __inline_all_equal__Tuple_i32_String_bool___66: #Tuple<i32,String,bool>^Eq::eq(__local_141, __local_142);
     };
     __cond_17 = __v0_16 == 0;
     if __cond_17 == 0 {
@@ -811,7 +811,7 @@ fn String::push(self, c) {
     };
 }
 
-fn Tuple<i32,String,bool>^Eq::eq(self, other) {
+fn #Tuple<i32,String,bool>^Eq::eq(self, other) {
     let a: ref String;
     let b: ref String;
     let __sroa___sroa___tuple_2_0_0: i32;
@@ -820,12 +820,12 @@ fn Tuple<i32,String,bool>^Eq::eq(self, other) {
     let __sroa___sroa___tuple_2_1_1: ref String;
     let __sroa___sroa___tuple_2_2_0: bool;
     let __sroa___sroa___tuple_2_2_1: bool;
-    __sroa___sroa___tuple_2_0_0 = "tuple/[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.0.0;
-    __sroa___sroa___tuple_2_0_1 = "tuple/[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.1.0;
-    __sroa___sroa___tuple_2_1_0 = "tuple/[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.0.1;
-    __sroa___sroa___tuple_2_1_1 = "tuple/[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.1.1;
-    __sroa___sroa___tuple_2_2_0 = "tuple/[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.0.2;
-    __sroa___sroa___tuple_2_2_1 = "tuple/[Tuple<i32,String,bool>, Tuple<i32,String,bool>]" { 0: self, 1: other }.1.2;
+    __sroa___sroa___tuple_2_0_0 = "tuple/[#Tuple<i32,String,bool>, #Tuple<i32,String,bool>]" { 0: self, 1: other }.0.0;
+    __sroa___sroa___tuple_2_0_1 = "tuple/[#Tuple<i32,String,bool>, #Tuple<i32,String,bool>]" { 0: self, 1: other }.1.0;
+    __sroa___sroa___tuple_2_1_0 = "tuple/[#Tuple<i32,String,bool>, #Tuple<i32,String,bool>]" { 0: self, 1: other }.0.1;
+    __sroa___sroa___tuple_2_1_1 = "tuple/[#Tuple<i32,String,bool>, #Tuple<i32,String,bool>]" { 0: self, 1: other }.1.1;
+    __sroa___sroa___tuple_2_2_0 = "tuple/[#Tuple<i32,String,bool>, #Tuple<i32,String,bool>]" { 0: self, 1: other }.0.2;
+    __sroa___sroa___tuple_2_2_1 = "tuple/[#Tuple<i32,String,bool>, #Tuple<i32,String,bool>]" { 0: self, 1: other }.1.2;
     if (__sroa___sroa___tuple_2_0_0 == __sroa___sroa___tuple_2_0_1) == 0 {
         return 0;
     };
@@ -840,28 +840,28 @@ fn Tuple<i32,String,bool>^Eq::eq(self, other) {
     return 1;
 }
 
-fn Tuple<i32>^Eq::eq(self, other) {
+fn #Tuple<i32>^Eq::eq(self, other) {
     let __sroa___sroa___tuple_2_0_0: i32;
     let __sroa___sroa___tuple_2_0_1: i32;
-    __sroa___sroa___tuple_2_0_0 = "tuple/[Tuple<i32>, Tuple<i32>]" { 0: self, 1: other }.0.0;
-    __sroa___sroa___tuple_2_0_1 = "tuple/[Tuple<i32>, Tuple<i32>]" { 0: self, 1: other }.1.0;
+    __sroa___sroa___tuple_2_0_0 = "tuple/[#Tuple<i32>, #Tuple<i32>]" { 0: self, 1: other }.0.0;
+    __sroa___sroa___tuple_2_0_1 = "tuple/[#Tuple<i32>, #Tuple<i32>]" { 0: self, 1: other }.1.0;
     if (__sroa___sroa___tuple_2_0_0 == __sroa___sroa___tuple_2_0_1) == 0 {
         return 0;
     };
     return 1;
 }
 
-fn Tuple<i32,String>^Eq::eq(self, other) {
+fn #Tuple<i32,String>^Eq::eq(self, other) {
     let a: ref String;
     let b: ref String;
     let __sroa___sroa___tuple_2_0_0: i32;
     let __sroa___sroa___tuple_2_0_1: i32;
     let __sroa___sroa___tuple_2_1_0: ref String;
     let __sroa___sroa___tuple_2_1_1: ref String;
-    __sroa___sroa___tuple_2_0_0 = "tuple/[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.0.0;
-    __sroa___sroa___tuple_2_0_1 = "tuple/[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.1.0;
-    __sroa___sroa___tuple_2_1_0 = "tuple/[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.0.1;
-    __sroa___sroa___tuple_2_1_1 = "tuple/[Tuple<i32,String>, Tuple<i32,String>]" { 0: self, 1: other }.1.1;
+    __sroa___sroa___tuple_2_0_0 = "tuple/[#Tuple<i32,String>, #Tuple<i32,String>]" { 0: self, 1: other }.0.0;
+    __sroa___sroa___tuple_2_0_1 = "tuple/[#Tuple<i32,String>, #Tuple<i32,String>]" { 0: self, 1: other }.1.0;
+    __sroa___sroa___tuple_2_1_0 = "tuple/[#Tuple<i32,String>, #Tuple<i32,String>]" { 0: self, 1: other }.0.1;
+    __sroa___sroa___tuple_2_1_1 = "tuple/[#Tuple<i32,String>, #Tuple<i32,String>]" { 0: self, 1: other }.1.1;
     if (__sroa___sroa___tuple_2_0_0 == __sroa___sroa___tuple_2_0_1) == 0 {
         return 0;
     };

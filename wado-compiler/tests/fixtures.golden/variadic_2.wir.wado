@@ -96,7 +96,7 @@ type "functype/__cm_export____test_5_spread_vs_field_access" = fn();
 
 type "functype/__cm_export____test_6_for_of_try_op" = fn();
 
-type "functype/process_all<Tuple<i32,String,bool>>" = fn(ref "tuple/[i32, String, bool]") -> ref null String;
+type "functype/process_all<#Tuple<i32,String,bool>>" = fn(ref "tuple/[i32, String, bool]") -> ref null String;
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
@@ -418,12 +418,12 @@ condition: call_count == 1
         });
         unreachable;
     };
-    drop(__inline_eval_prepend_i32_Tuple_i32_i32___23: block -> ref "tuple/[i32, i32, i32]" {
+    drop(__inline_eval_prepend_i32__Tuple_i32_i32___23: block -> ref "tuple/[i32, i32, i32]" {
         __local_65 = __inline_make_pair_24: block -> ref "tuple/[i32, i32]" {
             call_count = call_count + 1;
             break __inline_make_pair_24: "tuple/[i32, i32]" { 0: 10, 1: 20 };
         };
-        break __inline_eval_prepend_i32_Tuple_i32_i32___23: "tuple/[i32, i32, i32]" { 0: 99, 1: 10, 2: 20 };
+        break __inline_eval_prepend_i32__Tuple_i32_i32___23: "tuple/[i32, i32, i32]" { 0: 99, 1: 10, 2: 20 };
     });
     __v0_9 = 99;
     __cond_10 = __v0_9 == 99;
@@ -678,12 +678,12 @@ fn __test_5_spread_vs_field_access() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    drop(__inline_combine_Tuple_i32_i32___1: block -> ref "tuple/[i32, i32, i32]" {
+    drop(__inline_combine__Tuple_i32_i32___1: block -> ref "tuple/[i32, i32, i32]" {
         __local_33 = 10;
         __local_34 = 20;
         __local_35 = 30;
         __local_36 = 40;
-        break __inline_combine_Tuple_i32_i32___1: "tuple/[i32, i32, i32]" { 0: 10, 1: 30, 2: 40 };
+        break __inline_combine__Tuple_i32_i32___1: "tuple/[i32, i32, i32]" { 0: 10, 1: 30, 2: 40 };
     });
     __v0_1 = 10;
     __cond_2 = __v0_1 == 10;
@@ -755,7 +755,7 @@ fn __test_6_for_of_try_op() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    result = process_all<Tuple<i32,String,bool>>("tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 });
+    result = process_all<#Tuple<i32,String,bool>>("tuple/[i32, String, bool]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 });
     let __match_scrut_0: ref null String;
     __match_scrut_0 = result;
     __cond = if ref.is_null(__match_scrut_0) -> bool {
@@ -820,7 +820,7 @@ fn __cm_export____test_6_for_of_try_op() {
     "wasi/task-return"(0);
 }
 
-fn process_all<Tuple<i32,String,bool>>(items) {
+fn process_all<#Tuple<i32,String,bool>>(items) {
     let __local_3: ref String;
     let __tuple_1: ref "tuple/[i32, String, bool]";
     let v_5: i32;

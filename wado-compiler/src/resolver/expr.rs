@@ -2667,7 +2667,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ResolvedType::TypePack { .. } => true,
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } if name == TypeTable::TUPLE_TYPE_NAME => type_args.iter().any(|e| self.type_contains_pack(*e)),
+            } if name == TypeTable::TUPLE_TYPE_NAME => {
+                type_args.iter().any(|e| self.type_contains_pack(*e))
+            }
             _ => false,
         }
     }

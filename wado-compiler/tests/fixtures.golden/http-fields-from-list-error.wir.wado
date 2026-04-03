@@ -176,7 +176,7 @@ struct [String, Array<u8>] {
     mut 1: ref Array<u8>,
 }
 
-array array<Tuple<String,Array<u8>>> (mut ref "tuple/[String, Array<u8>]");
+array array<#Tuple<String,Array<u8>>> (mut ref "tuple/[String, Array<u8>]");
 
 struct ArrayIter<u8> {  // from core:allocator  // ArrayIter<T> with T=u8
     mut repr: ref array<u8>,
@@ -294,8 +294,8 @@ struct Array<u8> {  // Array<T> with T=u8
     mut used: i32,
 }
 
-struct Array<Tuple<String,Array<u8>>> {  // Array<T> with T=Tuple<String,Array<u8>>
-    mut repr: ref array<Tuple<String,Array<u8>>>,
+struct Array<#Tuple<String,Array<u8>>> {  // Array<T> with T=#Tuple<String,Array<u8>>
+    mut repr: ref array<#Tuple<String,Array<u8>>>,
     mut used: i32,
 }
 
@@ -323,7 +323,7 @@ type "functype/wasi/wasi:http/Fields::from_list" = fn(i32, i32, i32);
 
 type "functype/wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);
 
-type "functype/__cm_binding__Fields_from_list" = fn(ref Array<Tuple<String,Array<u8>>>) -> ref Result<Fields,HeaderError>;
+type "functype/__cm_binding__Fields_from_list" = fn(ref Array<#Tuple<String,Array<u8>>>) -> ref Result<Fields,HeaderError>;
 
 type "functype/__cm_binding__Fields_new" = fn() -> i32;
 
@@ -371,9 +371,9 @@ type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
 
 type "functype/Array<u8>::grow" = fn(ref Array<u8>);
 
-type "functype/Array<Tuple<String,Array<u8>>>::push" = fn(ref Array<Tuple<String,Array<u8>>>, ref "tuple/[String, Array<u8>]");
+type "functype/Array<#Tuple<String,Array<u8>>>::push" = fn(ref Array<#Tuple<String,Array<u8>>>, ref "tuple/[String, Array<u8>]");
 
-type "functype/Array<Tuple<String,Array<u8>>>::grow" = fn(ref Array<Tuple<String,Array<u8>>>);
+type "functype/Array<#Tuple<String,Array<u8>>>::grow" = fn(ref Array<#Tuple<String,Array<u8>>>);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -416,16 +416,16 @@ import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn handle() {
-    let __local_1: ref Array<Tuple<String,Array<u8>>>;
-    let valid_entries: ref Array<Tuple<String,Array<u8>>>;
+    let __local_1: ref Array<#Tuple<String,Array<u8>>>;
+    let valid_entries: ref Array<#Tuple<String,Array<u8>>>;
     let valid_result: ref Result<Fields,HeaderError>;
     let __cond_4: bool;
     let __local_5: ref Array<u8>;
     let null_byte: ref Array<u8>;
     let __local_7: ref String;
     let null_name: ref String;
-    let __local_9: ref Array<Tuple<String,Array<u8>>>;
-    let invalid_entries: ref Array<Tuple<String,Array<u8>>>;
+    let __local_9: ref Array<#Tuple<String,Array<u8>>>;
+    let invalid_entries: ref Array<#Tuple<String,Array<u8>>>;
     let invalid_result: ref Result<Fields,HeaderError>;
     let __cond_12: bool;
     let trailers_future: i32;
@@ -570,8 +570,8 @@ fn handle() {
     let __packed_170: i64;
     let __ptr_171: i32;
     let __len_172: i32;
-    valid_entries = __seq_lit: block -> ref Array<Tuple<String,Array<u8>>> {
-        __local_1 = Array<Tuple<String,Array<u8>>> { repr: array.new_fixed<ref "tuple/[String, Array<u8>]">("tuple/[String, Array<u8>]" { 0: String { repr: array.new_data<u8>("x-valid"), used: 7 }, 1: ref.as_non_null(__inline_String__as_bytes_3: block -> ref Array<u8> {
+    valid_entries = __seq_lit: block -> ref Array<#Tuple<String,Array<u8>>> {
+        __local_1 = Array<#Tuple<String,Array<u8>>> { repr: array.new_fixed<ref "tuple/[String, Array<u8>]">("tuple/[String, Array<u8>]" { 0: String { repr: array.new_data<u8>("x-valid"), used: 7 }, 1: ref.as_non_null(__inline_String__as_bytes_3: block -> ref Array<u8> {
             break __inline_String__as_bytes_3: StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("value"), used: 5, index: 0 });
         }) }), used: 1 };
         break __seq_lit: __local_1;
@@ -628,8 +628,8 @@ condition: valid_result matches { Ok(_) }
     } else {
         unreachable;
     });
-    invalid_entries = __seq_lit: block -> ref Array<Tuple<String,Array<u8>>> {
-        __local_9 = Array<Tuple<String,Array<u8>>> { repr: array.new_fixed<ref "tuple/[String, Array<u8>]">("tuple/[String, Array<u8>]" { 0: null_name, 1: ref.as_non_null(__inline_String__as_bytes_16: block -> ref Array<u8> {
+    invalid_entries = __seq_lit: block -> ref Array<#Tuple<String,Array<u8>>> {
+        __local_9 = Array<#Tuple<String,Array<u8>>> { repr: array.new_fixed<ref "tuple/[String, Array<u8>]">("tuple/[String, Array<u8>]" { 0: null_name, 1: ref.as_non_null(__inline_String__as_bytes_16: block -> ref Array<u8> {
             break __inline_String__as_bytes_16: StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("value"), used: 5, index: 0 });
         }) }), used: 1 };
         break __seq_lit: __local_9;
@@ -1017,7 +1017,7 @@ fn __cm_binding__Fields_from_list(entries) {
     let __vresult: ref "wasi:http/types.wado/HeaderError";
     let __disc_14: i32;
     let __option_result: ref null String;
-    let __local_17: ref Array<Tuple<String,Array<u8>>>;
+    let __local_17: ref Array<#Tuple<String,Array<u8>>>;
     let __local_18: i32;
     let __local_19: ref Array<u8>;
     let __local_20: ref array<u8>;
@@ -1034,14 +1034,14 @@ fn __cm_binding__Fields_from_list(entries) {
                 break b45;
             };
             __entries_addr = __entries_base + (__entries_i * 16);
-            __entries_elem = __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: block -> ref "tuple/[String, Array<u8>]" {
-                __local_17 = value_copy Array<Tuple<String,Array<u8>>>(entries);
+            __entries_elem = __inline_Array__Tuple_String_Array_u8____IndexValue__index_value_1: block -> ref "tuple/[String, Array<u8>]" {
+                __local_17 = value_copy Array<#Tuple<String,Array<u8>>>(entries);
                 __local_18 = __entries_i;
                 if __local_18 >= __local_17.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, Array<u8>]">(__local_17.repr, __local_18);
+                break __inline_Array__Tuple_String_Array_u8____IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, Array<u8>]">(__local_17.repr, __local_18);
             };
             __packed = "core:internal/cm_lower_string"(__entries_elem.0);
             builtin::store_i32(__entries_addr, builtin::i32_wrap_i64(__packed));
@@ -1680,21 +1680,21 @@ fn Array<u8>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<Tuple<String,Array<u8>>>::push(self, value) {
+fn Array<#Tuple<String,Array<u8>>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<Tuple<String,Array<u8>>>::grow(self);
+        Array<#Tuple<String,Array<u8>>>::grow(self);
     };
     builtin::array_set<ref "tuple/[String, Array<u8>]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<Tuple<String,Array<u8>>>::grow(self) {
+fn Array<#Tuple<String,Array<u8>>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<Tuple<String,Array<u8>>>;
-    let old_repr: ref array<Tuple<String,Array<u8>>>;
+    let new_repr: ref array<#Tuple<String,Array<u8>>>;
+    let old_repr: ref array<#Tuple<String,Array<u8>>>;
     let used: i32;
     let i: i32;
     let __local_7: i32;

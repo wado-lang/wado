@@ -25,7 +25,7 @@ struct [String, String] {
     mut 1: ref String,
 }
 
-array array<Tuple<String,String>> (mut ref "tuple/[String, String]");
+array array<#Tuple<String,String>> (mut ref "tuple/[String, String]");
 
 array array<String> (mut ref String);
 
@@ -34,8 +34,8 @@ struct Array<String> {  // Array<T> with T=String
     mut used: i32,
 }
 
-struct Array<Tuple<String,String>> {  // Array<T> with T=Tuple<String,String>
-    mut repr: ref array<Tuple<String,String>>,
+struct Array<#Tuple<String,String>> {  // Array<T> with T=#Tuple<String,String>
+    mut repr: ref array<#Tuple<String,String>>,
     mut used: i32,
 }
 
@@ -69,7 +69,7 @@ type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_binding__Environment_get_environment" = fn() -> ref Array<Tuple<String,String>>;
+type "functype/__cm_binding__Environment_get_environment" = fn() -> ref Array<#Tuple<String,String>>;
 
 type "functype/__cm_binding__Environment_get_arguments" = fn() -> ref Array<String>;
 
@@ -107,9 +107,9 @@ type "functype/Array<String>::push" = fn(ref Array<String>, ref String);
 
 type "functype/Array<String>::grow" = fn(ref Array<String>);
 
-type "functype/Array<Tuple<String,String>>::push" = fn(ref Array<Tuple<String,String>>, ref "tuple/[String, String]");
+type "functype/Array<#Tuple<String,String>>::push" = fn(ref Array<#Tuple<String,String>>, ref "tuple/[String, String]");
 
-type "functype/Array<Tuple<String,String>>::grow" = fn(ref Array<Tuple<String,String>>);
+type "functype/Array<#Tuple<String,String>>::grow" = fn(ref Array<#Tuple<String,String>>);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -141,7 +141,7 @@ import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:
 
 fn run() with Stdout, Stderr, Environment {
     let arguments: ref Array<String>;
-    let env_vars: ref Array<Tuple<String,String>>;
+    let env_vars: ref Array<#Tuple<String,String>>;
     let __local_2: ref String;
     let __local_3: ref Formatter;
     let __local_4: ref String;
@@ -179,7 +179,7 @@ fn __cm_binding__Environment_get_environment() {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
-    let __result: ref Array<Tuple<String,String>>;
+    let __result: ref Array<#Tuple<String,String>>;
     let __i: i32;
     let __elem_addr: i32;
     let __lifted_result_6: ref String;
@@ -194,7 +194,7 @@ fn __cm_binding__Environment_get_environment() {
     "wasi/wasi:cli/Environment::get_environment"(__outptr);
     __base = builtin::load_i32(__outptr);
     __count = builtin::load_i32(__outptr + 4);
-    __result = Array<Tuple<String,String>> { repr: builtin::array_new<ref "tuple/[String, String]">(__count), used: 0 };
+    __result = Array<#Tuple<String,String>> { repr: builtin::array_new<ref "tuple/[String, String]">(__count), used: 0 };
     __i = 0;
     b0: block {
         l1: loop {
@@ -214,7 +214,7 @@ fn __cm_binding__Environment_get_environment() {
                 __local_16 = "core:internal/memory_to_gc_array"(__local_14, __local_15);
                 break __inline_memory_to_gc_string_3: String { repr: __local_16, used: __local_15 };
             };
-            Array<Tuple<String,String>>::push(__result, "tuple/[String, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
+            Array<#Tuple<String,String>>::push(__result, "tuple/[String, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 0), builtin::load_i32((__elem_addr + 0) + 4), 1, 0));
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 8), builtin::load_i32((__elem_addr + 8) + 4), 1, 0));
             __i = __i + 1;
@@ -578,21 +578,21 @@ fn Array<String>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<Tuple<String,String>>::push(self, value) {
+fn Array<#Tuple<String,String>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<Tuple<String,String>>::grow(self);
+        Array<#Tuple<String,String>>::grow(self);
     };
     builtin::array_set<ref "tuple/[String, String]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<Tuple<String,String>>::grow(self) {
+fn Array<#Tuple<String,String>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<Tuple<String,String>>;
-    let old_repr: ref array<Tuple<String,String>>;
+    let new_repr: ref array<#Tuple<String,String>>;
+    let old_repr: ref array<#Tuple<String,String>>;
     let used: i32;
     let i: i32;
     let __local_7: i32;

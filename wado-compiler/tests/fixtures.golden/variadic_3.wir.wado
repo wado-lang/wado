@@ -109,17 +109,17 @@ struct Result<bool,String>::Err {
     payload_0: ref String,
 }
 
-variant Result<Tuple<i32,String,bool>,String> {
+variant Result<#Tuple<i32,String,bool>,String> {
     Ok(ref "tuple/[i32, String, bool]"),
     Err(ref String),
 }
 
-struct Result<Tuple<i32,String,bool>,String>::Ok {
+struct Result<#Tuple<i32,String,bool>,String>::Ok {
     discriminant: i32,
     payload_0: ref "tuple/[i32, String, bool]",
 }
 
-struct Result<Tuple<i32,String,bool>,String>::Err {
+struct Result<#Tuple<i32,String,bool>,String>::Err {
     discriminant: i32,
     payload_0: ref String,
 }
@@ -193,7 +193,7 @@ type "functype/__cm_export____test_9_type_pack_expansion_try_op_two" = fn();
 
 type "functype/__cm_export____test_10_type_pack_expansion_with_args" = fn();
 
-type "functype/try_make_defaults_err<Tuple<i32,String,bool>>" = fn() -> ref Result<Tuple<i32,String,bool>,String>;
+type "functype/try_make_defaults_err<#Tuple<i32,String,bool>>" = fn() -> ref Result<#Tuple<i32,String,bool>,String>;
 
 type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
 
@@ -267,11 +267,11 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/try_make_defaults_two<Tuple<i32,bool>>" = fn() -> [i32, ref null "tuple/[i32, bool]", ref null String];
+type "functype/try_make_defaults_two<#Tuple<i32,bool>>" = fn() -> [i32, ref null "tuple/[i32, bool]", ref null String];
 
-type "functype/make_with_prefix<Tuple<i32,bool>>" = fn(ref String) -> [i32, ref null "tuple/[String, i32, bool]", ref null String];
+type "functype/make_with_prefix<#Tuple<i32,bool>>" = fn(ref String) -> [i32, ref null "tuple/[String, i32, bool]", ref null String];
 
-type "functype/try_make_defaults<Tuple<i32,String,bool>>" = fn() -> [i32, ref null "tuple/[i32, String, bool]", ref null String];
+type "functype/try_make_defaults<#Tuple<i32,String,bool>>" = fn() -> [i32, ref null "tuple/[i32, String, bool]", ref null String];
 
 type "functype/unpack64" = fn(f64) -> [u64, i32];
 
@@ -444,9 +444,9 @@ fn __test_4_type_pack_expansion_method_type_param() {
         __modules_initialized = 1;
     };
     reader = FixedReader { value: 42 };
-    result = __inline_read_all_Tuple_i32_String___1: block -> ref "tuple/[i32, String]" {
+    result = __inline_read_all__Tuple_i32_String___1: block -> ref "tuple/[i32, String]" {
         __local_10 = reader;
-        break __inline_read_all_Tuple_i32_String___1: "tuple/[i32, String]" { 0: __local_10.value, 1: ref.as_non_null(FixedReader^Reader::read_string(__local_10.value)) };
+        break __inline_read_all__Tuple_i32_String___1: "tuple/[i32, String]" { 0: __local_10.value, 1: ref.as_non_null(FixedReader^Reader::read_string(__local_10.value)) };
     };
     __v0_2 = result.0;
     __cond_3 = __v0_2 == 42;
@@ -534,7 +534,7 @@ fn __test_5_type_pack_expansion_try_op() {
     let __sroa_result_discriminant: i32;
     let __sroa_result_case0_payload_0: ref null "tuple/[i32, String, bool]";
     let __sroa_result_case1_payload_0: ref null String;
-    multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = try_make_defaults<Tuple<i32,String,bool>>();
+    multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = try_make_defaults<#Tuple<i32,String,bool>>();
     if __sroa_result_discriminant == 0 {
         t = __sroa_result_case0_payload_0;
         __v0_2 = t.0;
@@ -640,7 +640,7 @@ condition: t.2 == false
 }
 
 fn __test_6_type_pack_expansion_try_op_err() {
-    let result: ref Result<Tuple<i32,String,bool>,String>;
+    let result: ref Result<#Tuple<i32,String,bool>,String>;
     let __cond_1: bool;
     let e: ref String;
     let __v0: ref String;
@@ -657,12 +657,12 @@ fn __test_6_type_pack_expansion_try_op_err() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    result = try_make_defaults_err<Tuple<i32,String,bool>>();
-    let __match_scrut_0: ref Result<Tuple<i32,String,bool>,String>;
+    result = try_make_defaults_err<#Tuple<i32,String,bool>>();
+    let __match_scrut_0: ref Result<#Tuple<i32,String,bool>,String>;
     __match_scrut_0 = result;
-    __cond_1 = if ref.test Result<Tuple<i32,String,bool>,String>::Err(__match_scrut_0) -> bool {
-        let __cast_1: ref Result<Tuple<i32,String,bool>,String>::Err;
-        __cast_1 = ref.cast Result<Tuple<i32,String,bool>,String>::Err(__match_scrut_0);
+    __cond_1 = if ref.test Result<#Tuple<i32,String,bool>,String>::Err(__match_scrut_0) -> bool {
+        let __cast_1: ref Result<#Tuple<i32,String,bool>,String>::Err;
+        __cast_1 = ref.cast Result<#Tuple<i32,String,bool>,String>::Err(__match_scrut_0);
         1;
     } else {
         0;
@@ -687,8 +687,8 @@ condition: result matches { Err(_) }
         });
         unreachable;
     };
-    if ref.test Result<Tuple<i32,String,bool>,String>::Err(result) {
-        e = ref.cast Result<Tuple<i32,String,bool>,String>::Err(result).payload_0;
+    if ref.test Result<#Tuple<i32,String,bool>,String>::Err(result) {
+        e = ref.cast Result<#Tuple<i32,String,bool>,String>::Err(result).payload_0;
         __v0 = e;
         __cond_4 = String^Eq::eq(__v0, String { repr: array.new_data<u8>("string failed"), used: 13 });
         if __cond_4 == 0 {
@@ -750,7 +750,7 @@ fn __test_7_type_pack_expansion_try_op_mixed() {
     let __sroa_result_discriminant: i32;
     let __sroa_result_case0_payload_0: ref null "tuple/[String, i32, bool]";
     let __sroa_result_case1_payload_0: ref null String;
-    multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = make_with_prefix<Tuple<i32,bool>>(String { repr: array.new_data<u8>("header"), used: 6 });
+    multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = make_with_prefix<#Tuple<i32,bool>>(String { repr: array.new_data<u8>("header"), used: 6 });
     if __sroa_result_discriminant == 0 {
         t = __sroa_result_case0_payload_0;
         __v0_2 = t.0;
@@ -878,14 +878,14 @@ fn __test_8_type_pack_expansion_try_op_option() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    result = __inline_make_defaults_option_Tuple_i32_String___1: block -> ref null "tuple/[i32, String]" {
-        break __inline_make_defaults_option_Tuple_i32_String___1: "tuple/[i32, String]" { 0: let __match_scrut_0: ref Option<i32>; __match_scrut_0 = Option<i32>::Some { discriminant: 0, payload_0: 42 }; if ref.test Option<i32>::Some(__match_scrut_0) -> i32 {
+    result = __inline_make_defaults_option__Tuple_i32_String___1: block -> ref null "tuple/[i32, String]" {
+        break __inline_make_defaults_option__Tuple_i32_String___1: "tuple/[i32, String]" { 0: let __match_scrut_0: ref Option<i32>; __match_scrut_0 = Option<i32>::Some { discriminant: 0, payload_0: 42 }; if ref.test Option<i32>::Some(__match_scrut_0) -> i32 {
             let __cast_1: ref Option<i32>::Some;
             __cast_1 = ref.cast Option<i32>::Some(__match_scrut_0);
             __local_11 = __cast_1.payload_0;
             __local_11;
         } else if 0 -> i32 {
-            break __inline_make_defaults_option_Tuple_i32_String___1: ref.null none;
+            break __inline_make_defaults_option__Tuple_i32_String___1: ref.null none;
             unreachable;
         } else {
             unreachable;
@@ -895,7 +895,7 @@ fn __test_8_type_pack_expansion_try_op_option() {
             __local_12 = ref.as_non_null(__cast_2);
             __local_12;
         } else if ref.is_null(__match_scrut_1) -> ref String {
-            break __inline_make_defaults_option_Tuple_i32_String___1: ref.null none;
+            break __inline_make_defaults_option__Tuple_i32_String___1: ref.null none;
             unreachable;
         } else {
             unreachable;
@@ -993,7 +993,7 @@ fn __test_9_type_pack_expansion_try_op_two() {
     let __sroa_result_discriminant: i32;
     let __sroa_result_case0_payload_0: ref null "tuple/[i32, bool]";
     let __sroa_result_case1_payload_0: ref null String;
-    multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = try_make_defaults_two<Tuple<i32,bool>>();
+    multivalue_bind [__sroa_result_discriminant, __sroa_result_case0_payload_0, __sroa_result_case1_payload_0] = try_make_defaults_two<#Tuple<i32,bool>>();
     if __sroa_result_discriminant == 0 {
         t = __sroa_result_case0_payload_0;
         __v0_2 = t.0;
@@ -1219,7 +1219,7 @@ fn __cm_export____test_10_type_pack_expansion_with_args() {
     "wasi/task-return"(0);
 }
 
-fn try_make_defaults_two<Tuple<i32,bool>>() {
+fn try_make_defaults_two<#Tuple<i32,bool>>() {
     let __local_0: i32;
     let __local_1: ref String;
     let __local_2: bool;
@@ -1253,7 +1253,7 @@ fn try_make_defaults_two<Tuple<i32,bool>>() {
     } }; ref.null none;
 }
 
-fn make_with_prefix<Tuple<i32,bool>>(prefix) {
+fn make_with_prefix<#Tuple<i32,bool>>(prefix) {
     let __local_1: i32;
     let __local_2: ref String;
     let __local_3: bool;
@@ -1287,14 +1287,14 @@ fn make_with_prefix<Tuple<i32,bool>>(prefix) {
     } }; ref.null none;
 }
 
-fn try_make_defaults_err<Tuple<i32,String,bool>>() {
+fn try_make_defaults_err<#Tuple<i32,String,bool>>() {
     let __local_0: i32;
     let __local_1: ref String;
     let __local_2: ref String;
     let __local_3: ref String;
     let __local_4: bool;
     let __local_5: ref String;
-    return Result<Tuple<i32,String,bool>,String>::Ok { discriminant: 0, payload_0: "tuple/[i32, String, bool]" { 0: let __match_scrut_0: ref Result<i32,String>; __match_scrut_0 = Result<i32,String>::Ok { discriminant: 0, payload_0: 0 }; if ref.test Result<i32,String>::Ok(__match_scrut_0) -> i32 {
+    return Result<#Tuple<i32,String,bool>,String>::Ok { discriminant: 0, payload_0: "tuple/[i32, String, bool]" { 0: let __match_scrut_0: ref Result<i32,String>; __match_scrut_0 = Result<i32,String>::Ok { discriminant: 0, payload_0: 0 }; if ref.test Result<i32,String>::Ok(__match_scrut_0) -> i32 {
         let __cast_2: ref Result<i32,String>::Ok;
         __cast_2 = ref.cast Result<i32,String>::Ok(__match_scrut_0);
         __local_0 = __cast_2.payload_0;
@@ -1303,7 +1303,7 @@ fn try_make_defaults_err<Tuple<i32,String,bool>>() {
         let __cast_1: ref Result<i32,String>::Err;
         __cast_1 = ref.cast Result<i32,String>::Err(__match_scrut_0);
         __local_1 = __cast_1.payload_0;
-        return Result<Tuple<i32,String,bool>,String>::Err { discriminant: 1, payload_0: __local_1 };
+        return Result<#Tuple<i32,String,bool>,String>::Err { discriminant: 1, payload_0: __local_1 };
         unreachable;
     } else {
         unreachable;
@@ -1316,7 +1316,7 @@ fn try_make_defaults_err<Tuple<i32,String,bool>>() {
         let __cast_3: ref Result<String,String>::Err;
         __cast_3 = ref.cast Result<String,String>::Err(__match_scrut_1);
         __local_3 = __cast_3.payload_0;
-        return Result<Tuple<i32,String,bool>,String>::Err { discriminant: 1, payload_0: __local_3 };
+        return Result<#Tuple<i32,String,bool>,String>::Err { discriminant: 1, payload_0: __local_3 };
         unreachable;
     } else {
         unreachable;
@@ -1329,14 +1329,14 @@ fn try_make_defaults_err<Tuple<i32,String,bool>>() {
         let __cast_5: ref Result<bool,String>::Err;
         __cast_5 = ref.cast Result<bool,String>::Err(__match_scrut_2);
         __local_5 = __cast_5.payload_0;
-        return Result<Tuple<i32,String,bool>,String>::Err { discriminant: 1, payload_0: __local_5 };
+        return Result<#Tuple<i32,String,bool>,String>::Err { discriminant: 1, payload_0: __local_5 };
         unreachable;
     } else {
         unreachable;
     } } };
 }
 
-fn try_make_defaults<Tuple<i32,String,bool>>() {
+fn try_make_defaults<#Tuple<i32,String,bool>>() {
     let __local_0: i32;
     let __local_1: ref String;
     let __local_2: ref String;

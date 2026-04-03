@@ -441,7 +441,11 @@ impl Monomorphizer {
         {
             let mono = method_func.monomorph_info.as_ref();
             let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
-                MethodName::format_local(TypeTable::TUPLE_TYPE_NAME, info.trait_name.as_deref(), &info.method_name)
+                MethodName::format_local(
+                    TypeTable::TUPLE_TYPE_NAME,
+                    info.trait_name.as_deref(),
+                    &info.method_name,
+                )
             });
             let impl_type_args = mono.map(|m| m.impl_type_args.clone()).unwrap_or_else(|| {
                 let mut receiver_type = receiver.type_id;

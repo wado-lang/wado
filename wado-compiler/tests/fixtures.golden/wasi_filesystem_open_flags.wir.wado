@@ -59,7 +59,7 @@ struct [Descriptor, String] {
     mut 1: ref String,
 }
 
-array array<Tuple<Descriptor,String>> (mut ref "tuple/[Descriptor, String]");
+array array<#Tuple<Descriptor,String>> (mut ref "tuple/[Descriptor, String]");
 
 variant Result<unit,ErrorCode> {
     Ok,
@@ -86,8 +86,8 @@ struct Result<Descriptor,ErrorCode>::Err {
     payload_0: ref "wasi:filesystem/types.wado/ErrorCode",
 }
 
-struct Array<Tuple<Descriptor,String>> {  // Array<T> with T=Tuple<Descriptor,String>
-    mut repr: ref array<Tuple<Descriptor,String>>,
+struct Array<#Tuple<Descriptor,String>> {  // Array<T> with T=#Tuple<Descriptor,String>
+    mut repr: ref array<#Tuple<Descriptor,String>>,
     mut used: i32,
 }
 
@@ -121,7 +121,7 @@ type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
 type "functype/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_binding__Preopens_get_directories" = fn() -> ref Array<Tuple<Descriptor,String>>;
+type "functype/__cm_binding__Preopens_get_directories" = fn() -> ref Array<#Tuple<Descriptor,String>>;
 
 type "functype/__cm_binding__Descriptor_unlink_file_at" = fn(i32, ref String) -> ref Result<unit,ErrorCode>;
 
@@ -155,9 +155,9 @@ type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
 
 type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
 
-type "functype/Array<Tuple<Descriptor,String>>::push" = fn(ref Array<Tuple<Descriptor,String>>, ref "tuple/[Descriptor, String]");
+type "functype/Array<#Tuple<Descriptor,String>>::push" = fn(ref Array<#Tuple<Descriptor,String>>, ref "tuple/[Descriptor, String]");
 
-type "functype/Array<Tuple<Descriptor,String>>::grow" = fn(ref Array<Tuple<Descriptor,String>>);
+type "functype/Array<#Tuple<Descriptor,String>>::grow" = fn(ref Array<#Tuple<Descriptor,String>>);
 
 type "functype/wasi/stream-drop-writable" = fn(i32);
 
@@ -188,7 +188,7 @@ import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:
 import fn subtask-drop from "wasi/subtask-drop";
 
 fn run() with Stdout, Stderr, Preopens {
-    let dirs: ref Array<Tuple<Descriptor,String>>;
+    let dirs: ref Array<#Tuple<Descriptor,String>>;
     let dir: i32;
     let excl_result: ref Result<Descriptor,ErrorCode>;
     let excl_dup_result: ref Result<Descriptor,ErrorCode>;
@@ -200,12 +200,12 @@ fn run() with Stdout, Stderr, Preopens {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
         return;
     };
-    dir = __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: block -> ref "tuple/[Descriptor, String]" {
+    dir = __inline_Array__Tuple_Descriptor_String___IndexValue__index_value_3: block -> ref "tuple/[Descriptor, String]" {
         if 0 >= dirs.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: builtin::array_get<ref "tuple/[Descriptor, String]">(dirs.repr, 0);
+        break __inline_Array__Tuple_Descriptor_String___IndexValue__index_value_3: builtin::array_get<ref "tuple/[Descriptor, String]">(dirs.repr, 0);
     }.0;
     drop(__cm_binding__Descriptor_unlink_file_at(dir, String { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }));
     excl_result = __cm_binding__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("exclusive_test.txt"), used: 18 }, 5, 2);
@@ -254,7 +254,7 @@ fn __cm_binding__Preopens_get_directories() {
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
-    let __result: ref Array<Tuple<Descriptor,String>>;
+    let __result: ref Array<#Tuple<Descriptor,String>>;
     let __i: i32;
     let __elem_addr: i32;
     let __lifted_result_6: i32;
@@ -266,7 +266,7 @@ fn __cm_binding__Preopens_get_directories() {
     "wasi/wasi:filesystem/Preopens::get_directories"(__outptr);
     __base = builtin::load_i32(__outptr);
     __count = builtin::load_i32(__outptr + 4);
-    __result = Array<Tuple<Descriptor,String>> { repr: builtin::array_new<ref "tuple/[Descriptor, String]">(__count), used: 0 };
+    __result = Array<#Tuple<Descriptor,String>> { repr: builtin::array_new<ref "tuple/[Descriptor, String]">(__count), used: 0 };
     __i = 0;
     b7: block {
         l8: loop {
@@ -281,7 +281,7 @@ fn __cm_binding__Preopens_get_directories() {
                 __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
                 break __inline_memory_to_gc_string_1: String { repr: __local_11, used: __local_10 };
             };
-            Array<Tuple<Descriptor,String>>::push(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
+            Array<#Tuple<Descriptor,String>>::push(__result, "tuple/[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l8;
@@ -751,21 +751,21 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     return code; evt_handle; payload;
 }
 
-fn Array<Tuple<Descriptor,String>>::push(self, value) {
+fn Array<#Tuple<Descriptor,String>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<Tuple<Descriptor,String>>::grow(self);
+        Array<#Tuple<Descriptor,String>>::grow(self);
     };
     builtin::array_set<ref "tuple/[Descriptor, String]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<Tuple<Descriptor,String>>::grow(self) {
+fn Array<#Tuple<Descriptor,String>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<Tuple<Descriptor,String>>;
-    let old_repr: ref array<Tuple<Descriptor,String>>;
+    let new_repr: ref array<#Tuple<Descriptor,String>>;
+    let old_repr: ref array<#Tuple<Descriptor,String>>;
     let used: i32;
     let i: i32;
     let __local_7: i32;

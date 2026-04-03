@@ -404,7 +404,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             is_ref_impl: false,
                         });
                     }
-                    (TypeTable::TUPLE_TYPE_NAME.to_string(), None, Some(elems.clone()), None)
+                    (
+                        TypeTable::TUPLE_TYPE_NAME.to_string(),
+                        None,
+                        Some(elems.clone()),
+                        None,
+                    )
                 } else {
                     (
                         name.clone(),

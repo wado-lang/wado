@@ -229,7 +229,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/core/json/from_string<Tuple<i32,String>>" = fn(ref String) -> [i32, ref null "tuple/[i32, String]", ref null "core:serde/DeserializeError"];
+type "functype/core/json/from_string<#Tuple<i32,String>>" = fn(ref String) -> [i32, ref null "tuple/[i32, String]", ref null "core:serde/DeserializeError"];
 
 type "functype/pow10_coarse" = fn(i32) -> [u64, u64];
 
@@ -239,7 +239,7 @@ type "functype/char::from_u32" = fn(u32) -> [i32, char];
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
-type "functype/Tuple<i32,String>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null "tuple/[i32, String]", ref null "core:serde/DeserializeError"];
+type "functype/#Tuple<i32,String>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null "tuple/[i32, String]", ref null "core:serde/DeserializeError"];
 
 type "functype/core:json/JsonDeserializer::read_json_string" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null String, ref null "core:serde/DeserializeError"];
 
@@ -282,7 +282,7 @@ fn __test_0_tuple_deserialize_via_variadic_impl() {
     let __sroa_parsed_discriminant: i32;
     let __sroa_parsed_case0_payload_0: ref null "tuple/[i32, String]";
     let __sroa_parsed_case1_payload_0: ref null "core:serde/DeserializeError";
-    multivalue_bind [__sroa_parsed_discriminant, __sroa_parsed_case0_payload_0, __sroa_parsed_case1_payload_0] = "core/json/from_string<Tuple<i32,String>>"(json);
+    multivalue_bind [__sroa_parsed_discriminant, __sroa_parsed_case0_payload_0, __sroa_parsed_case1_payload_0] = "core/json/from_string<#Tuple<i32,String>>"(json);
     if __sroa_parsed_discriminant == 0 {
         t = __sroa_parsed_case0_payload_0;
         __v0_3 = t.0;
@@ -359,7 +359,7 @@ fn __cm_export____test_0_tuple_deserialize_via_variadic_impl() {
     "wasi/task-return"(0);
 }
 
-fn "core/json/from_string<Tuple<i32,String>>"(input) {
+fn "core/json/from_string<#Tuple<i32,String>>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let v: ref "tuple/[i32, String]";
     let e: ref "core:serde/DeserializeError";
@@ -369,7 +369,7 @@ fn "core/json/from_string<Tuple<i32,String>>"(input) {
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "tuple/[i32, String]";
     let __sroa_r_case1_payload_0: ref null "core:serde/DeserializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = Tuple<i32,String>^Deserialize::deserialize<JsonDeserializer>(de);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = #Tuple<i32,String>^Deserialize::deserialize<JsonDeserializer>(de);
     if __sroa_r_discriminant == 0 {
         v = __sroa_r_case0_payload_0;
         "core:json/JsonDeserializer::skip_whitespace"(de);
@@ -1082,7 +1082,7 @@ fn String::push(self, c) {
     };
 }
 
-fn Tuple<i32,String>^Deserialize::deserialize<JsonDeserializer>(d) {
+fn #Tuple<i32,String>^Deserialize::deserialize<JsonDeserializer>(d) {
     let __local_1: ref "core:json/JsonSeqAccess";
     let __local_2: ref "core:serde/DeserializeError";
     let seq: ref "core:json/JsonSeqAccess";

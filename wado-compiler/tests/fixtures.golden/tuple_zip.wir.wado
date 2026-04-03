@@ -37,12 +37,12 @@ struct [i32, i32, i32] {
     mut 2: i32,
 }
 
-struct [Tuple<i32,i32,i32>, Tuple<i32,i32,i32>] {
+struct [#Tuple<i32,i32,i32>, #Tuple<i32,i32,i32>] {
     mut 0: ref "tuple/[i32, i32, i32]",
     mut 1: ref "tuple/[i32, i32, i32]",
 }
 
-struct [Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>] {
+struct [#Tuple<i32,i32>, #Tuple<i32,i32>, #Tuple<i32,i32>] {
     mut 0: ref "tuple/[i32, i32]",
     mut 1: ref "tuple/[i32, i32]",
     mut 2: ref "tuple/[i32, i32]",
@@ -53,7 +53,7 @@ struct [i32, String] {
     mut 1: ref String,
 }
 
-struct [Tuple<i32,String>, Tuple<i32,String>] {
+struct [#Tuple<i32,String>, #Tuple<i32,String>] {
     mut 0: ref "tuple/[i32, String]",
     mut 1: ref "tuple/[i32, String]",
 }
@@ -62,7 +62,7 @@ struct [i32] {
     mut 0: i32,
 }
 
-struct [Tuple<i32>, Tuple<i32>] {
+struct [#Tuple<i32>, #Tuple<i32>] {
     mut 0: ref "tuple/[i32]",
     mut 1: ref "tuple/[i32]",
 }
@@ -179,12 +179,12 @@ fn __test_0_zip_homogeneous() {
     a = "tuple/[i32, i32, i32]" { 0: 1, 1: 2, 2: 3 };
     b = "tuple/[i32, i32, i32]" { 0: 4, 1: 5, 2: 6 };
     sum = 0;
-    __sroa___sroa___tuple_3_0_0 = "tuple/[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa___tuple_3_0_1 = "tuple/[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.0;
-    __sroa___sroa___tuple_3_1_0 = "tuple/[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.1;
-    __sroa___sroa___tuple_3_1_1 = "tuple/[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.1;
-    __sroa___sroa___tuple_3_2_0 = "tuple/[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.2;
-    __sroa___sroa___tuple_3_2_1 = "tuple/[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.2;
+    __sroa___sroa___tuple_3_0_0 = "tuple/[#Tuple<i32,i32,i32>, #Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.0;
+    __sroa___sroa___tuple_3_0_1 = "tuple/[#Tuple<i32,i32,i32>, #Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.0;
+    __sroa___sroa___tuple_3_1_0 = "tuple/[#Tuple<i32,i32,i32>, #Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.1;
+    __sroa___sroa___tuple_3_1_1 = "tuple/[#Tuple<i32,i32,i32>, #Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.1;
+    __sroa___sroa___tuple_3_2_0 = "tuple/[#Tuple<i32,i32,i32>, #Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.2;
+    __sroa___sroa___tuple_3_2_1 = "tuple/[#Tuple<i32,i32,i32>, #Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.2;
     sum = (0 + __sroa___sroa___tuple_3_0_0) + __sroa___sroa___tuple_3_0_1;
     sum = (sum + __sroa___sroa___tuple_3_1_0) + __sroa___sroa___tuple_3_1_1;
     sum = (sum + __sroa___sroa___tuple_3_2_0) + __sroa___sroa___tuple_3_2_1;
@@ -251,10 +251,10 @@ fn __test_1_zip_heterogeneous() {
     let __sroa___sroa_zipped_1_1: ref String;
     a = "tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("hello"), used: 5 } };
     b = "tuple/[i32, String]" { 0: 2, 1: String { repr: array.new_data<u8>("world"), used: 5 } };
-    __sroa___sroa_zipped_0_0 = "tuple/[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa_zipped_0_1 = "tuple/[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.1.0;
-    __sroa___sroa_zipped_1_0 = "tuple/[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.0.1;
-    __sroa___sroa_zipped_1_1 = "tuple/[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.1.1;
+    __sroa___sroa_zipped_0_0 = "tuple/[#Tuple<i32,String>, #Tuple<i32,String>]" { 0: a, 1: b }.0.0;
+    __sroa___sroa_zipped_0_1 = "tuple/[#Tuple<i32,String>, #Tuple<i32,String>]" { 0: a, 1: b }.1.0;
+    __sroa___sroa_zipped_1_0 = "tuple/[#Tuple<i32,String>, #Tuple<i32,String>]" { 0: a, 1: b }.0.1;
+    __sroa___sroa_zipped_1_1 = "tuple/[#Tuple<i32,String>, #Tuple<i32,String>]" { 0: a, 1: b }.1.1;
     __cond_4 = __sroa___sroa_zipped_0_0 == 1;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -386,12 +386,12 @@ fn __test_2_zip_three_tuples() {
     b = "tuple/[i32, i32]" { 0: 3, 1: 4 };
     c = "tuple/[i32, i32]" { 0: 5, 1: 6 };
     sum = 0;
-    __sroa___sroa___tuple_4_0_0 = "tuple/[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.0;
-    __sroa___sroa___tuple_4_0_1 = "tuple/[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.0;
-    __sroa___sroa___tuple_4_0_2 = "tuple/[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.0;
-    __sroa___sroa___tuple_4_1_0 = "tuple/[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.1;
-    __sroa___sroa___tuple_4_1_1 = "tuple/[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.1;
-    __sroa___sroa___tuple_4_1_2 = "tuple/[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.1;
+    __sroa___sroa___tuple_4_0_0 = "tuple/[#Tuple<i32,i32>, #Tuple<i32,i32>, #Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.0;
+    __sroa___sroa___tuple_4_0_1 = "tuple/[#Tuple<i32,i32>, #Tuple<i32,i32>, #Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.0;
+    __sroa___sroa___tuple_4_0_2 = "tuple/[#Tuple<i32,i32>, #Tuple<i32,i32>, #Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.0;
+    __sroa___sroa___tuple_4_1_0 = "tuple/[#Tuple<i32,i32>, #Tuple<i32,i32>, #Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.1;
+    __sroa___sroa___tuple_4_1_1 = "tuple/[#Tuple<i32,i32>, #Tuple<i32,i32>, #Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.1;
+    __sroa___sroa___tuple_4_1_2 = "tuple/[#Tuple<i32,i32>, #Tuple<i32,i32>, #Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.1;
     sum = ((0 + __sroa___sroa___tuple_4_0_0) + __sroa___sroa___tuple_4_0_1) + __sroa___sroa___tuple_4_0_2;
     sum = ((sum + __sroa___sroa___tuple_4_1_0) + __sroa___sroa___tuple_4_1_1) + __sroa___sroa___tuple_4_1_2;
     __v0 = sum;
@@ -445,8 +445,8 @@ fn __test_3_zip_single_element() {
     let __sroa___sroa___tuple_2_0_1: i32;
     a = "tuple/[i32]" { 0: 42 };
     b = "tuple/[i32]" { 0: 99 };
-    __sroa___sroa___tuple_2_0_0 = "tuple/[Tuple<i32>, Tuple<i32>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa___tuple_2_0_1 = "tuple/[Tuple<i32>, Tuple<i32>]" { 0: a, 1: b }.1.0;
+    __sroa___sroa___tuple_2_0_0 = "tuple/[#Tuple<i32>, #Tuple<i32>]" { 0: a, 1: b }.0.0;
+    __sroa___sroa___tuple_2_0_1 = "tuple/[#Tuple<i32>, #Tuple<i32>]" { 0: a, 1: b }.1.0;
     __cond_6 = __sroa___sroa___tuple_2_0_0 == 42;
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {

@@ -633,7 +633,9 @@ fn generate_inspect_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
         match resolved {
-            ResolvedType::GenericInstance { ref name, .. } if name == TypeTable::TUPLE_TYPE_NAME => {
+            ResolvedType::GenericInstance { ref name, .. }
+                if name == TypeTable::TUPLE_TYPE_NAME =>
+            {
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             ResolvedType::Function {
@@ -2082,7 +2084,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         }
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
-        if matches!(resolved, ResolvedType::GenericInstance { ref name, .. } if name == TypeTable::TUPLE_TYPE_NAME) {
+        if matches!(resolved, ResolvedType::GenericInstance { ref name, .. } if name == TypeTable::TUPLE_TYPE_NAME)
+        {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
         } else {
             // Function types, opaque types: delegate to Inspect
