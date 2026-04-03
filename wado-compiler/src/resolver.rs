@@ -267,12 +267,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// This is the correct way to look up struct fields — it disambiguates
     /// The flat `struct_fields` map is a visibility-scoped projection of `all_struct_fields`,
     /// containing only types visible to the current module (own definitions + explicit imports).
-    /// It has up-to-date TypeIds because per-module resolution re-registers types locally.
     ///
     /// `all_struct_fields` covers ALL modules and is needed for cross-module lookups where
     /// the type wasn't explicitly imported (e.g., a struct returned by a function from another
-    /// module). Its field TypeIds are resolved by `resolve_type_static` during orchestration,
-    /// which is the same interning as per-module resolution for supported types.
+    /// module).
     fn lookup_struct_fields(
         &self,
         name: &str,
