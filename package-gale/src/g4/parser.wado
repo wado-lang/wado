@@ -14,6 +14,8 @@ use {
     LexerNotElement,
     CharClass,
     CharRange,
+    DEFAULT_MODE,
+    NO_MODE,
 } from "../ir.wado";
 use { G4Token, make_token } from "./token.wado";
 use { tokenize } from "./lexer.wado";
@@ -98,14 +100,15 @@ impl G4Parser {
 
         let mut parser_rules: Array<ParserRule> = [];
         let mut lexer_rules: Array<LexerRule> = [];
-        let mut current_mode = "DEFAULT_MODE";
+        let mut mode_names: Array<String> = ["DEFAULT_MODE"];
+        let mut current_mode: i32 = DEFAULT_MODE;
 
         while !self.at_eof() {
             // Check for mode declaration: mode NAME;
             if self.is_kind(G4Token::Identifier) && self.peek().text == "mode" {
                 self.advance();
                 let mode_name_tok = self.expect(G4Token::Identifier)?;
-                current_mode = mode_name_tok.text;
+                current_mode = intern_mode(&mut mode_names, &mode_name_tok.text);
                 self.expect(G4Token::Semicolon)?;
                 continue;
             }
@@ -119,7 +122,7 @@ impl G4Parser {
             let rule_name = rule_name_tok.text;
 
             if is_lexer_grammar || is_frag || is_lexer_rule_name(&rule_name) {
-                let rule = self.parse_lexer_rule(rule_name, is_frag, current_mode)?;
+                let rule = self.parse_lexer_rule(rule_name, is_frag, current_mode, &mut mode_names)?;
                 lexer_rules.push(rule);
             } else {
                 let rule = self.parse_parser_rule(rule_name)?;
@@ -127,7 +130,7 @@ impl G4Parser {
             }
         }
 
-        return Result::<Grammar, ParseError>::Ok(Grammar { name, parser_rules, lexer_rules });
+        return Result::<Grammar, ParseError>::Ok(Grammar { name, parser_rules, lexer_rules, mode_names });
     }
 
     fn skip_preamble_blocks(&mut self) {
@@ -312,16 +315,16 @@ impl G4Parser {
         return Result::<Element, ParseError>::Ok(elem);
     }
 
-    fn parse_lexer_rule(&mut self, name: String, is_fragment: bool, mode: String) -> Result<LexerRule, ParseError> {
+    fn parse_lexer_rule(&mut self, name: String, is_fragment: bool, mode: i32, mode_names: &mut Array<String>) -> Result<LexerRule, ParseError> {
         self.expect(G4Token::Colon)?;
         let body = self.parse_lexer_alternatives()?;
 
         let mut skip = false;
-        let mut push_mode: Option<String> = null;
+        let mut push_mode: i32 = NO_MODE;
         let mut pop_mode = false;
         if self.is_kind(G4Token::Arrow) {
             self.advance();
-            self.parse_lexer_actions(&mut skip, &mut push_mode, &mut pop_mode);
+            self.parse_lexer_actions(&mut skip, &mut push_mode, &mut pop_mode, mode_names);
         }
 
         self.expect(G4Token::Semicolon)?;
@@ -330,7 +333,7 @@ impl G4Parser {
         );
     }
 
-    fn parse_lexer_actions(&mut self, skip: &mut bool, push_mode: &mut Option<String>, pop_mode: &mut bool) {
+    fn parse_lexer_actions(&mut self, skip: &mut bool, push_mode: &mut i32, pop_mode: &mut bool, mode_names: &mut Array<String>) {
         loop {
             let action_tok = self.advance();
             if action_tok.text == "skip" {
@@ -339,7 +342,7 @@ impl G4Parser {
                 self.expect(G4Token::LParen).unwrap();
                 let mode_name = self.advance();
                 self.expect(G4Token::RParen).unwrap();
-                *push_mode = Option::<String>::Some(mode_name.text);
+                *push_mode = intern_mode(mode_names, &mode_name.text);
             } else if action_tok.text == "popMode" {
                 *pop_mode = true;
             } else if action_tok.text == "channel" {
@@ -565,6 +568,16 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
     }
 
     return Result::<CharClass, ParseError>::Ok(CharClass { ranges, negated });
+}
+
+fn intern_mode(mode_names: &mut Array<String>, name: &String) -> i32 {
+    for let mut i = 0; i < mode_names.len(); i += 1 {
+        if mode_names[i] == *name {
+            return i;
+        }
+    }
+    mode_names.push(*name);
+    return mode_names.len() - 1;
 }
 
 pub fn parse(input: String) -> Result<Grammar, ParseError> {

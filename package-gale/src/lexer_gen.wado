@@ -96,7 +96,7 @@ pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitTo
     gen_lexer_struct(w);
     gen_lexer_match_fns(w, &grammar.lexer_rules);
     gen_literal_match_fns(w, lit_tokens);
-    gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens);
+    gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names);
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
 
@@ -417,56 +417,12 @@ fn lit_try_fn_name(const_name: &String) -> String {
     return result;
 }
 
-fn has_modes(lexer_rules: &Array<LexerRule>) -> bool {
-    for let rule of lexer_rules {
-        if rule.mode != "DEFAULT_MODE" {
-            return true;
-        }
-        if let Some(_) = rule.push_mode {
-            return true;
-        }
-        if rule.pop_mode {
-            return true;
-        }
-    }
-    return false;
+fn has_modes(mode_names: &Array<String>) -> bool {
+    return mode_names.len() > 1;
 }
 
-fn collect_mode_names(lexer_rules: &Array<LexerRule>) -> Array<String> {
-    let mut modes: Array<String> = ["DEFAULT_MODE"];
-    for let rule of lexer_rules {
-        if !str_in_list(&modes, &rule.mode) {
-            modes.push(rule.mode);
-        }
-        if let Some(pm) = rule.push_mode {
-            if !str_in_list(&modes, &pm) {
-                modes.push(pm);
-            }
-        }
-    }
-    return modes;
-}
-
-fn str_in_list(list: &Array<String>, s: &String) -> bool {
-    for let item of list {
-        if *item == *s {
-            return true;
-        }
-    }
-    return false;
-}
-
-fn mode_index(modes: &Array<String>, name: &String) -> i32 {
-    for let mut i = 0; i < modes.len(); i += 1 {
-        if modes[i] == *name {
-            return i;
-        }
-    }
-    return 0;
-}
-
-fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>) {
-    let use_modes = has_modes(lexer_rules);
+fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>, mode_names: &Array<String>) {
+    let use_modes = has_modes(mode_names);
 
     let mut f = FnSpec::new("tokenize");
     f.set_pub();
@@ -477,9 +433,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.line("let mut tokens: Array<Token> = [];");
     w.line("let mut trivia: Array<Token> = [];");
 
-    let mut modes: Array<String> = [];
     if use_modes {
-        modes = collect_mode_names(lexer_rules);
         w.line("let mut mode_stack: Array<i32> = [];");
         w.line("let mut current_mode: i32 = 0;");
     }
@@ -497,7 +451,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
 
     if use_modes {
         // Generate mode dispatch
-        for let mut mi = 0; mi < modes.len(); mi += 1 {
+        for let mut mi = 0; mi < mode_names.len(); mi += 1 {
             if mi == 0 {
                 w.begin(`if current_mode == {mi}`);
             } else {
@@ -512,13 +466,12 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                 }
             }
             for let rule of lexer_rules {
-                if !rule.is_fragment && rule.mode == modes[mi] {
+                if !rule.is_fragment && rule.mode == mi {
                     let fn_name = `try_{to_lower(&rule.name)}`;
                     w.line(`end = {fn_name}(&lexer.chars, start);`);
                     let mut extra = String::with_capacity(64);
-                    if let Some(pm) = rule.push_mode {
-                        let pm_idx = mode_index(&modes, &pm);
-                        extra.push_str(` best_push_mode = {pm_idx};`);
+                    if rule.push_mode >= 0 {
+                        extra.push_str(` best_push_mode = {rule.push_mode};`);
                     } else {
                         extra.push_str(" best_push_mode = -1;");
                     }

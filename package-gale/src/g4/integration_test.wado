@@ -82,7 +82,7 @@ test "parse css3Lexer.g4" {
     assert g.lexer_rules.len() > 20;
     // First rule: OpenBracket
     assert g.lexer_rules[0].name == "OpenBracket";
-    assert g.lexer_rules[0].mode == "DEFAULT_MODE";
+    assert g.lexer_rules[0].mode == 0;
 }
 
 test "parse css3Parser.g4" {
@@ -109,25 +109,25 @@ test "parse HTMLLexer.g4" {
     assert g.parser_rules.is_empty();
     // Check modes
     assert g.lexer_rules[0].name == "HTML_COMMENT";
-    assert g.lexer_rules[0].mode == "DEFAULT_MODE";
+    assert g.lexer_rules[0].mode == 0;
+    // Check mode names table
+    assert g.mode_names.len() >= 3, `expected at least 3 modes, got {g.mode_names.len()}`;
+    assert g.mode_names[0] == "DEFAULT_MODE";
     // TAG_CLOSE is in TAG mode
     let mut found_tag_close = false;
     for let rule of g.lexer_rules {
         if rule.name == "TAG_CLOSE" {
-            assert rule.mode == "TAG";
+            assert g.mode_names[rule.mode] == "TAG";
             assert rule.pop_mode == true;
             found_tag_close = true;
         }
         if rule.name == "TAG_OPEN" {
-            assert rule.mode == "DEFAULT_MODE";
-            if let Some(pm) = rule.push_mode {
-                assert pm == "TAG";
-            } else {
-                panic("TAG_OPEN should have pushMode(TAG)");
-            }
+            assert rule.mode == 0; // DEFAULT_MODE
+            assert rule.push_mode >= 0, "TAG_OPEN should have pushMode(TAG)";
+            assert g.mode_names[rule.push_mode] == "TAG";
         }
         if rule.name == "SCRIPT_BODY" {
-            assert rule.mode == "SCRIPT";
+            assert g.mode_names[rule.mode] == "SCRIPT";
             assert rule.pop_mode == true;
         }
     }

@@ -3,7 +3,11 @@ pub struct Grammar {
     pub name: String,
     pub parser_rules: Array<ParserRule>,
     pub lexer_rules: Array<LexerRule>,
+    pub mode_names: Array<String>,
 }
+
+pub global DEFAULT_MODE: i32 = 0;
+pub global NO_MODE: i32 = -1;
 
 /// ParserRule represents a parser rule (lowercase name in .g4).
 pub struct ParserRule {
@@ -46,19 +50,21 @@ pub enum RepeatKind {
 }
 
 /// LexerRule represents a lexer rule (uppercase name in .g4).
+/// `mode` is an index into `Grammar.mode_names` (0 = DEFAULT_MODE).
+/// `push_mode` is an index into `Grammar.mode_names`, or NO_MODE (-1) if none.
 pub struct LexerRule {
     pub name: String,
     pub is_fragment: bool,
     pub skip: bool,
-    pub mode: String,
-    pub push_mode: Option<String>,
+    pub mode: i32,
+    pub push_mode: i32,
     pub pop_mode: bool,
     pub body: Array<LexerAlt>,
 }
 
 impl LexerRule {
     pub fn new(name: String, is_fragment: bool, skip: bool, body: Array<LexerAlt>) -> LexerRule {
-        return LexerRule { name, is_fragment, skip, mode: "DEFAULT_MODE", push_mode: null, pop_mode: false, body };
+        return LexerRule { name, is_fragment, skip, mode: DEFAULT_MODE, push_mode: NO_MODE, pop_mode: false, body };
     }
 }
 
@@ -118,11 +124,23 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
     let mut name = grammars[0].name;
     let mut parser_rules: Array<ParserRule> = [];
     let mut lexer_rules: Array<LexerRule> = [];
+    let mut mode_names: Array<String> = ["DEFAULT_MODE"];
     for let g of grammars {
+        // Build mode index remapping table for this grammar
+        let mut remap: Array<i32> = [];
+        for let mn of g.mode_names {
+            let idx = find_or_add_mode(&mut mode_names, &mn);
+            remap.push(idx);
+        }
         for let r of g.parser_rules {
             parser_rules.push(r);
         }
-        for let r of g.lexer_rules {
+        for let mut r of g.lexer_rules {
+            // Remap mode indices
+            r.mode = remap[r.mode];
+            if r.push_mode >= 0 {
+                r.push_mode = remap[r.push_mode];
+            }
             lexer_rules.push(r);
         }
     }
@@ -157,5 +175,15 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
             }
         }
     }
-    return Grammar { name, parser_rules, lexer_rules };
+    return Grammar { name, parser_rules, lexer_rules, mode_names };
+}
+
+fn find_or_add_mode(modes: &mut Array<String>, name: &String) -> i32 {
+    for let mut i = 0; i < modes.len(); i += 1 {
+        if modes[i] == *name {
+            return i;
+        }
+    }
+    modes.push(*name);
+    return modes.len() - 1;
 }
