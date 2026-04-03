@@ -157,6 +157,10 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Cache for `lookup_method_info` results.
     /// Key: (`base_type_id`, `method_name`) → cached `MethodInfo`
     method_info_cache: IndexMap<(TypeId, String), Option<types::MethodInfo>>,
+    /// Index from function name → position in `current_module_items` for O(1) lookup.
+    current_module_func_index: IndexMap<String, usize>,
+    /// Per-module index from function name → position in module.items for O(1) lookup.
+    loaded_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -215,6 +219,46 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             trait_check_stack: RefCell::new(Vec::new()),
             method_info_cache: IndexMap::default(),
             pending_anonymous_structs: Vec::new(),
+            current_module_func_index: IndexMap::default(),
+            loaded_module_func_indices: IndexMap::default(),
+        }
+    }
+
+    /// Build a function-name → index map for a module's items.
+    fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
+        let mut index = IndexMap::default();
+        for (i, item) in items.iter().enumerate() {
+            if let Item::Function(func) = item {
+                index.insert(func.name.clone(), i);
+            }
+        }
+        index
+    }
+
+    /// Look up a function by name in a loaded module, returning the Item at that index.
+    fn lookup_func_in_loaded_module<'b>(
+        loaded_modules: &'b IndexMap<ModuleSource, Module>,
+        loaded_module_func_indices: &IndexMap<ModuleSource, IndexMap<String, usize>>,
+        module_source: &ModuleSource,
+        func_name: &str,
+    ) -> Option<&'b ast::Function> {
+        let idx_map = loaded_module_func_indices.get(module_source)?;
+        let &idx = idx_map.get(func_name)?;
+        let module = loaded_modules.get(module_source)?;
+        if let Item::Function(func) = &module.items[idx] {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    /// Look up a function by name in current module items.
+    fn lookup_current_func(&self, func_name: &str) -> Option<&ast::Function> {
+        let &idx = self.current_module_func_index.get(func_name)?;
+        if let Item::Function(func) = &self.current_module_items[idx] {
+            Some(func)
+        } else {
+            None
         }
     }
 
@@ -313,6 +357,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.current_module_source = module_source.clone();
         // Store current module items for local function parameter lookup
         self.current_module_items.clone_from(&module.items);
+        // Build function name → index for O(1) lookup
+        self.current_module_func_index = Self::build_func_index(&self.current_module_items);
         // Clear trait lookup caches (current_module_items changed)
         self.indexing_trait_cache.clear();
         // Build effect source map from imports
