@@ -27,7 +27,7 @@ struct Point {
 
 array array<Point> (mut ref Point);
 
-struct ArrayIter<Point> {  // from core:allocator  // ArrayIter<T> with T=Point
+struct ArrayIter<Point> {  // ArrayIter<T> with T=Point
     mut repr: ref array<Point>,
     mut used: i32,
     mut index: i32,
@@ -86,7 +86,7 @@ type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/ArrayIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Point>") -> ref null Point;
+type "functype/ArrayIter<Point>^Iterator::next" = fn(ref ArrayIter<Point>) -> ref null Point;
 
 type "functype/Array<Point>::push" = fn(ref Array<Point>, ref Point);
 
@@ -120,7 +120,7 @@ import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:
 fn run() with Stdout {
     let __local_0: ref Array<Point>;
     let points: ref Array<Point>;
-    let __iter_2: ref "core:allocator/ArrayIter<Point>";
+    let __iter_2: ref ArrayIter<Point>;
     let x: i32;
     let y: i32;
     let __local_5: ref String;
@@ -133,7 +133,7 @@ fn run() with Stdout {
         __local_0 = Array<Point> { repr: array.new_fixed<ref Point>(Point { x: 1, y: 2 }, Point { x: 3, y: 4 }), used: 2 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<Point>" { repr: points.repr, used: 2, index: 0 };
+    __iter_2 = ArrayIter<Point> { repr: points.repr, used: 2, index: 0 };
     b0: block {
         l1: loop {
             __pattern_temp_0 = ArrayIter<Point>^Iterator::next(__iter_2);

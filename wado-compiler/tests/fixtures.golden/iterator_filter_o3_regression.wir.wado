@@ -28,17 +28,17 @@ struct __Closure_0 {}
 
 array array<i32> (mut i32);
 
-struct IterFilter<IterFilter<ArrayIter<i32>>> {  // from core:allocator  // IterFilter<T> with T=IterFilter<ArrayIter<i32>>
-    mut inner: ref "core:allocator/IterFilter<ArrayIter<i32>>",
+struct IterFilter<IterFilter<ArrayIter<i32>>> {  // IterFilter<T> with T=IterFilter<ArrayIter<i32>>
+    mut inner: ref IterFilter<ArrayIter<i32>>,
     mut pred: ref struct,
 }
 
-struct IterFilter<ArrayIter<i32>> {  // from core:allocator  // IterFilter<T> with T=ArrayIter<i32>
-    mut inner: ref "core:allocator/ArrayIter<i32>",
+struct IterFilter<ArrayIter<i32>> {  // IterFilter<T> with T=ArrayIter<i32>
+    mut inner: ref ArrayIter<i32>,
     mut pred: ref struct,
 }
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -104,13 +104,13 @@ type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/IterFilter<IterFilter<ArrayIter<i32>>>^Iterator::collect" = fn(ref "core:allocator/IterFilter<IterFilter<ArrayIter<i32>>>") -> ref Array<i32>;
+type "functype/IterFilter<IterFilter<ArrayIter<i32>>>^Iterator::collect" = fn(ref IterFilter<IterFilter<ArrayIter<i32>>>) -> ref Array<i32>;
 
 type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
-type "functype/IterFilter<ArrayIter<i32>>^Iterator::collect" = fn(ref "core:allocator/IterFilter<ArrayIter<i32>>") -> ref Array<i32>;
+type "functype/IterFilter<ArrayIter<i32>>^Iterator::collect" = fn(ref IterFilter<ArrayIter<i32>>) -> ref Array<i32>;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -122,11 +122,11 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/IterFilter<IterFilter<ArrayIter<i32>>>^Iterator::next" = fn(ref "core:allocator/IterFilter<IterFilter<ArrayIter<i32>>>") -> [i32, i32];
+type "functype/IterFilter<IterFilter<ArrayIter<i32>>>^Iterator::next" = fn(ref IterFilter<IterFilter<ArrayIter<i32>>>) -> [i32, i32];
 
-type "functype/IterFilter<ArrayIter<i32>>^Iterator::next" = fn(ref "core:allocator/IterFilter<ArrayIter<i32>>") -> [i32, i32];
+type "functype/IterFilter<ArrayIter<i32>>^Iterator::next" = fn(ref IterFilter<ArrayIter<i32>>) -> [i32, i32];
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -182,7 +182,7 @@ fn run() {
     let __local_71: ref Formatter;
     let __local_76: ref Formatter;
     let __local_81: ref struct;
-    let __local_82: ref "core:allocator/IterFilter<ArrayIter<i32>>";
+    let __local_82: ref IterFilter<ArrayIter<i32>>;
     let __local_83: ref struct;
     let __local_88: ref Formatter;
     let __local_93: ref Formatter;
@@ -192,9 +192,9 @@ fn run() {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_0;
     };
-    evens = IterFilter<ArrayIter<i32>>^Iterator::collect(__inline_ArrayIter_i32__Iterator__filter_11: block -> ref "core:allocator/IterFilter<ArrayIter<i32>>" {
+    evens = IterFilter<ArrayIter<i32>>^Iterator::collect(__inline_ArrayIter_i32__Iterator__filter_11: block -> ref IterFilter<ArrayIter<i32>> {
         __local_40 = "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/iterator_filter_o3_regression.wado/__closure_wrapper_0") };
-        break __inline_ArrayIter_i32__Iterator__filter_11: "core:allocator/IterFilter<ArrayIter<i32>>" { inner: "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: arr.used, index: 0 }, pred: __local_40 };
+        break __inline_ArrayIter_i32__Iterator__filter_11: IterFilter<ArrayIter<i32>> { inner: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 }, pred: __local_40 };
     });
     __v0_3 = evens.used;
     __cond_4 = __v0_3 == 2;
@@ -298,13 +298,13 @@ condition: evens[1] == 4
         });
         unreachable;
     };
-    big_evens = IterFilter<IterFilter<ArrayIter<i32>>>^Iterator::collect(__inline_IterFilter_ArrayIter_i32___Iterator__filter_38: block -> ref "core:allocator/IterFilter<IterFilter<ArrayIter<i32>>>" {
-        __local_82 = __inline_ArrayIter_i32__Iterator__filter_37: block -> ref "core:allocator/IterFilter<ArrayIter<i32>>" {
+    big_evens = IterFilter<IterFilter<ArrayIter<i32>>>^Iterator::collect(__inline_IterFilter_ArrayIter_i32___Iterator__filter_38: block -> ref IterFilter<IterFilter<ArrayIter<i32>>> {
+        __local_82 = __inline_ArrayIter_i32__Iterator__filter_37: block -> ref IterFilter<ArrayIter<i32>> {
             __local_81 = "canonical/CanonicalClosure_0" { env: __Closure_1 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/iterator_filter_o3_regression.wado/__closure_wrapper_1") };
-            break __inline_ArrayIter_i32__Iterator__filter_37: "core:allocator/IterFilter<ArrayIter<i32>>" { inner: "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: arr.used, index: 0 }, pred: __local_81 };
+            break __inline_ArrayIter_i32__Iterator__filter_37: IterFilter<ArrayIter<i32>> { inner: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 }, pred: __local_81 };
         };
         __local_83 = "canonical/CanonicalClosure_0" { env: __Closure_2 {  }, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/iterator_filter_o3_regression.wado/__closure_wrapper_2") };
-        break __inline_IterFilter_ArrayIter_i32___Iterator__filter_38: "core:allocator/IterFilter<IterFilter<ArrayIter<i32>>>" { inner: __local_82, pred: __local_83 };
+        break __inline_IterFilter_ArrayIter_i32___Iterator__filter_38: IterFilter<IterFilter<ArrayIter<i32>>> { inner: __local_82, pred: __local_83 };
     });
     __v0_10 = big_evens.used;
     __cond_11 = __v0_10 == 1;
@@ -681,7 +681,7 @@ fn Array<i32>::grow(self) {
 
 fn IterFilter<IterFilter<ArrayIter<i32>>>^Iterator::next(self) {
     let item: i32;
-    let _licm_inner_3: ref "core:allocator/IterFilter<ArrayIter<i32>>";
+    let _licm_inner_3: ref IterFilter<ArrayIter<i32>>;
     let _licm_pred_4: ref struct;
     _licm_inner_3 = self.inner;
     _licm_pred_4 = self.pred;
@@ -709,7 +709,7 @@ fn IterFilter<IterFilter<ArrayIter<i32>>>^Iterator::next(self) {
 
 fn IterFilter<ArrayIter<i32>>^Iterator::next(self) {
     let item: i32;
-    let _licm_inner_3: ref "core:allocator/ArrayIter<i32>";
+    let _licm_inner_3: ref ArrayIter<i32>;
     let _licm_pred_4: ref struct;
     _licm_inner_3 = self.inner;
     _licm_pred_4 = self.pred;

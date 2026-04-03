@@ -33,19 +33,19 @@ array array<i32> (mut i32);
 
 array array<Point> (mut ref Point);
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayRefIter<Point> {  // from core:allocator  // ArrayRefIter<T> with T=Point
+struct ArrayRefIter<Point> {  // ArrayRefIter<T> with T=Point
     mut repr: ref array<Point>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayRefIter<i32> {  // from core:allocator  // ArrayRefIter<T> with T=i32
+struct ArrayRefIter<i32> {  // ArrayRefIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -125,13 +125,13 @@ type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/ArrayRefIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayRefIter<Point>") -> ref null Point;
+type "functype/ArrayRefIter<Point>^Iterator::next" = fn(ref ArrayRefIter<Point>) -> ref null Point;
 
 type "functype/Array<Point>::push" = fn(ref Array<Point>, ref Point);
 
 type "functype/Array<Point>::grow" = fn(ref Array<Point>);
 
-type "functype/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayRefIter<i32>") -> ref null "core:internal/Box<i32>";
+type "functype/ArrayRefIter<i32>^Iterator::next" = fn(ref ArrayRefIter<i32>) -> ref null "core:internal/Box<i32>";
 
 type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
@@ -147,7 +147,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -169,7 +169,7 @@ fn test_for_of_ref_array() with Stdout {
     let __local_0: ref Array<i32>;
     let arr: ref Array<i32>;
     let sum: i32;
-    let __iter_3: ref "core:allocator/ArrayRefIter<i32>";
+    let __iter_3: ref ArrayRefIter<i32>;
     let x: ref "core:internal/Box<i32>";
     let __v0: i32;
     let __cond: bool;
@@ -185,10 +185,10 @@ fn test_for_of_ref_array() with Stdout {
         break __seq_lit: __local_0;
     };
     sum = 0;
-    __iter_3 = __inline___i32__IntoIterator__into_iter_6: block -> ref "core:allocator/ArrayRefIter<i32>" {
+    __iter_3 = __inline___i32__IntoIterator__into_iter_6: block -> ref ArrayRefIter<i32> {
         __local_19 = arr;
         __local_20 = __local_19;
-        break __inline___i32__IntoIterator__into_iter_6: "core:allocator/ArrayRefIter<i32>" { repr: __local_20.repr, used: __local_20.used, index: 0 };
+        break __inline___i32__IntoIterator__into_iter_6: ArrayRefIter<i32> { repr: __local_20.repr, used: __local_20.used, index: 0 };
     };
     b0: block {
         l1: loop {
@@ -241,7 +241,7 @@ fn test_for_of_ref_struct() with Stdout {
     let __local_0: ref Array<Point>;
     let points: ref Array<Point>;
     let sum: i32;
-    let __iter_3: ref "core:allocator/ArrayRefIter<Point>";
+    let __iter_3: ref ArrayRefIter<Point>;
     let p: ref Point;
     let __v0: i32;
     let __cond: bool;
@@ -257,10 +257,10 @@ fn test_for_of_ref_struct() with Stdout {
         break __seq_lit: __local_0;
     };
     sum = 0;
-    __iter_3 = __inline___Point__IntoIterator__into_iter_5: block -> ref "core:allocator/ArrayRefIter<Point>" {
+    __iter_3 = __inline___Point__IntoIterator__into_iter_5: block -> ref ArrayRefIter<Point> {
         __local_17 = points;
         __local_18 = __local_17;
-        break __inline___Point__IntoIterator__into_iter_5: "core:allocator/ArrayRefIter<Point>" { repr: __local_18.repr, used: __local_18.used, index: 0 };
+        break __inline___Point__IntoIterator__into_iter_5: ArrayRefIter<Point> { repr: __local_18.repr, used: __local_18.used, index: 0 };
     };
     b4: block {
         l5: loop {
@@ -314,7 +314,7 @@ fn test_for_of_ref_var() with Stdout {
     let arr: ref Array<i32>;
     let ra: ref Array<i32>;
     let sum: i32;
-    let __iter_4: ref "core:allocator/ArrayRefIter<i32>";
+    let __iter_4: ref ArrayRefIter<i32>;
     let x: ref "core:internal/Box<i32>";
     let __v0: i32;
     let __cond: bool;
@@ -330,9 +330,9 @@ fn test_for_of_ref_var() with Stdout {
     };
     ra = arr;
     sum = 0;
-    __iter_4 = __inline___i32__IntoIterator__into_iter_6: block -> ref "core:allocator/ArrayRefIter<i32>" {
+    __iter_4 = __inline___i32__IntoIterator__into_iter_6: block -> ref ArrayRefIter<i32> {
         __local_21 = ra;
-        break __inline___i32__IntoIterator__into_iter_6: "core:allocator/ArrayRefIter<i32>" { repr: __local_21.repr, used: __local_21.used, index: 0 };
+        break __inline___i32__IntoIterator__into_iter_6: ArrayRefIter<i32> { repr: __local_21.repr, used: __local_21.used, index: 0 };
     };
     b8: block {
         l9: loop {
@@ -385,7 +385,7 @@ fn test_for_of_value_unchanged() with Stdout {
     let __local_0: ref Array<i32>;
     let arr: ref Array<i32>;
     let sum: i32;
-    let __iter_3: ref "core:allocator/ArrayIter<i32>";
+    let __iter_3: ref ArrayIter<i32>;
     let x: i32;
     let __v0: i32;
     let __cond: bool;
@@ -398,7 +398,7 @@ fn test_for_of_value_unchanged() with Stdout {
         break __seq_lit: __local_0;
     };
     sum = 0;
-    __iter_3 = "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: 3, index: 0 };
+    __iter_3 = ArrayIter<i32> { repr: arr.repr, used: 3, index: 0 };
     b12: block {
         l13: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

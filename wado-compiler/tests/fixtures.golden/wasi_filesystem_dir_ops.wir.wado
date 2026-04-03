@@ -95,7 +95,7 @@ array array<DirectoryEntry> (mut ref "wasi:filesystem/types.wado/DirectoryEntry"
 
 array array<Tuple<Descriptor,String>> (mut ref "tuple/[Descriptor, String]");
 
-struct ArrayIter<DirectoryEntry> {  // from core:allocator  // ArrayIter<T> with T=DirectoryEntry
+struct ArrayIter<DirectoryEntry> {  // ArrayIter<T> with T=DirectoryEntry
     mut repr: ref array<DirectoryEntry>,
     mut used: i32,
     mut index: i32,
@@ -209,7 +209,7 @@ type "functype/Array<Tuple<Descriptor,String>>::push" = fn(ref Array<Tuple<Descr
 
 type "functype/Array<Tuple<Descriptor,String>>::grow" = fn(ref Array<Tuple<Descriptor,String>>);
 
-type "functype/ArrayIter<DirectoryEntry>^Iterator::next" = fn(ref "core:allocator/ArrayIter<DirectoryEntry>") -> ref null "wasi:filesystem/types.wado/DirectoryEntry";
+type "functype/ArrayIter<DirectoryEntry>^Iterator::next" = fn(ref ArrayIter<DirectoryEntry>) -> ref null "wasi:filesystem/types.wado/DirectoryEntry";
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -268,7 +268,7 @@ fn run() with Stdout, Stderr, Preopens {
     let found_newdir: bool;
     let entry_count: i32;
     let entries: ref Array<DirectoryEntry>;
-    let __iter_13: ref "core:allocator/ArrayIter<DirectoryEntry>";
+    let __iter_13: ref ArrayIter<DirectoryEntry>;
     let entry: ref "wasi:filesystem/types.wado/DirectoryEntry";
     let rmdir_result: ref Result<unit,ErrorCode>;
     let rmdir_again: ref Result<unit,ErrorCode>;
@@ -319,7 +319,7 @@ fn run() with Stdout, Stderr, Preopens {
     found_newdir = 0;
     entry_count = 0;
     entries = unreachable;
-    __iter_13 = "core:allocator/ArrayIter<DirectoryEntry>" { repr: entries.repr, used: entries.used, index: 0 };
+    __iter_13 = ArrayIter<DirectoryEntry> { repr: entries.repr, used: entries.used, index: 0 };
     b5: block {
         l6: loop {
             __pattern_temp_3 = ArrayIter<DirectoryEntry>^Iterator::next(__iter_13);

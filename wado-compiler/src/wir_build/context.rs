@@ -243,7 +243,6 @@ impl<'a> WirContext<'a> {
             .map(|(_, v)| v)
     }
 
-
     // === Function Registration ===
 
     /// Register a function import and return its `WirFuncId`.

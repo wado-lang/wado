@@ -54,7 +54,7 @@ struct Formatter {
 
 array array<Choice> (mut ref "./sub/cross_module_variant_iter_helper.wado/Choice");
 
-struct ArrayRefIter<Choice> {  // from core:allocator  // ArrayRefIter<T> with T=Choice
+struct ArrayRefIter<Choice> {  // ArrayRefIter<T> with T=Choice
     mut repr: ref array<Choice>,
     mut used: i32,
     mut index: i32,
@@ -119,7 +119,7 @@ type "functype/./sub/cross_module_variant_iter_helper.wado/Array<Choice>::push" 
 
 type "functype/./sub/cross_module_variant_iter_helper.wado/Array<Choice>::grow" = fn(ref Array<Choice>);
 
-type "functype/./sub/cross_module_variant_iter_helper.wado/ArrayRefIter<Choice>^Iterator::next" = fn(ref "core:allocator/ArrayRefIter<Choice>") -> ref null "core:internal/Box<Choice>";
+type "functype/./sub/cross_module_variant_iter_helper.wado/ArrayRefIter<Choice>^Iterator::next" = fn(ref ArrayRefIter<Choice>) -> ref null "core:internal/Box<Choice>";
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -368,7 +368,7 @@ fn "./sub/cross_module_variant_iter_helper.wado/make_tree"() {  // from ./sub/cr
 
 fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>"(h, c) {  // from ./sub/cross_module_variant_iter_helper.wado
     let __local_2: ref "./sub/cross_module_variant_iter_helper.wado/AData";
-    let __local_3: ref "core:allocator/ArrayRefIter<Choice>";
+    let __local_3: ref ArrayRefIter<Choice>;
     let __local_4: ref "core:internal/Box<Choice>";
     let __local_5: ref "./sub/cross_module_variant_iter_helper.wado/BData";
     let __local_6: ref null "core:internal/Box<Choice>";
@@ -381,10 +381,10 @@ fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_
         let __cast_2: ref "./sub/cross_module_variant_iter_helper.wado/Choice::A";
         __cast_2 = ref.cast "./sub/cross_module_variant_iter_helper.wado/Choice::A"(__match_scrut_0);
         __local_2 = __cast_2.payload_0;
-        __local_3 = __inline___Choice__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayRefIter<Choice>" {
+        __local_3 = __inline___Choice__IntoIterator__into_iter_0: block -> ref ArrayRefIter<Choice> {
             __local_7 = __local_2.children;
             __local_8 = __local_7;
-            break __inline___Choice__IntoIterator__into_iter_0: "core:allocator/ArrayRefIter<Choice>" { repr: __local_8.repr, used: __local_8.used, index: 0 };
+            break __inline___Choice__IntoIterator__into_iter_0: ArrayRefIter<Choice> { repr: __local_8.repr, used: __local_8.used, index: 0 };
         };
         b15: block {
             l16: loop {

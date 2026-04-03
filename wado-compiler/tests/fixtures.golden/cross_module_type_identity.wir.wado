@@ -49,7 +49,7 @@ struct Shape::Rect {
 
 array array<Shape> (mut ref Shape);
 
-struct ArrayRefIter<Shape> {  // from ./sub/cross_module_type_identity_util.wado  // ArrayRefIter<T> with T=Shape
+struct ArrayRefIter<Shape> {  // ArrayRefIter<T> with T=Shape
     mut repr: ref array<Shape>,
     mut used: i32,
     mut index: i32,
@@ -102,7 +102,7 @@ type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
 
-type "functype/./sub/cross_module_type_identity_util.wado/ArrayRefIter<Shape>^Iterator::next" = fn(ref "./sub/cross_module_type_identity_util.wado/ArrayRefIter<Shape>") -> ref null "core:internal/Box<Shape>";
+type "functype/./sub/cross_module_type_identity_util.wado/ArrayRefIter<Shape>^Iterator::next" = fn(ref ArrayRefIter<Shape>) -> ref null "core:internal/Box<Shape>";
 
 type "functype/String::grow" = fn(ref String, i32);
 
@@ -200,16 +200,16 @@ fn __cm_export__run() {
 
 fn "./sub/cross_module_type_identity_util.wado/sum_shapes"(shapes) {  // from ./sub/cross_module_type_identity_util.wado
     let total: i32;
-    let __iter_2: ref "./sub/cross_module_type_identity_util.wado/ArrayRefIter<Shape>";
+    let __iter_2: ref ArrayRefIter<Shape>;
     let shape: ref "core:internal/Box<Shape>";
     let __local_4: ref CircleData;
     let __local_5: ref RectData;
     let __pattern_temp_0: ref null "core:internal/Box<Shape>";
     let __local_8: ref Array<Shape>;
     total = 0;
-    __iter_2 = __inline___Shape__IntoIterator__into_iter_0: block -> ref "./sub/cross_module_type_identity_util.wado/ArrayRefIter<Shape>" {
+    __iter_2 = __inline___Shape__IntoIterator__into_iter_0: block -> ref ArrayRefIter<Shape> {
         __local_8 = shapes;
-        break __inline___Shape__IntoIterator__into_iter_0: "./sub/cross_module_type_identity_util.wado/ArrayRefIter<Shape>" { repr: __local_8.repr, used: __local_8.used, index: 0 };
+        break __inline___Shape__IntoIterator__into_iter_0: ArrayRefIter<Shape> { repr: __local_8.repr, used: __local_8.used, index: 0 };
     };
     b1: block {
         l2: loop {

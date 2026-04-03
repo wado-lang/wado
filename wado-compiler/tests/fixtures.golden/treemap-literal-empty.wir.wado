@@ -20,27 +20,27 @@ struct Formatter {
     mut buf: ref String,
 }
 
-array array<TreeMapEntry<String,i32>> (mut ref "core:allocator/TreeMapEntry<String,i32>");
+array array<TreeMapEntry<String,i32>> (mut ref "core:collections/TreeMapEntry<String,i32>");
 
-struct TreeMap<String,i32> {  // from core:allocator  // TreeMap<T> with T=String, i32
-    mut root: ref null "core:allocator/TreeMapNode<String>",
-    mut entries: ref Array<TreeMapEntry<String,i32>>,
-    mut size: i32,
-    mut deleted_count: i32,
+struct TreeMapNode<String> {  // from core:collections  // TreeMapNode<T> with T=String
+    mut key: ref String,
+    mut index: i32,
+    mut level: i32,
+    mut left: ref null "core:collections/TreeMapNode<String>",
+    mut right: ref null "core:collections/TreeMapNode<String>",
 }
 
-struct TreeMapEntry<String,i32> {  // from core:allocator  // TreeMapEntry<T> with T=String, i32
+struct TreeMapEntry<String,i32> {  // from core:collections  // TreeMapEntry<T> with T=String, i32
     mut key: ref String,
     mut value: i32,
     mut deleted: bool,
 }
 
-struct TreeMapNode<String> {  // from core:allocator  // TreeMapNode<T> with T=String
-    mut key: ref String,
-    mut index: i32,
-    mut level: i32,
-    mut left: ref null "core:allocator/TreeMapNode<String>",
-    mut right: ref null "core:allocator/TreeMapNode<String>",
+struct TreeMap<String,i32> {  // from core:collections  // TreeMap<T> with T=String, i32
+    mut root: ref null "core:collections/TreeMapNode<String>",
+    mut entries: ref Array<TreeMapEntry<String,i32>>,
+    mut size: i32,
+    mut deleted_count: i32,
 }
 
 struct Array<TreeMapEntry<String,i32>> {  // Array<T> with T=TreeMapEntry<String,i32>
@@ -133,7 +133,7 @@ import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn run() with Stdout {
-    let __local_0: ref "core:allocator/TreeMap<String,i32>";
+    let __local_0: ref "core:collections/TreeMap<String,i32>";
     let __v0_2: i32;
     let __cond: bool;
     let __v0_4: bool;
@@ -146,9 +146,9 @@ fn run() with Stdout {
     let __local_23: ref Formatter;
     let __local_30: ref Formatter;
     let __local_35: ref Formatter;
-    drop(__kv_lit: block -> ref "core:allocator/TreeMap<String,i32>" {
-        __local_0 = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
-            __local_12 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
+    drop(__kv_lit: block -> ref "core:collections/TreeMap<String,i32>" {
+        __local_0 = "core:collections/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
+            __local_12 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:collections/TreeMapEntry<String,i32>">(0), used: 0 };
             break __seq_lit: __local_12;
         }), size: 0, deleted_count: 0 };
         break __kv_lit: __local_0;

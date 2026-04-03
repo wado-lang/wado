@@ -74,7 +74,7 @@ struct TupleValue::Text {
 
 array array<Tuple<i32,String>> (mut ref "tuple/[i32, String]");
 
-struct ArrayIter<Tuple<i32,String>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<i32,String>
+struct ArrayIter<Tuple<i32,String>> {  // ArrayIter<T> with T=Tuple<i32,String>
     mut repr: ref array<Tuple<i32,String>>,
     mut used: i32,
     mut index: i32,
@@ -159,7 +159,7 @@ type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> b
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,String>>") -> ref null "tuple/[i32, String]";
+type "functype/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref ArrayIter<Tuple<i32,String>>) -> ref null "tuple/[i32, String]";
 
 type "functype/Array<Tuple<i32,String>>::push" = fn(ref Array<Tuple<i32,String>>, ref "tuple/[i32, String]");
 
@@ -342,10 +342,10 @@ fn destruct_basic() with Stdout {
 fn destruct_for_of() with Stdout {
     let __local_0: ref Array<Tuple<i32,String>>;
     let pairs: ref Array<Tuple<i32,String>>;
-    let __iter_2: ref "core:allocator/ArrayIter<Tuple<i32,String>>";
+    let __iter_2: ref ArrayIter<Tuple<i32,String>>;
     let num: i32;
     let name_4: ref String;
-    let __iter_5: ref "core:allocator/ArrayIter<Tuple<i32,String>>";
+    let __iter_5: ref ArrayIter<Tuple<i32,String>>;
     let name_6: ref String;
     let __local_7: ref String;
     let __local_8: ref Formatter;
@@ -357,7 +357,7 @@ fn destruct_for_of() with Stdout {
         __local_0 = Array<Tuple<i32,String>> { repr: array.new_fixed<ref "tuple/[i32, String]">("tuple/[i32, String]" { 0: 1, 1: String { repr: array.new_data<u8>("one"), used: 3 } }, "tuple/[i32, String]" { 0: 2, 1: String { repr: array.new_data<u8>("two"), used: 3 } }, "tuple/[i32, String]" { 0: 3, 1: String { repr: array.new_data<u8>("three"), used: 5 } }), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<Tuple<i32,String>>" { repr: pairs.repr, used: 3, index: 0 };
+    __iter_2 = ArrayIter<Tuple<i32,String>> { repr: pairs.repr, used: 3, index: 0 };
     b10: block {
         l11: loop {
             __pattern_temp_0 = ArrayIter<Tuple<i32,String>>^Iterator::next(__iter_2);
@@ -380,7 +380,7 @@ fn destruct_for_of() with Stdout {
             continue l11;
         };
     };
-    __iter_5 = "core:allocator/ArrayIter<Tuple<i32,String>>" { repr: pairs.repr, used: 3, index: 0 };
+    __iter_5 = ArrayIter<Tuple<i32,String>> { repr: pairs.repr, used: 3, index: 0 };
     b13: block {
         l14: loop {
             __pattern_temp_2 = ArrayIter<Tuple<i32,String>>^Iterator::next(__iter_5);

@@ -263,6 +263,10 @@ type "functype/InspMatrix^Inspect::inspect" = fn(ref InspMatrix, ref Formatter);
 
 type "functype/InspUser^Inspect::inspect" = fn(ref InspUser, ref Formatter);
 
+type "functype/Array<Array<i32>>^Inspect::inspect" = fn(ref Array<Array<i32>>, ref Formatter);
+
+type "functype/Array<i32>^Inspect::inspect" = fn(ref Array<i32>, ref Formatter);
+
 type "functype/Array<Tuple<i32,String>>^Inspect::inspect" = fn(ref Array<Tuple<i32,String>>, ref Formatter);
 
 type "functype/Tuple<i32,String>^Inspect::inspect" = fn(ref "tuple/[i32, String]", ref Formatter);
@@ -289,8 +293,6 @@ type "functype/Array<Array<Array<i32>>>::push" = fn(ref Array<Array<Array<i32>>>
 
 type "functype/Array<Array<Array<i32>>>::grow" = fn(ref Array<Array<Array<i32>>>);
 
-type "functype/Array<Array<i32>>^Inspect::inspect" = fn(ref Array<Array<i32>>, ref Formatter);
-
 type "functype/Array<Array<i32>>::push" = fn(ref Array<Array<i32>>, ref Array<i32>);
 
 type "functype/Array<Array<i32>>::grow" = fn(ref Array<Array<i32>>);
@@ -306,8 +308,6 @@ type "functype/Array<Option<i32>>::grow" = fn(ref Array<Option<i32>>);
 type "functype/Array<InspPoint>::push" = fn(ref Array<InspPoint>, ref InspPoint);
 
 type "functype/Array<InspPoint>::grow" = fn(ref Array<InspPoint>);
-
-type "functype/Array<i32>^Inspect::inspect" = fn(ref Array<i32>, ref Formatter);
 
 type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
@@ -333,6 +333,8 @@ type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
 type "functype/InspWrapper^Inspect::inspect" = fn(ref Option<i32>, ref Formatter);
 
+type "functype/Option<i32>^Inspect::inspect" = fn(ref Option<i32>, ref Formatter);
+
 type "functype/Option<InspPoint>^Inspect::inspect" = fn(ref null InspPoint, ref Formatter);
 
 type "functype/Option<Option<String>>^Inspect::inspect" = fn(ref Option<Option<String>>, ref Formatter);
@@ -342,8 +344,6 @@ type "functype/Option<String>^Inspect::inspect" = fn(ref null String, ref Format
 type "functype/Option<Option<Option<i32>>>^Inspect::inspect" = fn(ref Option<Option<Option<i32>>>, ref Formatter);
 
 type "functype/Option<Option<i32>>^Inspect::inspect" = fn(ref null Option<i32>, ref Formatter);
-
-type "functype/Option<i32>^Inspect::inspect" = fn(ref Option<i32>, ref Formatter);
 
 type "functype/InspBox<i32>^Inspect::inspect" = fn(i32, ref Formatter);
 
@@ -2059,6 +2059,86 @@ fn InspUser^Inspect::inspect(self, f) {
     String::push_str(f.buf, s_17);
 }
 
+fn Array<Array<i32>>^Inspect::inspect(self, f) {
+    let i: i32;
+    let s: ref String;
+    let __local_9: i32;
+    let _licm_used_12: i32;
+    let _licm_repr_13: ref array<Array<i32>>;
+    String::push(f.buf, 91);
+    __for_5: block {
+        i = 0;
+        _licm_used_12 = self.used;
+        _licm_repr_13 = self.repr;
+        block {
+            l65: loop {
+                if (i < _licm_used_12) == 0 {
+                    break __for_5;
+                };
+                if i > 0 {
+                    s = String { repr: array.new_data<u8>(", "), used: 2 };
+                    String::push_str(f.buf, s);
+                };
+                Array<i32>^Inspect::inspect(__inline_Array_Array_i32___IndexValue__index_value_3: block -> ref Array<i32> {
+                    __local_9 = i;
+                    break __inline_Array_Array_i32___IndexValue__index_value_3: builtin::array_get<ref Array<i32>>(_licm_repr_13, __local_9);
+                }, f);
+                i = i + 1;
+                continue l65;
+            };
+        };
+    };
+    String::push(f.buf, 93);
+}
+
+fn Array<i32>^Inspect::inspect(self, f) {
+    let i: i32;
+    let s: ref String;
+    let __local_11: i32;
+    let _licm_used_16: i32;
+    let _licm_repr_17: ref array<i32>;
+    String::push(f.buf, 91);
+    __for_5: block {
+        i = 0;
+        _licm_used_16 = self.used;
+        _licm_repr_17 = self.repr;
+        block {
+            l69: loop {
+                if (i < _licm_used_16) == 0 {
+                    break __for_5;
+                };
+                if i > 0 {
+                    s = String { repr: array.new_data<u8>(", "), used: 2 };
+                    String::push_str(f.buf, s);
+                };
+                i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_4: block -> i32 {
+                    __local_11 = i;
+                    break __inline_Array_i32__IndexValue__index_value_4: builtin::array_get<i32>(_licm_repr_17, __local_11);
+                }, f);
+                i = i + 1;
+                continue l69;
+            };
+        };
+    };
+    String::push(f.buf, 93);
+}
+
+fn Option<i32>^Inspect::inspect(self, f) {
+    let __local_3: ref String;
+    let __local_9: ref String;
+    let __local_11: ref String;
+    if ref.test Option<i32>::Some(self) {
+        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
+        String::push_str(f.buf, __local_3);
+        i32::fmt_decimal(ref.cast Option<i32>::Some(self).payload_0, f);
+        __local_9 = String { repr: array.new_data<u8>(")"), used: 1 };
+        String::push_str(f.buf, __local_9);
+    } else if self.discriminant == 1 {
+        __local_11 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
+        String::push_str(f.buf, __local_11);
+    };
+}
+
 fn Option<InspPoint>^Inspect::inspect(self, f) {
     let __local_3: ref String;
     let __local_5: ref String;
@@ -2087,7 +2167,7 @@ fn Array<Tuple<i32,String>>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l67: loop {
+            l77: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -2100,7 +2180,7 @@ fn Array<Tuple<i32,String>>^Inspect::inspect(self, f) {
                     break __inline_Array_Tuple_i32_String___IndexValue__index_value_3: builtin::array_get<ref "tuple/[i32, String]">(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l67;
+                continue l77;
             };
         };
     };
@@ -2156,13 +2236,13 @@ fn Array<Tuple<i32,String>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l72: loop {
+            l82: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref "tuple/[i32, String]">(new_repr, i, builtin::array_get<ref "tuple/[i32, String]">(old_repr, i));
                 i = i + 1;
-                continue l72;
+                continue l82;
             };
         };
     };
@@ -2181,7 +2261,7 @@ fn Array<Array<String>>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l75: loop {
+            l85: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -2194,7 +2274,7 @@ fn Array<Array<String>>^Inspect::inspect(self, f) {
                     break __inline_Array_Array_String___IndexValue__index_value_3: builtin::array_get<ref Array<String>>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l75;
+                continue l85;
             };
         };
     };
@@ -2213,7 +2293,7 @@ fn Array<String>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l79: loop {
+            l89: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -2226,7 +2306,7 @@ fn Array<String>^Inspect::inspect(self, f) {
                     break __inline_Array_String__IndexValue__index_value_3: builtin::array_get<ref String>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l79;
+                continue l89;
             };
         };
     };
@@ -2262,13 +2342,13 @@ fn Array<String>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l84: loop {
+            l94: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
                 i = i + 1;
-                continue l84;
+                continue l94;
             };
         };
     };
@@ -2304,13 +2384,13 @@ fn Array<Array<String>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l88: loop {
+            l98: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Array<String>>(new_repr, i, builtin::array_get<ref Array<String>>(old_repr, i));
                 i = i + 1;
-                continue l88;
+                continue l98;
             };
         };
     };
@@ -2329,7 +2409,7 @@ fn Array<Array<Array<i32>>>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l91: loop {
+            l101: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -2342,7 +2422,7 @@ fn Array<Array<Array<i32>>>^Inspect::inspect(self, f) {
                     break __inline_Array_Array_Array_i32____IndexValue__index_value_3: builtin::array_get<ref Array<Array<i32>>>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l91;
+                continue l101;
             };
         };
     };
@@ -2378,49 +2458,17 @@ fn Array<Array<Array<i32>>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l96: loop {
+            l106: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Array<Array<i32>>>(new_repr, i, builtin::array_get<ref Array<Array<i32>>>(old_repr, i));
                 i = i + 1;
-                continue l96;
+                continue l106;
             };
         };
     };
     self.repr = new_repr;
-}
-
-fn Array<Array<i32>>^Inspect::inspect(self, f) {
-    let i: i32;
-    let s: ref String;
-    let __local_9: i32;
-    let _licm_used_12: i32;
-    let _licm_repr_13: ref array<Array<i32>>;
-    String::push(f.buf, 91);
-    __for_5: block {
-        i = 0;
-        _licm_used_12 = self.used;
-        _licm_repr_13 = self.repr;
-        block {
-            l99: loop {
-                if (i < _licm_used_12) == 0 {
-                    break __for_5;
-                };
-                if i > 0 {
-                    s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::push_str(f.buf, s);
-                };
-                Array<i32>^Inspect::inspect(__inline_Array_Array_i32___IndexValue__index_value_3: block -> ref Array<i32> {
-                    __local_9 = i;
-                    break __inline_Array_Array_i32___IndexValue__index_value_3: builtin::array_get<ref Array<i32>>(_licm_repr_13, __local_9);
-                }, f);
-                i = i + 1;
-                continue l99;
-            };
-        };
-    };
-    String::push(f.buf, 93);
 }
 
 fn Array<Array<i32>>::push(self, value) {
@@ -2452,13 +2500,13 @@ fn Array<Array<i32>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l104: loop {
+            l110: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Array<i32>>(new_repr, i, builtin::array_get<ref Array<i32>>(old_repr, i));
                 i = i + 1;
-                continue l104;
+                continue l110;
             };
         };
     };
@@ -2529,22 +2577,6 @@ fn Option<Option<i32>>^Inspect::inspect(self, f) {
     };
 }
 
-fn Option<i32>^Inspect::inspect(self, f) {
-    let __local_3: ref String;
-    let __local_9: ref String;
-    let __local_11: ref String;
-    if ref.test Option<i32>::Some(self) {
-        __local_3 = String { repr: array.new_data<u8>("Option::Some("), used: 13 };
-        String::push_str(f.buf, __local_3);
-        i32::fmt_decimal(ref.cast Option<i32>::Some(self).payload_0, f);
-        __local_9 = String { repr: array.new_data<u8>(")"), used: 1 };
-        String::push_str(f.buf, __local_9);
-    } else if self.discriminant == 1 {
-        __local_11 = String { repr: array.new_data<u8>("Option::None"), used: 12 };
-        String::push_str(f.buf, __local_11);
-    };
-}
-
 fn Array<InspPoint>^Inspect::inspect(self, f) {
     let i: i32;
     let s: ref String;
@@ -2557,7 +2589,7 @@ fn Array<InspPoint>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l117: loop {
+            l121: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -2570,7 +2602,7 @@ fn Array<InspPoint>^Inspect::inspect(self, f) {
                     break __inline_Array_InspPoint__IndexValue__index_value_3: builtin::array_get<ref InspPoint>(_licm_repr_13, __local_9);
                 }, f);
                 i = i + 1;
-                continue l117;
+                continue l121;
             };
         };
     };
@@ -2589,7 +2621,7 @@ fn Array<Option<i32>>^Inspect::inspect(self, f) {
         _licm_used_12 = self.used;
         _licm_repr_13 = self.repr;
         block {
-            l121: loop {
+            l125: loop {
                 if (i < _licm_used_12) == 0 {
                     break __for_5;
                 };
@@ -2602,7 +2634,7 @@ fn Array<Option<i32>>^Inspect::inspect(self, f) {
                     break __inline_Array_Option_i32___IndexValue__index_value_3: builtin::array_get<ref Option<i32>>(_licm_repr_13, __local_9);
                 }), f);
                 i = i + 1;
-                continue l121;
+                continue l125;
             };
         };
     };
@@ -2638,13 +2670,13 @@ fn Array<Option<i32>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l126: loop {
+            l130: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Option<i32>>(new_repr, i, builtin::array_get<ref Option<i32>>(old_repr, i));
                 i = i + 1;
-                continue l126;
+                continue l130;
             };
         };
     };
@@ -2680,49 +2712,17 @@ fn Array<InspPoint>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l130: loop {
+            l134: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref InspPoint>(new_repr, i, builtin::array_get<ref InspPoint>(old_repr, i));
                 i = i + 1;
-                continue l130;
+                continue l134;
             };
         };
     };
     self.repr = new_repr;
-}
-
-fn Array<i32>^Inspect::inspect(self, f) {
-    let i: i32;
-    let s: ref String;
-    let __local_11: i32;
-    let _licm_used_16: i32;
-    let _licm_repr_17: ref array<i32>;
-    String::push(f.buf, 91);
-    __for_5: block {
-        i = 0;
-        _licm_used_16 = self.used;
-        _licm_repr_17 = self.repr;
-        block {
-            l133: loop {
-                if (i < _licm_used_16) == 0 {
-                    break __for_5;
-                };
-                if i > 0 {
-                    s = String { repr: array.new_data<u8>(", "), used: 2 };
-                    String::push_str(f.buf, s);
-                };
-                i32::fmt_decimal(__inline_Array_i32__IndexValue__index_value_4: block -> i32 {
-                    __local_11 = i;
-                    break __inline_Array_i32__IndexValue__index_value_4: builtin::array_get<i32>(_licm_repr_17, __local_11);
-                }, f);
-                i = i + 1;
-                continue l133;
-            };
-        };
-    };
-    String::push(f.buf, 93);
 }
 
 fn Array<i32>::push(self, value) {

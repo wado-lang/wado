@@ -22,7 +22,7 @@ struct Formatter {
 
 array array<i32> (mut i32);
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -95,7 +95,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -115,9 +115,9 @@ import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:
 fn run() with Stdout {
     let __local_6: ref Array<i32>;
     let arr: ref Array<i32>;
-    let __iter_8: ref "core:allocator/ArrayIter<i32>";
+    let __iter_8: ref ArrayIter<i32>;
     let flags: i32;
-    let __iter_10: ref "core:allocator/ArrayIter<i32>";
+    let __iter_10: ref ArrayIter<i32>;
     let of: i32;
     let __local_12: ref String;
     let __local_13: ref Formatter;
@@ -154,7 +154,7 @@ fn run() with Stdout {
         __local_6 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_6;
     };
-    __iter_8 = "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: 3, index: 0 };
+    __iter_8 = ArrayIter<i32> { repr: arr.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -175,7 +175,7 @@ fn run() with Stdout {
             continue l1;
         };
     };
-    __iter_10 = "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: 3, index: 0 };
+    __iter_10 = ArrayIter<i32> { repr: arr.repr, used: 3, index: 0 };
     b3: block {
         l4: loop {
             let __sroa___pattern_temp_1_discriminant: i32;

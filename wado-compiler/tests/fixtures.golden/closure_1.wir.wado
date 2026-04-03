@@ -36,7 +36,7 @@ struct __Closure_0 {
 
 array array<i32> (mut i32);
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -194,7 +194,7 @@ type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -767,13 +767,13 @@ fn __cm_export____test_17_closure_function_factory() {
 fn for_each_item$__Closure_8(items) {
     let __local_2: ref Array<i32>;
     let result: ref Array<i32>;
-    let __iter_4: ref "core:allocator/ArrayIter<i32>";
+    let __iter_4: ref ArrayIter<i32>;
     let item: i32;
     result = __seq_lit: block -> ref Array<i32> {
         __local_2 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_2;
     };
-    __iter_4 = "core:allocator/ArrayIter<i32>" { repr: items.repr, used: items.used, index: 0 };
+    __iter_4 = ArrayIter<i32> { repr: items.repr, used: items.used, index: 0 };
     b18: block {
         l19: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

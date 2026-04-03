@@ -26,7 +26,7 @@ struct [i32, unit] {
 
 array array<Tuple<i32,unit>> (mut ref "tuple/[i32, unit]");
 
-struct ArrayIter<Tuple<i32,unit>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<i32,unit>
+struct ArrayIter<Tuple<i32,unit>> {  // ArrayIter<T> with T=Tuple<i32,unit>
     mut repr: ref array<Tuple<i32,unit>>,
     mut used: i32,
     mut index: i32,
@@ -85,7 +85,7 @@ type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/ArrayIter<Tuple<i32,unit>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,unit>>") -> ref null "tuple/[i32, unit]";
+type "functype/ArrayIter<Tuple<i32,unit>>^Iterator::next" = fn(ref ArrayIter<Tuple<i32,unit>>) -> ref null "tuple/[i32, unit]";
 
 type "functype/Array<Tuple<i32,unit>>::push" = fn(ref Array<Tuple<i32,unit>>, ref "tuple/[i32, unit]");
 
@@ -119,7 +119,7 @@ import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:
 fn run() with Stdout {
     let __local_0: ref Array<Tuple<i32,unit>>;
     let arr: ref Array<Tuple<i32,unit>>;
-    let __iter_2: ref "core:allocator/ArrayIter<Tuple<i32,unit>>";
+    let __iter_2: ref ArrayIter<Tuple<i32,unit>>;
     let item: ref "tuple/[i32, unit]";
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -128,7 +128,7 @@ fn run() with Stdout {
         __local_0 = Array<Tuple<i32,unit>> { repr: array.new_fixed<ref "tuple/[i32, unit]">("tuple/[i32, unit]" { 0: 1 }, "tuple/[i32, unit]" { 0: 2 }, "tuple/[i32, unit]" { 0: 3 }), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<Tuple<i32,unit>>" { repr: arr.repr, used: 3, index: 0 };
+    __iter_2 = ArrayIter<Tuple<i32,unit>> { repr: arr.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
             __pattern_temp_0 = ArrayIter<Tuple<i32,unit>>^Iterator::next(__iter_2);

@@ -26,7 +26,7 @@ struct Formatter {
     mut buf: ref String,
 }
 
-struct ArrayIter<u8> {  // from core:allocator  // ArrayIter<T> with T=u8
+struct ArrayIter<u8> {  // ArrayIter<T> with T=u8
     mut repr: ref array<u8>,
     mut used: i32,
     mut index: i32,
@@ -101,7 +101,7 @@ type "functype/String::push" = fn(ref String, char);
 
 type "functype/String::from_utf8_lossy<Array<u8>>" = fn(ref Array<u8>) -> ref String;
 
-type "functype/ArrayIter<u8>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u8>") -> ref Option<u8>;
+type "functype/ArrayIter<u8>^Iterator::next" = fn(ref ArrayIter<u8>) -> ref Option<u8>;
 
 type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
 
@@ -496,7 +496,7 @@ fn String::push(self, c) {
 
 fn String::from_utf8_lossy<Array<u8>>(bytes) {
     let builder: ref String;
-    let iter: ref "core:allocator/ArrayIter<u8>";
+    let iter: ref ArrayIter<u8>;
     let pending: ref Option<u8>;
     let __local_4: u8;
     let b0_opt: ref Option<u8>;
@@ -518,7 +518,7 @@ fn String::from_utf8_lossy<Array<u8>>(bytes) {
     let __pattern_temp_6: ref Option<u8>;
     let __local_25: u32;
     builder = String { repr: builtin::array_new<u8>(8), used: 0 };
-    iter = "core:allocator/ArrayIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
+    iter = ArrayIter<u8> { repr: bytes.repr, used: bytes.used, index: 0 };
     pending = Option<u8> { 1 };
     b32: block {
         l33: loop {

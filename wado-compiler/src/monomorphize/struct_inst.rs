@@ -36,7 +36,9 @@ impl Monomorphizer {
         // so that substitute_type can use it for self-references
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance {
-                name, module_source, type_args,
+                name,
+                module_source,
+                type_args,
             } = type_table.get(id)
                 && name == &key.name
                 && module_source == &key.module_source

@@ -52,85 +52,85 @@ array array<char> (mut char);
 
 array array<bool> (mut bool);
 
-struct ArrayIter<u8> {  // from core:allocator  // ArrayIter<T> with T=u8
+struct ArrayIter<u8> {  // ArrayIter<T> with T=u8
     mut repr: ref array<u8>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<u64> {  // from core:allocator  // ArrayIter<T> with T=u64
+struct ArrayIter<u64> {  // ArrayIter<T> with T=u64
     mut repr: ref array<u64>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<u32> {  // from core:allocator  // ArrayIter<T> with T=u32
+struct ArrayIter<u32> {  // ArrayIter<T> with T=u32
     mut repr: ref array<u32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<u16> {  // from core:allocator  // ArrayIter<T> with T=u16
+struct ArrayIter<u16> {  // ArrayIter<T> with T=u16
     mut repr: ref array<u16>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<Tuple<bool,i32,String>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<bool,i32,String>
+struct ArrayIter<Tuple<bool,i32,String>> {  // ArrayIter<T> with T=Tuple<bool,i32,String>
     mut repr: ref array<Tuple<bool,i32,String>>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<String> {  // from core:allocator  // ArrayIter<T> with T=String
+struct ArrayIter<String> {  // ArrayIter<T> with T=String
     mut repr: ref array<String>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<i8> {  // from core:allocator  // ArrayIter<T> with T=i8
+struct ArrayIter<i8> {  // ArrayIter<T> with T=i8
     mut repr: ref array<i8>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<i64> {  // from core:allocator  // ArrayIter<T> with T=i64
+struct ArrayIter<i64> {  // ArrayIter<T> with T=i64
     mut repr: ref array<i64>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<i16> {  // from core:allocator  // ArrayIter<T> with T=i16
+struct ArrayIter<i16> {  // ArrayIter<T> with T=i16
     mut repr: ref array<i16>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<f64> {  // from core:allocator  // ArrayIter<T> with T=f64
+struct ArrayIter<f64> {  // ArrayIter<T> with T=f64
     mut repr: ref array<f64>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<f32> {  // from core:allocator  // ArrayIter<T> with T=f32
+struct ArrayIter<f32> {  // ArrayIter<T> with T=f32
     mut repr: ref array<f32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<char> {  // from core:allocator  // ArrayIter<T> with T=char
+struct ArrayIter<char> {  // ArrayIter<T> with T=char
     mut repr: ref array<char>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<bool> {  // from core:allocator  // ArrayIter<T> with T=bool
+struct ArrayIter<bool> {  // ArrayIter<T> with T=bool
     mut repr: ref array<bool>,
     mut used: i32,
     mut index: i32,
@@ -316,6 +316,10 @@ type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::push" = fn(ref String, char);
 
+type "functype/Array<String>::push" = fn(ref Array<String>, ref String);
+
+type "functype/Array<String>::grow" = fn(ref Array<String>);
+
 type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
 
 type "functype/Array<u8>::grow" = fn(ref Array<u8>);
@@ -332,17 +336,13 @@ type "functype/Array<u16>::push" = fn(ref Array<u16>, u16);
 
 type "functype/Array<u16>::grow" = fn(ref Array<u16>);
 
-type "functype/ArrayIter<Tuple<bool,i32,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<bool,i32,String>>") -> ref null "tuple/[bool, i32, String]";
+type "functype/ArrayIter<Tuple<bool,i32,String>>^Iterator::next" = fn(ref ArrayIter<Tuple<bool,i32,String>>) -> ref null "tuple/[bool, i32, String]";
 
 type "functype/Array<Tuple<bool,i32,String>>::push" = fn(ref Array<Tuple<bool,i32,String>>, ref "tuple/[bool, i32, String]");
 
 type "functype/Array<Tuple<bool,i32,String>>::grow" = fn(ref Array<Tuple<bool,i32,String>>);
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref null String;
-
-type "functype/Array<String>::push" = fn(ref Array<String>, ref String);
-
-type "functype/Array<String>::grow" = fn(ref Array<String>);
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref ArrayIter<String>) -> ref null String;
 
 type "functype/Array<i8>::push" = fn(ref Array<i8>, i8);
 
@@ -408,29 +408,29 @@ type "functype/trim_zeros" = fn(u64, i32) -> [u64, i32];
 
 type "functype/check_special" = fn(f64) -> [bool, bool, i32];
 
-type "functype/ArrayIter<u8>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u8>") -> [i32, u8];
+type "functype/ArrayIter<u8>^Iterator::next" = fn(ref ArrayIter<u8>) -> [i32, u8];
 
-type "functype/ArrayIter<u64>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u64>") -> [i32, u64];
+type "functype/ArrayIter<u64>^Iterator::next" = fn(ref ArrayIter<u64>) -> [i32, u64];
 
-type "functype/ArrayIter<u32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u32>") -> [i32, u32];
+type "functype/ArrayIter<u32>^Iterator::next" = fn(ref ArrayIter<u32>) -> [i32, u32];
 
-type "functype/ArrayIter<u16>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u16>") -> [i32, u16];
+type "functype/ArrayIter<u16>^Iterator::next" = fn(ref ArrayIter<u16>) -> [i32, u16];
 
-type "functype/ArrayIter<i8>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i8>") -> [i32, i8];
+type "functype/ArrayIter<i8>^Iterator::next" = fn(ref ArrayIter<i8>) -> [i32, i8];
 
-type "functype/ArrayIter<i64>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i64>") -> [i32, i64];
+type "functype/ArrayIter<i64>^Iterator::next" = fn(ref ArrayIter<i64>) -> [i32, i64];
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
-type "functype/ArrayIter<i16>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i16>") -> [i32, i16];
+type "functype/ArrayIter<i16>^Iterator::next" = fn(ref ArrayIter<i16>) -> [i32, i16];
 
-type "functype/ArrayIter<f64>^Iterator::next" = fn(ref "core:allocator/ArrayIter<f64>") -> [i32, f64];
+type "functype/ArrayIter<f64>^Iterator::next" = fn(ref ArrayIter<f64>) -> [i32, f64];
 
-type "functype/ArrayIter<f32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<f32>") -> [i32, f32];
+type "functype/ArrayIter<f32>^Iterator::next" = fn(ref ArrayIter<f32>) -> [i32, f32];
 
-type "functype/ArrayIter<char>^Iterator::next" = fn(ref "core:allocator/ArrayIter<char>") -> [i32, char];
+type "functype/ArrayIter<char>^Iterator::next" = fn(ref ArrayIter<char>) -> [i32, char];
 
-type "functype/ArrayIter<bool>^Iterator::next" = fn(ref "core:allocator/ArrayIter<bool>") -> [i32, bool];
+type "functype/ArrayIter<bool>^Iterator::next" = fn(ref ArrayIter<bool>) -> [i32, bool];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -468,7 +468,7 @@ global mut __modules_initialized: bool = 0;
 fn array_specialized_bool() with Stdout {
     let __local_0: ref Array<bool>;
     let arr: ref Array<bool>;
-    let __iter_2: ref "core:allocator/ArrayIter<bool>";
+    let __iter_2: ref ArrayIter<bool>;
     let x: bool;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -479,7 +479,7 @@ fn array_specialized_bool() with Stdout {
     Array<bool>::push(arr, 1);
     Array<bool>::push(arr, 0);
     Array<bool>::push(arr, 1);
-    __iter_2 = "core:allocator/ArrayIter<bool>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<bool> { repr: arr.repr, used: arr.used, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -508,7 +508,7 @@ fn array_specialized_bool() with Stdout {
 fn array_specialized_char() with Stdout {
     let __local_0: ref Array<char>;
     let arr: ref Array<char>;
-    let __iter_2: ref "core:allocator/ArrayIter<char>";
+    let __iter_2: ref ArrayIter<char>;
     let x: char;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -519,7 +519,7 @@ fn array_specialized_char() with Stdout {
     Array<char>::push(arr, 65);
     Array<char>::push(arr, 66);
     Array<char>::push(arr, 67);
-    __iter_2 = "core:allocator/ArrayIter<char>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<char> { repr: arr.repr, used: arr.used, index: 0 };
     b4: block {
         l5: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -544,7 +544,7 @@ fn array_specialized_char() with Stdout {
 fn array_specialized_f32() with Stdout {
     let __local_0: ref Array<f32>;
     let arr: ref Array<f32>;
-    let __iter_2: ref "core:allocator/ArrayIter<f32>";
+    let __iter_2: ref ArrayIter<f32>;
     let x: f32;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -555,7 +555,7 @@ fn array_specialized_f32() with Stdout {
     Array<f32>::push(arr, builtin::f32_demote_f64(1.5));
     Array<f32>::push(arr, builtin::f32_demote_f64(2.5));
     Array<f32>::push(arr, builtin::f32_demote_f64(3.5));
-    __iter_2 = "core:allocator/ArrayIter<f32>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<f32> { repr: arr.repr, used: arr.used, index: 0 };
     b7: block {
         l8: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -580,7 +580,7 @@ fn array_specialized_f32() with Stdout {
 fn array_specialized_f64() with Stdout {
     let __local_0: ref Array<f64>;
     let arr: ref Array<f64>;
-    let __iter_2: ref "core:allocator/ArrayIter<f64>";
+    let __iter_2: ref ArrayIter<f64>;
     let x: f64;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -591,7 +591,7 @@ fn array_specialized_f64() with Stdout {
     Array<f64>::push(arr, 1.5);
     Array<f64>::push(arr, 2.5);
     Array<f64>::push(arr, 3.5);
-    __iter_2 = "core:allocator/ArrayIter<f64>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<f64> { repr: arr.repr, used: arr.used, index: 0 };
     b10: block {
         l11: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -616,7 +616,7 @@ fn array_specialized_f64() with Stdout {
 fn array_specialized_i16() with Stdout {
     let __local_0: ref Array<i16>;
     let arr: ref Array<i16>;
-    let __iter_2: ref "core:allocator/ArrayIter<i16>";
+    let __iter_2: ref ArrayIter<i16>;
     let x: i16;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -627,7 +627,7 @@ fn array_specialized_i16() with Stdout {
     Array<i16>::push(arr, 1000);
     Array<i16>::push(arr, -2000);
     Array<i16>::push(arr, 3000);
-    __iter_2 = "core:allocator/ArrayIter<i16>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<i16> { repr: arr.repr, used: arr.used, index: 0 };
     b13: block {
         l14: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -652,7 +652,7 @@ fn array_specialized_i16() with Stdout {
 fn array_specialized_i32() with Stdout {
     let __local_0: ref Array<i32>;
     let arr: ref Array<i32>;
-    let __iter_2: ref "core:allocator/ArrayIter<i32>";
+    let __iter_2: ref ArrayIter<i32>;
     let x: i32;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -663,7 +663,7 @@ fn array_specialized_i32() with Stdout {
     Array<i32>::push(arr, 100000);
     Array<i32>::push(arr, -200000);
     Array<i32>::push(arr, 300000);
-    __iter_2 = "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
     b16: block {
         l17: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -688,7 +688,7 @@ fn array_specialized_i32() with Stdout {
 fn array_specialized_i64() with Stdout {
     let __local_0: ref Array<i64>;
     let arr: ref Array<i64>;
-    let __iter_2: ref "core:allocator/ArrayIter<i64>";
+    let __iter_2: ref ArrayIter<i64>;
     let x: i64;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -699,7 +699,7 @@ fn array_specialized_i64() with Stdout {
     Array<i64>::push(arr, 10000000000_i64);
     Array<i64>::push(arr, -20000000000_i64);
     Array<i64>::push(arr, 30000000000_i64);
-    __iter_2 = "core:allocator/ArrayIter<i64>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<i64> { repr: arr.repr, used: arr.used, index: 0 };
     b19: block {
         l20: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -724,7 +724,7 @@ fn array_specialized_i64() with Stdout {
 fn array_specialized_i8() with Stdout {
     let __local_0: ref Array<i8>;
     let arr: ref Array<i8>;
-    let __iter_2: ref "core:allocator/ArrayIter<i8>";
+    let __iter_2: ref ArrayIter<i8>;
     let x: i8;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -735,7 +735,7 @@ fn array_specialized_i8() with Stdout {
     Array<i8>::push(arr, 1);
     Array<i8>::push(arr, -2);
     Array<i8>::push(arr, 3);
-    __iter_2 = "core:allocator/ArrayIter<i8>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<i8> { repr: arr.repr, used: arr.used, index: 0 };
     b22: block {
         l23: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -760,7 +760,7 @@ fn array_specialized_i8() with Stdout {
 fn array_specialized_string() with Stdout {
     let __local_0: ref Array<String>;
     let arr: ref Array<String>;
-    let __iter_2: ref "core:allocator/ArrayIter<String>";
+    let __iter_2: ref ArrayIter<String>;
     let x: ref String;
     let __pattern_temp_0: ref null String;
     arr = __seq_lit: block -> ref Array<String> {
@@ -770,7 +770,7 @@ fn array_specialized_string() with Stdout {
     Array<String>::push(arr, String { repr: array.new_data<u8>("hello"), used: 5 });
     Array<String>::push(arr, String { repr: array.new_data<u8>("world"), used: 5 });
     Array<String>::push(arr, String { repr: array.new_data<u8>("!"), used: 1 });
-    __iter_2 = "core:allocator/ArrayIter<String>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
     b25: block {
         l26: loop {
             __pattern_temp_0 = ArrayIter<String>^Iterator::next(__iter_2);
@@ -788,7 +788,7 @@ fn array_specialized_string() with Stdout {
 fn array_specialized_tuple() with Stdout {
     let __local_0: ref Array<Tuple<bool,i32,String>>;
     let arr: ref Array<Tuple<bool,i32,String>>;
-    let __iter_2: ref "core:allocator/ArrayIter<Tuple<bool,i32,String>>";
+    let __iter_2: ref ArrayIter<Tuple<bool,i32,String>>;
     let x: ref "tuple/[bool, i32, String]";
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -802,7 +802,7 @@ fn array_specialized_tuple() with Stdout {
     Array<Tuple<bool,i32,String>>::push(arr, "tuple/[bool, i32, String]" { 0: 1, 1: 1, 2: String { repr: array.new_data<u8>("one"), used: 3 } });
     Array<Tuple<bool,i32,String>>::push(arr, "tuple/[bool, i32, String]" { 0: 0, 1: 2, 2: String { repr: array.new_data<u8>("two"), used: 3 } });
     Array<Tuple<bool,i32,String>>::push(arr, "tuple/[bool, i32, String]" { 0: 1, 1: 3, 2: String { repr: array.new_data<u8>("three"), used: 5 } });
-    __iter_2 = "core:allocator/ArrayIter<Tuple<bool,i32,String>>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<Tuple<bool,i32,String>> { repr: arr.repr, used: arr.used, index: 0 };
     b28: block {
         l29: loop {
             __pattern_temp_0 = ArrayIter<Tuple<bool,i32,String>>^Iterator::next(__iter_2);
@@ -836,7 +836,7 @@ fn array_specialized_tuple() with Stdout {
 fn array_specialized_u16() with Stdout {
     let __local_0: ref Array<u16>;
     let arr: ref Array<u16>;
-    let __iter_2: ref "core:allocator/ArrayIter<u16>";
+    let __iter_2: ref ArrayIter<u16>;
     let x: u16;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -847,7 +847,7 @@ fn array_specialized_u16() with Stdout {
     Array<u16>::push(arr, 1000);
     Array<u16>::push(arr, 2000);
     Array<u16>::push(arr, 3000);
-    __iter_2 = "core:allocator/ArrayIter<u16>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<u16> { repr: arr.repr, used: arr.used, index: 0 };
     b32: block {
         l33: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -872,7 +872,7 @@ fn array_specialized_u16() with Stdout {
 fn array_specialized_u32() with Stdout {
     let __local_0: ref Array<u32>;
     let arr: ref Array<u32>;
-    let __iter_2: ref "core:allocator/ArrayIter<u32>";
+    let __iter_2: ref ArrayIter<u32>;
     let x: u32;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -883,7 +883,7 @@ fn array_specialized_u32() with Stdout {
     Array<u32>::push(arr, 100000);
     Array<u32>::push(arr, 200000);
     Array<u32>::push(arr, 300000);
-    __iter_2 = "core:allocator/ArrayIter<u32>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<u32> { repr: arr.repr, used: arr.used, index: 0 };
     b35: block {
         l36: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -908,7 +908,7 @@ fn array_specialized_u32() with Stdout {
 fn array_specialized_u64() with Stdout {
     let __local_0: ref Array<u64>;
     let arr: ref Array<u64>;
-    let __iter_2: ref "core:allocator/ArrayIter<u64>";
+    let __iter_2: ref ArrayIter<u64>;
     let x: u64;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -919,7 +919,7 @@ fn array_specialized_u64() with Stdout {
     Array<u64>::push(arr, 10000000000_i64);
     Array<u64>::push(arr, 20000000000_i64);
     Array<u64>::push(arr, 30000000000_i64);
-    __iter_2 = "core:allocator/ArrayIter<u64>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<u64> { repr: arr.repr, used: arr.used, index: 0 };
     b38: block {
         l39: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -944,7 +944,7 @@ fn array_specialized_u64() with Stdout {
 fn array_specialized_u8() with Stdout {
     let __local_0: ref Array<u8>;
     let arr: ref Array<u8>;
-    let __iter_2: ref "core:allocator/ArrayIter<u8>";
+    let __iter_2: ref ArrayIter<u8>;
     let x: u8;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -955,7 +955,7 @@ fn array_specialized_u8() with Stdout {
     Array<u8>::push(arr, 1);
     Array<u8>::push(arr, 2);
     Array<u8>::push(arr, 3);
-    __iter_2 = "core:allocator/ArrayIter<u8>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_2 = ArrayIter<u8> { repr: arr.repr, used: arr.used, index: 0 };
     b41: block {
         l42: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -2674,6 +2674,48 @@ fn String::push(self, c) {
     };
 }
 
+fn Array<String>::push(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        Array<String>::grow(self);
+    };
+    builtin::array_set<ref String>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn Array<String>::grow(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref array<String>;
+    let old_repr: ref array<String>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref String>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l227: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                };
+                builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
+                i = i + 1;
+                continue l227;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
 fn ArrayIter<u8>^Iterator::next(self) {
     let item: u8;
     if self.index >= self.used {
@@ -2713,13 +2755,13 @@ fn Array<u8>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l228: loop {
+            l232: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l228;
+                continue l232;
             };
         };
     };
@@ -2765,13 +2807,13 @@ fn Array<u64>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l233: loop {
+            l237: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
                 i = i + 1;
-                continue l233;
+                continue l237;
             };
         };
     };
@@ -2817,13 +2859,13 @@ fn Array<u32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l238: loop {
+            l242: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<u32>(new_repr, i, builtin::array_get<u32>(old_repr, i));
                 i = i + 1;
-                continue l238;
+                continue l242;
             };
         };
     };
@@ -2869,13 +2911,13 @@ fn Array<u16>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l243: loop {
+            l247: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<u16>(new_repr, i, builtin::array_get<u16>(old_repr, i));
                 i = i + 1;
-                continue l243;
+                continue l247;
             };
         };
     };
@@ -2921,13 +2963,13 @@ fn Array<Tuple<bool,i32,String>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l248: loop {
+            l252: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref "tuple/[bool, i32, String]">(new_repr, i, builtin::array_get<ref "tuple/[bool, i32, String]">(old_repr, i));
                 i = i + 1;
-                continue l248;
+                continue l252;
             };
         };
     };
@@ -2942,48 +2984,6 @@ fn ArrayIter<String>^Iterator::next(self) {
     item = builtin::array_get<ref String>(self.repr, self.index);
     self.index = self.index + 1;
     return item;
-}
-
-fn Array<String>::push(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<String>::grow(self);
-    };
-    builtin::array_set<ref String>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<String>::grow(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<String>;
-    let old_repr: ref array<String>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref String>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l253: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                };
-                builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
-                i = i + 1;
-                continue l253;
-            };
-        };
-    };
-    self.repr = new_repr;
 }
 
 fn ArrayIter<i8>^Iterator::next(self) {

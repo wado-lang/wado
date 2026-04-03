@@ -143,7 +143,7 @@ struct ErrorCode::InternalError {
 
 array array<Array<u8>> (mut ref Array<u8>);
 
-struct ArrayIter<Array<u8>> {  // from core:allocator  // ArrayIter<T> with T=Array<u8>
+struct ArrayIter<Array<u8>> {  // ArrayIter<T> with T=Array<u8>
     mut repr: ref array<Array<u8>>,
     mut used: i32,
     mut index: i32,
@@ -276,7 +276,7 @@ type "functype/core:internal/cm_stream_read_u8" = fn(i32, i32) -> ref Array<u8>;
 
 type "functype/core:internal/cm_stream_write_u8" = fn(i32, ref Array<u8>);
 
-type "functype/ArrayIter<Array<u8>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Array<u8>>") -> ref null Array<u8>;
+type "functype/ArrayIter<Array<u8>>^Iterator::next" = fn(ref ArrayIter<Array<u8>>) -> ref null Array<u8>;
 
 type "functype/Array<Array<u8>>::push" = fn(ref Array<Array<u8>>, ref Array<u8>);
 
@@ -329,7 +329,7 @@ fn handle(request) {
     let resp_tx: i32;
     let headers: i32;
     let response: i32;
-    let __iter_15: ref "core:allocator/ArrayIter<Array<u8>>";
+    let __iter_15: ref ArrayIter<Array<u8>>;
     let chunk_16: ref Array<u8>;
     let __task_ret: ref Result<Response,ErrorCode>;
     let __tv_1: i32;
@@ -803,7 +803,7 @@ fn handle(request) {
         };
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     };
-    __iter_15 = "core:allocator/ArrayIter<Array<u8>>" { repr: chunks.repr, used: chunks.used, index: 0 };
+    __iter_15 = ArrayIter<Array<u8>> { repr: chunks.repr, used: chunks.used, index: 0 };
     b41: block {
         l42: loop {
             __pattern_temp_5 = ArrayIter<Array<u8>>^Iterator::next(__iter_15);

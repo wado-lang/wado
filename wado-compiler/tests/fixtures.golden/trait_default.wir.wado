@@ -27,7 +27,7 @@ struct Article {
 
 array array<i32> (mut i32);
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -104,7 +104,7 @@ type "functype/String::push" = fn(ref String, char);
 
 type "functype/Article^Summary::summary" = fn(ref Article) -> ref String;
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
 
 type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
@@ -160,7 +160,7 @@ fn trait_default_calls_default() with Stdout {
 fn trait_default_count() with Stdout {
     let __local_0: ref Array<i32>;
     let arr: ref Array<i32>;
-    let iter: ref "core:allocator/ArrayIter<i32>";
+    let iter: ref ArrayIter<i32>;
     let remaining: i32;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -170,7 +170,7 @@ fn trait_default_count() with Stdout {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_0;
     };
-    iter = "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: 5, index: 0 };
+    iter = ArrayIter<i32> { repr: arr.repr, used: 5, index: 0 };
     drop(ArrayIter<i32>^Iterator::next(iter));
     remaining = __inline_ArrayIter_i32__Iterator__count_9: block -> i32 {
         __local_21 = 0;

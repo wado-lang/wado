@@ -45,7 +45,7 @@ array array<bool> (mut bool);
 
 array array<i32> (mut i32);
 
-struct ArrayIter<Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,i32>
+struct ArrayIter<Tuple<String,i32>> {  // ArrayIter<T> with T=Tuple<String,i32>
     mut repr: ref array<Tuple<String,i32>>,
     mut used: i32,
     mut index: i32,
@@ -186,7 +186,7 @@ type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
 type "functype/TreeMap<String,i32>::needs_compaction" = fn(ref TreeMap<String,i32>) -> bool;
 
-type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> ref null "tuple/[String, i32]";
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref ArrayIter<Tuple<String,i32>>) -> ref null "tuple/[String, i32]";
 
 type "functype/TreeMap<String,i32>::iter" = fn(ref TreeMap<String,i32>) -> ref Array<Tuple<String,i32>>;
 
@@ -253,12 +253,12 @@ import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:
 fn run() with Stdout {
     let map: ref TreeMap<String,i32>;
     let entries: ref Array<Tuple<String,i32>>;
-    let __iter_2: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
+    let __iter_2: ref ArrayIter<Tuple<String,i32>>;
     let entry_3: ref "tuple/[String, i32]";
     let key_4: ref String;
     let value_5: i32;
     let final_entries: ref Array<Tuple<String,i32>>;
-    let __iter_7: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
+    let __iter_7: ref ArrayIter<Tuple<String,i32>>;
     let entry_8: ref "tuple/[String, i32]";
     let key_9: ref String;
     let value_10: i32;
@@ -374,7 +374,7 @@ fn run() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("
 === Iteration (sorted) ==="), used: 27 });
     entries = TreeMap<String,i32>::iter(map);
-    __iter_2 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: entries.repr, used: entries.used, index: 0 };
+    __iter_2 = ArrayIter<Tuple<String,i32>> { repr: entries.repr, used: entries.used, index: 0 };
     b1: block {
         l2: loop {
             __pattern_temp_0_29 = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_2);
@@ -431,7 +431,7 @@ fn run() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>("
 === Final iteration ==="), used: 24 });
     final_entries = TreeMap<String,i32>::iter(map);
-    __iter_7 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: final_entries.repr, used: final_entries.used, index: 0 };
+    __iter_7 = ArrayIter<Tuple<String,i32>> { repr: final_entries.repr, used: final_entries.used, index: 0 };
     b6: block {
         l7: loop {
             __pattern_temp_1 = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_7);

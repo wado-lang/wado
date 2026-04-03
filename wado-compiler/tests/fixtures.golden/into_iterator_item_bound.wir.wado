@@ -20,7 +20,7 @@ struct Formatter {
     mut buf: ref String,
 }
 
-struct ArrayIter<u8> {  // from core:allocator  // ArrayIter<T> with T=u8
+struct ArrayIter<u8> {  // ArrayIter<T> with T=u8
     mut repr: ref array<u8>,
     mut used: i32,
     mut index: i32,
@@ -95,7 +95,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/ArrayIter<u8>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u8>") -> [i32, u8];
+type "functype/ArrayIter<u8>^Iterator::next" = fn(ref ArrayIter<u8>) -> [i32, u8];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -142,10 +142,10 @@ fn __cm_export__run() {
 
 fn sum_bytes<Array<u8>>(items) {
     let total: i32;
-    let iter: ref "core:allocator/ArrayIter<u8>";
+    let iter: ref ArrayIter<u8>;
     let b: u8;
     total = 0;
-    iter = "core:allocator/ArrayIter<u8>" { repr: items.repr, used: items.used, index: 0 };
+    iter = ArrayIter<u8> { repr: items.repr, used: items.used, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

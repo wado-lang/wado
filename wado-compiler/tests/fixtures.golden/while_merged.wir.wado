@@ -22,7 +22,7 @@ struct Formatter {
 
 array array<i32> (mut i32);
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -107,7 +107,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -266,7 +266,7 @@ condition: sum == 1 + 2 + 4 + 5
 fn __test_2_while_let_basic() {
     let __local_0: ref Array<i32>;
     let items: ref Array<i32>;
-    let iter: ref "core:allocator/ArrayIter<i32>";
+    let iter: ref ArrayIter<i32>;
     let sum: i32;
     let x: i32;
     let __v0: i32;
@@ -279,7 +279,7 @@ fn __test_2_while_let_basic() {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
     };
-    iter = "core:allocator/ArrayIter<i32>" { repr: items.repr, used: 3, index: 0 };
+    iter = ArrayIter<i32> { repr: items.repr, used: 3, index: 0 };
     sum = 0;
     b10: block {
         l11: loop {
@@ -332,7 +332,7 @@ condition: sum == 6
 fn __test_3_while_let_chain() {
     let __local_0: ref Array<i32>;
     let arr: ref Array<i32>;
-    let iter: ref "core:allocator/ArrayIter<i32>";
+    let iter: ref ArrayIter<i32>;
     let sum: i32;
     let x_4: i32;
     let __v0_5: i32;
@@ -341,8 +341,8 @@ fn __test_3_while_let_chain() {
     let xs: ref Array<i32>;
     let __local_9: ref Array<i32>;
     let ys: ref Array<i32>;
-    let ix: ref "core:allocator/ArrayIter<i32>";
-    let iy: ref "core:allocator/ArrayIter<i32>";
+    let ix: ref ArrayIter<i32>;
+    let iy: ref ArrayIter<i32>;
     let total: i32;
     let x_14: i32;
     let y: i32;
@@ -350,7 +350,7 @@ fn __test_3_while_let_chain() {
     let __cond_17: bool;
     let __local_18: ref Array<i32>;
     let arr3: ref Array<i32>;
-    let iter3: ref "core:allocator/ArrayIter<i32>";
+    let iter3: ref ArrayIter<i32>;
     let count: i32;
     let v: i32;
     let __v0_25: i32;
@@ -371,7 +371,7 @@ fn __test_3_while_let_chain() {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3, 8, 9), used: 5 };
         break __seq_lit: __local_0;
     };
-    iter = "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: 5, index: 0 };
+    iter = ArrayIter<i32> { repr: arr.repr, used: 5, index: 0 };
     sum = 0;
     b14: block {
         l15: loop {
@@ -431,8 +431,8 @@ condition: sum == 6
         __local_9 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_9;
     };
-    ix = "core:allocator/ArrayIter<i32>" { repr: xs.repr, used: 3, index: 0 };
-    iy = "core:allocator/ArrayIter<i32>" { repr: ys.repr, used: 3, index: 0 };
+    ix = ArrayIter<i32> { repr: xs.repr, used: 3, index: 0 };
+    iy = ArrayIter<i32> { repr: ys.repr, used: 3, index: 0 };
     total = 0;
     b19: block {
         l20: loop {
@@ -494,7 +494,7 @@ condition: total == 66
         __local_18 = Array<i32> { repr: array.new_fixed<i32>(2, 4, 7, 8), used: 4 };
         break __seq_lit: __local_18;
     };
-    iter3 = "core:allocator/ArrayIter<i32>" { repr: arr3.repr, used: 4, index: 0 };
+    iter3 = ArrayIter<i32> { repr: arr3.repr, used: 4, index: 0 };
     count = 0;
     b24: block {
         l25: loop {

@@ -22,7 +22,7 @@ struct Formatter {
 
 array array<i32> (mut i32);
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -115,7 +115,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -134,9 +134,9 @@ import fn stream-new from "wasi/stream-new";
 import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn first_positive(arr) {
-    let __iter_1: ref "core:allocator/ArrayIter<i32>";
+    let __iter_1: ref ArrayIter<i32>;
     let x: i32;
-    __iter_1 = "core:allocator/ArrayIter<i32>" { repr: arr.repr, used: arr.used, index: 0 };
+    __iter_1 = ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

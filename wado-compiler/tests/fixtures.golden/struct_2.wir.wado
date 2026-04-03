@@ -58,7 +58,7 @@ struct SDLine {
 
 array array<SDPoint> (mut ref SDPoint);
 
-struct ArrayIter<SDPoint> {  // from core:allocator  // ArrayIter<T> with T=SDPoint
+struct ArrayIter<SDPoint> {  // ArrayIter<T> with T=SDPoint
     mut repr: ref array<SDPoint>,
     mut used: i32,
     mut index: i32,
@@ -139,7 +139,7 @@ type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> b
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/ArrayIter<SDPoint>^Iterator::next" = fn(ref "core:allocator/ArrayIter<SDPoint>") -> ref null SDPoint;
+type "functype/ArrayIter<SDPoint>^Iterator::next" = fn(ref ArrayIter<SDPoint>) -> ref null SDPoint;
 
 type "functype/Array<SDPoint>::push" = fn(ref Array<SDPoint>, ref SDPoint);
 
@@ -248,10 +248,10 @@ fn destruct_basic() with Stdout {
 fn destruct_for_of() with Stdout {
     let __local_0: ref Array<SDPoint>;
     let points: ref Array<SDPoint>;
-    let __iter_2: ref "core:allocator/ArrayIter<SDPoint>";
+    let __iter_2: ref ArrayIter<SDPoint>;
     let x: i32;
     let y: i32;
-    let __iter_5: ref "core:allocator/ArrayIter<SDPoint>";
+    let __iter_5: ref ArrayIter<SDPoint>;
     let a: i32;
     let b: i32;
     let __local_8: ref String;
@@ -266,7 +266,7 @@ fn destruct_for_of() with Stdout {
         __local_0 = Array<SDPoint> { repr: array.new_fixed<ref SDPoint>(SDPoint { x: 1, y: 2 }, SDPoint { x: 3, y: 4 }, SDPoint { x: 5, y: 6 }), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<SDPoint>" { repr: points.repr, used: 3, index: 0 };
+    __iter_2 = ArrayIter<SDPoint> { repr: points.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
             __pattern_temp_0 = ArrayIter<SDPoint>^Iterator::next(__iter_2);
@@ -286,7 +286,7 @@ fn destruct_for_of() with Stdout {
             continue l1;
         };
     };
-    __iter_5 = "core:allocator/ArrayIter<SDPoint>" { repr: points.repr, used: 3, index: 0 };
+    __iter_5 = ArrayIter<SDPoint> { repr: points.repr, used: 3, index: 0 };
     b3: block {
         l4: loop {
             __pattern_temp_2 = ArrayIter<SDPoint>^Iterator::next(__iter_5);

@@ -68,7 +68,7 @@ array array<CstChild> (mut ref "./sub/test_world_variant_generic_helper.wado/Cst
 
 array array<TokenData> (mut ref "./sub/test_world_variant_generic_helper.wado/TokenData");
 
-struct ArrayRefIter<CstChild> {  // from core:allocator  // ArrayRefIter<T> with T=CstChild
+struct ArrayRefIter<CstChild> {  // ArrayRefIter<T> with T=CstChild
     mut repr: ref array<CstChild>,
     mut used: i32,
     mut index: i32,
@@ -144,7 +144,7 @@ type "functype/./sub/test_world_variant_generic_helper.wado/Array<CstChild>::pus
 
 type "functype/./sub/test_world_variant_generic_helper.wado/Array<CstChild>::grow" = fn(ref Array<CstChild>);
 
-type "functype/./sub/test_world_variant_generic_helper.wado/ArrayRefIter<CstChild>^Iterator::next" = fn(ref "core:allocator/ArrayRefIter<CstChild>") -> ref null "core:internal/Box<CstChild>";
+type "functype/./sub/test_world_variant_generic_helper.wado/ArrayRefIter<CstChild>^Iterator::next" = fn(ref ArrayRefIter<CstChild>) -> ref null "core:internal/Box<CstChild>";
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -409,17 +409,17 @@ fn "./sub/test_world_variant_generic_helper.wado/make_test_tree"() {  // from ./
 }
 
 fn "./sub/test_world_variant_generic_helper.wado/./sub/test_world_variant_generic_helper.wado/walk_node<Recorder>"(v, node) {  // from ./sub/test_world_variant_generic_helper.wado
-    let __iter_2: ref "core:allocator/ArrayRefIter<CstChild>";
+    let __iter_2: ref ArrayRefIter<CstChild>;
     let child: ref "core:internal/Box<CstChild>";
     let __local_5: ref "./sub/test_world_variant_generic_helper.wado/NodeData";
     let __pattern_temp_0: ref null "core:internal/Box<CstChild>";
     let __local_9: ref Array<CstChild>;
     let __local_10: ref Array<CstChild>;
     v.count = v.count + 1;
-    __iter_2 = __inline___CstChild__IntoIterator__into_iter_1: block -> ref "core:allocator/ArrayRefIter<CstChild>" {
+    __iter_2 = __inline___CstChild__IntoIterator__into_iter_1: block -> ref ArrayRefIter<CstChild> {
         __local_9 = node.children;
         __local_10 = __local_9;
-        break __inline___CstChild__IntoIterator__into_iter_1: "core:allocator/ArrayRefIter<CstChild>" { repr: __local_10.repr, used: __local_10.used, index: 0 };
+        break __inline___CstChild__IntoIterator__into_iter_1: ArrayRefIter<CstChild> { repr: __local_10.repr, used: __local_10.used, index: 0 };
     };
     b14: block {
         l15: loop {

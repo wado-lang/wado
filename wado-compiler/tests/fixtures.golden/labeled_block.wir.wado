@@ -22,7 +22,7 @@ struct Formatter {
 
 array array<i32> (mut i32);
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -111,7 +111,7 @@ type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
 
 type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
@@ -294,7 +294,7 @@ condition: result == 30
 
 fn labeled_block_expr_value() with Stdout {
     let __local_1: ref Array<i32>;
-    let __local_2: ref "core:allocator/ArrayIter<i32>";
+    let __local_2: ref ArrayIter<i32>;
     let __local_3: i32;
     let x: i32;
     let __local_5: ref String;
@@ -302,12 +302,12 @@ fn labeled_block_expr_value() with Stdout {
     let __local_7: ref Option<i32>;
     let __local_8: ref Array<i32>;
     x = foo: block -> i32 {
-        __local_2 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<i32>" {
+        __local_2 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref ArrayIter<i32> {
             __local_8 = __seq_lit: block -> ref Array<i32> {
                 __local_1 = Array<i32> { repr: array.new_fixed<i32>(5, 6, 7), used: 3 };
                 break __seq_lit: __local_1;
             };
-            break __inline_Array_i32__IntoIterator__into_iter_0: "core:allocator/ArrayIter<i32>" { repr: __local_8.repr, used: 3, index: 0 };
+            break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: __local_8.repr, used: 3, index: 0 };
         };
         b2: block {
             l3: loop {

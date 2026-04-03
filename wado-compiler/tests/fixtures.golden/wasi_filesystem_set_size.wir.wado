@@ -102,7 +102,7 @@ struct [Descriptor, String] {
 
 array array<Tuple<Descriptor,String>> (mut ref "tuple/[Descriptor, String]");
 
-struct ArrayIter<u8> {  // from core:allocator  // ArrayIter<T> with T=u8
+struct ArrayIter<u8> {  // ArrayIter<T> with T=u8
     mut repr: ref array<u8>,
     mut used: i32,
     mut index: i32,
@@ -288,7 +288,7 @@ type "functype/core:internal/cm_stream_read_u8" = fn(i32, i32) -> [ref array<u8>
 
 type "functype/core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];
 
-type "functype/ArrayIter<u8>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u8>") -> [i32, u8];
+type "functype/ArrayIter<u8>^Iterator::next" = fn(ref ArrayIter<u8>) -> [i32, u8];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -340,7 +340,7 @@ fn read_all(file) {
     let read_future: i32;
     let __local_3: ref Array<u8>;
     let result: ref Array<u8>;
-    let __iter_6: ref "core:allocator/ArrayIter<u8>";
+    let __iter_6: ref ArrayIter<u8>;
     let b: u8;
     let __sroa___pattern_temp_0_0: i32;
     let __sroa___pattern_temp_0_1: i32;
@@ -359,7 +359,7 @@ fn read_all(file) {
             if __sroa_chunk_used == 0 {
                 break b0;
             };
-            __iter_6 = "core:allocator/ArrayIter<u8>" { repr: __sroa_chunk_repr, used: __sroa_chunk_used, index: 0 };
+            __iter_6 = ArrayIter<u8> { repr: __sroa_chunk_repr, used: __sroa_chunk_used, index: 0 };
             b3: block {
                 l4: loop {
                     let __sroa___pattern_temp_1_discriminant: i32;

@@ -111,7 +111,7 @@ struct __Closure_1 {}
 struct __Closure_0 {}
 
 struct Config {
-    mut settings: ref "core:allocator/TreeMap<String,i32>",
+    mut settings: ref "core:collections/TreeMap<String,i32>",
 }
 
 struct Inner {
@@ -154,7 +154,7 @@ array array<u64> (mut u64);
 
 array array<String> (mut ref String);
 
-array array<TreeMapEntry<String,i32>> (mut ref "core:allocator/TreeMapEntry<String,i32>");
+array array<TreeMapEntry<String,i32>> (mut ref "core:collections/TreeMapEntry<String,i32>");
 
 array array<Option<i32>> (mut ref Option<i32>);
 
@@ -164,44 +164,44 @@ array array<Tuple<String,i32>> (mut ref "tuple/[String, i32]");
 
 array array<Direction> (mut i32);
 
-array array<TreeMapEntry<String,String>> (mut ref "core:allocator/TreeMapEntry<String,String>");
+array array<TreeMapEntry<String,String>> (mut ref "core:collections/TreeMapEntry<String,String>");
 
 array array<Tuple<String,String>> (mut ref "tuple/[String, String]");
 
 array array<Inner> (mut ref Inner);
 
-struct TreeMap<String,String> {  // from core:allocator  // TreeMap<T> with T=String, String
-    mut root: ref null "core:allocator/TreeMapNode<String>",
+struct TreeMap<String,String> {  // from core:collections  // TreeMap<T> with T=String, String
+    mut root: ref null "core:collections/TreeMapNode<String>",
     mut entries: ref Array<TreeMapEntry<String,String>>,
     mut size: i32,
     mut deleted_count: i32,
 }
 
-struct TreeMap<String,i32> {  // from core:allocator  // TreeMap<T> with T=String, i32
-    mut root: ref null "core:allocator/TreeMapNode<String>",
+struct TreeMap<String,i32> {  // from core:collections  // TreeMap<T> with T=String, i32
+    mut root: ref null "core:collections/TreeMapNode<String>",
     mut entries: ref Array<TreeMapEntry<String,i32>>,
     mut size: i32,
     mut deleted_count: i32,
 }
 
-struct TreeMapEntry<String,i32> {  // from core:allocator  // TreeMapEntry<T> with T=String, i32
+struct TreeMapNode<String> {  // from core:collections  // TreeMapNode<T> with T=String
+    mut key: ref String,
+    mut index: i32,
+    mut level: i32,
+    mut left: ref null "core:collections/TreeMapNode<String>",
+    mut right: ref null "core:collections/TreeMapNode<String>",
+}
+
+struct TreeMapEntry<String,i32> {  // from core:collections  // TreeMapEntry<T> with T=String, i32
     mut key: ref String,
     mut value: i32,
     mut deleted: bool,
 }
 
-struct TreeMapEntry<String,String> {  // from core:allocator  // TreeMapEntry<T> with T=String, String
+struct TreeMapEntry<String,String> {  // from core:collections  // TreeMapEntry<T> with T=String, String
     mut key: ref String,
     mut value: ref String,
     mut deleted: bool,
-}
-
-struct TreeMapNode<String> {  // from core:allocator  // TreeMapNode<T> with T=String
-    mut key: ref String,
-    mut index: i32,
-    mut level: i32,
-    mut left: ref null "core:allocator/TreeMapNode<String>",
-    mut right: ref null "core:allocator/TreeMapNode<String>",
 }
 
 struct ArrayIter<String> {  // from core:serde  // ArrayIter<T> with T=String
@@ -283,13 +283,13 @@ struct Result<i32,String>::Err {
 }
 
 variant Result<TreeMap<String,i32>,DeserializeError> {
-    Ok(ref "core:allocator/TreeMap<String,i32>"),
+    Ok(ref "core:collections/TreeMap<String,i32>"),
     Err(ref "core:serde/DeserializeError"),
 }
 
 struct Result<TreeMap<String,i32>,DeserializeError>::Ok {
     discriminant: i32,
-    payload_0: ref "core:allocator/TreeMap<String,i32>",
+    payload_0: ref "core:collections/TreeMap<String,i32>",
 }
 
 struct Result<TreeMap<String,i32>,DeserializeError>::Err {
@@ -418,7 +418,7 @@ struct Result<Inner,DeserializeError>::Err {
 }
 
 variant Option<TreeMapNode<String>> {
-    Some(ref "core:allocator/TreeMapNode<String>"),
+    Some(ref "core:collections/TreeMapNode<String>"),
     None,
 }
 
@@ -719,7 +719,7 @@ type "functype/String^Ord::cmp" = fn(ref String, ref String) -> enum:Ordering;
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,i32>>") -> ref null "core:allocator/TreeMapEntry<String,i32>";
+type "functype/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,i32>>") -> ref null "core:collections/TreeMapEntry<String,i32>";
 
 type "functype/Array<Option<i32>>::push" = fn(ref Array<Option<i32>>, ref Option<i32>);
 
@@ -735,23 +735,23 @@ type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
 type "functype/TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> ref Result<TreeMap<String,i32>,DeserializeError>;
 
-type "functype/TreeMap<String,i32>::insert" = fn(ref "core:allocator/TreeMap<String,i32>", ref String, i32);
+type "functype/TreeMap<String,i32>::insert" = fn(ref "core:collections/TreeMap<String,i32>", ref String, i32);
 
-type "functype/TreeMap<String,i32>::insert_node" = fn(ref "core:allocator/TreeMap<String,i32>", ref null "core:allocator/TreeMapNode<String>", ref String, i32) -> ref null "core:allocator/TreeMapNode<String>";
+type "functype/TreeMap<String,i32>::insert_node" = fn(ref "core:collections/TreeMap<String,i32>", ref null "core:collections/TreeMapNode<String>", ref String, i32) -> ref null "core:collections/TreeMapNode<String>";
 
-type "functype/Array<TreeMapEntry<String,i32>>::push" = fn(ref Array<TreeMapEntry<String,i32>>, ref "core:allocator/TreeMapEntry<String,i32>");
+type "functype/Array<TreeMapEntry<String,i32>>::push" = fn(ref Array<TreeMapEntry<String,i32>>, ref "core:collections/TreeMapEntry<String,i32>");
 
 type "functype/Array<TreeMapEntry<String,i32>>::grow" = fn(ref Array<TreeMapEntry<String,i32>>);
 
-type "functype/TreeMap<String,i32>::find_index" = fn(ref "core:allocator/TreeMap<String,i32>", ref String) -> i32;
+type "functype/TreeMap<String,i32>::find_index" = fn(ref "core:collections/TreeMap<String,i32>", ref String) -> i32;
 
-type "functype/JsonStructSerializer^SerializeStruct::field<TreeMap<String,i32>>" = fn(ref "core:json/JsonStructSerializer", ref String, ref "core:allocator/TreeMap<String,i32>") -> ref null "core:serde/SerializeError";
+type "functype/JsonStructSerializer^SerializeStruct::field<TreeMap<String,i32>>" = fn(ref "core:json/JsonStructSerializer", ref String, ref "core:collections/TreeMap<String,i32>") -> ref null "core:serde/SerializeError";
 
 type "functype/JsonMapSerializer^SerializeMap::key<String>" = fn(ref "core:json/JsonMapSerializer", ref String) -> ref null "core:serde/SerializeError";
 
 type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,i32>>") -> ref null "tuple/[String, i32]";
 
-type "functype/TreeMap<String,i32>::entries" = fn(ref "core:allocator/TreeMap<String,i32>") -> ref Array<Tuple<String,i32>>;
+type "functype/TreeMap<String,i32>::entries" = fn(ref "core:collections/TreeMap<String,i32>") -> ref Array<Tuple<String,i32>>;
 
 type "functype/Array<Tuple<String,i32>>::push" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
@@ -767,17 +767,17 @@ type "functype/Array<Direction>::push" = fn(ref Array<Direction>, enum:Direction
 
 type "functype/Array<Direction>::grow" = fn(ref Array<Direction>);
 
-type "functype/TreeMap<String,i32>^IndexValue::index_value" = fn(ref "core:allocator/TreeMap<String,i32>", ref String) -> i32;
+type "functype/TreeMap<String,i32>^IndexValue::index_value" = fn(ref "core:collections/TreeMap<String,i32>", ref String) -> i32;
 
-type "functype/TreeMap<String,String>^IndexValue::index_value" = fn(ref "core:allocator/TreeMap<String,String>", ref String) -> ref String;
+type "functype/TreeMap<String,String>^IndexValue::index_value" = fn(ref "core:collections/TreeMap<String,String>", ref String) -> ref String;
 
-type "functype/TreeMap<String,String>::find_index" = fn(ref "core:allocator/TreeMap<String,String>", ref String) -> i32;
+type "functype/TreeMap<String,String>::find_index" = fn(ref "core:collections/TreeMap<String,String>", ref String) -> i32;
 
-type "functype/TreeMap<String,String>::insert" = fn(ref "core:allocator/TreeMap<String,String>", ref String, ref String);
+type "functype/TreeMap<String,String>::insert" = fn(ref "core:collections/TreeMap<String,String>", ref String, ref String);
 
-type "functype/TreeMap<String,String>::insert_node" = fn(ref "core:allocator/TreeMap<String,String>", ref null "core:allocator/TreeMapNode<String>", ref String, i32) -> ref null "core:allocator/TreeMapNode<String>";
+type "functype/TreeMap<String,String>::insert_node" = fn(ref "core:collections/TreeMap<String,String>", ref null "core:collections/TreeMapNode<String>", ref String, i32) -> ref null "core:collections/TreeMapNode<String>";
 
-type "functype/Array<TreeMapEntry<String,String>>::push" = fn(ref Array<TreeMapEntry<String,String>>, ref "core:allocator/TreeMapEntry<String,String>");
+type "functype/Array<TreeMapEntry<String,String>>::push" = fn(ref Array<TreeMapEntry<String,String>>, ref "core:collections/TreeMapEntry<String,String>");
 
 type "functype/Array<TreeMapEntry<String,String>>::grow" = fn(ref Array<TreeMapEntry<String,String>>);
 
@@ -785,13 +785,13 @@ type "functype/JsonMapSerializer^SerializeMap::value<String>" = fn(ref "core:jso
 
 type "functype/ArrayIter<Tuple<String,String>>^Iterator::next" = fn(ref "core:serde/ArrayIter<Tuple<String,String>>") -> ref null "tuple/[String, String]";
 
-type "functype/TreeMap<String,String>::entries" = fn(ref "core:allocator/TreeMap<String,String>") -> ref Array<Tuple<String,String>>;
+type "functype/TreeMap<String,String>::entries" = fn(ref "core:collections/TreeMap<String,String>") -> ref Array<Tuple<String,String>>;
 
 type "functype/Array<Tuple<String,String>>::push" = fn(ref Array<Tuple<String,String>>, ref "tuple/[String, String]");
 
 type "functype/Array<Tuple<String,String>>::grow" = fn(ref Array<Tuple<String,String>>);
 
-type "functype/ArrayIter<TreeMapEntry<String,String>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,String>>") -> ref null "core:allocator/TreeMapEntry<String,String>";
+type "functype/ArrayIter<TreeMapEntry<String,String>>^Iterator::next" = fn(ref "core:serde/ArrayIter<TreeMapEntry<String,String>>") -> ref null "core:collections/TreeMapEntry<String,String>";
 
 type "functype/JsonVariantSerializer^SerializeVariant::payload<String>" = fn(ref "core:json/JsonVariantSerializer", ref String) -> ref null "core:serde/SerializeError";
 
@@ -875,13 +875,13 @@ type "functype/core/json/from_string<Direction>" = fn(ref String) -> [i32, i32, 
 
 type "functype/core/json/to_string<Direction>" = fn(enum:Direction) -> [i32, ref null String, ref null "core:serde/SerializeError"];
 
-type "functype/core/json/from_string<TreeMap<String,i32>>" = fn(ref String) -> [i32, ref null "core:allocator/TreeMap<String,i32>", ref null "core:serde/DeserializeError"];
+type "functype/core/json/from_string<TreeMap<String,i32>>" = fn(ref String) -> [i32, ref null "core:collections/TreeMap<String,i32>", ref null "core:serde/DeserializeError"];
 
-type "functype/core/json/to_string<TreeMap<String,i32>>" = fn(ref "core:allocator/TreeMap<String,i32>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
+type "functype/core/json/to_string<TreeMap<String,i32>>" = fn(ref "core:collections/TreeMap<String,i32>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
 
-type "functype/core/json/from_string<TreeMap<String,String>>" = fn(ref String) -> [i32, ref null "core:allocator/TreeMap<String,String>", ref null "core:serde/DeserializeError"];
+type "functype/core/json/from_string<TreeMap<String,String>>" = fn(ref String) -> [i32, ref null "core:collections/TreeMap<String,String>", ref null "core:serde/DeserializeError"];
 
-type "functype/core/json/to_string<TreeMap<String,String>>" = fn(ref "core:allocator/TreeMap<String,String>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
+type "functype/core/json/to_string<TreeMap<String,String>>" = fn(ref "core:collections/TreeMap<String,String>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
 
 type "functype/core/json/from_string<Result<i32,String>>" = fn(ref String) -> [i32, ref null Result<i32,String>, ref null "core:serde/DeserializeError"];
 
@@ -933,7 +933,7 @@ type "functype/Shape^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:
 
 type "functype/Direction^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> [i32, i32, ref null "core:serde/DeserializeError"];
 
-type "functype/TreeMap<String,String>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null "core:allocator/TreeMap<String,String>", ref null "core:serde/DeserializeError"];
+type "functype/TreeMap<String,String>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null "core:collections/TreeMap<String,String>", ref null "core:serde/DeserializeError"];
 
 type "functype/Result<i32,String>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json/JsonDeserializer") -> [i32, ref null Result<i32,String>, ref null "core:serde/DeserializeError"];
 
@@ -959,7 +959,7 @@ type "functype/core:json/JsonDeserializer^Deserializer::begin_map" = fn(ref "cor
 
 type "functype/core/json/to_string<Option<Array<i32>>>" = fn(ref null Array<i32>) -> [i32, ref null String, ref null "core:serde/SerializeError"];
 
-type "functype/core/json/to_string<Config>" = fn(ref "core:allocator/TreeMap<String,i32>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
+type "functype/core/json/to_string<Config>" = fn(ref "core:collections/TreeMap<String,i32>") -> [i32, ref null String, ref null "core:serde/SerializeError"];
 
 type "functype/core/json/to_string<Shape>" = fn(ref Shape) -> [i32, ref null String, ref null "core:serde/SerializeError"];
 
@@ -983,9 +983,9 @@ type "functype/Array<i32>^Serialize::serialize<JsonSerializer>" = fn(ref Array<i
 
 type "functype/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "core:json/JsonSeqSerializer", i32) -> ref null "core:serde/SerializeError";
 
-type "functype/Config^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,i32>", ref String) -> ref null "core:serde/SerializeError";
+type "functype/Config^Serialize::serialize<JsonSerializer>" = fn(ref "core:collections/TreeMap<String,i32>", ref String) -> ref null "core:serde/SerializeError";
 
-type "functype/TreeMap<String,i32>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,i32>", ref String) -> ref null "core:serde/SerializeError";
+type "functype/TreeMap<String,i32>^Serialize::serialize<JsonSerializer>" = fn(ref "core:collections/TreeMap<String,i32>", ref String) -> ref null "core:serde/SerializeError";
 
 type "functype/JsonMapSerializer^SerializeMap::value<i32>" = fn(ref "core:json/JsonMapSerializer", i32) -> ref null "core:serde/SerializeError";
 
@@ -1001,7 +1001,7 @@ type "functype/JsonVariantSerializer^SerializeVariant::payload<f64>" = fn(ref "c
 
 type "functype/Direction^Serialize::serialize<JsonSerializer>" = fn(enum:Direction, ref String) -> ref null "core:serde/SerializeError";
 
-type "functype/TreeMap<String,String>^Serialize::serialize<JsonSerializer>" = fn(ref "core:allocator/TreeMap<String,String>", ref String) -> ref null "core:serde/SerializeError";
+type "functype/TreeMap<String,String>^Serialize::serialize<JsonSerializer>" = fn(ref "core:collections/TreeMap<String,String>", ref String) -> ref null "core:serde/SerializeError";
 
 type "functype/Result<i32,String>^Serialize::serialize<JsonSerializer>" = fn(ref Result<i32,String>, ref String) -> ref null "core:serde/SerializeError";
 
@@ -1027,13 +1027,13 @@ type "functype/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref "core
 
 type "functype/JsonStructSerializer^SerializeStruct::field<f64>" = fn(ref "core:json/JsonStructSerializer", ref String, f64) -> ref null "core:serde/SerializeError";
 
-type "functype/TreeMap<String,i32>::split" = fn(ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
+type "functype/TreeMap<String,i32>::split" = fn(ref null "core:collections/TreeMapNode<String>") -> ref null "core:collections/TreeMapNode<String>";
 
-type "functype/TreeMap<String,i32>::skew" = fn(ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
+type "functype/TreeMap<String,i32>::skew" = fn(ref null "core:collections/TreeMapNode<String>") -> ref null "core:collections/TreeMapNode<String>";
 
-type "functype/TreeMap<String,String>::split" = fn(ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
+type "functype/TreeMap<String,String>::split" = fn(ref null "core:collections/TreeMapNode<String>") -> ref null "core:collections/TreeMapNode<String>";
 
-type "functype/TreeMap<String,String>::skew" = fn(ref null "core:allocator/TreeMapNode<String>") -> ref null "core:allocator/TreeMapNode<String>";
+type "functype/TreeMap<String,String>::skew" = fn(ref null "core:collections/TreeMapNode<String>") -> ref null "core:collections/TreeMapNode<String>";
 
 type "functype/__Closure_0::__call" = fn(ref String, i32, i32) -> ref Option<i32>;
 
@@ -2398,9 +2398,9 @@ condition: msg == \"not found\"
 }
 
 fn __test_7_treemap_string_values_roundtrip() {
-    let map: ref "core:allocator/TreeMap<String,String>";
+    let map: ref "core:collections/TreeMap<String,String>";
     let json: ref String;
-    let m: ref "core:allocator/TreeMap<String,String>";
+    let m: ref "core:collections/TreeMap<String,String>";
     let __v0_5: ref String;
     let __cond_6: bool;
     let __v0_7: ref String;
@@ -2423,8 +2423,8 @@ fn __test_7_treemap_string_values_roundtrip() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    map = "core:allocator/TreeMap<String,String>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,String>> {
-        __local_15 = Array<TreeMapEntry<String,String>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,String>">(0), used: 0 };
+    map = "core:collections/TreeMap<String,String>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,String>> {
+        __local_15 = Array<TreeMapEntry<String,String>> { repr: builtin::array_new<ref "core:collections/TreeMapEntry<String,String>">(0), used: 0 };
         break __seq_lit: __local_15;
     }), size: 0, deleted_count: 0 };
     key_20 = String { repr: array.new_data<u8>("name"), used: 4 };
@@ -2440,7 +2440,7 @@ fn __test_7_treemap_string_values_roundtrip() {
     if __sroa_json_r_discriminant == 0 {
         json = __sroa_json_r_case0_payload_0;
         let __sroa_parsed_r_discriminant: i32;
-        let __sroa_parsed_r_case0_payload_0: ref null "core:allocator/TreeMap<String,String>";
+        let __sroa_parsed_r_case0_payload_0: ref null "core:collections/TreeMap<String,String>";
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde/DeserializeError";
         multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core/json/from_string<TreeMap<String,String>>"(json);
         if __sroa_parsed_r_discriminant == 0 {
@@ -2510,9 +2510,9 @@ condition: m[\"city\"] == \"Tokyo\"
 }
 
 fn __test_8_treemap_i32_values_roundtrip() {
-    let map: ref "core:allocator/TreeMap<String,i32>";
+    let map: ref "core:collections/TreeMap<String,i32>";
     let json: ref String;
-    let m: ref "core:allocator/TreeMap<String,i32>";
+    let m: ref "core:collections/TreeMap<String,i32>";
     let __v0_5: i32;
     let __cond_6: bool;
     let __v0_7: i32;
@@ -2535,8 +2535,8 @@ fn __test_8_treemap_i32_values_roundtrip() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    map = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
-        __local_15 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
+    map = "core:collections/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
+        __local_15 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:collections/TreeMapEntry<String,i32>">(0), used: 0 };
         break __seq_lit: __local_15;
     }), size: 0, deleted_count: 0 };
     key_20 = String { repr: array.new_data<u8>("x"), used: 1 };
@@ -2550,7 +2550,7 @@ fn __test_8_treemap_i32_values_roundtrip() {
     if __sroa_json_r_discriminant == 0 {
         json = __sroa_json_r_case0_payload_0;
         let __sroa_parsed_r_discriminant: i32;
-        let __sroa_parsed_r_case0_payload_0: ref null "core:allocator/TreeMap<String,i32>";
+        let __sroa_parsed_r_case0_payload_0: ref null "core:collections/TreeMap<String,i32>";
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde/DeserializeError";
         multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core/json/from_string<TreeMap<String,i32>>"(json);
         if __sroa_parsed_r_discriminant == 0 {
@@ -2636,11 +2636,11 @@ condition: m[\"y\"] == 20
 }
 
 fn __test_9_empty_treemap_roundtrip() {
-    let map: ref "core:allocator/TreeMap<String,i32>";
+    let map: ref "core:collections/TreeMap<String,i32>";
     let json: ref String;
     let __v0_3: ref String;
     let __cond_4: bool;
-    let m: ref "core:allocator/TreeMap<String,i32>";
+    let m: ref "core:collections/TreeMap<String,i32>";
     let __v0_7: i32;
     let __cond_8: bool;
     let __local_9: ref String;
@@ -2658,8 +2658,8 @@ fn __test_9_empty_treemap_roundtrip() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    map = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
-        __local_15 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
+    map = "core:collections/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
+        __local_15 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:collections/TreeMapEntry<String,i32>">(0), used: 0 };
         break __seq_lit: __local_15;
     }), size: 0, deleted_count: 0 };
     let __sroa_json_r_discriminant: i32;
@@ -2701,7 +2701,7 @@ condition: json == \"{}\"
             unreachable;
         };
         let __sroa_parsed_r_discriminant: i32;
-        let __sroa_parsed_r_case0_payload_0: ref null "core:allocator/TreeMap<String,i32>";
+        let __sroa_parsed_r_case0_payload_0: ref null "core:collections/TreeMap<String,i32>";
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde/DeserializeError";
         multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core/json/from_string<TreeMap<String,i32>>"(json);
         if __sroa_parsed_r_discriminant == 0 {
@@ -3224,7 +3224,7 @@ condition: inner.label == \"rect\"
 }
 
 fn __test_15_struct_with_treemap_field_roundtrip() {
-    let settings: ref "core:allocator/TreeMap<String,i32>";
+    let settings: ref "core:collections/TreeMap<String,i32>";
     let json: ref String;
     let p: ref Config;
     let __v0_6: i32;
@@ -3249,8 +3249,8 @@ fn __test_15_struct_with_treemap_field_roundtrip() {
         __initialize_module();
         __modules_initialized = 1;
     };
-    settings = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
-        __local_16 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
+    settings = "core:collections/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
+        __local_16 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:collections/TreeMapEntry<String,i32>">(0), used: 0 };
         break __seq_lit: __local_16;
     }), size: 0, deleted_count: 0 };
     key_21 = String { repr: array.new_data<u8>("port"), used: 4 };
@@ -4739,14 +4739,14 @@ fn "core/json/to_string<Direction>"(value) {
 fn "core/json/from_string<TreeMap<String,i32>>"(input) {
     let de: ref "core:json/JsonDeserializer";
     let r: ref Result<TreeMap<String,i32>,DeserializeError>;
-    let v: ref "core:allocator/TreeMap<String,i32>";
+    let v: ref "core:collections/TreeMap<String,i32>";
     let e: ref "core:serde/DeserializeError";
     let __local_7: ref String;
     let __local_8: i64;
     de = "core:json/JsonDeserializer" { input: input, pos: 0 };
     r = TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(de);
     if ref.test Result<TreeMap<String,i32>,DeserializeError>::Ok(r) {
-        v = value_copy "core:allocator/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(r).payload_0);
+        v = value_copy "core:collections/TreeMap<String,i32>"(ref.cast Result<TreeMap<String,i32>,DeserializeError>::Ok(r).payload_0);
         "core:json/JsonDeserializer::skip_whitespace"(de);
         if de.pos < __inline_String__len_0: block -> i32 {
             __local_7 = de.input;
@@ -4782,13 +4782,13 @@ fn "core/json/to_string<TreeMap<String,i32>>"(value) {
 
 fn "core/json/from_string<TreeMap<String,String>>"(input) {
     let de: ref "core:json/JsonDeserializer";
-    let v: ref "core:allocator/TreeMap<String,String>";
+    let v: ref "core:collections/TreeMap<String,String>";
     let e: ref "core:serde/DeserializeError";
     let __local_7: ref String;
     let __local_8: i64;
     de = "core:json/JsonDeserializer" { input: input, pos: 0 };
     let __sroa_r_discriminant: i32;
-    let __sroa_r_case0_payload_0: ref null "core:allocator/TreeMap<String,String>";
+    let __sroa_r_case0_payload_0: ref null "core:collections/TreeMap<String,String>";
     let __sroa_r_case1_payload_0: ref null "core:serde/DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = TreeMap<String,String>^Deserialize::deserialize<JsonDeserializer>(de);
     if __sroa_r_discriminant == 0 {
@@ -6716,11 +6716,11 @@ fn String::push(self, c) {
 }
 
 fn ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(self) {
-    let item: ref "core:allocator/TreeMapEntry<String,i32>";
+    let item: ref "core:collections/TreeMapEntry<String,i32>";
     if self.index >= self.used {
         return ref.null none;
     };
-    item = builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(self.repr, self.index);
+    item = builtin::array_get<ref "core:collections/TreeMapEntry<String,i32>">(self.repr, self.index);
     self.index = self.index + 1;
     return item;
 }
@@ -7311,12 +7311,12 @@ fn ArrayIter<i32>^Iterator::next(self) {
 fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
     let sd: ref "core:json/JsonStructAccess";
     let seen: u32;
-    let settings: ref "core:allocator/TreeMap<String,i32>";
+    let settings: ref "core:collections/TreeMap<String,i32>";
     let __next: ref Result<Option<i32>,DeserializeError>;
     let __opt: ref Option<i32>;
     let __idx: i32;
     let __local_8: ref Result<TreeMap<String,i32>,DeserializeError>;
-    let __local_9: ref "core:allocator/TreeMap<String,i32>";
+    let __local_9: ref "core:collections/TreeMap<String,i32>";
     let __pattern_temp_1: ref Result<Option<i32>,DeserializeError>;
     let __local_13: ref Result<TreeMap<String,i32>,DeserializeError>;
     let __local_14: ref Array<TreeMapEntry<String,i32>>;
@@ -7327,8 +7327,8 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
     if __sroa___result_discriminant == 0 {
         sd = __sroa___result_case0_payload_0;
         seen = 0;
-        settings = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
-            __local_14 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
+        settings = "core:collections/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
+            __local_14 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:collections/TreeMapEntry<String,i32>">(0), used: 0 };
             break __seq_lit: __local_14;
         }), size: 0, deleted_count: 0 };
         b547: block {
@@ -7373,7 +7373,7 @@ fn Config^Deserialize::deserialize<JsonDeserializer>(d) {
 
 fn TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(d) {
     let ma: ref "core:json/JsonMapAccess";
-    let result: ref "core:allocator/TreeMap<String,i32>";
+    let result: ref "core:collections/TreeMap<String,i32>";
     let key_opt: ref null String;
     let end_r: ref null "core:serde/DeserializeError";
     let e_7: ref "core:serde/DeserializeError";
@@ -7391,8 +7391,8 @@ fn TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(d) {
     multivalue_bind [__sroa_map_r_discriminant, __sroa_map_r_case0_payload_0, __sroa_map_r_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_map"(d);
     if __sroa_map_r_discriminant == 0 {
         ma = __sroa_map_r_case0_payload_0;
-        result = "core:allocator/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
-            __local_22 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(0), used: 0 };
+        result = "core:collections/TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,i32>> {
+            __local_22 = Array<TreeMapEntry<String,i32>> { repr: builtin::array_new<ref "core:collections/TreeMapEntry<String,i32>">(0), used: 0 };
             break __seq_lit: __local_22;
         }), size: 0, deleted_count: 0 };
         block {
@@ -7445,18 +7445,18 @@ fn TreeMap<String,i32>^Deserialize::deserialize<JsonDeserializer>(d) {
 fn TreeMap<String,i32>::insert(self, key, value) {
     let existing_index: i32;
     let new_index: i32;
-    let entry: ref "core:allocator/TreeMapEntry<String,i32>";
+    let entry: ref "core:collections/TreeMapEntry<String,i32>";
     let __local_6: ref Array<TreeMapEntry<String,i32>>;
     let __local_8: ref Array<TreeMapEntry<String,i32>>;
     existing_index = TreeMap<String,i32>::find_index(self, key);
     if existing_index >= 0 {
-        __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: block -> ref "core:allocator/TreeMapEntry<String,i32>" {
+        __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: block -> ref "core:collections/TreeMapEntry<String,i32>" {
             __local_6 = self.entries;
             if existing_index >= __local_6.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(__local_6.repr, existing_index);
+            break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: builtin::array_get<ref "core:collections/TreeMapEntry<String,i32>">(__local_6.repr, existing_index);
         }.value = value;
         return;
     };
@@ -7464,16 +7464,16 @@ fn TreeMap<String,i32>::insert(self, key, value) {
         __local_8 = self.entries;
         break __inline_Array_TreeMapEntry_String_i32____len_1: __local_8.used;
     };
-    entry = "core:allocator/TreeMapEntry<String,i32>" { key: key, value: value, deleted: 0 };
+    entry = "core:collections/TreeMapEntry<String,i32>" { key: key, value: value, deleted: 0 };
     Array<TreeMapEntry<String,i32>>::push(self.entries, entry);
     self.root = TreeMap<String,i32>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
 
 fn TreeMap<String,i32>::insert_node(self, node, key, index) {
-    let n: ref "core:allocator/TreeMapNode<String>";
-    let after_skew: ref null "core:allocator/TreeMapNode<String>";
-    let new_node: ref "core:allocator/TreeMapNode<String>";
+    let n: ref "core:collections/TreeMapNode<String>";
+    let after_skew: ref null "core:collections/TreeMapNode<String>";
+    let new_node: ref "core:collections/TreeMapNode<String>";
     if ref.is_null(node) == 0 {
         n = ref.as_non_null(node);
         if String^Eq::eq(key, n.key) {
@@ -7488,16 +7488,16 @@ fn TreeMap<String,i32>::insert_node(self, node, key, index) {
         after_skew = TreeMap<String,i32>::skew(n);
         return TreeMap<String,i32>::split(after_skew);
     };
-    new_node = "core:allocator/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
+    new_node = "core:collections/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
     return new_node;
 }
 
 fn TreeMap<String,i32>::split(node) {
-    let n: ref "core:allocator/TreeMapNode<String>";
-    let right: ref "core:allocator/TreeMapNode<String>";
-    let rr: ref "core:allocator/TreeMapNode<String>";
-    let __pattern_temp_1: ref null "core:allocator/TreeMapNode<String>";
-    let __pattern_temp_2: ref null "core:allocator/TreeMapNode<String>";
+    let n: ref "core:collections/TreeMapNode<String>";
+    let right: ref "core:collections/TreeMapNode<String>";
+    let rr: ref "core:collections/TreeMapNode<String>";
+    let __pattern_temp_1: ref null "core:collections/TreeMapNode<String>";
+    let __pattern_temp_2: ref null "core:collections/TreeMapNode<String>";
     if ref.is_null(node) == 0 {
         n = ref.as_non_null(node);
         __pattern_temp_1 = n.right;
@@ -7520,9 +7520,9 @@ fn TreeMap<String,i32>::split(node) {
 }
 
 fn TreeMap<String,i32>::skew(node) {
-    let n: ref "core:allocator/TreeMapNode<String>";
-    let left: ref "core:allocator/TreeMapNode<String>";
-    let __pattern_temp_1: ref null "core:allocator/TreeMapNode<String>";
+    let n: ref "core:collections/TreeMapNode<String>";
+    let left: ref "core:collections/TreeMapNode<String>";
+    let __pattern_temp_1: ref null "core:collections/TreeMapNode<String>";
     if ref.is_null(node) == 0 {
         n = ref.as_non_null(node);
         __pattern_temp_1 = n.left;
@@ -7545,7 +7545,7 @@ fn Array<TreeMapEntry<String,i32>>::push(self, value) {
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<TreeMapEntry<String,i32>>::grow(self);
     };
-    builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(self.repr, used, value);
+    builtin::array_set<ref "core:collections/TreeMapEntry<String,i32>">(self.repr, used, value);
     self.used = used + 1;
 }
 
@@ -7562,7 +7562,7 @@ fn Array<TreeMapEntry<String,i32>>::grow(self) {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
     };
-    new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,i32>">(new_capacity);
+    new_repr = builtin::array_new<ref "core:collections/TreeMapEntry<String,i32>">(new_capacity);
     old_repr = self.repr;
     used = self.used;
     __for_0: block {
@@ -7572,7 +7572,7 @@ fn Array<TreeMapEntry<String,i32>>::grow(self) {
                 if (i < used) == 0 {
                     break __for_0;
                 };
-                builtin::array_set<ref "core:allocator/TreeMapEntry<String,i32>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(old_repr, i));
+                builtin::array_set<ref "core:collections/TreeMapEntry<String,i32>">(new_repr, i, builtin::array_get<ref "core:collections/TreeMapEntry<String,i32>">(old_repr, i));
                 i = i + 1;
                 continue l578;
             };
@@ -7582,10 +7582,10 @@ fn Array<TreeMapEntry<String,i32>>::grow(self) {
 }
 
 fn TreeMap<String,i32>::find_index(self, key) {
-    let current: ref null "core:allocator/TreeMapNode<String>";
-    let n: ref "core:allocator/TreeMapNode<String>";
-    let entry: ref "core:allocator/TreeMapEntry<String,i32>";
-    let __pattern_temp_0: ref null "core:allocator/TreeMapNode<String>";
+    let current: ref null "core:collections/TreeMapNode<String>";
+    let n: ref "core:collections/TreeMapNode<String>";
+    let entry: ref "core:collections/TreeMapEntry<String,i32>";
+    let __pattern_temp_0: ref null "core:collections/TreeMapNode<String>";
     let __local_7: i32;
     let _licm_entries_8: ref Array<TreeMapEntry<String,i32>>;
     let _licm_used_9: i32;
@@ -7600,13 +7600,13 @@ fn TreeMap<String,i32>::find_index(self, key) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 n = ref.as_non_null(__pattern_temp_0);
                 if String^Eq::eq(key, n.key) {
-                    entry = __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: block -> ref "core:allocator/TreeMapEntry<String,i32>" {
+                    entry = __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: block -> ref "core:collections/TreeMapEntry<String,i32>" {
                         __local_7 = n.index;
                         if __local_7 >= _licm_used_9 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         };
-                        break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(_licm_repr_10, __local_7);
+                        break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_0: builtin::array_get<ref "core:collections/TreeMapEntry<String,i32>">(_licm_repr_10, __local_7);
                     };
                     if entry.deleted {
                         return -1;
@@ -7756,8 +7756,8 @@ fn TreeMap<String,i32>::entries(self) {
     let __local_1: ref Array<Tuple<String,i32>>;
     let result: ref Array<Tuple<String,i32>>;
     let __iter_3: ref "core:serde/ArrayIter<TreeMapEntry<String,i32>>";
-    let entry: ref "core:allocator/TreeMapEntry<String,i32>";
-    let __pattern_temp_0: ref null "core:allocator/TreeMapEntry<String,i32>";
+    let entry: ref "core:collections/TreeMapEntry<String,i32>";
+    let __pattern_temp_0: ref null "core:collections/TreeMapEntry<String,i32>";
     let __local_9: ref Array<TreeMapEntry<String,i32>>;
     result = __seq_lit: block -> ref Array<Tuple<String,i32>> {
         __local_1 = Array<Tuple<String,i32>> { repr: builtin::array_new<ref "tuple/[String, i32]">(0), used: 0 };
@@ -7771,7 +7771,7 @@ fn TreeMap<String,i32>::entries(self) {
         l598: loop {
             __pattern_temp_0 = ArrayIter<TreeMapEntry<String,i32>>^Iterator::next(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
-                entry = value_copy "core:allocator/TreeMapEntry<String,i32>"(ref.as_non_null(__pattern_temp_0));
+                entry = value_copy "core:collections/TreeMapEntry<String,i32>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
                     Array<Tuple<String,i32>>::push(result, "tuple/[String, i32]" { 0: entry.key, 1: entry.value });
                 };
@@ -8369,13 +8369,13 @@ fn TreeMap<String,i32>^IndexValue::index_value(self, key) {
         });
         unreachable;
     };
-    return __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_2: block -> ref "core:allocator/TreeMapEntry<String,i32>" {
+    return __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_2: block -> ref "core:collections/TreeMapEntry<String,i32>" {
         __local_7 = self.entries;
         if index >= __local_7.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_2: builtin::array_get<ref "core:allocator/TreeMapEntry<String,i32>">(__local_7.repr, index);
+        break __inline_Array_TreeMapEntry_String_i32___IndexValue__index_value_2: builtin::array_get<ref "core:collections/TreeMapEntry<String,i32>">(__local_7.repr, index);
     }.value;
 }
 
@@ -8395,21 +8395,21 @@ fn TreeMap<String,String>^IndexValue::index_value(self, key) {
         });
         unreachable;
     };
-    return __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_2: block -> ref "core:allocator/TreeMapEntry<String,String>" {
+    return __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_2: block -> ref "core:collections/TreeMapEntry<String,String>" {
         __local_7 = self.entries;
         if index >= __local_7.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_2: builtin::array_get<ref "core:allocator/TreeMapEntry<String,String>">(__local_7.repr, index);
+        break __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_2: builtin::array_get<ref "core:collections/TreeMapEntry<String,String>">(__local_7.repr, index);
     }.value;
 }
 
 fn TreeMap<String,String>::find_index(self, key) {
-    let current: ref null "core:allocator/TreeMapNode<String>";
-    let n: ref "core:allocator/TreeMapNode<String>";
-    let entry: ref "core:allocator/TreeMapEntry<String,String>";
-    let __pattern_temp_0: ref null "core:allocator/TreeMapNode<String>";
+    let current: ref null "core:collections/TreeMapNode<String>";
+    let n: ref "core:collections/TreeMapNode<String>";
+    let entry: ref "core:collections/TreeMapEntry<String,String>";
+    let __pattern_temp_0: ref null "core:collections/TreeMapNode<String>";
     let __local_7: i32;
     let _licm_entries_8: ref Array<TreeMapEntry<String,String>>;
     let _licm_used_9: i32;
@@ -8424,13 +8424,13 @@ fn TreeMap<String,String>::find_index(self, key) {
             if ref.is_null(__pattern_temp_0) == 0 {
                 n = ref.as_non_null(__pattern_temp_0);
                 if String^Eq::eq(key, n.key) {
-                    entry = __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: block -> ref "core:allocator/TreeMapEntry<String,String>" {
+                    entry = __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: block -> ref "core:collections/TreeMapEntry<String,String>" {
                         __local_7 = n.index;
                         if __local_7 >= _licm_used_9 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         };
-                        break __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: builtin::array_get<ref "core:allocator/TreeMapEntry<String,String>">(_licm_repr_10, __local_7);
+                        break __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: builtin::array_get<ref "core:collections/TreeMapEntry<String,String>">(_licm_repr_10, __local_7);
                     };
                     if entry.deleted {
                         return -1;
@@ -8453,7 +8453,7 @@ fn TreeMap<String,String>::find_index(self, key) {
 
 fn TreeMap<String,String>^Deserialize::deserialize<JsonDeserializer>(d) {
     let ma: ref "core:json/JsonMapAccess";
-    let result: ref "core:allocator/TreeMap<String,String>";
+    let result: ref "core:collections/TreeMap<String,String>";
     let key_opt: ref null String;
     let end_r: ref null "core:serde/DeserializeError";
     let e_7: ref "core:serde/DeserializeError";
@@ -8471,8 +8471,8 @@ fn TreeMap<String,String>^Deserialize::deserialize<JsonDeserializer>(d) {
     multivalue_bind [__sroa_map_r_discriminant, __sroa_map_r_case0_payload_0, __sroa_map_r_case1_payload_0] = "core:json/JsonDeserializer^Deserializer::begin_map"(d);
     if __sroa_map_r_discriminant == 0 {
         ma = __sroa_map_r_case0_payload_0;
-        result = "core:allocator/TreeMap<String,String>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,String>> {
-            __local_22 = Array<TreeMapEntry<String,String>> { repr: builtin::array_new<ref "core:allocator/TreeMapEntry<String,String>">(0), used: 0 };
+        result = "core:collections/TreeMap<String,String>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,String>> {
+            __local_22 = Array<TreeMapEntry<String,String>> { repr: builtin::array_new<ref "core:collections/TreeMapEntry<String,String>">(0), used: 0 };
             break __seq_lit: __local_22;
         }), size: 0, deleted_count: 0 };
         block {
@@ -8525,18 +8525,18 @@ fn TreeMap<String,String>^Deserialize::deserialize<JsonDeserializer>(d) {
 fn TreeMap<String,String>::insert(self, key, value) {
     let existing_index: i32;
     let new_index: i32;
-    let entry: ref "core:allocator/TreeMapEntry<String,String>";
+    let entry: ref "core:collections/TreeMapEntry<String,String>";
     let __local_6: ref Array<TreeMapEntry<String,String>>;
     let __local_8: ref Array<TreeMapEntry<String,String>>;
     existing_index = TreeMap<String,String>::find_index(self, key);
     if existing_index >= 0 {
-        __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: block -> ref "core:allocator/TreeMapEntry<String,String>" {
+        __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: block -> ref "core:collections/TreeMapEntry<String,String>" {
             __local_6 = self.entries;
             if existing_index >= __local_6.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: builtin::array_get<ref "core:allocator/TreeMapEntry<String,String>">(__local_6.repr, existing_index);
+            break __inline_Array_TreeMapEntry_String_String___IndexValue__index_value_0: builtin::array_get<ref "core:collections/TreeMapEntry<String,String>">(__local_6.repr, existing_index);
         }.value = value;
         return;
     };
@@ -8544,16 +8544,16 @@ fn TreeMap<String,String>::insert(self, key, value) {
         __local_8 = self.entries;
         break __inline_Array_TreeMapEntry_String_String____len_1: __local_8.used;
     };
-    entry = "core:allocator/TreeMapEntry<String,String>" { key: key, value: value, deleted: 0 };
+    entry = "core:collections/TreeMapEntry<String,String>" { key: key, value: value, deleted: 0 };
     Array<TreeMapEntry<String,String>>::push(self.entries, entry);
     self.root = TreeMap<String,String>::insert_node(self, self.root, key, new_index);
     self.size = self.size + 1;
 }
 
 fn TreeMap<String,String>::insert_node(self, node, key, index) {
-    let n: ref "core:allocator/TreeMapNode<String>";
-    let after_skew: ref null "core:allocator/TreeMapNode<String>";
-    let new_node: ref "core:allocator/TreeMapNode<String>";
+    let n: ref "core:collections/TreeMapNode<String>";
+    let after_skew: ref null "core:collections/TreeMapNode<String>";
+    let new_node: ref "core:collections/TreeMapNode<String>";
     if ref.is_null(node) == 0 {
         n = ref.as_non_null(node);
         if String^Eq::eq(key, n.key) {
@@ -8568,16 +8568,16 @@ fn TreeMap<String,String>::insert_node(self, node, key, index) {
         after_skew = TreeMap<String,String>::skew(n);
         return TreeMap<String,String>::split(after_skew);
     };
-    new_node = "core:allocator/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
+    new_node = "core:collections/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
     return new_node;
 }
 
 fn TreeMap<String,String>::split(node) {
-    let n: ref "core:allocator/TreeMapNode<String>";
-    let right: ref "core:allocator/TreeMapNode<String>";
-    let rr: ref "core:allocator/TreeMapNode<String>";
-    let __pattern_temp_1: ref null "core:allocator/TreeMapNode<String>";
-    let __pattern_temp_2: ref null "core:allocator/TreeMapNode<String>";
+    let n: ref "core:collections/TreeMapNode<String>";
+    let right: ref "core:collections/TreeMapNode<String>";
+    let rr: ref "core:collections/TreeMapNode<String>";
+    let __pattern_temp_1: ref null "core:collections/TreeMapNode<String>";
+    let __pattern_temp_2: ref null "core:collections/TreeMapNode<String>";
     if ref.is_null(node) == 0 {
         n = ref.as_non_null(node);
         __pattern_temp_1 = n.right;
@@ -8600,9 +8600,9 @@ fn TreeMap<String,String>::split(node) {
 }
 
 fn TreeMap<String,String>::skew(node) {
-    let n: ref "core:allocator/TreeMapNode<String>";
-    let left: ref "core:allocator/TreeMapNode<String>";
-    let __pattern_temp_1: ref null "core:allocator/TreeMapNode<String>";
+    let n: ref "core:collections/TreeMapNode<String>";
+    let left: ref "core:collections/TreeMapNode<String>";
+    let __pattern_temp_1: ref null "core:collections/TreeMapNode<String>";
     if ref.is_null(node) == 0 {
         n = ref.as_non_null(node);
         __pattern_temp_1 = n.left;
@@ -8625,7 +8625,7 @@ fn Array<TreeMapEntry<String,String>>::push(self, value) {
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<TreeMapEntry<String,String>>::grow(self);
     };
-    builtin::array_set<ref "core:allocator/TreeMapEntry<String,String>">(self.repr, used, value);
+    builtin::array_set<ref "core:collections/TreeMapEntry<String,String>">(self.repr, used, value);
     self.used = used + 1;
 }
 
@@ -8642,7 +8642,7 @@ fn Array<TreeMapEntry<String,String>>::grow(self) {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
     };
-    new_repr = builtin::array_new<ref "core:allocator/TreeMapEntry<String,String>">(new_capacity);
+    new_repr = builtin::array_new<ref "core:collections/TreeMapEntry<String,String>">(new_capacity);
     old_repr = self.repr;
     used = self.used;
     __for_0: block {
@@ -8652,7 +8652,7 @@ fn Array<TreeMapEntry<String,String>>::grow(self) {
                 if (i < used) == 0 {
                     break __for_0;
                 };
-                builtin::array_set<ref "core:allocator/TreeMapEntry<String,String>">(new_repr, i, builtin::array_get<ref "core:allocator/TreeMapEntry<String,String>">(old_repr, i));
+                builtin::array_set<ref "core:collections/TreeMapEntry<String,String>">(new_repr, i, builtin::array_get<ref "core:collections/TreeMapEntry<String,String>">(old_repr, i));
                 i = i + 1;
                 continue l703;
             };
@@ -8749,8 +8749,8 @@ fn TreeMap<String,String>::entries(self) {
     let __local_1: ref Array<Tuple<String,String>>;
     let result: ref Array<Tuple<String,String>>;
     let __iter_3: ref "core:serde/ArrayIter<TreeMapEntry<String,String>>";
-    let entry: ref "core:allocator/TreeMapEntry<String,String>";
-    let __pattern_temp_0: ref null "core:allocator/TreeMapEntry<String,String>";
+    let entry: ref "core:collections/TreeMapEntry<String,String>";
+    let __pattern_temp_0: ref null "core:collections/TreeMapEntry<String,String>";
     let __local_9: ref Array<TreeMapEntry<String,String>>;
     result = __seq_lit: block -> ref Array<Tuple<String,String>> {
         __local_1 = Array<Tuple<String,String>> { repr: builtin::array_new<ref "tuple/[String, String]">(0), used: 0 };
@@ -8764,7 +8764,7 @@ fn TreeMap<String,String>::entries(self) {
         l714: loop {
             __pattern_temp_0 = ArrayIter<TreeMapEntry<String,String>>^Iterator::next(__iter_3);
             if ref.is_null(__pattern_temp_0) == 0 {
-                entry = value_copy "core:allocator/TreeMapEntry<String,String>"(ref.as_non_null(__pattern_temp_0));
+                entry = value_copy "core:collections/TreeMapEntry<String,String>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
                     Array<Tuple<String,String>>::push(result, "tuple/[String, String]" { 0: entry.key, 1: entry.value });
                 };
@@ -8820,11 +8820,11 @@ fn Array<Tuple<String,String>>::grow(self) {
 }
 
 fn ArrayIter<TreeMapEntry<String,String>>^Iterator::next(self) {
-    let item: ref "core:allocator/TreeMapEntry<String,String>";
+    let item: ref "core:collections/TreeMapEntry<String,String>";
     if self.index >= self.used {
         return ref.null none;
     };
-    item = builtin::array_get<ref "core:allocator/TreeMapEntry<String,String>">(self.repr, self.index);
+    item = builtin::array_get<ref "core:collections/TreeMapEntry<String,String>">(self.repr, self.index);
     self.index = self.index + 1;
     return item;
 }

@@ -37,13 +37,13 @@ array array<String> (mut ref String);
 
 array array<i32> (mut i32);
 
-struct ArrayIter<String> {  // from core:allocator  // ArrayIter<T> with T=String
+struct ArrayIter<String> {  // ArrayIter<T> with T=String
     mut repr: ref array<String>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -115,7 +115,7 @@ type "functype/Array<String>^Serialize::serialize<JsonSerializer>" = fn(ref Arra
 
 type "functype/JsonSeqSerializer^SerializeSeq::element<String>" = fn(ref JsonSeqSerializer, ref String) -> ref null SerializeError;
 
-type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref null String;
+type "functype/ArrayIter<String>^Iterator::next" = fn(ref ArrayIter<String>) -> ref null String;
 
 type "functype/Array<i32>^Serialize::serialize<JsonSerializer>" = fn(ref Array<i32>, ref JsonSerializer) -> ref null SerializeError;
 
@@ -133,7 +133,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -516,7 +516,7 @@ fn Array<String>::grow(self) {
 
 fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
     let seq: ref JsonSeqSerializer;
-    let __iter_4: ref "core:allocator/ArrayIter<String>";
+    let __iter_4: ref ArrayIter<String>;
     let item: ref String;
     let __pattern_temp_1: ref null String;
     let __local_11: ref Array<String>;
@@ -525,9 +525,9 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
         String::push(s.buf, 91);
         __fused_payload_13 = JsonSeqSerializer { ser: s, count: 0 };
         seq = __fused_payload_13;
-        __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref "core:allocator/ArrayIter<String>" {
+        __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref ArrayIter<String> {
             __local_11 = self;
-            break __inline_Array_String__IntoIterator__into_iter_2: "core:allocator/ArrayIter<String>" { repr: __local_11.repr, used: __local_11.used, index: 0 };
+            break __inline_Array_String__IntoIterator__into_iter_2: ArrayIter<String> { repr: __local_11.repr, used: __local_11.used, index: 0 };
         };
         b26: block {
             l27: loop {
@@ -575,16 +575,16 @@ fn ArrayIter<String>^Iterator::next(self) {
 
 fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
     let seq: ref JsonSeqSerializer;
-    let __iter_4: ref "core:allocator/ArrayIter<i32>";
+    let __iter_4: ref ArrayIter<i32>;
     let __local_11: ref Array<i32>;
     let __fused_payload_13: ref JsonSeqSerializer;
     __fused___inline_JsonSerializer_Serializer__begin_seq_0: block {
         String::push(s.buf, 91);
         __fused_payload_13 = JsonSeqSerializer { ser: s, count: 0 };
         seq = __fused_payload_13;
-        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:allocator/ArrayIter<i32>" {
+        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref ArrayIter<i32> {
             __local_11 = self;
-            break __inline_Array_i32__IntoIterator__into_iter_2: "core:allocator/ArrayIter<i32>" { repr: __local_11.repr, used: __local_11.used, index: 0 };
+            break __inline_Array_i32__IntoIterator__into_iter_2: ArrayIter<i32> { repr: __local_11.repr, used: __local_11.used, index: 0 };
         };
         b31: block {
             l32: loop {

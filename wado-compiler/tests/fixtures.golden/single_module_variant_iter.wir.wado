@@ -54,7 +54,7 @@ struct Choice::B {
 
 array array<Choice> (mut ref Choice);
 
-struct ArrayRefIter<Choice> {  // from core:allocator  // ArrayRefIter<T> with T=Choice
+struct ArrayRefIter<Choice> {  // ArrayRefIter<T> with T=Choice
     mut repr: ref array<Choice>,
     mut used: i32,
     mut index: i32,
@@ -117,7 +117,7 @@ type "functype/Array<Choice>::push" = fn(ref Array<Choice>, ref Choice);
 
 type "functype/Array<Choice>::grow" = fn(ref Array<Choice>);
 
-type "functype/ArrayRefIter<Choice>^Iterator::next" = fn(ref "core:allocator/ArrayRefIter<Choice>") -> ref null "core:internal/Box<Choice>";
+type "functype/ArrayRefIter<Choice>^Iterator::next" = fn(ref ArrayRefIter<Choice>) -> ref null "core:internal/Box<Choice>";
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -225,7 +225,7 @@ fn __cm_export__run() {
 
 fn walk<Counter>(h, c) {
     let __local_2: ref AData;
-    let __local_3: ref "core:allocator/ArrayRefIter<Choice>";
+    let __local_3: ref ArrayRefIter<Choice>;
     let __local_4: ref "core:internal/Box<Choice>";
     let __local_5: ref BData;
     let __local_6: ref null "core:internal/Box<Choice>";
@@ -238,10 +238,10 @@ fn walk<Counter>(h, c) {
         let __cast_2: ref Choice::A;
         __cast_2 = ref.cast Choice::A(__match_scrut_0);
         __local_2 = __cast_2.payload_0;
-        __local_3 = __inline___Choice__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayRefIter<Choice>" {
+        __local_3 = __inline___Choice__IntoIterator__into_iter_0: block -> ref ArrayRefIter<Choice> {
             __local_7 = __local_2.children;
             __local_8 = __local_7;
-            break __inline___Choice__IntoIterator__into_iter_0: "core:allocator/ArrayRefIter<Choice>" { repr: __local_8.repr, used: __local_8.used, index: 0 };
+            break __inline___Choice__IntoIterator__into_iter_0: ArrayRefIter<Choice> { repr: __local_8.repr, used: __local_8.used, index: 0 };
         };
         b2: block {
             l3: loop {

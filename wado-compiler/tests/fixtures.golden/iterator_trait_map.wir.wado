@@ -34,7 +34,7 @@ struct Formatter {
     mut buf: ref String,
 }
 
-struct IterMap<StrCharIter,char> {  // from core:allocator  // IterMap<T> with T=StrCharIter, char
+struct IterMap<StrCharIter,char> {  // IterMap<T> with T=StrCharIter, char
     mut inner: ref StrCharIter,
     mut f: ref struct,
 }
@@ -98,7 +98,7 @@ type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> b
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/String::from_iter<IterMap<StrCharIter,char>>" = fn(ref "core:allocator/IterMap<StrCharIter,char>") -> ref String;
+type "functype/String::from_iter<IterMap<StrCharIter,char>>" = fn(ref IterMap<StrCharIter,char>) -> ref String;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -114,7 +114,7 @@ type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
 
-type "functype/IterMap<StrCharIter,char>^Iterator::next" = fn(ref "core:allocator/IterMap<StrCharIter,char>") -> [i32, char];
+type "functype/IterMap<StrCharIter,char>^Iterator::next" = fn(ref IterMap<StrCharIter,char>) -> [i32, char];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -173,9 +173,9 @@ fn run() {
     let __local_83: ref struct;
     let __local_87: ref Formatter;
     __v0_0 = __inline_String__to_ascii_lowercase_2: block -> ref String {
-        break __inline_String__to_ascii_lowercase_2: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__4: block -> ref "core:allocator/IterMap<StrCharIter,char>" {
+        break __inline_String__to_ascii_lowercase_2: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__4: block -> ref IterMap<StrCharIter,char> {
             __local_28 = "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/core:prelude/string.wado/__closure_wrapper_0") };
-            break __inline_StrCharIter_Iterator__map_char__4: "core:allocator/IterMap<StrCharIter,char>" { inner: StrCharIter { repr: array.new_data<u8>("HELLO"), used: 5, byte_index: 0 }, f: __local_28 };
+            break __inline_StrCharIter_Iterator__map_char__4: IterMap<StrCharIter,char> { inner: StrCharIter { repr: array.new_data<u8>("HELLO"), used: 5, byte_index: 0 }, f: __local_28 };
         });
     };
     __cond_1 = String^Eq::eq(__v0_0, String { repr: array.new_data<u8>("hello"), used: 5 });
@@ -207,9 +207,9 @@ condition: \"HELLO\".to_ascii_lowercase() == \"hello\"
         unreachable;
     };
     __v0_2 = __inline_String__to_ascii_lowercase_10: block -> ref String {
-        break __inline_String__to_ascii_lowercase_10: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__12: block -> ref "core:allocator/IterMap<StrCharIter,char>" {
+        break __inline_String__to_ascii_lowercase_10: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__12: block -> ref IterMap<StrCharIter,char> {
             __local_39 = "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/core:prelude/string.wado/__closure_wrapper_0") };
-            break __inline_StrCharIter_Iterator__map_char__12: "core:allocator/IterMap<StrCharIter,char>" { inner: StrCharIter { repr: array.new_data<u8>("Hello World"), used: 11, byte_index: 0 }, f: __local_39 };
+            break __inline_StrCharIter_Iterator__map_char__12: IterMap<StrCharIter,char> { inner: StrCharIter { repr: array.new_data<u8>("Hello World"), used: 11, byte_index: 0 }, f: __local_39 };
         });
     };
     __cond_3 = String^Eq::eq(__v0_2, String { repr: array.new_data<u8>("hello world"), used: 11 });
@@ -241,9 +241,9 @@ condition: \"Hello World\".to_ascii_lowercase() == \"hello world\"
         unreachable;
     };
     __v0_4 = __inline_String__to_ascii_lowercase_18: block -> ref String {
-        break __inline_String__to_ascii_lowercase_18: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__20: block -> ref "core:allocator/IterMap<StrCharIter,char>" {
+        break __inline_String__to_ascii_lowercase_18: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__20: block -> ref IterMap<StrCharIter,char> {
             __local_50 = "canonical/CanonicalClosure_0" { env: __Closure_0 {  }, func: ref.as_non_null(ref.func "closure/core:prelude/string.wado/__closure_wrapper_0") };
-            break __inline_StrCharIter_Iterator__map_char__20: "core:allocator/IterMap<StrCharIter,char>" { inner: StrCharIter { repr: array.new_data<u8>("already lower"), used: 13, byte_index: 0 }, f: __local_50 };
+            break __inline_StrCharIter_Iterator__map_char__20: IterMap<StrCharIter,char> { inner: StrCharIter { repr: array.new_data<u8>("already lower"), used: 13, byte_index: 0 }, f: __local_50 };
         });
     };
     __cond_5 = String^Eq::eq(__v0_4, String { repr: array.new_data<u8>("already lower"), used: 13 });
@@ -275,9 +275,9 @@ condition: \"already lower\".to_ascii_lowercase() == \"already lower\"
         unreachable;
     };
     __v0_6 = __inline_String__to_ascii_uppercase_26: block -> ref String {
-        break __inline_String__to_ascii_uppercase_26: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__28: block -> ref "core:allocator/IterMap<StrCharIter,char>" {
+        break __inline_String__to_ascii_uppercase_26: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__28: block -> ref IterMap<StrCharIter,char> {
             __local_61 = "canonical/CanonicalClosure_0" { env: __Closure_1 {  }, func: ref.as_non_null(ref.func "closure/core:prelude/string.wado/__closure_wrapper_1") };
-            break __inline_StrCharIter_Iterator__map_char__28: "core:allocator/IterMap<StrCharIter,char>" { inner: StrCharIter { repr: array.new_data<u8>("hello"), used: 5, byte_index: 0 }, f: __local_61 };
+            break __inline_StrCharIter_Iterator__map_char__28: IterMap<StrCharIter,char> { inner: StrCharIter { repr: array.new_data<u8>("hello"), used: 5, byte_index: 0 }, f: __local_61 };
         });
     };
     __cond_7 = String^Eq::eq(__v0_6, String { repr: array.new_data<u8>("HELLO"), used: 5 });
@@ -309,9 +309,9 @@ condition: \"hello\".to_ascii_uppercase() == \"HELLO\"
         unreachable;
     };
     __v0_8 = __inline_String__to_ascii_uppercase_34: block -> ref String {
-        break __inline_String__to_ascii_uppercase_34: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__36: block -> ref "core:allocator/IterMap<StrCharIter,char>" {
+        break __inline_String__to_ascii_uppercase_34: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__36: block -> ref IterMap<StrCharIter,char> {
             __local_72 = "canonical/CanonicalClosure_0" { env: __Closure_1 {  }, func: ref.as_non_null(ref.func "closure/core:prelude/string.wado/__closure_wrapper_1") };
-            break __inline_StrCharIter_Iterator__map_char__36: "core:allocator/IterMap<StrCharIter,char>" { inner: StrCharIter { repr: array.new_data<u8>("Hello World"), used: 11, byte_index: 0 }, f: __local_72 };
+            break __inline_StrCharIter_Iterator__map_char__36: IterMap<StrCharIter,char> { inner: StrCharIter { repr: array.new_data<u8>("Hello World"), used: 11, byte_index: 0 }, f: __local_72 };
         });
     };
     __cond_9 = String^Eq::eq(__v0_8, String { repr: array.new_data<u8>("HELLO WORLD"), used: 11 });
@@ -343,9 +343,9 @@ condition: \"Hello World\".to_ascii_uppercase() == \"HELLO WORLD\"
         unreachable;
     };
     __v0_10 = __inline_String__to_ascii_uppercase_42: block -> ref String {
-        break __inline_String__to_ascii_uppercase_42: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__44: block -> ref "core:allocator/IterMap<StrCharIter,char>" {
+        break __inline_String__to_ascii_uppercase_42: String::from_iter<IterMap<StrCharIter,char>>(__inline_StrCharIter_Iterator__map_char__44: block -> ref IterMap<StrCharIter,char> {
             __local_83 = "canonical/CanonicalClosure_0" { env: __Closure_1 {  }, func: ref.as_non_null(ref.func "closure/core:prelude/string.wado/__closure_wrapper_1") };
-            break __inline_StrCharIter_Iterator__map_char__44: "core:allocator/IterMap<StrCharIter,char>" { inner: StrCharIter { repr: array.new_data<u8>("ALREADY UPPER"), used: 13, byte_index: 0 }, f: __local_83 };
+            break __inline_StrCharIter_Iterator__map_char__44: IterMap<StrCharIter,char> { inner: StrCharIter { repr: array.new_data<u8>("ALREADY UPPER"), used: 13, byte_index: 0 }, f: __local_83 };
         });
     };
     __cond_11 = String^Eq::eq(__v0_10, String { repr: array.new_data<u8>("ALREADY UPPER"), used: 13 });
@@ -691,10 +691,10 @@ fn String::push(self, c) {
 
 fn String::from_iter<IterMap<StrCharIter,char>>(iter) {
     let s: ref String;
-    let __iter_2: ref "core:allocator/IterMap<StrCharIter,char>";
+    let __iter_2: ref IterMap<StrCharIter,char>;
     let c: char;
     s = String { repr: builtin::array_new<u8>(8), used: 0 };
-    __iter_2 = value_copy "core:allocator/IterMap<StrCharIter,char>"(iter);
+    __iter_2 = value_copy IterMap<StrCharIter,char>(iter);
     b37: block {
         l38: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

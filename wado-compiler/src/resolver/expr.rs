@@ -703,14 +703,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return (0, TypeTable::UNKNOWN);
                 }
                 // Clone fields to avoid borrow issues
-                let fields_clone =
-                    self.lookup_struct_fields(&name, &module_source).cloned();
+                let fields_clone = self.lookup_struct_fields(&name, &module_source).cloned();
                 if let Some(struct_info) = fields_clone {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
-                            let concrete_type =
-                                self.substitute_type_params(*ftype, &type_args);
+                            let concrete_type = self.substitute_type_params(*ftype, &type_args);
                             return (index as u32, concrete_type);
                         }
                     }

@@ -679,9 +679,9 @@ impl TypeTable {
             .copied()
     }
 
-    /// Find the module_source where a type with the given name is defined.
-    /// Searches struct_name_index first, then falls back to scanning for
-    /// GenericInstance types (for generic struct base names like "IterFilter").
+    /// Find the `module_source` where a type with the given name is defined.
+    /// Searches `struct_name_index` first, then falls back to scanning for
+    /// `GenericInstance` types (for generic struct base names like "`IterFilter`").
     pub fn find_struct_module_source(&self, name: &str) -> Option<ModuleSource> {
         // Try struct_name_index first (for concrete struct types)
         if let Some((_, ms)) = self.struct_name_index.keys().find(|(n, _)| n == name) {
@@ -694,10 +694,9 @@ impl TypeTable {
                 module_source,
                 ..
             } = self.get(*id)
+                && gi_name == name
             {
-                if gi_name == name {
-                    return Some(module_source.clone());
-                }
+                return Some(module_source.clone());
             }
         }
         None

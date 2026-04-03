@@ -83,13 +83,13 @@ array array<Elem> (mut ref "./sub/variant_deref_helper.wado/Elem");
 
 array array<Alt> (mut ref "./sub/variant_deref_helper.wado/Alt");
 
-struct ArrayIter<Elem> {  // from core:allocator  // ArrayIter<T> with T=Elem
+struct ArrayIter<Elem> {  // ArrayIter<T> with T=Elem
     mut repr: ref array<Elem>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<Alt> {  // from core:allocator  // ArrayIter<T> with T=Alt
+struct ArrayIter<Alt> {  // ArrayIter<T> with T=Alt
     mut repr: ref array<Alt>,
     mut used: i32,
     mut index: i32,
@@ -163,9 +163,9 @@ type "functype/Array<Elem>::push" = fn(ref Array<Elem>, ref "./sub/variant_deref
 
 type "functype/Array<Elem>::grow" = fn(ref Array<Elem>);
 
-type "functype/ArrayIter<Elem>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Elem>") -> ref null "./sub/variant_deref_helper.wado/Elem";
+type "functype/ArrayIter<Elem>^Iterator::next" = fn(ref ArrayIter<Elem>) -> ref null "./sub/variant_deref_helper.wado/Elem";
 
-type "functype/ArrayIter<Alt>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Alt>") -> ref null "./sub/variant_deref_helper.wado/Alt";
+type "functype/ArrayIter<Alt>^Iterator::next" = fn(ref ArrayIter<Alt>) -> ref null "./sub/variant_deref_helper.wado/Alt";
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -204,7 +204,7 @@ fn process(elem, out) {
     let name_4: ref String;
     let rep: ref "./sub/variant_deref_helper.wado/RepeatElem";
     let alts: ref Array<Alt>;
-    let __iter_7: ref "core:allocator/ArrayIter<Alt>";
+    let __iter_7: ref ArrayIter<Alt>;
     let alt: ref "./sub/variant_deref_helper.wado/Alt";
     let lab: ref "./sub/variant_deref_helper.wado/LabelElem";
     let __pattern_temp_0: ref "./sub/variant_deref_helper.wado/Elem";
@@ -241,7 +241,7 @@ fn process(elem, out) {
     __pattern_temp_4 = elem;
     if ref.test "./sub/variant_deref_helper.wado/Elem::Group"(__pattern_temp_4) {
         alts = value_copy Array<Alt>(ref.cast "./sub/variant_deref_helper.wado/Elem::Group"(__pattern_temp_4).payload_0);
-        __iter_7 = "core:allocator/ArrayIter<Alt>" { repr: alts.repr, used: alts.used, index: 0 };
+        __iter_7 = ArrayIter<Alt> { repr: alts.repr, used: alts.used, index: 0 };
         b5: block {
             l6: loop {
                 __pattern_temp_5 = ArrayIter<Alt>^Iterator::next(__iter_7);
@@ -265,12 +265,12 @@ fn process(elem, out) {
 }
 
 fn process_all(alt, out) {
-    let __iter_2: ref "core:allocator/ArrayIter<Elem>";
+    let __iter_2: ref ArrayIter<Elem>;
     let __pattern_temp_0: ref null "./sub/variant_deref_helper.wado/Elem";
     let __local_5: ref Array<Elem>;
-    __iter_2 = __inline_Array_Elem__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<Elem>" {
+    __iter_2 = __inline_Array_Elem__IntoIterator__into_iter_0: block -> ref ArrayIter<Elem> {
         __local_5 = alt.elements;
-        break __inline_Array_Elem__IntoIterator__into_iter_0: "core:allocator/ArrayIter<Elem>" { repr: __local_5.repr, used: __local_5.used, index: 0 };
+        break __inline_Array_Elem__IntoIterator__into_iter_0: ArrayIter<Elem> { repr: __local_5.repr, used: __local_5.used, index: 0 };
     };
     b9: block {
         l10: loop {

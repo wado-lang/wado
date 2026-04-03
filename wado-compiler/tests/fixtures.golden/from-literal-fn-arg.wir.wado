@@ -24,7 +24,7 @@ array array<i32> (mut i32);
 
 array array<String> (mut ref String);
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -121,7 +121,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -141,13 +141,13 @@ import fn future-drop-readable:transmission-cli from "wasi/future-drop-readable:
 
 fn sum_values(m) {
     let total: i32;
-    let __iter_2: ref "core:allocator/ArrayIter<i32>";
+    let __iter_2: ref ArrayIter<i32>;
     let v: i32;
     let __local_5: ref Array<i32>;
     total = 0;
-    __iter_2 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref "core:allocator/ArrayIter<i32>" {
+    __iter_2 = __inline_Array_i32__IntoIterator__into_iter_0: block -> ref ArrayIter<i32> {
         __local_5 = m.values;
-        break __inline_Array_i32__IntoIterator__into_iter_0: "core:allocator/ArrayIter<i32>" { repr: __local_5.repr, used: __local_5.used, index: 0 };
+        break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: __local_5.repr, used: __local_5.used, index: 0 };
     };
     b0: block {
         l1: loop {

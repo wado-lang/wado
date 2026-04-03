@@ -22,7 +22,7 @@ struct Formatter {
 
 array array<i32> (mut i32);
 
-struct ArrayIter<i32> {  // from core:allocator  // ArrayIter<T> with T=i32
+struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
     mut index: i32,
@@ -105,7 +105,7 @@ type "functype/wasi/stream-new" = fn() -> i64;
 
 type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -126,7 +126,7 @@ fn for_of_basic() with Stdout {
     let __local_0: ref Array<i32>;
     let numbers: ref Array<i32>;
     let sum: i32;
-    let __iter_3: ref "core:allocator/ArrayIter<i32>";
+    let __iter_3: ref ArrayIter<i32>;
     let n: i32;
     let __local_5: ref String;
     let __local_6: ref Formatter;
@@ -135,7 +135,7 @@ fn for_of_basic() with Stdout {
         break __seq_lit: __local_0;
     };
     sum = 0;
-    __iter_3 = "core:allocator/ArrayIter<i32>" { repr: numbers.repr, used: 5, index: 0 };
+    __iter_3 = ArrayIter<i32> { repr: numbers.repr, used: 5, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -167,7 +167,7 @@ fn for_of_basic() with Stdout {
 fn for_of_break() with Stdout {
     let __local_0: ref Array<i32>;
     let numbers: ref Array<i32>;
-    let __iter_2: ref "core:allocator/ArrayIter<i32>";
+    let __iter_2: ref ArrayIter<i32>;
     let n: i32;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -175,7 +175,7 @@ fn for_of_break() with Stdout {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<i32>" { repr: numbers.repr, used: 5, index: 0 };
+    __iter_2 = ArrayIter<i32> { repr: numbers.repr, used: 5, index: 0 };
     b3: block {
         l4: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -204,7 +204,7 @@ fn for_of_break() with Stdout {
 fn for_of_continue() with Stdout {
     let __local_0: ref Array<i32>;
     let numbers: ref Array<i32>;
-    let __iter_2: ref "core:allocator/ArrayIter<i32>";
+    let __iter_2: ref ArrayIter<i32>;
     let n: i32;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -212,7 +212,7 @@ fn for_of_continue() with Stdout {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<i32>" { repr: numbers.repr, used: 5, index: 0 };
+    __iter_2 = ArrayIter<i32> { repr: numbers.repr, used: 5, index: 0 };
     b7: block {
         l8: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -240,7 +240,7 @@ fn for_of_continue() with Stdout {
 fn for_of_empty() with Stdout {
     let __local_0: ref Array<i32>;
     let empty: ref Array<i32>;
-    let __iter_2: ref "core:allocator/ArrayIter<i32>";
+    let __iter_2: ref ArrayIter<i32>;
     let item: i32;
     let __local_4: ref String;
     let __local_5: ref Formatter;
@@ -248,7 +248,7 @@ fn for_of_empty() with Stdout {
         __local_0 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<i32>" { repr: empty.repr, used: 0, index: 0 };
+    __iter_2 = ArrayIter<i32> { repr: empty.repr, used: 0, index: 0 };
     b11: block {
         l12: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
@@ -274,13 +274,13 @@ fn for_of_empty() with Stdout {
 
 fn for_of_generic_method() with Stdout {
     let __local_0: ref Array<i32>;
-    let __iter_1: ref "core:allocator/ArrayIter<i32>";
+    let __iter_1: ref ArrayIter<i32>;
     let __sroa_c_items: ref Array<i32>;
     __sroa_c_items = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_1 = "core:allocator/ArrayIter<i32>" { repr: __sroa_c_items.repr, used: 3, index: 0 };
+    __iter_1 = ArrayIter<i32> { repr: __sroa_c_items.repr, used: 3, index: 0 };
     b14: block {
         l15: loop {
             let __sroa___pattern_temp_0_discriminant: i32;

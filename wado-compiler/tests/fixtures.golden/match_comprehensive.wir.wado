@@ -49,13 +49,13 @@ array array<Option<i32>> (mut ref Option<i32>);
 
 array array<Tree> (mut ref Tree);
 
-struct ArrayIter<Option<i32>> {  // from core:allocator  // ArrayIter<T> with T=Option<i32>
+struct ArrayIter<Option<i32>> {  // ArrayIter<T> with T=Option<i32>
     mut repr: ref array<Option<i32>>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<Tree> {  // from core:allocator  // ArrayIter<T> with T=Tree
+struct ArrayIter<Tree> {  // ArrayIter<T> with T=Tree
     mut repr: ref array<Tree>,
     mut used: i32,
     mut index: i32,
@@ -141,13 +141,13 @@ type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/ArrayIter<Option<i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Option<i32>>") -> ref null Option<i32>;
+type "functype/ArrayIter<Option<i32>>^Iterator::next" = fn(ref ArrayIter<Option<i32>>) -> ref null Option<i32>;
 
 type "functype/Array<Option<i32>>::push" = fn(ref Array<Option<i32>>, ref Option<i32>);
 
 type "functype/Array<Option<i32>>::grow" = fn(ref Array<Option<i32>>);
 
-type "functype/ArrayIter<Tree>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tree>") -> ref null Tree;
+type "functype/ArrayIter<Tree>^Iterator::next" = fn(ref ArrayIter<Tree>) -> ref null Tree;
 
 type "functype/Array<Tree>::push" = fn(ref Array<Tree>, ref Tree);
 
@@ -307,7 +307,7 @@ fn match_option_chained() with Stdout {
 fn match_variant_comprehensive() with Stdout {
     let __local_0: ref Array<Tree>;
     let trees: ref Array<Tree>;
-    let __iter_2: ref "core:allocator/ArrayIter<Tree>";
+    let __iter_2: ref ArrayIter<Tree>;
     let tree: ref Tree;
     let __local_4: i32;
     let __local_5: i32;
@@ -329,7 +329,7 @@ fn match_variant_comprehensive() with Stdout {
         __local_0 = Array<Tree> { repr: array.new_fixed<ref Tree>(Tree::Leaf { discriminant: 0, payload_0: 1 }, Tree::Node { discriminant: 1, payload_0: "tuple/[i32, i32]" { 0: 10, 1: 20 } }, Tree { 2 }, Tree::Leaf { discriminant: 0, payload_0: 99 }), used: 4 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<Tree>" { repr: trees.repr, used: 4, index: 0 };
+    __iter_2 = ArrayIter<Tree> { repr: trees.repr, used: 4, index: 0 };
     b8: block {
         l9: loop {
             __pattern_temp_0 = ArrayIter<Tree>^Iterator::next(__iter_2);
@@ -456,7 +456,7 @@ fn match_in_loop() with Stdout {
     let __local_0: ref Array<Option<i32>>;
     let items: ref Array<Option<i32>>;
     let sum: i32;
-    let __iter_3: ref "core:allocator/ArrayIter<Option<i32>>";
+    let __iter_3: ref ArrayIter<Option<i32>>;
     let item: ref Option<i32>;
     let __local_5: i32;
     let __local_6: ref String;
@@ -467,7 +467,7 @@ fn match_in_loop() with Stdout {
         break __seq_lit: __local_0;
     };
     sum = 0;
-    __iter_3 = "core:allocator/ArrayIter<Option<i32>>" { repr: items.repr, used: 5, index: 0 };
+    __iter_3 = ArrayIter<Option<i32>> { repr: items.repr, used: 5, index: 0 };
     b19: block {
         l20: loop {
             __pattern_temp_0 = ArrayIter<Option<i32>>^Iterator::next(__iter_3);
@@ -633,7 +633,7 @@ fn matches_operator() with Stdout {
 fn if_let_with_else() with Stdout {
     let __local_0: ref Array<Option<i32>>;
     let values: ref Array<Option<i32>>;
-    let __iter_2: ref "core:allocator/ArrayIter<Option<i32>>";
+    let __iter_2: ref ArrayIter<Option<i32>>;
     let v: ref Option<i32>;
     let n: i32;
     let __local_5: ref String;
@@ -643,7 +643,7 @@ fn if_let_with_else() with Stdout {
         __local_0 = Array<Option<i32>> { repr: array.new_fixed<ref Option<i32>>(Option<i32>::Some { discriminant: 0, payload_0: 10 }, Option<i32> { 1 }, Option<i32>::Some { discriminant: 0, payload_0: 30 }), used: 3 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<Option<i32>>" { repr: values.repr, used: 3, index: 0 };
+    __iter_2 = ArrayIter<Option<i32>> { repr: values.repr, used: 3, index: 0 };
     b36: block {
         l37: loop {
             __pattern_temp_0 = ArrayIter<Option<i32>>^Iterator::next(__iter_2);

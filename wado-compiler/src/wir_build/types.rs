@@ -255,8 +255,7 @@ fn register_struct(
                 .collect();
             let resolved_name =
                 crate::name::mangle_generic_name(&mono.generic_name, &resolved_args);
-            let resolved_sn =
-                StructName::new(effective_module.clone(), resolved_name.clone());
+            let resolved_sn = StructName::new(effective_module.clone(), resolved_name.clone());
             if let Some(existing) = ctx
                 .struct_type_map
                 .get(&resolved_sn)
@@ -320,7 +319,7 @@ fn register_struct(
             },
             fields,
             meta: WirMeta {
-                module_source: Some(effective_module.clone()),
+                module_source: Some(effective_module),
                 ..WirMeta::default()
             },
             generic_origin,

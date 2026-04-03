@@ -178,7 +178,7 @@ struct [String, Array<u8>] {
 
 array array<Tuple<String,Array<u8>>> (mut ref "tuple/[String, Array<u8>]");
 
-struct ArrayIter<u8> {  // from core:allocator  // ArrayIter<T> with T=u8
+struct ArrayIter<u8> {  // ArrayIter<T> with T=u8
     mut repr: ref array<u8>,
     mut used: i32,
     mut index: i32,
@@ -391,7 +391,7 @@ type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/__cm_binding__Response_new" = fn(i32, ref Option<Stream<u8>>, i32) -> [i32, i32];
 
-type "functype/ArrayIter<u8>^Iterator::next" = fn(ref "core:allocator/ArrayIter<u8>") -> [i32, u8];
+type "functype/ArrayIter<u8>^Iterator::next" = fn(ref ArrayIter<u8>) -> [i32, u8];
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
@@ -1464,7 +1464,7 @@ fn Array<u8>::grow(self) {
 
 fn String::from_utf8<Array<u8>>(bytes) {
     let builder: ref String;
-    let iter: ref "core:allocator/ArrayIter<u8>";
+    let iter: ref ArrayIter<u8>;
     let b0: u8;
     let code: u32;
     let b1_5: u8;
@@ -1475,7 +1475,7 @@ fn String::from_utf8<Array<u8>>(bytes) {
     let b3: u8;
     let __local_20: u32;
     builder = String { repr: builtin::array_new<u8>(8), used: 0 };
-    iter = "core:allocator/ArrayIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
+    iter = ArrayIter<u8> { repr: bytes.repr, used: bytes.used, index: 0 };
     b88: block {
         l89: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
