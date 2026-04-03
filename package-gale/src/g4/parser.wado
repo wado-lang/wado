@@ -167,6 +167,19 @@ impl G4Parser {
         }
     }
 
+    fn skip_angle_block(&mut self) {
+        self.expect(G4Token::LAngle).unwrap();
+        let mut depth = 1;
+        while !self.at_eof() && depth > 0 {
+            if self.is_kind(G4Token::LAngle) {
+                depth += 1;
+            } else if self.is_kind(G4Token::RAngle) {
+                depth -= 1;
+            }
+            self.advance();
+        }
+    }
+
     fn parse_parser_rule(&mut self, name: String) -> Result<ParserRule, ParseError> {
         self.expect(G4Token::Colon)?;
         let alternatives = self.parse_alternatives()?;
@@ -198,6 +211,20 @@ impl G4Parser {
                 || self.is_kind(G4Token::RParen)
                 || self.is_kind(G4Token::Hash) {
                 break;
+            }
+            // Skip action blocks {..} and semantic predicates {..}?
+            if self.is_kind(G4Token::LBrace) {
+                self.skip_braced_block();
+                // If followed by ?, this was a semantic predicate — skip the ?
+                if self.is_kind(G4Token::Question) {
+                    self.advance();
+                }
+                continue;
+            }
+            // Skip element options <...> (e.g. <assoc=right>)
+            if self.is_kind(G4Token::LAngle) {
+                self.skip_angle_block();
+                continue;
             }
             let elem = self.parse_element()?;
             elements.push(elem);
@@ -358,6 +385,19 @@ impl G4Parser {
                 || self.is_kind(G4Token::RParen)
                 || self.is_kind(G4Token::Arrow) {
                 break;
+            }
+            // Skip action blocks {..} and semantic predicates {..}?
+            if self.is_kind(G4Token::LBrace) {
+                self.skip_braced_block();
+                if self.is_kind(G4Token::Question) {
+                    self.advance();
+                }
+                continue;
+            }
+            // Skip element options <...>
+            if self.is_kind(G4Token::LAngle) {
+                self.skip_angle_block();
+                continue;
             }
             let elem = self.parse_lexer_element()?;
             elements.push(elem);

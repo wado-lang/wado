@@ -165,6 +165,78 @@ test "merge HTML grammars" {
     assert merged.parser_rules.len() > 5;
 }
 
+test "parse ANTLRv4Lexer.g4" {
+    let input = #include_str("../../tests/grammars/ANTLRv4Lexer.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "ANTLRv4Lexer";
+    assert g.parser_rules.is_empty();
+    assert g.lexer_rules.len() > 10;
+}
+
+test "parse ANTLRv4Parser.g4" {
+    let input = #include_str("../../tests/grammars/ANTLRv4Parser.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "ANTLRv4Parser";
+    assert g.lexer_rules.is_empty();
+    assert g.parser_rules.len() > 10;
+}
+
+test "parse RustLexer.g4" {
+    let input = #include_str("../../tests/grammars/RustLexer.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "RustLexer";
+    assert g.parser_rules.is_empty();
+    assert g.lexer_rules.len() > 20;
+}
+
+test "parse RustParser.g4" {
+    let input = #include_str("../../tests/grammars/RustParser.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "RustParser";
+    assert g.lexer_rules.is_empty();
+    assert g.parser_rules.len() > 30;
+}
+
+test "parse TypeScriptLexer.g4" {
+    let input = #include_str("../../tests/grammars/TypeScriptLexer.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "TypeScriptLexer";
+    assert g.parser_rules.is_empty();
+    assert g.lexer_rules.len() > 20;
+}
+
+test "parse TypeScriptParser.g4" {
+    let input = #include_str("../../tests/grammars/TypeScriptParser.g4");
+    let result = parse(input);
+    if let Err(e) = result {
+        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+    }
+    let g = result.unwrap();
+    assert g.name == "TypeScriptParser";
+    assert g.lexer_rules.is_empty();
+    assert g.parser_rules.len() > 20;
+}
+
 test "parse calculator.g4" {
     let input = #include_str("../../tests/grammars/calculator.g4");
     let g = parse(input).unwrap();

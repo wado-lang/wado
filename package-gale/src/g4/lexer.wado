@@ -223,6 +223,8 @@ impl G4Lexer {
             '}' => G4Token::RBrace,
             ',' => G4Token::Comma,
             '@' => G4Token::At,
+            '<' => G4Token::LAngle,
+            '>' => G4Token::RAngle,
             '-' && !self.at_end() && self.chars[self.pos] == '>' => {
                 self.pos += 1;
                 return make_token(G4Token::Arrow, "->", start, self.pos);

@@ -1,5 +1,6 @@
 use { generate } from "../src/generator.wado";
 use { parse } from "../src/g4/parser.wado";
+use { merge_grammars } from "../src/ir.wado";
 
 test "generate json golden" {
     let input = #include_str("./grammars/JSON.g4");
@@ -32,4 +33,13 @@ test "generate sqlite golden" {
     let output = generate(&grammar);
     let expected = #include_str("./golden/sqlite.wado");
     assert output == expected, `golden mismatch:\n---actual (len={output.len()})---\n{output}\n---expected (len={expected.len()})---\n{expected}`;
+}
+
+test "generate html golden" {
+    let lexer_g = parse(#include_str("./grammars/HTMLLexer.g4")).unwrap();
+    let parser_g = parse(#include_str("./grammars/HTMLParser.g4")).unwrap();
+    let grammar = merge_grammars([lexer_g, parser_g]);
+    let output = generate(&grammar);
+    let expected = #include_str("./golden/html.wado");
+    assert output == expected, `HTML golden mismatch:\n---actual (len={output.len()})---\n{output}\n---expected (len={expected.len()})---\n{expected}`;
 }
