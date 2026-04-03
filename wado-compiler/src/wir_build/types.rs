@@ -605,6 +605,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                     .map(|&e| type_table.mangle_type_name_resolving_newtypes(e))
                     .collect();
                 let tuple_display = format!("[{}]", elem_names.join(", "));
+                // TODO: should include module_source like other types: "{module_source}//[...]"
                 let fq = format!("tuple//{tuple_display}");
 
                 let fields: Vec<WirField> = elements
