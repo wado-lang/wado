@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775182844051,
+  "lastUpdate": 1775185414516,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9929,6 +9929,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ff7935be10f3edfb7e9a335560aea24a4bdd3238"
         },
         "date": 1775182843822,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ea151af7680d38548c294abe180b7e59dd07ee6",
+          "message": "Merge pull request #763 from wado-lang/claude/optimize-parser-compilation-M481V\n\nOptimize resolver: O(1) lookups and eliminate AST clones",
+          "timestamp": "2026-04-03T12:00:40+09:00",
+          "tree_id": "bc4a7101bbf4e5cd3c1dc5d970611f292a6d500f",
+          "url": "https://github.com/wado-lang/wado/commit/2ea151af7680d38548c294abe180b7e59dd07ee6"
+        },
+        "date": 1775185414304,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
