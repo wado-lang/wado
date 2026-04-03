@@ -44,10 +44,61 @@ test "eq with struct" {
     assert a != c;
 }
 
+test "ord homogeneous" {
+    let a = [1, 2, 3];
+    let b = [1, 2, 4];
+    assert a < b;
+    assert b > a;
+    assert a <= b;
+    assert b >= a;
+    assert a <= a;
+    assert a >= a;
+}
+
+test "ord first element decides" {
+    let a = [1, 100];
+    let b = [2, 0];
+    assert a < b;
+}
+
+test "ord lexicographic" {
+    let a = [1, 2, 3];
+    let b = [1, 2, 4];
+    let c = [1, 3, 0];
+    assert a < b;
+    assert a < c;
+    assert b < c;
+}
+
+test "ord equal tuples" {
+    let a = [1, 2, 3];
+    let b = [1, 2, 3];
+    assert !(a < b);
+    assert !(a > b);
+    assert a <= b;
+    assert a >= b;
+}
+
+test "ord single element" {
+    let a = [10];
+    let b = [20];
+    assert a < b;
+    assert b > a;
+}
+
+test "ord with strings" {
+    let a = [1, "apple"];
+    let b = [1, "banana"];
+    assert a < b;
+}
+
+test "ord nested tuple" {
+    let a = [[1, 2], [3, 4]];
+    let b = [[1, 2], [3, 5]];
+    assert a < b;
+}
+
 struct Point {
     x: i32,
     y: i32,
 }
-
-__DATA__
-{"test": {}}
