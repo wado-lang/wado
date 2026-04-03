@@ -3584,7 +3584,7 @@ fn flat_types_from_type_id_into(
                     out.push(cm_abi::CmValType::I32); // ptr
                     out.push(cm_abi::CmValType::I32); // len
                 }
-                "Tuple" => {
+                TypeTable::TUPLE_TYPE_NAME => {
                     for &elem in type_args {
                         flat_types_from_type_id_into(elem, out, tir_modules, type_table);
                     }

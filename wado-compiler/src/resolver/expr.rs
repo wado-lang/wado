@@ -696,7 +696,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name, type_args, ..
             } => {
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
-                if name == "Tuple"
+                if name == TypeTable::TUPLE_TYPE_NAME
                     && let Ok(index) = field_name.parse::<usize>()
                 {
                     if index < type_args.len() {
@@ -886,7 +886,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 module_source,
                 type_args: inner_args,
             } => {
-                if name == "Tuple" {
+                if name == TypeTable::TUPLE_TYPE_NAME {
                     // Expand TypePack elements: splice the pack's concrete types into the tuple
                     let mut new_elems: Vec<TypeId> = Vec::new();
                     for &e in &inner_args {
@@ -1045,7 +1045,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             type_args: ref elements,
             ..
         } = base_type
-            && name == "Tuple"
+            && name == TypeTable::TUPLE_TYPE_NAME
         {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
@@ -2529,8 +2529,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     type_args: actual_elems,
                     ..
                 },
-            ) if expected_name == "Tuple"
-                && actual_name == "Tuple"
+            ) if expected_name == TypeTable::TUPLE_TYPE_NAME
+                && actual_name == TypeTable::TUPLE_TYPE_NAME
                 && expected_elems.iter().any(|e| {
                     matches!(
                         self.type_table.borrow().get(*e),
@@ -2609,7 +2609,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ..
                 },
             ) if name == "Array"
-                && actual_name == "Tuple"
+                && actual_name == TypeTable::TUPLE_TYPE_NAME
                 && expected_args.len() == 1
                 && !actual_elems.is_empty() =>
             {
@@ -2667,7 +2667,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ResolvedType::TypePack { .. } => true,
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } if name == "Tuple" => type_args.iter().any(|e| self.type_contains_pack(*e)),
+            } if name == TypeTable::TUPLE_TYPE_NAME => type_args.iter().any(|e| self.type_contains_pack(*e)),
             _ => false,
         }
     }
@@ -2725,7 +2725,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     type_args: inner_elems,
                     ..
                 } = spread_type
-                    && name == "Tuple"
+                    && name == TypeTable::TUPLE_TYPE_NAME
                 {
                     // For concrete tuples, expand inline via FieldAccess.
                     // If the expression is non-trivial (not a local), bind it to a

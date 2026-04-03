@@ -1,0 +1,18 @@
+// Test: user-defined generic struct "Tuple<T>" coexists with built-in tuples
+struct Tuple<T> {
+    value: T,
+}
+
+export fn run() {
+    // User-defined Tuple<i32>
+    let t = Tuple { value: 42 };
+    assert t.value == 42;
+
+    // Built-in tuple [i32, i32]
+    let pair = [10, 20];
+    assert pair.0 == 10;
+    assert pair.1 == 20;
+}
+
+__DATA__
+{"stdout": ""}

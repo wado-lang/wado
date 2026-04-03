@@ -738,14 +738,14 @@ fn analyze_expr(
                         name,
                         type_args,
                         module_source: _,
-                    } if name == "Tuple" => {
+                    } if name == TypeTable::TUPLE_TYPE_NAME => {
                         // Tuple method call (e.g., Tuple<f64,f64>^Inspect::inspect)
                         // Synthesized as non-monomorphized methods with struct_name "Tuple<f64,f64>"
                         let type_arg_names: Vec<String> = type_args
                             .iter()
                             .map(|t| type_table.mangle_type_name(*t))
                             .collect();
-                        let mangled_struct = mangle_generic_name("Tuple", &type_arg_names);
+                        let mangled_struct = mangle_generic_name(TypeTable::TUPLE_TYPE_NAME, &type_arg_names);
                         let method_id = FunctionId::Method(MethodName::new(
                             current_module.clone(),
                             mangled_struct,

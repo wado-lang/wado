@@ -358,7 +358,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 module_source,
                 type_args,
             } => {
-                if name == "Tuple" {
+                if name == TypeTable::TUPLE_TYPE_NAME {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {
@@ -404,7 +404,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             is_ref_impl: false,
                         });
                     }
-                    ("Tuple".to_string(), None, Some(elems.clone()), None)
+                    (TypeTable::TUPLE_TYPE_NAME.to_string(), None, Some(elems.clone()), None)
                 } else {
                     (
                         name.clone(),
@@ -2440,7 +2440,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
-                if name == "Tuple" {
+                if name == TypeTable::TUPLE_TYPE_NAME {
                     let parts: Vec<String> = type_args
                         .iter()
                         .map(|&t| self.type_id_to_string(t))

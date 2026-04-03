@@ -515,7 +515,7 @@ impl<'a> WirContext<'a> {
                 name,
                 type_args: elements,
                 ..
-            } if name == "Tuple" => {
+            } if name == TypeTable::TUPLE_TYPE_NAME => {
                 if let Some(type_id) = self.tuple_type_map.get(elements) {
                     WirType::Ref {
                         type_id: type_id.clone(),

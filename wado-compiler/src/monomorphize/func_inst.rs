@@ -644,12 +644,12 @@ impl Monomorphizer {
                 // The resolver already creates monomorph_info with the generic name and
                 // impl_type_args (the concrete tuple element types).
                 if let Some(ref info) = method_func.method_info
-                    && info.struct_name == "Tuple"
+                    && info.struct_name == TypeTable::TUPLE_TYPE_NAME
                 {
                     let mono = method_func.monomorph_info.as_ref();
                     let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
                         MethodName::format_local(
-                            "Tuple",
+                            TypeTable::TUPLE_TYPE_NAME,
                             info.trait_name.as_deref(),
                             &info.method_name,
                         )
@@ -3594,7 +3594,7 @@ fn try_lower_comparison(
             module_source,
             ..
         } => {
-            if name == "Tuple" {
+            if name == TypeTable::TUPLE_TYPE_NAME {
                 // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
                 // and already lowered to method calls by the resolver.
                 return None;

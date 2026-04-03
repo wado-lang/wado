@@ -183,7 +183,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
-                if name == "Tuple" {
+                if name == TypeTable::TUPLE_TYPE_NAME {
                     // Tuples implement a trait when all elements implement it
                     let elems = type_args.clone();
                     return elems

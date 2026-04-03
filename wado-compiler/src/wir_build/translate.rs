@@ -474,7 +474,7 @@ impl FunctionTranslator<'_, '_> {
                     return false;
                 }
                 // Empty tuples (unit-like) don't need value copy.
-                if name == "Tuple" && type_args.is_empty() {
+                if name == TypeTable::TUPLE_TYPE_NAME && type_args.is_empty() {
                     return false;
                 }
                 true

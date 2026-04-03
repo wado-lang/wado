@@ -633,7 +633,7 @@ fn generate_inspect_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
         match resolved {
-            ResolvedType::GenericInstance { ref name, .. } if name == "Tuple" => {
+            ResolvedType::GenericInstance { ref name, .. } if name == TypeTable::TUPLE_TYPE_NAME => {
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             ResolvedType::Function {
@@ -2082,7 +2082,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         }
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
-        if matches!(resolved, ResolvedType::GenericInstance { ref name, .. } if name == "Tuple") {
+        if matches!(resolved, ResolvedType::GenericInstance { ref name, .. } if name == TypeTable::TUPLE_TYPE_NAME) {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
         } else {
             // Function types, opaque types: delegate to Inspect
@@ -2864,7 +2864,7 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
     // Parameterized types (function types, opaque types) — Display fallback
     // Tuples: Display is provided by variadic impl in core:prelude/tuple.wado
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        if base_name == "Tuple" {
+        if base_name == TypeTable::TUPLE_TYPE_NAME {
             continue;
         }
         let mangled = format_parameterized_name(&base_name, &type_arg_names);
@@ -3434,12 +3434,12 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
         .filter_map(|(id, resolved)| match resolved {
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } if name == "Tuple" => {
+            } if name == TypeTable::TUPLE_TYPE_NAME => {
                 if !type_args.iter().all(|e| is_concrete(*e)) {
                     return None;
                 }
                 let args = type_args.iter().map(|e| tt.mangle_type_name(*e)).collect();
-                Some((*id, "Tuple".to_string(), args))
+                Some((*id, TypeTable::TUPLE_TYPE_NAME.to_string(), args))
             }
             ResolvedType::Function {
                 params,

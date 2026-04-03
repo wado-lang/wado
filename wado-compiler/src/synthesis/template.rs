@@ -875,7 +875,7 @@ fn trait_fmt_call(
             ref name,
             ref type_args,
             ..
-        } if name == "Tuple" => {
+        } if name == TypeTable::TUPLE_TYPE_NAME => {
             let elements = type_args.clone();
             let mut stmts = Vec::new();
             stmts.push(write_str_stmt("[", fmt.clone(), tt, span));

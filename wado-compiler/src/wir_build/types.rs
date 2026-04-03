@@ -574,7 +574,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 type_args: elements,
                 ..
             } = resolved
-                && name == "Tuple"
+                && name == TypeTable::TUPLE_TYPE_NAME
             {
                 if ctx.tuple_type_map.contains_key(elements) {
                     continue;
@@ -1335,7 +1335,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                             type_args: elements,
                             ..
                         } = type_table.get(type_id)
-                            && name == "Tuple"
+                            && name == TypeTable::TUPLE_TYPE_NAME
                             && field_idx < elements.len()
                         {
                             // Check if this tuple maps to the same WIR type
