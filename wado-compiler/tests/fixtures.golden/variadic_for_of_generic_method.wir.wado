@@ -81,7 +81,7 @@ type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/#Tuple<i32,bool>^Addable::value" = fn(ref "tuple/[i32, bool]") -> i32;
+type "functype/Tuple<i32,bool>^Addable::value" = fn(ref "tuple/[i32, bool]") -> i32;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -118,7 +118,7 @@ fn run() with Stdout {
     let __local_9: ref Formatter;
     let __local_14: ref Formatter;
     t = "tuple/[i32, bool]" { 0: 42, 1: 1 };
-    __v0 = #Tuple<i32,bool>^Addable::value(t);
+    __v0 = Tuple<i32,bool>^Addable::value(t);
     __cond = __v0 == 43;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -425,7 +425,7 @@ fn String::push(self, c) {
     };
 }
 
-fn #Tuple<i32,bool>^Addable::value(self) {
+fn Tuple<i32,bool>^Addable::value(self) {
     let __tuple_2: ref "tuple/[i32, bool]";
     let v_4: i32;
     let v_5: bool;

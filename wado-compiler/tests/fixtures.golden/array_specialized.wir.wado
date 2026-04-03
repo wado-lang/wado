@@ -32,7 +32,7 @@ array array<u32> (mut u32);
 
 array array<u16> (mut u16);
 
-array array<#Tuple<bool,i32,String>> (mut ref "tuple/[bool, i32, String]");
+array array<Tuple<bool,i32,String>> (mut ref "tuple/[bool, i32, String]");
 
 array array<String> (mut ref String);
 
@@ -76,8 +76,8 @@ struct ArrayIter<u16> {  // from core:allocator  // ArrayIter<T> with T=u16
     mut index: i32,
 }
 
-struct ArrayIter<#Tuple<bool,i32,String>> {  // from core:allocator  // ArrayIter<T> with T=#Tuple<bool,i32,String>
-    mut repr: ref array<#Tuple<bool,i32,String>>,
+struct ArrayIter<Tuple<bool,i32,String>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<bool,i32,String>
+    mut repr: ref array<Tuple<bool,i32,String>>,
     mut used: i32,
     mut index: i32,
 }
@@ -191,8 +191,8 @@ struct Array<i8> {  // Array<T> with T=i8
     mut used: i32,
 }
 
-struct Array<#Tuple<bool,i32,String>> {  // Array<T> with T=#Tuple<bool,i32,String>
-    mut repr: ref array<#Tuple<bool,i32,String>>,
+struct Array<Tuple<bool,i32,String>> {  // Array<T> with T=Tuple<bool,i32,String>
+    mut repr: ref array<Tuple<bool,i32,String>>,
     mut used: i32,
 }
 
@@ -332,11 +332,11 @@ type "functype/Array<u16>::push" = fn(ref Array<u16>, u16);
 
 type "functype/Array<u16>::grow" = fn(ref Array<u16>);
 
-type "functype/ArrayIter<#Tuple<bool,i32,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<#Tuple<bool,i32,String>>") -> ref null "tuple/[bool, i32, String]";
+type "functype/ArrayIter<Tuple<bool,i32,String>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<bool,i32,String>>") -> ref null "tuple/[bool, i32, String]";
 
-type "functype/Array<#Tuple<bool,i32,String>>::push" = fn(ref Array<#Tuple<bool,i32,String>>, ref "tuple/[bool, i32, String]");
+type "functype/Array<Tuple<bool,i32,String>>::push" = fn(ref Array<Tuple<bool,i32,String>>, ref "tuple/[bool, i32, String]");
 
-type "functype/Array<#Tuple<bool,i32,String>>::grow" = fn(ref Array<#Tuple<bool,i32,String>>);
+type "functype/Array<Tuple<bool,i32,String>>::grow" = fn(ref Array<Tuple<bool,i32,String>>);
 
 type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref null String;
 
@@ -786,26 +786,26 @@ fn array_specialized_string() with Stdout {
 }
 
 fn array_specialized_tuple() with Stdout {
-    let __local_0: ref Array<#Tuple<bool,i32,String>>;
-    let arr: ref Array<#Tuple<bool,i32,String>>;
-    let __iter_2: ref "core:allocator/ArrayIter<#Tuple<bool,i32,String>>";
+    let __local_0: ref Array<Tuple<bool,i32,String>>;
+    let arr: ref Array<Tuple<bool,i32,String>>;
+    let __iter_2: ref "core:allocator/ArrayIter<Tuple<bool,i32,String>>";
     let x: ref "tuple/[bool, i32, String]";
     let __local_4: ref String;
     let __local_5: ref Formatter;
     let __pattern_temp_0: ref null "tuple/[bool, i32, String]";
     let __local_14: ref Formatter;
     let __local_19: ref Formatter;
-    arr = __seq_lit: block -> ref Array<#Tuple<bool,i32,String>> {
-        __local_0 = Array<#Tuple<bool,i32,String>> { repr: builtin::array_new<ref "tuple/[bool, i32, String]">(0), used: 0 };
+    arr = __seq_lit: block -> ref Array<Tuple<bool,i32,String>> {
+        __local_0 = Array<Tuple<bool,i32,String>> { repr: builtin::array_new<ref "tuple/[bool, i32, String]">(0), used: 0 };
         break __seq_lit: __local_0;
     };
-    Array<#Tuple<bool,i32,String>>::push(arr, "tuple/[bool, i32, String]" { 0: 1, 1: 1, 2: String { repr: array.new_data<u8>("one"), used: 3 } });
-    Array<#Tuple<bool,i32,String>>::push(arr, "tuple/[bool, i32, String]" { 0: 0, 1: 2, 2: String { repr: array.new_data<u8>("two"), used: 3 } });
-    Array<#Tuple<bool,i32,String>>::push(arr, "tuple/[bool, i32, String]" { 0: 1, 1: 3, 2: String { repr: array.new_data<u8>("three"), used: 5 } });
-    __iter_2 = "core:allocator/ArrayIter<#Tuple<bool,i32,String>>" { repr: arr.repr, used: arr.used, index: 0 };
+    Array<Tuple<bool,i32,String>>::push(arr, "tuple/[bool, i32, String]" { 0: 1, 1: 1, 2: String { repr: array.new_data<u8>("one"), used: 3 } });
+    Array<Tuple<bool,i32,String>>::push(arr, "tuple/[bool, i32, String]" { 0: 0, 1: 2, 2: String { repr: array.new_data<u8>("two"), used: 3 } });
+    Array<Tuple<bool,i32,String>>::push(arr, "tuple/[bool, i32, String]" { 0: 1, 1: 3, 2: String { repr: array.new_data<u8>("three"), used: 5 } });
+    __iter_2 = "core:allocator/ArrayIter<Tuple<bool,i32,String>>" { repr: arr.repr, used: arr.used, index: 0 };
     b28: block {
         l29: loop {
-            __pattern_temp_0 = ArrayIter<#Tuple<bool,i32,String>>^Iterator::next(__iter_2);
+            __pattern_temp_0 = ArrayIter<Tuple<bool,i32,String>>^Iterator::next(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
                 x = value_copy "tuple/[bool, i32, String]"(ref.as_non_null(__pattern_temp_0));
                 "core:cli/println"(__tmpl: block -> ref String {
@@ -2882,7 +2882,7 @@ fn Array<u16>::grow(self) {
     self.repr = new_repr;
 }
 
-fn ArrayIter<#Tuple<bool,i32,String>>^Iterator::next(self) {
+fn ArrayIter<Tuple<bool,i32,String>>^Iterator::next(self) {
     let item: ref "tuple/[bool, i32, String]";
     if self.index >= self.used {
         return ref.null none;
@@ -2892,21 +2892,21 @@ fn ArrayIter<#Tuple<bool,i32,String>>^Iterator::next(self) {
     return item;
 }
 
-fn Array<#Tuple<bool,i32,String>>::push(self, value) {
+fn Array<Tuple<bool,i32,String>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<#Tuple<bool,i32,String>>::grow(self);
+        Array<Tuple<bool,i32,String>>::grow(self);
     };
     builtin::array_set<ref "tuple/[bool, i32, String]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<#Tuple<bool,i32,String>>::grow(self) {
+fn Array<Tuple<bool,i32,String>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<#Tuple<bool,i32,String>>;
-    let old_repr: ref array<#Tuple<bool,i32,String>>;
+    let new_repr: ref array<Tuple<bool,i32,String>>;
+    let old_repr: ref array<Tuple<bool,i32,String>>;
     let used: i32;
     let i: i32;
     let __local_7: i32;

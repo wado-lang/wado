@@ -35,9 +35,9 @@ struct Point {
     mut y: i32,
 }
 
-array array<#Tuple<i32,i32>> (mut ref "tuple/[i32, i32]");
+array array<Tuple<i32,i32>> (mut ref "tuple/[i32, i32]");
 
-array array<#Tuple<String,i32>> (mut ref "tuple/[String, i32]");
+array array<Tuple<String,i32>> (mut ref "tuple/[String, i32]");
 
 array array<Point> (mut ref Point);
 
@@ -45,14 +45,14 @@ array array<String> (mut ref String);
 
 array array<i32> (mut i32);
 
-struct ArrayIter<#Tuple<i32,i32>> {  // from core:allocator  // ArrayIter<T> with T=#Tuple<i32,i32>
-    mut repr: ref array<#Tuple<i32,i32>>,
+struct ArrayIter<Tuple<i32,i32>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<i32,i32>
+    mut repr: ref array<Tuple<i32,i32>>,
     mut used: i32,
     mut index: i32,
 }
 
-struct ArrayIter<#Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=#Tuple<String,i32>
-    mut repr: ref array<#Tuple<String,i32>>,
+struct ArrayIter<Tuple<String,i32>> {  // from core:allocator  // ArrayIter<T> with T=Tuple<String,i32>
+    mut repr: ref array<Tuple<String,i32>>,
     mut used: i32,
     mut index: i32,
 }
@@ -85,8 +85,8 @@ struct Array<i32> {  // Array<T> with T=i32
     mut used: i32,
 }
 
-struct Array<#Tuple<String,i32>> {  // Array<T> with T=#Tuple<String,i32>
-    mut repr: ref array<#Tuple<String,i32>>,
+struct Array<Tuple<String,i32>> {  // Array<T> with T=Tuple<String,i32>
+    mut repr: ref array<Tuple<String,i32>>,
     mut used: i32,
 }
 
@@ -95,8 +95,8 @@ struct Array<Point> {  // Array<T> with T=Point
     mut used: i32,
 }
 
-struct Array<#Tuple<i32,i32>> {  // Array<T> with T=#Tuple<i32,i32>
-    mut repr: ref array<#Tuple<i32,i32>>,
+struct Array<Tuple<i32,i32>> {  // Array<T> with T=Tuple<i32,i32>
+    mut repr: ref array<Tuple<i32,i32>>,
     mut used: i32,
 }
 
@@ -170,13 +170,13 @@ type "functype/Array<String>::push" = fn(ref Array<String>, ref String);
 
 type "functype/Array<String>::grow" = fn(ref Array<String>);
 
-type "functype/ArrayIter<#Tuple<i32,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<#Tuple<i32,i32>>") -> ref null "tuple/[i32, i32]";
+type "functype/ArrayIter<Tuple<i32,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<i32,i32>>") -> ref null "tuple/[i32, i32]";
 
-type "functype/Array<#Tuple<i32,i32>>::push" = fn(ref Array<#Tuple<i32,i32>>, ref "tuple/[i32, i32]");
+type "functype/Array<Tuple<i32,i32>>::push" = fn(ref Array<Tuple<i32,i32>>, ref "tuple/[i32, i32]");
 
-type "functype/Array<#Tuple<i32,i32>>::grow" = fn(ref Array<#Tuple<i32,i32>>);
+type "functype/Array<Tuple<i32,i32>>::grow" = fn(ref Array<Tuple<i32,i32>>);
 
-type "functype/ArrayIter<#Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<#Tuple<String,i32>>") -> ref null "tuple/[String, i32]";
+type "functype/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Tuple<String,i32>>") -> ref null "tuple/[String, i32]";
 
 type "functype/ArrayIter<Point>^Iterator::next" = fn(ref "core:allocator/ArrayIter<Point>") -> ref null Point;
 
@@ -186,9 +186,9 @@ type "functype/Array<Point>::grow" = fn(ref Array<Point>);
 
 type "functype/ArrayIter<String>^Iterator::next" = fn(ref "core:allocator/ArrayIter<String>") -> ref null String;
 
-type "functype/Array<#Tuple<String,i32>>::push" = fn(ref Array<#Tuple<String,i32>>, ref "tuple/[String, i32]");
+type "functype/Array<Tuple<String,i32>>::push" = fn(ref Array<Tuple<String,i32>>, ref "tuple/[String, i32]");
 
-type "functype/Array<#Tuple<String,i32>>::grow" = fn(ref Array<#Tuple<String,i32>>);
+type "functype/Array<Tuple<String,i32>>::grow" = fn(ref Array<Tuple<String,i32>>);
 
 type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
@@ -231,18 +231,18 @@ fn get_numbers() with Stdout {
 }
 
 fn for_of_generic_tuple() with Stdout {
-    let __local_0: ref Array<#Tuple<String,i32>>;
-    let __iter_1: ref "core:allocator/ArrayIter<#Tuple<String,i32>>";
+    let __local_0: ref Array<Tuple<String,i32>>;
+    let __iter_1: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
     let __pattern_temp_0: ref null "tuple/[String, i32]";
-    let __sroa_h_items: ref Array<#Tuple<String,i32>>;
-    __sroa_h_items = __seq_lit: block -> ref Array<#Tuple<String,i32>> {
-        __local_0 = Array<#Tuple<String,i32>> { repr: array.new_fixed<ref "tuple/[String, i32]">("tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("a"), used: 1 }, 1: 1 }, "tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("b"), used: 1 }, 1: 2 }), used: 2 };
+    let __sroa_h_items: ref Array<Tuple<String,i32>>;
+    __sroa_h_items = __seq_lit: block -> ref Array<Tuple<String,i32>> {
+        __local_0 = Array<Tuple<String,i32>> { repr: array.new_fixed<ref "tuple/[String, i32]">("tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("a"), used: 1 }, 1: 1 }, "tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("b"), used: 1 }, 1: 2 }), used: 2 };
         break __seq_lit: __local_0;
     };
-    __iter_1 = "core:allocator/ArrayIter<#Tuple<String,i32>>" { repr: __sroa_h_items.repr, used: 2, index: 0 };
+    __iter_1 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: __sroa_h_items.repr, used: 2, index: 0 };
     b0: block {
         l1: loop {
-            __pattern_temp_0 = ArrayIter<#Tuple<String,i32>>^Iterator::next(__iter_1);
+            __pattern_temp_0 = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_1);
             if ref.is_null(__pattern_temp_0) == 0 {
             } else {
                 break b0;
@@ -467,19 +467,19 @@ fn for_of_structs() with Stdout {
 }
 
 fn for_of_tuple_array() with Stdout {
-    let __local_0: ref Array<#Tuple<String,i32>>;
-    let items: ref Array<#Tuple<String,i32>>;
-    let __iter_2: ref "core:allocator/ArrayIter<#Tuple<String,i32>>";
+    let __local_0: ref Array<Tuple<String,i32>>;
+    let items: ref Array<Tuple<String,i32>>;
+    let __iter_2: ref "core:allocator/ArrayIter<Tuple<String,i32>>";
     let pair: ref "tuple/[String, i32]";
     let __pattern_temp_0: ref null "tuple/[String, i32]";
-    items = __seq_lit: block -> ref Array<#Tuple<String,i32>> {
-        __local_0 = Array<#Tuple<String,i32>> { repr: array.new_fixed<ref "tuple/[String, i32]">("tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("a"), used: 1 }, 1: 1 }, "tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("b"), used: 1 }, 1: 2 }), used: 2 };
+    items = __seq_lit: block -> ref Array<Tuple<String,i32>> {
+        __local_0 = Array<Tuple<String,i32>> { repr: array.new_fixed<ref "tuple/[String, i32]">("tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("a"), used: 1 }, 1: 1 }, "tuple/[String, i32]" { 0: String { repr: array.new_data<u8>("b"), used: 1 }, 1: 2 }), used: 2 };
         break __seq_lit: __local_0;
     };
-    __iter_2 = "core:allocator/ArrayIter<#Tuple<String,i32>>" { repr: items.repr, used: 2, index: 0 };
+    __iter_2 = "core:allocator/ArrayIter<Tuple<String,i32>>" { repr: items.repr, used: 2, index: 0 };
     b21: block {
         l22: loop {
-            __pattern_temp_0 = ArrayIter<#Tuple<String,i32>>^Iterator::next(__iter_2);
+            __pattern_temp_0 = ArrayIter<Tuple<String,i32>>^Iterator::next(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
                 pair = value_copy "tuple/[String, i32]"(ref.as_non_null(__pattern_temp_0));
                 "core:cli/println"(pair.0);
@@ -495,9 +495,9 @@ fn for_of_tuple_array() with Stdout {
 fn for_of_tuples() with Stdout {
     let t1: ref "tuple/[i32, i32]";
     let t2: ref "tuple/[i32, i32]";
-    let __local_2: ref Array<#Tuple<i32,i32>>;
-    let pairs: ref Array<#Tuple<i32,i32>>;
-    let __iter_4: ref "core:allocator/ArrayIter<#Tuple<i32,i32>>";
+    let __local_2: ref Array<Tuple<i32,i32>>;
+    let pairs: ref Array<Tuple<i32,i32>>;
+    let __iter_4: ref "core:allocator/ArrayIter<Tuple<i32,i32>>";
     let p: ref "tuple/[i32, i32]";
     let __local_6: ref String;
     let __local_7: ref Formatter;
@@ -506,14 +506,14 @@ fn for_of_tuples() with Stdout {
     let __local_25: ref Formatter;
     t1 = "tuple/[i32, i32]" { 0: 1, 1: 2 };
     t2 = "tuple/[i32, i32]" { 0: 3, 1: 4 };
-    pairs = __seq_lit: block -> ref Array<#Tuple<i32,i32>> {
-        __local_2 = Array<#Tuple<i32,i32>> { repr: array.new_fixed<ref "tuple/[i32, i32]">(t1, t2), used: 2 };
+    pairs = __seq_lit: block -> ref Array<Tuple<i32,i32>> {
+        __local_2 = Array<Tuple<i32,i32>> { repr: array.new_fixed<ref "tuple/[i32, i32]">(t1, t2), used: 2 };
         break __seq_lit: __local_2;
     };
-    __iter_4 = "core:allocator/ArrayIter<#Tuple<i32,i32>>" { repr: pairs.repr, used: 2, index: 0 };
+    __iter_4 = "core:allocator/ArrayIter<Tuple<i32,i32>>" { repr: pairs.repr, used: 2, index: 0 };
     b24: block {
         l25: loop {
-            __pattern_temp_0 = ArrayIter<#Tuple<i32,i32>>^Iterator::next(__iter_4);
+            __pattern_temp_0 = ArrayIter<Tuple<i32,i32>>^Iterator::next(__iter_4);
             if ref.is_null(__pattern_temp_0) == 0 {
                 p = value_copy "tuple/[i32, i32]"(ref.as_non_null(__pattern_temp_0));
                 "core:cli/println"(__tmpl: block -> ref String {
@@ -832,7 +832,7 @@ fn Array<String>::grow(self) {
     self.repr = new_repr;
 }
 
-fn ArrayIter<#Tuple<i32,i32>>^Iterator::next(self) {
+fn ArrayIter<Tuple<i32,i32>>^Iterator::next(self) {
     let item: ref "tuple/[i32, i32]";
     if self.index >= self.used {
         return ref.null none;
@@ -842,21 +842,21 @@ fn ArrayIter<#Tuple<i32,i32>>^Iterator::next(self) {
     return item;
 }
 
-fn Array<#Tuple<i32,i32>>::push(self, value) {
+fn Array<Tuple<i32,i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<#Tuple<i32,i32>>::grow(self);
+        Array<Tuple<i32,i32>>::grow(self);
     };
     builtin::array_set<ref "tuple/[i32, i32]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<#Tuple<i32,i32>>::grow(self) {
+fn Array<Tuple<i32,i32>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<#Tuple<i32,i32>>;
-    let old_repr: ref array<#Tuple<i32,i32>>;
+    let new_repr: ref array<Tuple<i32,i32>>;
+    let old_repr: ref array<Tuple<i32,i32>>;
     let used: i32;
     let i: i32;
     let __local_7: i32;
@@ -884,7 +884,7 @@ fn Array<#Tuple<i32,i32>>::grow(self) {
     self.repr = new_repr;
 }
 
-fn ArrayIter<#Tuple<String,i32>>^Iterator::next(self) {
+fn ArrayIter<Tuple<String,i32>>^Iterator::next(self) {
     let item: ref "tuple/[String, i32]";
     if self.index >= self.used {
         return ref.null none;
@@ -966,21 +966,21 @@ fn ArrayIter<i32>^Iterator::next(self) {
     return 0; item;
 }
 
-fn Array<#Tuple<String,i32>>::push(self, value) {
+fn Array<Tuple<String,i32>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<#Tuple<String,i32>>::grow(self);
+        Array<Tuple<String,i32>>::grow(self);
     };
     builtin::array_set<ref "tuple/[String, i32]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<#Tuple<String,i32>>::grow(self) {
+fn Array<Tuple<String,i32>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<#Tuple<String,i32>>;
-    let old_repr: ref array<#Tuple<String,i32>>;
+    let new_repr: ref array<Tuple<String,i32>>;
+    let old_repr: ref array<Tuple<String,i32>>;
     let used: i32;
     let i: i32;
     let __local_7: i32;

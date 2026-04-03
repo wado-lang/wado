@@ -89,7 +89,7 @@ type "functype/String::push_str" = fn(ref String, ref String);
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/#Tuple<i32,bool>^Countable::count" = fn(ref "tuple/[i32, bool]") -> i32;
+type "functype/Tuple<i32,bool>^Countable::count" = fn(ref "tuple/[i32, bool]") -> i32;
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -126,7 +126,7 @@ fn run() with Stdout {
     let __local_10: ref Formatter;
     let __local_15: ref Formatter;
     t = "tuple/[i32, bool]" { 0: 42, 1: 1 };
-    c = #Tuple<i32,bool>^Countable::count(t);
+    c = Tuple<i32,bool>^Countable::count(t);
     __cond = c == 3;
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -435,7 +435,7 @@ fn String::push(self, c) {
     };
 }
 
-fn #Tuple<i32,bool>^Countable::count(self) {
+fn Tuple<i32,bool>^Countable::count(self) {
     let total: i32;
     let __tuple_2: ref "tuple/[i32, bool]";
     let v_4: i32;

@@ -537,7 +537,7 @@ impl TypeTable {
     /// Distinguished from user-defined structs named "Tuple" by `module_source.is_core()`.
     pub const TUPLE_TYPE_NAME: &'static str = "Tuple";
 
-    /// Check if a name and module_source identify a built-in tuple type.
+    /// Check if a name and `module_source` identify a built-in tuple type.
     pub fn is_tuple_type(name: &str, module_source: &ModuleSource) -> bool {
         name == Self::TUPLE_TYPE_NAME && module_source.is_core()
     }

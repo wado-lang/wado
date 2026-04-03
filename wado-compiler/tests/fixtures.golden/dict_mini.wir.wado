@@ -33,15 +33,15 @@ struct [String, String] {
     mut 1: ref String,
 }
 
-array array<#Tuple<String,String>> (mut ref "tuple/[String, String]");
+array array<Tuple<String,String>> (mut ref "tuple/[String, String]");
 
-struct Array<#Tuple<String,String>> {  // Array<T> with T=#Tuple<String,String>
-    mut repr: ref array<#Tuple<String,String>>,
+struct Array<Tuple<String,String>> {  // Array<T> with T=Tuple<String,String>
+    mut repr: ref array<Tuple<String,String>>,
     mut used: i32,
 }
 
 struct MiniDict<String,String> {  // MiniDict<T> with T=String, String
-    mut entries: ref Array<#Tuple<String,String>>,
+    mut entries: ref Array<Tuple<String,String>>,
 }
 
 enum Alignment { Left = 0, Center = 1, Right = 2 };
@@ -96,9 +96,9 @@ type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> b
 
 type "functype/String::push" = fn(ref String, char);
 
-type "functype/Array<#Tuple<String,String>>::push" = fn(ref Array<#Tuple<String,String>>, ref "tuple/[String, String]");
+type "functype/Array<Tuple<String,String>>::push" = fn(ref Array<Tuple<String,String>>, ref "tuple/[String, String]");
 
-type "functype/Array<#Tuple<String,String>>::grow" = fn(ref Array<#Tuple<String,String>>);
+type "functype/Array<Tuple<String,String>>::grow" = fn(ref Array<Tuple<String,String>>);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -114,11 +114,11 @@ type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
 
-type "functype/MiniDict<String,String>::has" = fn(ref Array<#Tuple<String,String>>, ref String) -> bool;
+type "functype/MiniDict<String,String>::has" = fn(ref Array<Tuple<String,String>>, ref String) -> bool;
 
-type "functype/MiniDict<String,String>::get" = fn(ref Array<#Tuple<String,String>>, ref String) -> ref null String;
+type "functype/MiniDict<String,String>::get" = fn(ref Array<Tuple<String,String>>, ref String) -> ref null String;
 
-type "functype/MiniDict<String,String>::set" = fn(ref Array<#Tuple<String,String>>, ref String, ref String);
+type "functype/MiniDict<String,String>::set" = fn(ref Array<Tuple<String,String>>, ref String, ref String);
 
 import fn realloc from "mem/realloc";
 import fn stream-write from "wasi/stream-write";
@@ -151,13 +151,13 @@ fn run() with Stdout {
     let __pattern_temp_1: ref null String;
     let __pattern_temp_2: ref null String;
     let __pattern_temp_3: ref null String;
-    let __local_18: ref Array<#Tuple<String,String>>;
+    let __local_18: ref Array<Tuple<String,String>>;
     let __local_27: ref "core:internal/Box<bool>";
     let __local_33: ref "core:internal/Box<bool>";
     let __local_39: ref "core:internal/Box<i32>";
-    let __local_44: ref Array<#Tuple<String,String>>;
-    dict = MiniDict<String,String> { entries: ref.as_non_null(__seq_lit: block -> ref Array<#Tuple<String,String>> {
-        __local_18 = Array<#Tuple<String,String>> { repr: builtin::array_new<ref "tuple/[String, String]">(0), used: 0 };
+    let __local_44: ref Array<Tuple<String,String>>;
+    dict = MiniDict<String,String> { entries: ref.as_non_null(__seq_lit: block -> ref Array<Tuple<String,String>> {
+        __local_18 = Array<Tuple<String,String>> { repr: builtin::array_new<ref "tuple/[String, String]">(0), used: 0 };
         break __seq_lit: __local_18;
     }) };
     MiniDict<String,String>::set(dict.entries, String { repr: array.new_data<u8>("name"), used: 4 }, String { repr: array.new_data<u8>("Wado"), used: 4 });
@@ -237,9 +237,9 @@ fn run() with Stdout {
         String::push(__local_11, 58);
         String::push(__local_11, 32);
         __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
-        __local_39 = "core:internal/Box<i32>" { value: __inline_Array__Tuple_String_String____len_0: block -> i32 {
+        __local_39 = "core:internal/Box<i32>" { value: __inline_Array_Tuple_String_String____len_0: block -> i32 {
             __local_44 = dict.entries;
-            break __inline_Array__Tuple_String_String____len_0: __local_44.used;
+            break __inline_Array_Tuple_String_String____len_0: __local_44.used;
         } };
         i32::fmt_decimal(__local_39.value, __local_12);
         break __tmpl: __local_11;
@@ -516,21 +516,21 @@ fn String::push(self, c) {
     };
 }
 
-fn Array<#Tuple<String,String>>::push(self, value) {
+fn Array<Tuple<String,String>>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<#Tuple<String,String>>::grow(self);
+        Array<Tuple<String,String>>::grow(self);
     };
     builtin::array_set<ref "tuple/[String, String]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<#Tuple<String,String>>::grow(self) {
+fn Array<Tuple<String,String>>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<#Tuple<String,String>>;
-    let old_repr: ref array<#Tuple<String,String>>;
+    let new_repr: ref array<Tuple<String,String>>;
+    let old_repr: ref array<Tuple<String,String>>;
     let used: i32;
     let i: i32;
     let __local_7: i32;
@@ -561,9 +561,9 @@ fn Array<#Tuple<String,String>>::grow(self) {
 fn MiniDict<String,String>::has(self, key) {
     let i: i32;
     let __local_5: i32;
-    let _licm_entries_6: ref Array<#Tuple<String,String>>;
+    let _licm_entries_6: ref Array<Tuple<String,String>>;
     let _licm_used_7: i32;
-    let _licm_repr_8: ref array<#Tuple<String,String>>;
+    let _licm_repr_8: ref array<Tuple<String,String>>;
     __for_2: block {
         i = 0;
         _licm_entries_6 = self;
@@ -574,9 +574,9 @@ fn MiniDict<String,String>::has(self, key) {
                 if (i < _licm_used_7) == 0 {
                     break __for_2;
                 };
-                if String^Eq::eq(__inline_Array__Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
+                if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
                     __local_5 = i;
-                    break __inline_Array__Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_8, __local_5);
+                    break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_8, __local_5);
                 }.0, key) {
                     return 1;
                 };
@@ -592,9 +592,9 @@ fn MiniDict<String,String>::get(self, key) {
     let i: i32;
     let __local_5: i32;
     let __local_7: i32;
-    let _licm_entries_8: ref Array<#Tuple<String,String>>;
+    let _licm_entries_8: ref Array<Tuple<String,String>>;
     let _licm_used_9: i32;
-    let _licm_repr_10: ref array<#Tuple<String,String>>;
+    let _licm_repr_10: ref array<Tuple<String,String>>;
     __for_1: block {
         i = 0;
         _licm_entries_8 = self;
@@ -605,13 +605,13 @@ fn MiniDict<String,String>::get(self, key) {
                 if (i < _licm_used_9) == 0 {
                     break __for_1;
                 };
-                if String^Eq::eq(__inline_Array__Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
+                if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
                     __local_5 = i;
-                    break __inline_Array__Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_5);
+                    break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_5);
                 }.0, key) {
-                    return __inline_Array__Tuple_String_String___IndexValue__index_value_2: block -> ref "tuple/[String, String]" {
+                    return __inline_Array_Tuple_String_String___IndexValue__index_value_2: block -> ref "tuple/[String, String]" {
                         __local_7 = i;
-                        break __inline_Array__Tuple_String_String___IndexValue__index_value_2: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_7);
+                        break __inline_Array_Tuple_String_String___IndexValue__index_value_2: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_10, __local_7);
                     }.1;
                 };
                 i = i + 1;
@@ -627,9 +627,9 @@ fn MiniDict<String,String>::set(self, key, value) {
     let __local_6: i32;
     let index: i32;
     let value_9: ref "tuple/[String, String]";
-    let _licm_entries_10: ref Array<#Tuple<String,String>>;
+    let _licm_entries_10: ref Array<Tuple<String,String>>;
     let _licm_used_11: i32;
-    let _licm_repr_12: ref array<#Tuple<String,String>>;
+    let _licm_repr_12: ref array<Tuple<String,String>>;
     __for_0: block {
         i = 0;
         _licm_entries_10 = self;
@@ -640,9 +640,9 @@ fn MiniDict<String,String>::set(self, key, value) {
                 if (i < _licm_used_11) == 0 {
                     break __for_0;
                 };
-                if String^Eq::eq(__inline_Array__Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
+                if String^Eq::eq(__inline_Array_Tuple_String_String___IndexValue__index_value_1: block -> ref "tuple/[String, String]" {
                     __local_6 = i;
-                    break __inline_Array__Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_12, __local_6);
+                    break __inline_Array_Tuple_String_String___IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, String]">(_licm_repr_12, __local_6);
                 }.0, key) {
                     index = i;
                     value_9 = "tuple/[String, String]" { 0: key, 1: value };
@@ -654,7 +654,7 @@ fn MiniDict<String,String>::set(self, key, value) {
             };
         };
     };
-    Array<#Tuple<String,String>>::push(self, "tuple/[String, String]" { 0: key, 1: value });
+    Array<Tuple<String,String>>::push(self, "tuple/[String, String]" { 0: key, 1: value });
 }
 
 fn Formatter::write_char_n(self, c, n) {

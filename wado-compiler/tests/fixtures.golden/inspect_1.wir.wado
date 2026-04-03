@@ -186,7 +186,7 @@ type "functype/String::push" = fn(ref String, char);
 
 type "functype/InspColor^Inspect::inspect" = fn(enum:InspColor, ref Formatter);
 
-type "functype/#Tuple<f64,f64>^Inspect::inspect" = fn(ref "tuple/[f64, f64]", ref Formatter);
+type "functype/Tuple<f64,f64>^Inspect::inspect" = fn(ref "tuple/[f64, f64]", ref Formatter);
 
 type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
 
@@ -3455,7 +3455,7 @@ fn InspShape^Inspect::inspect(self, f) {
     } else if ref.test InspShape::Rectangle(self) {
         __local_9 = String { repr: array.new_data<u8>("InspShape::Rectangle("), used: 21 };
         String::push_str(f.buf, __local_9);
-        #Tuple<f64,f64>^Inspect::inspect(ref.cast InspShape::Rectangle(self).payload_0, f);
+        Tuple<f64,f64>^Inspect::inspect(ref.cast InspShape::Rectangle(self).payload_0, f);
         __local_11 = String { repr: array.new_data<u8>(")"), used: 1 };
         String::push_str(f.buf, __local_11);
     } else if self.discriminant == 2 {
@@ -3497,7 +3497,7 @@ fn InspPerms^Inspect::inspect(self, f) {
     };
 }
 
-fn #Tuple<f64,f64>^Inspect::inspect(self, f) {
+fn Tuple<f64,f64>^Inspect::inspect(self, f) {
     let __tuple_3: ref "tuple/[f64, f64]";
     let v_5: f64;
     let v_6: f64;

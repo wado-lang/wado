@@ -31,7 +31,7 @@ struct [String, Value] {
 
 array array<TreeMapEntry<String,Value>> (mut ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>");
 
-array array<#Tuple<String,Value>> (mut ref "tuple/[String, Value]");
+array array<Tuple<String,Value>> (mut ref "tuple/[String, Value]");
 
 struct TreeMap<String,Value> {  // from ./sub/cross_module_treemap_variant_helper.wado  // TreeMap<T> with T=String, Value
     mut root: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapNode<String>",
@@ -65,8 +65,8 @@ variant Option<TreeMapNode<String>> {
     None,
 }
 
-struct Array<#Tuple<String,Value>> {  // Array<T> with T=#Tuple<String,Value>
-    mut repr: ref array<#Tuple<String,Value>>,
+struct Array<Tuple<String,Value>> {  // Array<T> with T=Tuple<String,Value>
+    mut repr: ref array<Tuple<String,Value>>,
     mut used: i32,
 }
 
@@ -121,11 +121,11 @@ type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i3
 
 type "functype/./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>^Iterator::next" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>") -> ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
 
-type "functype/./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entries" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>") -> ref Array<#Tuple<String,Value>>;
+type "functype/./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entries" = fn(ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>") -> ref Array<Tuple<String,Value>>;
 
-type "functype/./sub/cross_module_treemap_variant_helper.wado/Array<#Tuple<String,Value>>::push" = fn(ref Array<#Tuple<String,Value>>, ref "tuple/[String, Value]");
+type "functype/./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::push" = fn(ref Array<Tuple<String,Value>>, ref "tuple/[String, Value]");
 
-type "functype/./sub/cross_module_treemap_variant_helper.wado/Array<#Tuple<String,Value>>::grow" = fn(ref Array<#Tuple<String,Value>>);
+type "functype/./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::grow" = fn(ref Array<Tuple<String,Value>>);
 
 type "functype/String::grow" = fn(ref String, i32);
 
@@ -201,7 +201,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
     let __local_1: ref String;
     let __local_2: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>";
     let __local_3: ref String;
-    let __local_4: ref Array<#Tuple<String,Value>>;
+    let __local_4: ref Array<Tuple<String,Value>>;
     let __local_5: i32;
     let __local_6: ref String;
     let __local_8: ref String;
@@ -242,13 +242,13 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
                             break __tmpl: __local_9;
                         };
                     };
-                    __local_12 = __inline_Array__Tuple_String_Value___IndexValue__index_value_3: block -> ref "tuple/[String, Value]" {
+                    __local_12 = __inline_Array_Tuple_String_Value___IndexValue__index_value_3: block -> ref "tuple/[String, Value]" {
                         __local_17 = __local_5;
                         if __local_17 >= __local_4.used {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
                         };
-                        break __inline_Array__Tuple_String_Value___IndexValue__index_value_3: builtin::array_get<ref "tuple/[String, Value]">(__local_4.repr, __local_17);
+                        break __inline_Array_Tuple_String_Value___IndexValue__index_value_3: builtin::array_get<ref "tuple/[String, Value]">(__local_4.repr, __local_17);
                     };
                     __local_6 = __local_12.0;
                     __local_3 = __tmpl: block -> ref String {
@@ -409,14 +409,14 @@ fn "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String
 }
 
 fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entries"(self) {  // from ./sub/cross_module_treemap_variant_helper.wado
-    let __local_1: ref Array<#Tuple<String,Value>>;
-    let result: ref Array<#Tuple<String,Value>>;
+    let __local_1: ref Array<Tuple<String,Value>>;
+    let result: ref Array<Tuple<String,Value>>;
     let __iter_3: ref "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>";
     let entry: ref "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
     let __pattern_temp_0: ref null "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>";
     let __local_9: ref Array<TreeMapEntry<String,Value>>;
-    result = __seq_lit: block -> ref Array<#Tuple<String,Value>> {
-        __local_1 = Array<#Tuple<String,Value>> { repr: builtin::array_new<ref "tuple/[String, Value]">(0), used: 0 };
+    result = __seq_lit: block -> ref Array<Tuple<String,Value>> {
+        __local_1 = Array<Tuple<String,Value>> { repr: builtin::array_new<ref "tuple/[String, Value]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
     __iter_3 = __inline_Array_TreeMapEntry_String_Value___IntoIterator__into_iter_3: block -> ref "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String,Value>>" {
@@ -429,7 +429,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
             if ref.is_null(__pattern_temp_0) == 0 {
                 entry = value_copy "./sub/cross_module_treemap_variant_helper.wado/TreeMapEntry<String,Value>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
-                    "./sub/cross_module_treemap_variant_helper.wado/Array<#Tuple<String,Value>>::push"(result, "tuple/[String, Value]" { 0: entry.key, 1: entry.value });
+                    "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::push"(result, "tuple/[String, Value]" { 0: entry.key, 1: entry.value });
                 };
             } else {
                 break b14;
@@ -440,21 +440,21 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
     return result;
 }
 
-fn "./sub/cross_module_treemap_variant_helper.wado/Array<#Tuple<String,Value>>::push"(self, value) {  // from ./sub/cross_module_treemap_variant_helper.wado
+fn "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::push"(self, value) {  // from ./sub/cross_module_treemap_variant_helper.wado
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "./sub/cross_module_treemap_variant_helper.wado/Array<#Tuple<String,Value>>::grow"(self);
+        "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::grow"(self);
     };
     builtin::array_set<ref "tuple/[String, Value]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "./sub/cross_module_treemap_variant_helper.wado/Array<#Tuple<String,Value>>::grow"(self) {  // from ./sub/cross_module_treemap_variant_helper.wado
+fn "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::grow"(self) {  // from ./sub/cross_module_treemap_variant_helper.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<#Tuple<String,Value>>;
-    let old_repr: ref array<#Tuple<String,Value>>;
+    let new_repr: ref array<Tuple<String,Value>>;
+    let old_repr: ref array<Tuple<String,Value>>;
     let used: i32;
     let i: i32;
     let __local_7: i32;

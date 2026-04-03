@@ -36,7 +36,7 @@ fn __cm_binding__Environment_get_environment() -> Array<[String, String]> {
     cm_raw_call wasi:cli/Environment::get_environment(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
     let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: Array<[String, String]> = "Array<#Tuple<String,String>>::with_capacity"(__count);
+    let mut __result: Array<[String, String]> = "Array<Tuple<String,String>>::with_capacity"(__count);
     let mut __i: i32 = 0;
     loop {
         if (__i >= __count) {
@@ -45,7 +45,7 @@ fn __cm_binding__Environment_get_environment() -> Array<[String, String]> {
         let __elem_addr: i32 = (__base + (__i * 16));
         let __lifted_result_6: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)));
         let __lifted_result_7: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)));
-        __result."Array<#Tuple<String,String>>::push"([__lifted_result_6, __lifted_result_7]);
+        __result."Array<Tuple<String,String>>::push"([__lifted_result_6, __lifted_result_7]);
         core::builtin::realloc(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)), 1, 0);
         core::builtin::realloc(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)), 1, 0);
         __i = (__i + 1);
