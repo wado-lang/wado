@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775174263268,
+  "lastUpdate": 1775177039062,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9851,6 +9851,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5147fb777e0f38f7f8c48b7474bd399a654c45b5"
         },
         "date": 1775174263045,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e9419b64559ebc5de121123fc96033c7aeb52780",
+          "message": "Merge pull request #761 from wado-lang/claude/tuple-eq-wado-impl-2Ln31\n\nImplement tuple Eq at language level via .zip() pseudo-method",
+          "timestamp": "2026-04-03T09:41:04+09:00",
+          "tree_id": "6cf12c3d0ea722817aa9c8568a42a2dbdc812d6e",
+          "url": "https://github.com/wado-lang/wado/commit/e9419b64559ebc5de121123fc96033c7aeb52780"
+        },
+        "date": 1775177038841,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
