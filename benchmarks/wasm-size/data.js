@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775203557032,
+  "lastUpdate": 1775258269505,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10061,6 +10061,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0dd36628979c7d7dd97d6077e88e0a382106251e",
+          "message": "Merge pull request #767 from wado-lang/claude/analyze-sieve-optimization-wEvek\n\nAdd labeled block copy propagation and CSE optimization passes",
+          "timestamp": "2026-04-04T08:15:02+09:00",
+          "tree_id": "9deb5d8acca5c79680337f810fa65b3799c0ae10",
+          "url": "https://github.com/wado-lang/wado/commit/0dd36628979c7d7dd97d6077e88e0a382106251e"
+        },
+        "date": 1775258269302,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8975,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20408,
             "unit": "bytes"
           }
         ]
