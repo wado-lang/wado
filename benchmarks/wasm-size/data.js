@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775185414516,
+  "lastUpdate": 1775197461730,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -9968,6 +9968,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2ea151af7680d38548c294abe180b7e59dd07ee6"
         },
         "date": 1775185414304,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8f2ce427c51b967f9b1225f41af7af25102ede7e",
+          "message": "Merge pull request #764 from wado-lang/claude/design-package-gale-lexer-tbqq6\n\nSupport separated lexer/parser grammars with lexer modes in Gale",
+          "timestamp": "2026-04-03T15:21:31+09:00",
+          "tree_id": "e5b3eee9d8daa2683082c76ef98c42fca0d94449",
+          "url": "https://github.com/wado-lang/wado/commit/8f2ce427c51b967f9b1225f41af7af25102ede7e"
+        },
+        "date": 1775197461509,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
