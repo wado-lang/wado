@@ -186,7 +186,7 @@ __unroll_1: {
 ### Constraints
 
 - **Concrete type required**: Tuple enumeration is only valid when the tuple type is fully concrete. Attempting to enumerate a generic `T` that has not been instantiated is a compile error
-- **`break` and `continue` are not allowed**: Since the loop is unrolled into sequential blocks, `break`/`continue` have no natural target. They are compile errors inside tuple enumeration. `return` is allowed and exits the enclosing function
+- **`break` and `continue` are not allowed**: Since the loop is unrolled into sequential blocks, `break`/`continue` have no natural target. They are compile errors inside tuple enumeration
 - **Index is a compile-time constant**: The `i` binding from `.enumerate()` is a compile-time `i32` constant, usable in tuple/array indexing expressions
 - **Empty tuple**: `for let v of []` produces zero unrolled blocks (no-op)
 - **Nested enumeration**: Enumerating a tuple that contains tuples works; inner tuples are elements, not automatically flattened

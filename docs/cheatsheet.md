@@ -485,7 +485,6 @@ for let v of t {
     println(`{v}`);
 }
 // break and continue are not allowed inside tuple for-of
-// return is allowed (exits the enclosing function)
 
 // Infinite loop
 loop {
