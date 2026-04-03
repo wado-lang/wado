@@ -16,6 +16,7 @@ mod const_folding;
 mod const_global_promotion;
 mod const_propagation;
 mod copy_prop;
+mod cse;
 pub mod dce;
 mod field_scalarize;
 mod inline;
@@ -33,6 +34,7 @@ use const_folding::fold_constants;
 use const_global_promotion::promote_constant_globals;
 use const_propagation::propagate_constants;
 use copy_prop::propagate_copies;
+use cse::eliminate_common_subexprs;
 use dce::{
     analyze_project, remove_unreachable_functions, remove_unreachable_globals,
     remove_unreachable_types,
@@ -226,6 +228,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig, profiler: 
             scalar_replace_aggregates(p)
         });
         changed |= run_pass("tir/copy_prop", project, profiler, propagate_copies);
+        changed |= run_pass("tir/cse", project, profiler, eliminate_common_subexprs);
         changed |= run_pass("tir/store_load_forward", project, profiler, |p| {
             forward_stores_to_loads(p)
         });

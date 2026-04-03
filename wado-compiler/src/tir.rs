@@ -2127,7 +2127,7 @@ pub struct TemplateFormatSpec {
     pub type_char: Option<char>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TirBinaryOp {
     Add,
     Sub,

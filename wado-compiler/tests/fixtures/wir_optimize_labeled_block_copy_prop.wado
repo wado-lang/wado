@@ -1,0 +1,30 @@
+// Test: labeled block copy propagation + trivial block flattening
+//
+// When array index access is inlined, it creates:
+//   label: { let index = i; [bounds check]; break label: array_get(repr, index); }
+//
+// After copy propagation within the labeled block, the redundant `index` copy
+// is eliminated, and the trivial block is flattened to a direct array_get call.
+//
+// At O0: index access is a function call (not inlined)
+// At O2: index access is inlined with copy eliminated and block flattened
+
+fn sum_array(arr: Array<i32>) -> i32 {
+    let mut total = 0;
+    for let mut i = 0; i < arr.len(); i += 1 {
+        total += arr[i];
+    }
+    return total;
+}
+
+test {
+    let a: Array<i32> = [10, 20, 30];
+    assert sum_array(a) == 60;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": ["index_value(arr, i)"],
+    "wir_not_expect:O2": ["index_value("]
+}
