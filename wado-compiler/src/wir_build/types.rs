@@ -220,35 +220,26 @@ fn register_struct(
     type_table: &TypeTable,
     module_source: &ModuleSource,
 ) {
-    let struct_name = StructName::new(module_source.clone(), tir_struct.name.clone());
+    // For monomorphized structs, use the defining module (the module where the
+    // base generic struct is defined) rather than the processing module. This
+    // ensures that e.g. `Box<i32>` instantiated from both the entry module and
+    // a library module gets the same StructName key, enabling exact-match dedup.
+    // Non-mono structs use the processing module as-is (they are distinct types).
+    let effective_module = if let Some(ref mono) = tir_struct.monomorph_info {
+        type_table
+            .find_struct_module_source(&mono.generic_name)
+            .unwrap_or(module_source.clone())
+    } else {
+        module_source.clone()
+    };
 
-    // Skip if already registered (exact match)
+    let struct_name = StructName::new(effective_module.clone(), tir_struct.name.clone());
+
+    // Skip if already registered (exact match — works for both mono and non-mono)
     if ctx.struct_type_map.contains_key(&struct_name) {
         return;
     }
 
-    // Skip if already registered under a different module_source (name-only match).
-    // Monomorphized structs like TreeMap<String,i32> may appear in both the
-    // definition module and the entry module. Only register the first occurrence.
-    // Only applies to monomorphized structs — non-mono structs with the same name
-    // from different modules (e.g., two modules defining `Pair`) are distinct types.
-    // Check that the existing type comes from the same base generic definition
-    // to avoid conflating same-named generics from different modules.
-    if let Some(ref mono) = tir_struct.monomorph_info {
-        // Find the defining module of the base generic struct
-        let base_module = type_table
-            .find_struct_module_source(&mono.generic_name)
-            .unwrap_or(module_source.clone());
-        // Check if we already registered this monomorphized struct from the same base module
-        if let Some((existing_base_module, existing_id)) =
-            ctx.mono_struct_dedup.get(&tir_struct.name)
-        {
-            if *existing_base_module == base_module {
-                ctx.struct_type_map.insert(struct_name, existing_id.clone());
-                return;
-            }
-        }
-    }
     // Also check with newtypes resolved: e.g., Array<Tuple<FieldName,FieldValue>> should
     // reuse the existing Array<Tuple<String,Array<u8>>> when FieldName/FieldValue are newtypes.
     if let Some(ref mono) = tir_struct.monomorph_info {
@@ -264,14 +255,21 @@ fn register_struct(
                 .collect();
             let resolved_name =
                 crate::name::mangle_generic_name(&mono.generic_name, &resolved_args);
-            if let Some(existing) = ctx.lookup_struct_by_name(&resolved_name).cloned() {
+            let resolved_sn =
+                StructName::new(effective_module.clone(), resolved_name.clone());
+            if let Some(existing) = ctx
+                .struct_type_map
+                .get(&resolved_sn)
+                .or_else(|| ctx.lookup_struct_by_name(&resolved_name))
+                .cloned()
+            {
                 ctx.struct_type_map.insert(struct_name, existing);
                 return;
             }
         }
     }
 
-    let fq = format!("{module_source}//{}", tir_struct.name);
+    let fq = format!("{effective_module}//{}", tir_struct.name);
     let display = tir_struct.name.clone();
 
     // Pre-register raw array types for BuiltinArray fields before resolving field types,
@@ -318,11 +316,11 @@ fn register_struct(
         WirTypeDef::Struct(WirStructType {
             name: WirName {
                 display,
-                fq: format!("{module_source}//{}", tir_struct.name),
+                fq: format!("{effective_module}//{}", tir_struct.name),
             },
             fields,
             meta: WirMeta {
-                module_source: Some(module_source.clone()),
+                module_source: Some(effective_module.clone()),
                 ..WirMeta::default()
             },
             generic_origin,
@@ -330,16 +328,7 @@ fn register_struct(
         }),
     );
 
-    ctx.struct_type_map.insert(struct_name, type_id.clone());
-
-    // Record in mono dedup map for cross-module deduplication
-    if let Some(ref mono) = tir_struct.monomorph_info {
-        let base_module = type_table
-            .find_struct_module_source(&mono.generic_name)
-            .unwrap_or(module_source.clone());
-        ctx.mono_struct_dedup
-            .insert(tir_struct.name.clone(), (base_module, type_id));
-    }
+    ctx.struct_type_map.insert(struct_name, type_id);
 }
 
 /// Register a single variant type.

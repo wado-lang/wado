@@ -1,0 +1,20 @@
+// Cross-module generic function type inference without turbofish.
+// Type args should be inferred from arguments automatically.
+
+#![TODO]
+
+use { wrap as wrap_a } from "./sub/cross_module_same_name_fn_a.wado";
+use { wrap as wrap_b } from "./sub/cross_module_same_name_fn_b.wado";
+
+test "cross-module same-name generic functions without turbofish" {
+    let a = wrap_a(42);
+    assert a.0 == 42;
+    assert a.1 == 1;
+
+    let b = wrap_b(42);
+    assert b.0 == 42;
+    assert b.1 == 2;
+}
+
+__DATA__
+{"test": {}}

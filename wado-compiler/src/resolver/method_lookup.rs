@@ -1875,17 +1875,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
             self.trait_ctx = saved_trait_ctx;
         }
 
-        // Remove duplicates (same trait from same module)
-        found_traits.dedup_by(|a, b| {
-            a.trait_name == b.trait_name && a.impl_module_source == b.impl_module_source
-        });
-
-        // Prefer trait from the current module over cross-module traits
+        // Prefer trait from the current module over cross-module traits.
+        // Sort BEFORE dedup_by, since dedup_by only removes adjacent duplicates.
         let current_module = &self.current_module_source;
         found_traits.sort_by(|a, b| {
             let a_local = &a.impl_module_source == current_module;
             let b_local = &b.impl_module_source == current_module;
             b_local.cmp(&a_local)
+        });
+
+        // Remove duplicates (same trait from same module)
+        found_traits.dedup_by(|a, b| {
+            a.trait_name == b.trait_name && a.impl_module_source == b.impl_module_source
         });
 
         // Return the first one found (if there are multiple, it would be ambiguous,
