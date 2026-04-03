@@ -36,10 +36,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     _ => unreachable!("ImplBlockRef::Loaded points to non-impl item"),
                 }
             }
-            ImplBlockRef::CurrentModule(item_idx) => match &self.current_module_items[*item_idx] {
-                Item::Impl(impl_block) => impl_block,
-                _ => unreachable!("ImplBlockRef::CurrentModule points to non-impl item"),
-            },
+            ImplBlockRef::CurrentModule(item_idx) => {
+                match &self.current_module_items[*item_idx] {
+                    Item::Impl(impl_block) => impl_block,
+                    _ => unreachable!("ImplBlockRef::CurrentModule points to non-impl item"),
+                }
+            }
         }
     }
 
@@ -255,7 +257,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Check current module
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             match item {
                 Item::Struct(s) if s.name == struct_name => {
                     return self.current_module_source.clone();
@@ -860,7 +862,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // First collect method info without resolving types
         let mut found_method: Option<(ast::SelfKind, Vec<ast::Type>, Vec<bool>)> = None;
 
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Impl(impl_block) = item {
                 // Skip trait impls
                 if impl_block.trait_type.is_some() {
@@ -2407,7 +2409,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
         // Search current module items
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && Self::get_type_name_static(&impl_block.ty) == struct_name
             {
@@ -2429,7 +2431,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Vec<ast::GenericParam> {
         // Try local functions
         if callee_module.is_entry_point() {
-            for item in &self.current_module_items {
+            for item in self.current_module_items {
                 if let ast::Item::Function(func) = item
                     && func.name == func_name
                 {

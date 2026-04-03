@@ -440,7 +440,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
         }
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let crate::ast::Item::Trait(trait_decl) = item {
                 for assoc in &trait_decl.associated_types {
                     if assoc.name == assoc_name {

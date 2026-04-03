@@ -1305,7 +1305,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
         // Check current module's impl blocks
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Impl(impl_block) = item {
                 let impl_struct_name = self.get_type_name(&impl_block.ty);
                 if impl_struct_name == struct_name {
@@ -1621,7 +1621,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Check current module
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && Self::get_type_name_static(&impl_block.ty) == struct_name
             {
@@ -1677,7 +1677,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
         };
 
-        if let Some(result) = find_in_items(&self.current_module_items) {
+        if let Some(result) = find_in_items(self.current_module_items) {
             return result;
         }
         for module in self.loaded_modules.values() {
@@ -1715,7 +1715,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
         };
 
-        if let Some(result) = find_in_items(&self.current_module_items) {
+        if let Some(result) = find_in_items(self.current_module_items) {
             return result;
         }
         for module in self.loaded_modules.values() {
@@ -1755,7 +1755,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 false
             }
         };
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && check_impl(impl_block)
             {
@@ -1845,7 +1845,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             None
         };
 
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && let Some(name) = check_impl(impl_block)
             {
@@ -1885,7 +1885,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Check current module's impl blocks (not in the pre-built index)
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Impl(impl_block) = item {
                 let impl_struct_name = self.get_type_name(&impl_block.ty);
                 if impl_struct_name == struct_name {

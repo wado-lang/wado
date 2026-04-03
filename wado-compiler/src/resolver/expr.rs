@@ -3144,7 +3144,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Search current module items
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && check_impl(impl_block)
             {

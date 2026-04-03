@@ -681,7 +681,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 logger,
                 current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"), // Set in resolve_module
                 entry_module_source: entry_module_source.clone(),
-                current_module_items: Vec::new(), // Set in resolve_module
+                current_module_items: &[], // Set in resolve_module
                 effect_sources: IndexMap::default(), // Populated per-module in resolve_module
                 current_effect_params: IndexSet::default(),
                 trait_ctx: super::trait_env::TraitContext::default(),

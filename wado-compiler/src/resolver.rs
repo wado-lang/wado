@@ -93,7 +93,7 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Entry module source (for cross-module import dedup)
     entry_module_source: ModuleSource,
     /// Current module items (for local function parameter lookup)
-    current_module_items: Vec<Item>,
+    current_module_items: &'a [Item],
     /// Mutable trait resolution context: type params, bounds, associated type bindings, self type.
     /// Grouped together so scope entry/exit can save/restore the whole context at once.
     trait_ctx: trait_env::TraitContext,
@@ -197,7 +197,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             logger,
             current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
             entry_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
-            current_module_items: Vec::new(),
+            current_module_items: &[],
             effect_sources: IndexMap::default(),
             current_effect_params: IndexSet::default(),
             trait_ctx: trait_env::TraitContext::default(),
@@ -350,15 +350,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Resolve a module, converting AST to TIR
     pub fn resolve_module(
         &mut self,
-        module: &Module,
+        module: &'a Module,
         module_source: ModuleSource,
     ) -> Result<TirModule, Bail> {
         // Set current module source for struct type creation
         self.current_module_source = module_source.clone();
-        // Store current module items for local function parameter lookup
-        self.current_module_items.clone_from(&module.items);
+        // Store current module items as a reference (no clone)
+        self.current_module_items = &module.items;
         // Build function name → index for O(1) lookup
-        self.current_module_func_index = Self::build_func_index(&self.current_module_items);
+        self.current_module_func_index = Self::build_func_index(self.current_module_items);
         // Clear trait lookup caches (current_module_items changed)
         self.indexing_trait_cache.clear();
         // Build effect source map from imports

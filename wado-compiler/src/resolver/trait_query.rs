@@ -24,7 +24,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
         // Check current module items (not covered by the index).
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Trait(trait_decl) = item
                 && trait_decl.name == trait_name
             {
@@ -272,7 +272,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Also check current module items (not covered by the index).
-        for item in &self.current_module_items {
+        for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && let Some(trait_type) = &impl_block.trait_type
                 && Self::get_type_name_static(&impl_block.ty) == type_name
@@ -416,7 +416,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Also check current module items
             if found_trait_method.is_none() {
-                for item in &self.current_module_items {
+                for item in self.current_module_items {
                     if let Item::Trait(trait_decl) = item
                         && trait_decl.name == *trait_name
                     {
