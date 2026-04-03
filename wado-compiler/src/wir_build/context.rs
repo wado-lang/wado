@@ -219,12 +219,10 @@ impl<'a> WirContext<'a> {
         if let Some(existing) = self.type_map.get(&fq) {
             return existing.clone();
         }
-        let display = fq.clone();
         self.register_type(
             fq,
             WirTypeDef::Func(WirFuncType {
                 name: WirName {
-                    display,
                     fq: String::new(), // filled from register_type
                 },
                 params,
@@ -363,10 +361,7 @@ impl<'a> WirContext<'a> {
         let struct_type_id = self.register_type(
             struct_fq.clone(),
             WirTypeDef::Struct(WirStructType {
-                name: WirName {
-                    display: format!("CanonicalClosure_{id}"),
-                    fq: struct_fq,
-                },
+                name: WirName { fq: struct_fq },
                 fields: vec![
                     WirField {
                         name: "env".to_string(),
@@ -417,10 +412,7 @@ impl<'a> WirContext<'a> {
         }
         let type_fq = format!("functype//wasi/{name}");
         let type_id = self.register_func_type(type_fq, params, results);
-        let wir_name = WirName {
-            display: name.clone(),
-            fq: key,
-        };
+        let wir_name = WirName { fq: key };
         let func_id = self.register_import_func("wasi".to_string(), name, type_id, wir_name);
         self.needed_canonicals.insert(intrinsic, func_id.clone());
         func_id
@@ -839,7 +831,6 @@ impl<'a> WirContext<'a> {
             .collect();
         let struct_def = crate::wir::WirTypeDef::Struct(crate::wir::WirStructType {
             name: crate::wir::WirName {
-                display: display.clone(),
                 fq: display.clone(),
             },
             fields,

@@ -2251,7 +2251,7 @@ impl<'a> WirEmitter<'a> {
             for (i, func) in self.wir.functions.iter().enumerate() {
                 let wir_func_idx = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
                 if let Some(&wasm_idx) = self.func_index_map.get(&wir_func_idx) {
-                    name_map.append(wasm_idx, &func.name.display);
+                    name_map.append(wasm_idx, &func.name.fq);
                 }
             }
             names.functions(&name_map);

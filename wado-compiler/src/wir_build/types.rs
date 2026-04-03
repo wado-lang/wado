@@ -269,7 +269,6 @@ fn register_struct(
     }
 
     let fq = format!("{effective_module}//{}", tir_struct.name);
-    let display = tir_struct.name.clone();
 
     // Pre-register raw array types for BuiltinArray fields before resolving field types,
     // so that concrete array refs are available instead of falling back to abstract arrayref.
@@ -314,7 +313,6 @@ fn register_struct(
         fq,
         WirTypeDef::Struct(WirStructType {
             name: WirName {
-                display,
                 fq: format!("{effective_module}//{}", tir_struct.name),
             },
             fields,
@@ -343,8 +341,6 @@ fn register_variant(
     if ctx.variant_type_map.contains_key(&fq) {
         return;
     }
-
-    let display = variant.name.clone();
 
     let raw_cases: Vec<(String, Vec<WirType>)> = variant
         .cases
@@ -376,7 +372,6 @@ fn register_variant(
         fq.clone(),
         WirTypeDef::Variant(WirVariantType {
             name: WirName {
-                display,
                 fq: fq.clone(),
             },
             cases: cases.clone(),
@@ -416,7 +411,6 @@ fn register_variant(
             case_fq,
             WirTypeDef::Struct(WirStructType {
                 name: WirName {
-                    display: format!("{}::{}", variant.name, case.name),
                     fq: format!("{fq}::{}", case.name),
                 },
                 fields,
@@ -461,7 +455,6 @@ fn register_raw_array_type(
         fq.clone(),
         WirTypeDef::Array(WirArrayType {
             name: WirName {
-                display: format!("array<{elem_name}>"),
                 fq,
             },
             element_type: elem_wir_type,
@@ -516,10 +509,7 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
     let type_id = ctx.register_type(
         fq.clone(),
         WirTypeDef::Struct(WirStructType {
-            name: WirName {
-                display: box_name,
-                fq,
-            },
+            name: WirName { fq },
             fields: vec![WirField {
                 name: "value".to_string(),
                 ty: wir_type,
@@ -614,8 +604,8 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                     .iter()
                     .map(|&e| type_table.mangle_type_name_resolving_newtypes(e))
                     .collect();
-                let display = format!("[{}]", elem_names.join(", "));
-                let fq = format!("tuple//{display}");
+                let tuple_display = format!("[{}]", elem_names.join(", "));
+                let fq = format!("tuple//{tuple_display}");
 
                 let fields: Vec<WirField> = elements
                     .iter()
@@ -639,7 +629,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 let wir_type_id = ctx.register_type(
                     fq.clone(),
                     WirTypeDef::Struct(WirStructType {
-                        name: WirName { display, fq },
+                        name: WirName { fq },
                         fields,
                         meta: WirMeta::default(),
                         generic_origin: None,
@@ -949,7 +939,6 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                 fq.clone(),
                 WirTypeDef::Variant(WirVariantType {
                     name: WirName {
-                        display: mangled_name.clone(),
                         fq: fq.clone(),
                     },
                     cases: wir_cases.clone(),
@@ -987,7 +976,6 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     case_fq,
                     WirTypeDef::Struct(WirStructType {
                         name: WirName {
-                            display: format!("{}::{}", mangled_name, case.name),
                             fq: format!("{fq}::{}", case.name),
                         },
                         fields,
@@ -1024,7 +1012,6 @@ fn register_enums(ctx: &mut WirContext<'_>) {
             if ctx.type_map.contains_key(&fq) {
                 continue;
             }
-            let display = e.name.clone();
             let cases: Vec<WirEnumCase> = e
                 .cases
                 .iter()
@@ -1039,7 +1026,6 @@ fn register_enums(ctx: &mut WirContext<'_>) {
                 fq,
                 WirTypeDef::Enum(WirEnumType {
                     name: WirName {
-                        display,
                         fq: format!("{module_source}//enum:{}", e.name),
                     },
                     cases,
@@ -1231,10 +1217,7 @@ fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
     let type_id = ctx.register_type(
         fq.clone(),
         WirTypeDef::Struct(WirStructType {
-            name: WirName {
-                display: mangled,
-                fq,
-            },
+            name: WirName { fq },
             fields: vec![
                 WirField {
                     name: "repr".to_string(),
@@ -1299,7 +1282,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             }
 
             let module_source = s.meta.module_source.as_ref();
-            let struct_name_str = &s.name.display;
+            let struct_name_str = s.name.fq.split("//").nth(1).unwrap_or(&s.name.fq);
 
             let mut resolved = None;
 
@@ -1388,7 +1371,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
         };
         let variant_module_source = vt.meta.module_source.clone();
         // Extract the base variant name from the FQ (e.g. "Module//Name" → "Name")
-        let variant_display = vt.name.display.clone();
+        let variant_display = vt.name.fq.split("//").nth(1).unwrap_or(&vt.name.fq).to_string();
         for (case_idx, case) in vt.cases.iter().enumerate() {
             for (payload_idx, payload_ty) in case.payload.iter().enumerate() {
                 if !is_abstract_ref(payload_ty) {
@@ -1530,7 +1513,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             }
 
             // Find the TIR function that matches this func type
-            let fq = &f.name.display;
+            let fq = &f.name.fq;
             let mut resolved_params = None;
             let mut resolved_results = None;
             for body in &ctx.pending_bodies {
@@ -1585,7 +1568,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                     for tir_mod in ctx.project.tir_modules.values() {
                         let tt = tir_mod.type_table.borrow();
                         for tir_variant in &tir_mod.variants {
-                            if tir_variant.name == v.name.display
+                            let v_base = v.name.fq.split("//").nth(1).unwrap_or(&v.name.fq);
+                            if tir_variant.name == v_base
                                 && case_idx < tir_variant.cases.len()
                             {
                                 let payload_type_id = tir_variant.cases[case_idx].payload;

@@ -324,7 +324,7 @@ impl<'a> WirUnparser<'a> {
     fn unparse_struct_type(&mut self, s: &WirStructType) {
         self.write_indent();
         self.write("struct ");
-        self.write(&s.name.display);
+        self.write(&s.name.fq);
         self.write(" {");
 
         self.unparse_source_comment(&s.meta);
@@ -375,7 +375,7 @@ impl<'a> WirUnparser<'a> {
     fn unparse_variant_type(&mut self, v: &WirVariantType) {
         self.write_indent();
         self.write("variant ");
-        self.write(&v.name.display);
+        self.write(&v.name.fq);
         self.write(" {");
         self.unparse_source_comment(&v.meta);
         self.newline();
@@ -407,7 +407,7 @@ impl<'a> WirUnparser<'a> {
     fn unparse_enum_type(&mut self, e: &WirEnumType) {
         self.write_indent();
         self.write("enum ");
-        self.write(&e.name.display);
+        self.write(&e.name.fq);
         self.write(" { ");
 
         for (i, case) in e.cases.iter().enumerate() {
@@ -427,7 +427,7 @@ impl<'a> WirUnparser<'a> {
     fn unparse_flags_type(&mut self, f: &WirFlagsType) {
         self.write_indent();
         self.write("flags ");
-        self.write(&f.name.display);
+        self.write(&f.name.fq);
         self.write(" { ");
 
         for (i, bit) in f.bits.iter().enumerate() {
@@ -447,7 +447,7 @@ impl<'a> WirUnparser<'a> {
     fn unparse_array_type(&mut self, a: &WirArrayType) {
         self.write_indent();
         self.write("array ");
-        self.write(&a.name.display);
+        self.write(&a.name.fq);
         if a.mutable {
             self.write(" (mut ");
         } else {
@@ -462,7 +462,7 @@ impl<'a> WirUnparser<'a> {
     fn unparse_func_type(&mut self, f: &WirFuncType) {
         self.write_indent();
         self.write("type ");
-        let name = self.shorten_fq(&f.name.display);
+        let name = self.shorten_fq(&f.name.fq);
         self.write_name(&name);
         self.write(" = fn(");
         for (i, param) in f.params.iter().enumerate() {
@@ -499,7 +499,7 @@ impl<'a> WirUnparser<'a> {
         match &import.desc {
             WirImportDesc::Func { name, .. } => {
                 self.write("fn ");
-                self.write(&name.display);
+                self.write(&name.fq);
             }
             WirImportDesc::Global { ty, mutable } => {
                 self.write("global ");
@@ -536,7 +536,7 @@ impl<'a> WirUnparser<'a> {
         if global.mutable {
             self.write("mut ");
         }
-        self.write(&global.name.display);
+        self.write(&global.name.fq);
         self.write(": ");
         self.write(&self.fmt_type(&global.ty));
         self.write(" = ");
@@ -653,7 +653,7 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr(s);
             }
             self.write_indent();
-            self.write(&name.display);
+            self.write(&name.fq);
             self.write(" = ");
             self.unparse_instr_inline(last_val);
             self.write(";");
@@ -725,10 +725,10 @@ impl<'a> WirUnparser<'a> {
 
             // Globals
             WirInstr::GlobalGet { name, .. } => {
-                self.write(&name.display);
+                self.write(&name.fq);
             }
             WirInstr::GlobalSet { name, value } => {
-                self.write(&name.display);
+                self.write(&name.fq);
                 self.write(" = ");
                 self.unparse_instr_inline(value);
             }
@@ -1934,7 +1934,7 @@ impl<'a> WirUnparser<'a> {
                 self.write_name(&fid);
             }
             WirExportDesc::Global { name } => {
-                self.write(&format!("global {}", name.display));
+                self.write(&format!("global {}", name.fq));
             }
             WirExportDesc::Memory => {
                 self.write("memory");

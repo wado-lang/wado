@@ -194,14 +194,12 @@ __DATA__
 {
     "stdout": "ok\n",
     "wir_expect:O2": [
-        "\"functype/Wrapper::get\" = fn(i32) -> i32",
-        "\"functype/Wrapper::doubled\" = fn(i32) -> i32",
-        "\"functype/Amount::as_cents\" = fn(f64) -> i32",
-        "\"functype/Label::len\" = fn(ref String) -> i32",
-        "\"functype/Flag::is_set\" = fn(bool) -> bool",
-        "\"functype/double_wrapper\" = fn(i32) -> i32",
-        "\"functype/triple_wrapper\" = fn(i32) -> i32",
-        "\"functype/add_amounts\" = fn(f64, f64) -> f64"
+        "fn Wrapper::get(self) {\n    return self;\n}",
+        "fn Wrapper::doubled(self) {\n    return self * 2;\n}",
+        "fn Flag::is_set(self) {\n    return self;\n}",
+        "fn double_wrapper(w) {\n    return w * 2;\n}",
+        "fn triple_wrapper(w) {\n    return w * 3;\n}",
+        "fn add_amounts(a, b) {\n    return a + b;\n}"
     ],
     "wir_not_expect:O2": [
         "return self.inner;"
