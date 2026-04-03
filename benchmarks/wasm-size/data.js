@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775197461730,
+  "lastUpdate": 1775203557032,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10007,6 +10007,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8f2ce427c51b967f9b1225f41af7af25102ede7e"
         },
         "date": 1775197461509,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9040,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21454,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eca9fcec7a8562ea9f9e78043bb54a95425cc976",
+          "message": "Merge pull request #765 from wado-lang/claude/cleanup-legacy-tuple-AXeWZ\n\nRemove ResolvedType::Tuple, unify with GenericInstance",
+          "timestamp": "2026-04-03T17:02:50+09:00",
+          "tree_id": "b2d0cc843d20a31c1b24f5a9b40007eb0704b76c",
+          "url": "https://github.com/wado-lang/wado/commit/eca9fcec7a8562ea9f9e78043bb54a95425cc976"
+        },
+        "date": 1775203556810,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
