@@ -267,16 +267,19 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// This is the correct way to look up struct fields — it disambiguates
     /// structs with the same name from different modules. Falls back to the
     /// module-local flat map when the requested `module_source` has no entry in
-    /// the global map (e.g. during early resolution before all modules are loaded).
+    /// The flat `struct_fields` map is a visibility-scoped projection of `all_struct_fields`,
+    /// containing only types visible to the current module (own definitions + explicit imports).
+    /// It has up-to-date TypeIds because per-module resolution re-registers types locally.
+    ///
+    /// `all_struct_fields` is built once during orchestration before per-module resolution,
+    /// so its TypeIds may be stale. However, it covers ALL modules and is needed for
+    /// cross-module lookups where the type wasn't explicitly imported (e.g., a struct defined
+    /// in module A returned by a function called from module B, where B didn't import the struct).
     fn lookup_struct_fields(
         &self,
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
-        // Prefer the flat map (module-local, up-to-date TypeIds) over all_struct_fields
-        // (built early in orchestration with potentially stale TypeIds).
-        // Fall back to all_struct_fields for cross-module lookups where the flat map
-        // doesn't have an entry with matching module_source.
         self.struct_fields
             .get(name)
             .filter(|info| info.module_source == *module_source)
