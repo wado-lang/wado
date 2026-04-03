@@ -656,25 +656,22 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
     let b0_11: i32;
     let b1_12: i32;
     let __local_14: i32;
-    let __local_16: i32;
     let __local_18: i32;
-    let __local_20: i32;
     let __local_22: i32;
     let __local_24: i32;
     let __local_26: i32;
     let __local_28: i32;
-    let __local_30: i32;
     let __local_32: i32;
     let __local_34: i32;
-    let __local_36: i32;
     let __local_38: i32;
     let __local_40: i32;
     let __local_42: i32;
     let __local_44: i32;
-    let _licm_used_45: i32;
-    let _licm_repr_46: ref array<u8>;
-    let _licm_used_47: i32;
-    let _licm_repr_48: ref array<u8>;
+    let __cse_45: i32;
+    let _licm_used_46: i32;
+    let _licm_repr_47: ref array<u8>;
+    let _licm_used_48: i32;
+    let _licm_repr_49: ref array<u8>;
     len = data.used;
     if len == 0 {
         return String { repr: builtin::array_new<u8>(0), used: 0 };
@@ -685,70 +682,69 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
         break __inline_String__with_capacity_1: String { repr: builtin::array_new<u8>(__local_14), used: 0 };
     };
     i = 0;
-    _licm_used_45 = data.used;
-    _licm_repr_46 = data.repr;
-    _licm_used_47 = table.used;
-    _licm_repr_48 = table.repr;
+    _licm_used_46 = data.used;
+    _licm_repr_47 = data.repr;
+    _licm_used_48 = table.used;
+    _licm_repr_49 = table.repr;
     b37: block {
         l38: loop {
-            if ((i + 2) < len) == 0 {
+            __cse_45 = i + 2;
+            if (__cse_45 < len) == 0 {
                 break b37;
             };
             b0_7 = __inline_Array_u8__IndexValue__index_value_2: block -> u8 {
-                __local_16 = i;
-                if __local_16 >= _licm_used_45 {
+                if i >= _licm_used_46 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_2: builtin::array_get<u8>(_licm_repr_46, __local_16);
+                break __inline_Array_u8__IndexValue__index_value_2: builtin::array_get<u8>(_licm_repr_47, i);
             };
             b1_8 = __inline_Array_u8__IndexValue__index_value_3: block -> u8 {
                 __local_18 = i + 1;
-                if __local_18 >= _licm_used_45 {
+                if __local_18 >= _licm_used_46 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_3: builtin::array_get<u8>(_licm_repr_46, __local_18);
+                break __inline_Array_u8__IndexValue__index_value_3: builtin::array_get<u8>(_licm_repr_47, __local_18);
             };
             b2 = __inline_Array_u8__IndexValue__index_value_4: block -> u8 {
-                __local_20 = i + 2;
-                if __local_20 >= _licm_used_45 {
+                if __cse_45 >= _licm_used_46 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_4: builtin::array_get<u8>(_licm_repr_46, __local_20);
+                break __inline_Array_u8__IndexValue__index_value_4: builtin::array_get<u8>(_licm_repr_47, __cse_45);
             };
             String::push(out, __inline_Array_u8__IndexValue__index_value_5: block -> u8 {
                 __local_22 = (b0_7 >> 2) & 63;
-                if __local_22 >= _licm_used_47 {
+                if __local_22 >= _licm_used_48 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_5: builtin::array_get<u8>(_licm_repr_48, __local_22);
+                break __inline_Array_u8__IndexValue__index_value_5: builtin::array_get<u8>(_licm_repr_49, __local_22);
             });
             String::push(out, __inline_Array_u8__IndexValue__index_value_6: block -> u8 {
                 __local_24 = ((b0_7 << 4) | (b1_8 >> 4)) & 63;
-                if __local_24 >= _licm_used_47 {
+                if __local_24 >= _licm_used_48 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_6: builtin::array_get<u8>(_licm_repr_48, __local_24);
+                break __inline_Array_u8__IndexValue__index_value_6: builtin::array_get<u8>(_licm_repr_49, __local_24);
             });
             String::push(out, __inline_Array_u8__IndexValue__index_value_7: block -> u8 {
                 __local_26 = ((b1_8 << 2) | (b2 >> 6)) & 63;
-                if __local_26 >= _licm_used_47 {
+                if __local_26 >= _licm_used_48 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_7: builtin::array_get<u8>(_licm_repr_48, __local_26);
+                break __inline_Array_u8__IndexValue__index_value_7: builtin::array_get<u8>(_licm_repr_49, __local_26);
             });
             String::push(out, __inline_Array_u8__IndexValue__index_value_8: block -> u8 {
                 __local_28 = b2 & 63;
-                if __local_28 >= _licm_used_47 {
+                if __local_28 >= _licm_used_48 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_8: builtin::array_get<u8>(_licm_repr_48, __local_28);
+                break __inline_Array_u8__IndexValue__index_value_8: builtin::array_get<u8>(_licm_repr_49, __local_28);
             });
             i = i + 3;
             continue l38;
@@ -756,12 +752,11 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
     };
     if remainder == 1 {
         b0_10 = __inline_Array_u8__IndexValue__index_value_9: block -> u8 {
-            __local_30 = i;
-            if __local_30 >= data.used {
+            if i >= data.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_u8__IndexValue__index_value_9: builtin::array_get<u8>(data.repr, __local_30);
+            break __inline_Array_u8__IndexValue__index_value_9: builtin::array_get<u8>(data.repr, i);
         };
         String::push(out, __inline_Array_u8__IndexValue__index_value_10: block -> u8 {
             __local_32 = (b0_10 >> 2) & 63;
@@ -785,12 +780,11 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
         };
     } else if remainder == 2 {
         b0_11 = __inline_Array_u8__IndexValue__index_value_12: block -> u8 {
-            __local_36 = i;
-            if __local_36 >= data.used {
+            if i >= data.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             };
-            break __inline_Array_u8__IndexValue__index_value_12: builtin::array_get<u8>(data.repr, __local_36);
+            break __inline_Array_u8__IndexValue__index_value_12: builtin::array_get<u8>(data.repr, i);
         };
         b1_12 = __inline_Array_u8__IndexValue__index_value_13: block -> u8 {
             __local_38 = i + 1;
@@ -849,44 +843,40 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     let v1_16: i32;
     let v2_17: i32;
     let __local_19: i32;
-    let __local_20: i32;
-    let __local_22: i32;
     let __local_24: i32;
     let __local_26: i32;
     let __local_28: i32;
     let __local_30: i32;
     let __local_32: i32;
-    let __local_34: i32;
     let __local_36: i32;
-    let __local_38: i32;
     let __local_40: i32;
     let __local_42: i32;
     let __local_44: i32;
-    let __local_46: i32;
     let __local_48: i32;
     let __local_50: i32;
     let __local_52: i32;
     let __local_54: i32;
     let __local_56: i32;
-    let _licm_used_57: i32;
-    let _licm_repr_58: ref array<u8>;
-    let _licm_used_59: i32;
-    let _licm_repr_60: ref array<u8>;
-    let _licm_used_61: i32;
-    let _licm_repr_62: ref array<u8>;
+    let __cse_57: i32;
+    let _licm_used_58: i32;
+    let _licm_repr_59: ref array<u8>;
+    let _licm_used_60: i32;
+    let _licm_repr_61: ref array<u8>;
+    let _licm_used_62: i32;
+    let _licm_repr_63: ref array<u8>;
     end = input_len;
-    _licm_used_57 = input.used;
-    _licm_repr_58 = input.repr;
+    _licm_used_58 = input.used;
+    _licm_repr_59 = input.repr;
     b59: block {
         l60: loop {
             if if end > 0 -> i32 {
                 __inline_Array_u8__IndexValue__index_value_0: block -> u8 {
                     __local_19 = end - 1;
-                    if __local_19 >= _licm_used_57 {
+                    if __local_19 >= _licm_used_58 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_u8__IndexValue__index_value_0: builtin::array_get<u8>(_licm_repr_58, __local_19);
+                    break __inline_Array_u8__IndexValue__index_value_0: builtin::array_get<u8>(_licm_repr_59, __local_19);
                 } == 61;
             } else {
                 0;
@@ -908,80 +898,76 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     } else if remainder == 3 {
         out_len = out_len + 2;
     };
-    out = __inline_Array_u8___with_capacity_1: block -> ref Array<u8> {
-        __local_20 = out_len;
-        break __inline_Array_u8___with_capacity_1: Array<u8> { repr: builtin::array_new<u8>(__local_20), used: 0 };
-    };
+    out = Array<u8> { repr: builtin::array_new<u8>(out_len), used: 0 };
     table = DECODE_TABLE;
     i = 0;
-    _licm_used_59 = input.used;
-    _licm_repr_60 = input.repr;
-    _licm_used_61 = table.used;
-    _licm_repr_62 = table.repr;
+    _licm_used_60 = input.used;
+    _licm_repr_61 = input.repr;
+    _licm_used_62 = table.used;
+    _licm_repr_63 = table.repr;
     b67: block {
         l68: loop {
-            if ((i + 3) < end) == 0 {
+            __cse_57 = i + 3;
+            if (__cse_57 < end) == 0 {
                 break b67;
             };
             v0_9 = __inline_Array_u8__IndexValue__index_value_3: block -> u8 {
                 __local_24 = __inline_Array_u8__IndexValue__index_value_2: block -> u8 {
-                    __local_22 = i;
-                    if __local_22 >= _licm_used_59 {
+                    if i >= _licm_used_60 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_u8__IndexValue__index_value_2: builtin::array_get<u8>(_licm_repr_60, __local_22);
+                    break __inline_Array_u8__IndexValue__index_value_2: builtin::array_get<u8>(_licm_repr_61, i);
                 };
-                if __local_24 >= _licm_used_61 {
+                if __local_24 >= _licm_used_62 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_3: builtin::array_get<u8>(_licm_repr_62, __local_24);
+                break __inline_Array_u8__IndexValue__index_value_3: builtin::array_get<u8>(_licm_repr_63, __local_24);
             };
             v1_10 = __inline_Array_u8__IndexValue__index_value_5: block -> u8 {
                 __local_28 = __inline_Array_u8__IndexValue__index_value_4: block -> u8 {
                     __local_26 = i + 1;
-                    if __local_26 >= _licm_used_59 {
+                    if __local_26 >= _licm_used_60 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_u8__IndexValue__index_value_4: builtin::array_get<u8>(_licm_repr_60, __local_26);
+                    break __inline_Array_u8__IndexValue__index_value_4: builtin::array_get<u8>(_licm_repr_61, __local_26);
                 };
-                if __local_28 >= _licm_used_61 {
+                if __local_28 >= _licm_used_62 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_5: builtin::array_get<u8>(_licm_repr_62, __local_28);
+                break __inline_Array_u8__IndexValue__index_value_5: builtin::array_get<u8>(_licm_repr_63, __local_28);
             };
             v2_11 = __inline_Array_u8__IndexValue__index_value_7: block -> u8 {
                 __local_32 = __inline_Array_u8__IndexValue__index_value_6: block -> u8 {
                     __local_30 = i + 2;
-                    if __local_30 >= _licm_used_59 {
+                    if __local_30 >= _licm_used_60 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_u8__IndexValue__index_value_6: builtin::array_get<u8>(_licm_repr_60, __local_30);
+                    break __inline_Array_u8__IndexValue__index_value_6: builtin::array_get<u8>(_licm_repr_61, __local_30);
                 };
-                if __local_32 >= _licm_used_61 {
+                if __local_32 >= _licm_used_62 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_7: builtin::array_get<u8>(_licm_repr_62, __local_32);
+                break __inline_Array_u8__IndexValue__index_value_7: builtin::array_get<u8>(_licm_repr_63, __local_32);
             };
             v3 = __inline_Array_u8__IndexValue__index_value_9: block -> u8 {
                 __local_36 = __inline_Array_u8__IndexValue__index_value_8: block -> u8 {
-                    __local_34 = i + 3;
-                    if __local_34 >= _licm_used_59 {
+                    if __cse_57 >= _licm_used_60 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_u8__IndexValue__index_value_8: builtin::array_get<u8>(_licm_repr_60, __local_34);
+                    break __inline_Array_u8__IndexValue__index_value_8: builtin::array_get<u8>(_licm_repr_61, __cse_57);
                 };
-                if __local_36 >= _licm_used_61 {
+                if __local_36 >= _licm_used_62 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_9: builtin::array_get<u8>(_licm_repr_62, __local_36);
+                break __inline_Array_u8__IndexValue__index_value_9: builtin::array_get<u8>(_licm_repr_63, __local_36);
             };
             if if if if v0_9 >= 254 -> i32 {
                 1;
@@ -1008,12 +994,11 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     if remainder == 2 {
         v0_13 = __inline_Array_u8__IndexValue__index_value_11: block -> u8 {
             __local_40 = __inline_Array_u8__IndexValue__index_value_10: block -> u8 {
-                __local_38 = i;
-                if __local_38 >= input.used {
+                if i >= input.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_10: builtin::array_get<u8>(input.repr, __local_38);
+                break __inline_Array_u8__IndexValue__index_value_10: builtin::array_get<u8>(input.repr, i);
             };
             if __local_40 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -1047,12 +1032,11 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     } else if remainder == 3 {
         v0_15 = __inline_Array_u8__IndexValue__index_value_15: block -> u8 {
             __local_48 = __inline_Array_u8__IndexValue__index_value_14: block -> u8 {
-                __local_46 = i;
-                if __local_46 >= input.used {
+                if i >= input.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_u8__IndexValue__index_value_14: builtin::array_get<u8>(input.repr, __local_46);
+                break __inline_Array_u8__IndexValue__index_value_14: builtin::array_get<u8>(input.repr, i);
             };
             if __local_48 >= table.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });

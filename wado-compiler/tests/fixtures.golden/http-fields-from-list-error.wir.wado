@@ -1017,17 +1017,19 @@ fn __cm_binding__Fields_from_list(entries) {
     let __vresult: ref "wasi:http/types.wado/HeaderError";
     let __disc_14: i32;
     let __option_result: ref null String;
-    let __local_17: ref Array<Tuple<String,Array<u8>>>;
-    let __local_18: i32;
     let __local_19: ref Array<u8>;
     let __local_20: ref array<u8>;
     let __local_21: i32;
     let __local_24: i32;
     let __local_25: i32;
     let __local_26: ref array<u8>;
+    let _licm_used_27: i32;
+    let _licm_repr_28: ref array<Tuple<String,Array<u8>>>;
     __entries_len = entries.used;
     __entries_base = "mem/realloc"(0, 0, 4, __entries_len * 16);
     __entries_i = 0;
+    _licm_used_27 = entries.used;
+    _licm_repr_28 = entries.repr;
     b45: block {
         l46: loop {
             if __entries_i >= __entries_len {
@@ -1035,13 +1037,11 @@ fn __cm_binding__Fields_from_list(entries) {
             };
             __entries_addr = __entries_base + (__entries_i * 16);
             __entries_elem = __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: block -> ref "tuple/[String, Array<u8>]" {
-                __local_17 = value_copy Array<Tuple<String,Array<u8>>>(entries);
-                __local_18 = __entries_i;
-                if __local_18 >= __local_17.used {
+                if __entries_i >= _licm_used_27 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 };
-                break __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, Array<u8>]">(__local_17.repr, __local_18);
+                break __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, Array<u8>]">(_licm_repr_28, __entries_i);
             };
             __packed = "core:internal/cm_lower_string"(__entries_elem.0);
             builtin::store_i32(__entries_addr, builtin::i32_wrap_i64(__packed));
@@ -1473,7 +1473,6 @@ fn String::from_utf8<Array<u8>>(bytes) {
     let b1_8: u8;
     let b2_9: u8;
     let b3: u8;
-    let __local_20: u32;
     builder = String { repr: builtin::array_new<u8>(8), used: 0 };
     iter = ArrayIter<u8> { repr: bytes.repr, used: bytes.used, index: 0 };
     b88: block {
@@ -1615,10 +1614,7 @@ fn String::from_utf8<Array<u8>>(bytes) {
                 } else {
                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: byte out of range"), used: 32 } };
                 };
-                String::push(builder, __inline_char__from_u32_unchecked_2: block -> char {
-                    __local_20 = code;
-                    break __inline_char__from_u32_unchecked_2: __local_20;
-                });
+                String::push(builder, code);
             } else {
                 break b88;
             };

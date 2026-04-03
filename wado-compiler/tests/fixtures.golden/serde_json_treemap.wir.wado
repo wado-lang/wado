@@ -2385,7 +2385,6 @@ fn parse(d, p) {
     let u: u64;
     let shift: u64;
     let __local_14: i32;
-    let __local_16: u64;
     b = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
     lp = (p * 108853) >> 15;
     e = __inline_i32__min_2: block -> i32 {
@@ -2401,10 +2400,7 @@ fn parse(d, p) {
     shift = builtin::i64_extend_i32_u(u >=u 36028797018963966_i64);
     u = (u >>u shift) | (u & 1_i64);
     e = e - builtin::i32_wrap_i64(shift);
-    return pack64(__inline_unrounded_round_4: block -> u64 {
-        __local_16 = u;
-        break __inline_unrounded_round_4: ((__local_16 + 1_i64) + ((__local_16 >>u 2_i64) & 1_i64)) >>u 2_i64;
-    }, 0 - e);
+    return pack64(((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64, 0 - e);
 }
 
 fn count_digits_i64(val) {
@@ -4916,7 +4912,6 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     let __local_42: i32;
     let __local_43: ref String;
     let __local_44: i64;
-    let __local_47: i32;
     let __local_48: ref String;
     let __local_49: ref String;
     let __local_50: i32;
@@ -4993,10 +4988,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             if (scan_pos < _licm_used_90) == 0 {
                 break b406;
             };
-            sb = __inline_String__get_byte_5: block -> u8 {
-                __local_47 = scan_pos;
-                break __inline_String__get_byte_5: builtin::array_get_u8(_licm_repr_91, __local_47);
-            };
+            sb = builtin::array_get_u8(_licm_repr_91, scan_pos);
             if if sb == 34 -> i32 {
                 1;
             } else {

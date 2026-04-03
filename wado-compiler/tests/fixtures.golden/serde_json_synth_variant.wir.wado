@@ -1128,8 +1128,6 @@ fn short(f) {
     let d: u64;
     let __local_22: i32;
     let __local_23: i32;
-    let __local_24: i32;
-    let __local_25: i32;
     let __local_26: u64;
     let __local_27: u64;
     let __local_29: u64;
@@ -1167,14 +1165,10 @@ fn short(f) {
     };
     max_m = m + (1_i64 << builtin::i64_extend_i32_s(z - 1));
     odd = builtin::i32_wrap_i64((m >>u builtin::i64_extend_i32_s(z)) & 1_i64);
-    lp = __inline_log2_pow10_2: block -> i32 {
-        __local_24 = p;
-        break __inline_log2_pow10_2: (__local_24 * 108853) >> 15;
-    };
+    lp = (p * 108853) >> 15;
     let __sroa_pm_hi: u64;
     let __sroa_pm_lo: u64;
-    __local_25 = p;
-    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(__local_25);
+    multivalue_bind [__sroa_pm_hi, __sroa_pm_lo] = mul_pow10(p);
     s = 0 - ((e + lp) + 3);
     dmin = __inline_unrounded_ceil_4: block -> u64 {
         __local_26 = __inline_unrounded_nudge_5: block -> u64 {
@@ -1220,26 +1214,20 @@ fn trim_zeros(x, p) {
     let d2: u64;
     let d1b: u64;
     let __local_17: u64;
-    let __local_19: u64;
     let __local_21: i64;
     let __local_22: u64;
-    let __local_24: u64;
     let __local_26: i64;
     let __local_27: u64;
-    let __local_29: u64;
     let __local_31: i64;
     let __local_32: u64;
-    let __local_34: u64;
     let __local_36: i64;
     let __local_37: u64;
-    let __local_39: u64;
     let __local_41: i64;
     xv = x;
     pv = p;
     d1 = __inline_rotate_right_0: block -> u64 {
         __local_17 = __inline_u64_mul_1: block -> u64 {
-            __local_19 = xv;
-            multivalue_bind [__local_21, _] = i64.mul_wide_u(__local_19, -3689348814741910323_i64);
+            multivalue_bind [__local_21, _] = i64.mul_wide_u(xv, -3689348814741910323_i64);
             break __inline_u64_mul_1: __local_21;
         };
         break __inline_rotate_right_0: (__local_17 >>u 1_i64) | (__local_17 << 63_i64);
@@ -1252,8 +1240,7 @@ fn trim_zeros(x, p) {
     };
     d8 = __inline_rotate_right_2: block -> u64 {
         __local_22 = __inline_u64_mul_3: block -> u64 {
-            __local_24 = xv;
-            multivalue_bind [__local_26, _] = i64.mul_wide_u(__local_24, -4078282918271054303_i64);
+            multivalue_bind [__local_26, _] = i64.mul_wide_u(xv, -4078282918271054303_i64);
             break __inline_u64_mul_3: __local_26;
         };
         break __inline_rotate_right_2: (__local_22 >>u 8_i64) | (__local_22 << 56_i64);
@@ -1264,8 +1251,7 @@ fn trim_zeros(x, p) {
     };
     d4 = __inline_rotate_right_4: block -> u64 {
         __local_27 = __inline_u64_mul_5: block -> u64 {
-            __local_29 = xv;
-            multivalue_bind [__local_31, _] = i64.mul_wide_u(__local_29, -3276141747490816367_i64);
+            multivalue_bind [__local_31, _] = i64.mul_wide_u(xv, -3276141747490816367_i64);
             break __inline_u64_mul_5: __local_31;
         };
         break __inline_rotate_right_4: (__local_27 >>u 4_i64) | (__local_27 << 60_i64);
@@ -1276,8 +1262,7 @@ fn trim_zeros(x, p) {
     };
     d2 = __inline_rotate_right_6: block -> u64 {
         __local_32 = __inline_u64_mul_7: block -> u64 {
-            __local_34 = xv;
-            multivalue_bind [__local_36, _] = i64.mul_wide_u(__local_34, -8116567392432202711_i64);
+            multivalue_bind [__local_36, _] = i64.mul_wide_u(xv, -8116567392432202711_i64);
             break __inline_u64_mul_7: __local_36;
         };
         break __inline_rotate_right_6: (__local_32 >>u 2_i64) | (__local_32 << 62_i64);
@@ -1288,8 +1273,7 @@ fn trim_zeros(x, p) {
     };
     d1b = __inline_rotate_right_8: block -> u64 {
         __local_37 = __inline_u64_mul_9: block -> u64 {
-            __local_39 = xv;
-            multivalue_bind [__local_41, _] = i64.mul_wide_u(__local_39, -3689348814741910323_i64);
+            multivalue_bind [__local_41, _] = i64.mul_wide_u(xv, -3689348814741910323_i64);
             break __inline_u64_mul_9: __local_41;
         };
         break __inline_rotate_right_8: (__local_37 >>u 1_i64) | (__local_37 << 63_i64);
@@ -1304,7 +1288,6 @@ fn trim_zeros(x, p) {
 fn write_digits_at(buf, offset, val, nd) {
     let v: u64;
     let idx: i32;
-    let index: i32;
     let value: u8;
     let _licm_repr_9: ref array<u8>;
     v = val;
@@ -1315,9 +1298,8 @@ fn write_digits_at(buf, offset, val, nd) {
             if (idx >= offset) == 0 {
                 break b103;
             };
-            index = idx;
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
-            builtin::array_set_u8(_licm_repr_9, index, value);
+            builtin::array_set_u8(_licm_repr_9, idx, value);
             v = v /u 10_i64;
             idx = idx - 1;
             continue l104;
@@ -1553,11 +1535,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
 fn check_special(f) {
     let bits: i64;
     let is_neg: bool;
-    let __local_6: f64;
-    bits = __inline_f64__to_bits_0: block -> i64 {
-        __local_6 = f;
-        break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(__local_6);
-    };
+    bits = builtin::i64_reinterpret_f64(f);
     if bits == 0_i64 {
         return 1; 0; 1;
     };
@@ -1602,7 +1580,6 @@ fn parse(d, p) {
     let u: u64;
     let shift: u64;
     let __local_14: i32;
-    let __local_16: u64;
     b = 64 - builtin::i32_wrap_i64(builtin::i64_clz(d));
     lp = (p * 108853) >> 15;
     e = __inline_i32__min_2: block -> i32 {
@@ -1618,10 +1595,7 @@ fn parse(d, p) {
     shift = builtin::i64_extend_i32_u(u >=u 36028797018963966_i64);
     u = (u >>u shift) | (u & 1_i64);
     e = e - builtin::i32_wrap_i64(shift);
-    return pack64(__inline_unrounded_round_4: block -> u64 {
-        __local_16 = u;
-        break __inline_unrounded_round_4: ((__local_16 + 1_i64) + ((__local_16 >>u 2_i64) & 1_i64)) >>u 2_i64;
-    }, 0 - e);
+    return pack64(((u + 1_i64) + ((u >>u 2_i64) & 1_i64)) >>u 2_i64, 0 - e);
 }
 
 fn __initialize_module() {
@@ -2421,11 +2395,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core
     let __local_2: ref String;
     let __local_3: ref Formatter;
     let __local_5: ref "core:internal/Box<f64>";
-    let __local_10: f64;
-    if __inline_f64__is_nan_0: block -> bool {
-        __local_10 = v;
-        break __inline_f64__is_nan_0: __local_10 != __local_10;
-    } {
+    if v != v {
         return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
     };
     if __inline_f64__is_finite_1: block -> bool {
@@ -2580,7 +2550,6 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
     let __local_42: i32;
     let __local_43: ref String;
     let __local_44: i64;
-    let __local_47: i32;
     let __local_48: ref String;
     let __local_49: ref String;
     let __local_50: i32;
@@ -2657,10 +2626,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             if (scan_pos < _licm_used_90) == 0 {
                 break b240;
             };
-            sb = __inline_String__get_byte_5: block -> u8 {
-                __local_47 = scan_pos;
-                break __inline_String__get_byte_5: builtin::array_get_u8(_licm_repr_91, __local_47);
-            };
+            sb = builtin::array_get_u8(_licm_repr_91, scan_pos);
             if if sb == 34 -> i32 {
                 1;
             } else {

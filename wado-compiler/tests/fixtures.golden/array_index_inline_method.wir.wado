@@ -567,7 +567,6 @@ fn Array<String>::grow(self) {
 fn Container<String,i32>::is_full(self, max_keys) {
     let count: i32;
     let i: i32;
-    let __local_6: i32;
     let _licm_keys_7: ref Array<String>;
     let _licm_deleted_8: ref Array<bool>;
     let _licm_used_9: i32;
@@ -587,12 +586,11 @@ fn Container<String,i32>::is_full(self, max_keys) {
                     break __for_0;
                 };
                 if __inline_Array_bool__IndexValue__index_value_1: block -> bool {
-                    __local_6 = i;
-                    if __local_6 >= _licm_used_10 {
+                    if i >= _licm_used_10 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_11, __local_6);
+                    break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_11, i);
                 } == 0 {
                     count = count + 1;
                 };
@@ -606,7 +604,6 @@ fn Container<String,i32>::is_full(self, max_keys) {
 
 fn Container<String,i32>::find_key_index(self, key) {
     let i: i32;
-    let __local_5: i32;
     let _licm_keys_6: ref Array<String>;
     let _licm_used_7: i32;
     let _licm_repr_8: ref array<String>;
@@ -618,12 +615,11 @@ fn Container<String,i32>::find_key_index(self, key) {
         l41: loop {
             if if i < _licm_used_7 -> i32 {
                 String^Ord::cmp(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
-                    __local_5 = i;
-                    if __local_5 >= _licm_used_7 {
+                    if i >= _licm_used_7 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_8, __local_5);
+                    break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_8, i);
                 }, key) == 0;
             } else {
                 0;

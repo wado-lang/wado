@@ -127,7 +127,7 @@ mise run benchmark-sqlite-parse
 
 | Component  | Version      |
 | ---------- | ------------ |
-| Wado       | 2026-03-31   |
+| Wado       | 2026-04-03   |
 | wasmtime   | 42.0.1       |
 | Node.js    | v24.14.1     |
 | C compiler | gcc 13.3.0   |
@@ -139,9 +139,9 @@ mise run benchmark-sqlite-parse
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 134       | 1.00x    |
-| **Wado**    | 140       | 1.04x    |
-| JavaScript  | 143       | 1.07x    |
+| C (gcc -O3) | 131       | 1.00x    |
+| **Wado**    | 139       | 1.06x    |
+| JavaScript  | 141       | 1.08x    |
 
 All implementations produce the same result: 47,407,790 total iterations.
 
@@ -149,9 +149,9 @@ All implementations produce the same result: 47,407,790 total iterations.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 3,275     | 1.00x    |
-| JavaScript  | 3,322     | 1.01x    |
-| **Wado**    | 3,324     | 1.01x    |
+| C (gcc -O3) | 3,284     | 1.00x    |
+| **Wado**    | 3,307     | 1.01x    |
+| JavaScript  | 3,320     | 1.01x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -159,9 +159,9 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime     | Time (ms) | Relative |
 | ----------- | --------- | -------- |
-| C (gcc -O3) | 59        | 1.00x    |
-| JavaScript  | 77        | 1.31x    |
-| **Wado**    | 87        | 1.47x    |
+| C (gcc -O3) | 53        | 1.00x    |
+| JavaScript  | 77        | 1.45x    |
+| **Wado**    | 81        | 1.53x    |
 
 All implementations produce the same result: 664,579 primes.
 
@@ -169,9 +169,9 @@ All implementations produce the same result: 664,579 primes.
 
 | Runtime               | Time (ms) | Relative |
 | --------------------- | --------- | -------- |
-| zlib-rs (native Rust) | 28        | 1.00x    |
-| C zlib (Wasm)         | 70        | 2.50x    |
-| **Wado** (pure Wado)  | 252       | 9.00x    |
+| zlib-rs (native Rust) | 29        | 1.00x    |
+| C zlib (Wasm)         | 72        | 2.48x    |
+| **Wado** (pure Wado)  | 251       | 8.66x    |
 
 ### zlib Decompress (twitter.json 631KB x 10 iterations)
 
@@ -188,7 +188,7 @@ zlib-rs runs natively; C zlib and Wado are compiled to Wasm and run on wasmtime.
 | Runtime             | Time (ms) | Relative |
 | ------------------- | --------- | -------- |
 | Zig (-OReleaseFast) | 25        | 1.00x    |
-| Rust (rustc -O)     | 34        | 1.36x    |
+| Rust (rustc -O)     | 35        | 1.40x    |
 | **Wado**            | 43        | 1.72x    |
 | C (gcc -O3)         | 57        | 2.28x    |
 
@@ -198,8 +198,8 @@ All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 0.718     | 1.00x    |
-| **Wado** (core:json, Wasm) | 16.583    | 23.10x   |
+| Rust (serde_json, native)  | 0.789     | 1.00x    |
+| **Wado** (core:json, Wasm) | 16.542    | 20.96x   |
 
 Both implementations parse 100 statuses from Twitter search results.
 
@@ -207,8 +207,8 @@ Both implementations parse 100 statuses from Twitter search results.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 7.694     | 1.00x    |
-| **Wado** (core:json, Wasm) | 71.521    | 9.30x    |
+| Rust (serde_json, native)  | 7.972     | 1.00x    |
+| **Wado** (core:json, Wasm) | 68.244    | 8.56x    |
 
 Both implementations parse 55,563 coordinate points from GeoJSON.
 
@@ -216,8 +216,8 @@ Both implementations parse 55,563 coordinate points from GeoJSON.
 
 | Runtime                    | Time (ms) | Relative |
 | -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 2.295     | 1.00x    |
-| **Wado** (core:json, Wasm) | 37.345    | 16.27x   |
+| Rust (serde_json, native)  | 2.347     | 1.00x    |
+| **Wado** (core:json, Wasm) | 36.112    | 15.38x   |
 
 Both implementations parse 184 events and 243 performances from CITM catalog data. Rust uses `BTreeMap` (ordered map) to match Wado's `TreeMap`.
 
@@ -225,8 +225,8 @@ Both implementations parse 184 events and 243 performances from CITM catalog dat
 
 | Runtime                                | Time (ms) | Per iteration (us) | Relative |
 | -------------------------------------- | --------- | ------------------ | -------- |
-| Rust (sqlparser-rs, native)            | 164       | 1,645              | 1.00x    |
-| **Wado** (Gale-generated parser, Wasm) | 4,023     | 40,228             | 24.45x   |
+| Rust (sqlparser-rs, native)            | 167       | 1,669              | 1.00x    |
+| **Wado** (Gale-generated parser, Wasm) | 3,910     | 39,098             | 23.42x   |
 
 Both implementations parse 81 SQL statements per iteration. The Gale parser is auto-generated from ANTLR4's `SQLite.g4` grammar; `sqlparser-rs` is a hand-tuned native Rust parser.
 

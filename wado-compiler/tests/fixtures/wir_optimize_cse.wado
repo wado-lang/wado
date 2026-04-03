@@ -1,0 +1,31 @@
+// Test: Common Subexpression Elimination (CSE)
+//
+// When the same pure binary expression appears in a loop guard and in the
+// loop body, CSE computes it once and reuses the result.
+//
+// At O0: `p * p` is computed twice per iteration (guard and body)
+// At O2: `p * p` is computed once into a __cse_ local and reused
+
+fn find_sqrt_bound(limit: i32) -> i32 {
+    let mut p = 2;
+    let mut last_sq = 0;
+    while p * p <= limit {
+        last_sq = p * p;
+        p += 1;
+    }
+    return last_sq;
+}
+
+test {
+    assert find_sqrt_bound(100) == 100;
+    assert find_sqrt_bound(99) == 81;
+    assert find_sqrt_bound(1) == 0;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": ["last_sq = p * p"],
+    "wir_not_expect:O2": ["last_sq = p * p"],
+    "wir_expect:O2": ["__cse_"]
+}

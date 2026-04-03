@@ -819,8 +819,6 @@ fn Array<i32>::grow(self) {
 
 fn Bag<i32>::get_by_key(self, key) {
     let i: i32;
-    let __local_5: i32;
-    let __local_7: i32;
     let _licm_keys_8: ref Array<String>;
     let _licm_values_9: ref Array<i32>;
     let _licm_used_10: i32;
@@ -839,17 +837,13 @@ fn Bag<i32>::get_by_key(self, key) {
             if (i < _licm_used_10) == 0 {
                 break b46;
             };
-            if String^Eq::eq(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
-                __local_5 = i;
-                break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_11, __local_5);
-            }, key) {
+            if String^Eq::eq(builtin::array_get<ref String>(_licm_repr_11, i), key) {
                 return 0; __inline_Array_i32__IndexValue__index_value_2: block -> i32 {
-                    __local_7 = i;
-                    if __local_7 >= _licm_used_12 {
+                    if i >= _licm_used_12 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     };
-                    break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_13, __local_7);
+                    break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_13, i);
                 };
             };
             i = i + 1;

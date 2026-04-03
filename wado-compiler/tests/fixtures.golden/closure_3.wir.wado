@@ -75,6 +75,7 @@ struct ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut index: i32,
 }
 
+<<<<<<< HEAD
 struct IterMap<ArrayIter<i32>,i32> {  // IterMap<T> with T=ArrayIter<i32>, i32
     mut inner: ref ArrayIter<i32>,
     mut f: ref struct,
@@ -95,6 +96,19 @@ struct Option<i32>::Some {
     payload_0: i32,
 }
 
+||||||| eca9fce
+variant Option<i32> {
+    Some(i32),
+    None,
+}
+
+struct Option<i32>::Some {
+    discriminant: i32,
+    payload_0: i32,
+}
+
+=======
+>>>>>>> origin/main
 struct Array<i32> {  // Array<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
@@ -241,9 +255,17 @@ type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
 
 type "functype/Array<i32>::grow" = fn(ref Array<i32>);
 
+<<<<<<< HEAD
 type "functype/ArrayIter<i32>^Iterator::next" = fn(ref ArrayIter<i32>) -> ref Option<i32>;
 
 type "functype/IterFilter<ArrayIter<i32>>^Iterator::collect" = fn(ref IterFilter<ArrayIter<i32>>) -> ref Array<i32>;
+||||||| eca9fce
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> ref Option<i32>;
+
+type "functype/IterFilter<ArrayIter<i32>>^Iterator::collect" = fn(ref "core:allocator/IterFilter<ArrayIter<i32>>") -> ref Array<i32>;
+=======
+type "functype/IterFilter<ArrayIter<i32>>^Iterator::collect" = fn(ref "core:allocator/IterFilter<ArrayIter<i32>>") -> ref Array<i32>;
+>>>>>>> origin/main
 
 type "functype/IterMap<ArrayIter<i32>,i32>^Iterator::fold<i32>" = fn(ref IterMap<ArrayIter<i32>,i32>, i32, ref struct) -> i32;
 
@@ -267,7 +289,15 @@ type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 type "functype/IterMap<ArrayIter<i32>,i32>^Iterator::next" = fn(ref IterMap<ArrayIter<i32>,i32>) -> [i32, i32];
 
+<<<<<<< HEAD
 type "functype/IterFilter<ArrayIter<i32>>^Iterator::next" = fn(ref IterFilter<ArrayIter<i32>>) -> [i32, i32];
+||||||| eca9fce
+type "functype/IterFilter<ArrayIter<i32>>^Iterator::next" = fn(ref "core:allocator/IterFilter<ArrayIter<i32>>") -> [i32, i32];
+=======
+type "functype/ArrayIter<i32>^Iterator::next" = fn(ref "core:allocator/ArrayIter<i32>") -> [i32, i32];
+
+type "functype/IterFilter<ArrayIter<i32>>^Iterator::next" = fn(ref "core:allocator/IterFilter<ArrayIter<i32>>") -> [i32, i32];
+>>>>>>> origin/main
 
 type "functype/IterMap<IterFilter<ArrayIter<i32>>,i32>^Iterator::next" = fn(ref IterMap<IterFilter<ArrayIter<i32>>,i32>) -> [i32, i32];
 
@@ -305,7 +335,17 @@ type "functype/__Closure_17::__call" = fn(i32, i32) -> enum:Ordering;
 
 type "functype/__Closure_18::__call" = fn(i32, i32) -> enum:Ordering;
 
+<<<<<<< HEAD
 type "functype/ArrayIter<i32>^Iterator::fold<i32>$__Closure_12" = fn(ref ArrayIter<i32>, i32) -> i32;
+||||||| eca9fce
+type "functype/ArrayIter<i32>^Iterator::fold<i32>$__Closure_12" = fn(ref "core:allocator/ArrayIter<i32>", i32) -> i32;
+=======
+type "functype/ArrayIter<i32>^Iterator::fold<i32>$__Closure_10" = fn(ref "core:allocator/ArrayIter<i32>", i32) -> i32;
+
+type "functype/ArrayIter<i32>^Iterator::fold<i32>$__Closure_11" = fn(ref "core:allocator/ArrayIter<i32>", i32) -> i32;
+
+type "functype/ArrayIter<i32>^Iterator::fold<i32>$__Closure_12" = fn(ref "core:allocator/ArrayIter<i32>", i32) -> i32;
+>>>>>>> origin/main
 
 type "functype/ArrayIter<i32>^Iterator::fold<i32>$__Closure_13" = fn(ref ArrayIter<i32>, i32) -> i32;
 
@@ -1255,6 +1295,7 @@ fn __test_7_iterator_fold() {
     let __local_69: ref Formatter;
     let __local_76: ref Formatter;
     let __local_81: ref Formatter;
+<<<<<<< HEAD
     let __local_84: ref ArrayIter<i32>;
     let __local_87: i32;
     let __local_88: i32;
@@ -1265,10 +1306,24 @@ fn __test_7_iterator_fold() {
     let __local_97: i32;
     let __local_98: ref Option<i32>;
     let __local_100: i32;
+||||||| eca9fce
+    let __local_84: ref "core:allocator/ArrayIter<i32>";
+    let __local_87: i32;
+    let __local_88: i32;
+    let __local_89: ref Option<i32>;
+    let __local_91: i32;
+    let __local_93: ref "core:allocator/ArrayIter<i32>";
+    let __local_96: i32;
+    let __local_97: i32;
+    let __local_98: ref Option<i32>;
+    let __local_100: i32;
+=======
+>>>>>>> origin/main
     nums = __seq_lit: block -> ref Array<i32> {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_0;
     };
+<<<<<<< HEAD
     sum = __inline_ArrayIter_i32__Iterator__fold_i32____Closure_10_0: block -> i32 {
         __local_84 = ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
         __local_87 = 0;
@@ -1289,6 +1344,30 @@ fn __test_7_iterator_fold() {
         };
         break __inline_ArrayIter_i32__Iterator__fold_i32____Closure_10_0: __local_87;
     };
+||||||| eca9fce
+    sum = __inline_ArrayIter_i32__Iterator__fold_i32____Closure_10_0: block -> i32 {
+        __local_84 = "core:allocator/ArrayIter<i32>" { repr: nums.repr, used: nums.used, index: 0 };
+        __local_87 = 0;
+        b39: block {
+            l40: loop {
+                __local_89 = ArrayIter<i32>^Iterator::next(__local_84);
+                if ref.test Option<i32>::Some(__local_89) {
+                    __local_88 = ref.cast Option<i32>::Some(__local_89).payload_0;
+                    __local_87 = __inline___Closure_10____call_0: block -> i32 {
+                        __local_91 = __local_87;
+                        break __inline___Closure_10____call_0: __local_91 + __local_88;
+                    };
+                } else {
+                    break b39;
+                };
+                continue l40;
+            };
+        };
+        break __inline_ArrayIter_i32__Iterator__fold_i32____Closure_10_0: __local_87;
+    };
+=======
+    sum = ArrayIter<i32>^Iterator::fold<i32>$__Closure_10("core:allocator/ArrayIter<i32>" { repr: nums.repr, used: nums.used, index: 0 }, 0);
+>>>>>>> origin/main
     __cond_4 = sum == 15;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -1320,6 +1399,7 @@ condition: sum == 15
         });
         unreachable;
     };
+<<<<<<< HEAD
     product = __inline_ArrayIter_i32__Iterator__fold_i32____Closure_11_1: block -> i32 {
         __local_93 = ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
         __local_96 = 1;
@@ -1340,6 +1420,30 @@ condition: sum == 15
         };
         break __inline_ArrayIter_i32__Iterator__fold_i32____Closure_11_1: __local_96;
     };
+||||||| eca9fce
+    product = __inline_ArrayIter_i32__Iterator__fold_i32____Closure_11_1: block -> i32 {
+        __local_93 = "core:allocator/ArrayIter<i32>" { repr: nums.repr, used: nums.used, index: 0 };
+        __local_96 = 1;
+        b43: block {
+            l44: loop {
+                __local_98 = ArrayIter<i32>^Iterator::next(__local_93);
+                if ref.test Option<i32>::Some(__local_98) {
+                    __local_97 = ref.cast Option<i32>::Some(__local_98).payload_0;
+                    __local_96 = __inline___Closure_11____call_0: block -> i32 {
+                        __local_100 = __local_96;
+                        break __inline___Closure_11____call_0: __local_100 * __local_97;
+                    };
+                } else {
+                    break b43;
+                };
+                continue l44;
+            };
+        };
+        break __inline_ArrayIter_i32__Iterator__fold_i32____Closure_11_1: __local_96;
+    };
+=======
+    product = ArrayIter<i32>^Iterator::fold<i32>$__Closure_11("core:allocator/ArrayIter<i32>" { repr: nums.repr, used: nums.used, index: 0 }, 1);
+>>>>>>> origin/main
     __cond_7 = product == 120;
     if __cond_7 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
@@ -2153,13 +2257,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l78: loop {
+            l72: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l78;
+                continue l72;
             };
         };
     };
@@ -2248,13 +2352,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l84: loop {
+            l78: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l84;
+                continue l78;
             };
         };
     };
@@ -2271,14 +2375,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l88: loop {
+                l82: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l88;
+                    continue l82;
                 };
             };
         };
@@ -2405,14 +2509,14 @@ fn Array<i32>::sort_by(self, cmp) {
     width = 1;
     __for_11: block {
         block {
-            l101: loop {
+            l95: loop {
                 if (width < n) == 0 {
                     break __for_11;
                 };
                 __for_12: block {
                     start = 0;
                     block {
-                        l104: loop {
+                        l98: loop {
                             if (start < n) == 0 {
                                 break __for_12;
                             };
@@ -2427,7 +2531,7 @@ fn Array<i32>::sort_by(self, cmp) {
                                 __for_13: block {
                                     k = start;
                                     block {
-                                        l108: loop {
+                                        l102: loop {
                                             if (k < end) == 0 {
                                                 break __for_13;
                                             };
@@ -2456,19 +2560,19 @@ fn Array<i32>::sort_by(self, cmp) {
                                                 j = j + 1;
                                             };
                                             k = k + 1;
-                                            continue l108;
+                                            continue l102;
                                         };
                                     };
                                 };
                                 builtin::array_copy<i32>(src, start, buf, start, end - start);
                             };
                             start = start + (width * 2);
-                            continue l104;
+                            continue l98;
                         };
                     };
                 };
                 width = width * 2;
-                continue l101;
+                continue l95;
             };
         };
     };
@@ -2482,8 +2586,8 @@ fn IterMap<ArrayIter<i32>,i32>^Iterator::collect(self) {
         __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b114: block {
-        l115: loop {
+    b108: block {
+        l109: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = IterMap<ArrayIter<i32>,i32>^Iterator::next(self);
@@ -2491,9 +2595,9 @@ fn IterMap<ArrayIter<i32>,i32>^Iterator::collect(self) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<i32>::push(result, item);
             } else {
-                break b114;
+                break b108;
             };
-            continue l115;
+            continue l109;
         };
     };
     return result;
@@ -2528,13 +2632,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l119: loop {
+            l113: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l119;
+                continue l113;
             };
         };
     };
@@ -2543,10 +2647,11 @@ fn Array<i32>::grow(self) {
 
 fn IterMap<ArrayIter<i32>,i32>^Iterator::next(self) {
     let item: i32;
-    let __pattern_temp_0: ref Option<i32>;
-    __pattern_temp_0 = ArrayIter<i32>^Iterator::next(self.inner);
-    if ref.test Option<i32>::Some(__pattern_temp_0) {
-        item = ref.cast Option<i32>::Some(__pattern_temp_0).payload_0;
+    let __sroa___pattern_temp_0_discriminant: i32;
+    let __sroa___pattern_temp_0_payload_0: i32;
+    multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(self.inner);
+    if __sroa___pattern_temp_0_discriminant == 0 {
+        item = __sroa___pattern_temp_0_payload_0;
         return 0; block -> i32 {
             let __indirect_call_0: ref "canonical/CanonicalClosure_0";
             __indirect_call_0 = ref.cast "canonical/CanonicalClosure_0"(self.f);
@@ -2559,11 +2664,11 @@ fn IterMap<ArrayIter<i32>,i32>^Iterator::next(self) {
 fn ArrayIter<i32>^Iterator::next(self) {
     let item: i32;
     if self.index >= self.used {
-        return Option<i32> { 1 };
+        return 1; 0;
     };
     item = builtin::array_get<i32>(self.repr, self.index);
     self.index = self.index + 1;
-    return Option<i32>::Some { discriminant: 0, payload_0: item };
+    return 0; item;
 }
 
 fn IterFilter<ArrayIter<i32>>^Iterator::collect(self) {
@@ -2574,8 +2679,8 @@ fn IterFilter<ArrayIter<i32>>^Iterator::collect(self) {
         __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b124: block {
-        l125: loop {
+    b118: block {
+        l119: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = IterFilter<ArrayIter<i32>>^Iterator::next(self);
@@ -2583,9 +2688,9 @@ fn IterFilter<ArrayIter<i32>>^Iterator::collect(self) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<i32>::push(result, item);
             } else {
-                break b124;
+                break b118;
             };
-            continue l125;
+            continue l119;
         };
     };
     return result;
@@ -2593,16 +2698,25 @@ fn IterFilter<ArrayIter<i32>>^Iterator::collect(self) {
 
 fn IterFilter<ArrayIter<i32>>^Iterator::next(self) {
     let item: i32;
+<<<<<<< HEAD
     let __pattern_temp_0: ref Option<i32>;
     let _licm_inner_3: ref ArrayIter<i32>;
+||||||| eca9fce
+    let __pattern_temp_0: ref Option<i32>;
+    let _licm_inner_3: ref "core:allocator/ArrayIter<i32>";
+=======
+    let _licm_inner_3: ref "core:allocator/ArrayIter<i32>";
+>>>>>>> origin/main
     let _licm_pred_4: ref struct;
     _licm_inner_3 = self.inner;
     _licm_pred_4 = self.pred;
     block {
-        l128: loop {
-            __pattern_temp_0 = ArrayIter<i32>^Iterator::next(_licm_inner_3);
-            if ref.test Option<i32>::Some(__pattern_temp_0) {
-                item = ref.cast Option<i32>::Some(__pattern_temp_0).payload_0;
+        l122: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(_licm_inner_3);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                item = __sroa___pattern_temp_0_payload_0;
                 if block -> bool {
                     let __indirect_call_0: ref "canonical/CanonicalClosure_2";
                     __indirect_call_0 = ref.cast "canonical/CanonicalClosure_2"(_licm_pred_4);
@@ -2613,7 +2727,7 @@ fn IterFilter<ArrayIter<i32>>^Iterator::next(self) {
             } else {
                 return 1; 0;
             };
-            continue l128;
+            continue l122;
         };
     };
 }
@@ -2622,8 +2736,8 @@ fn IterMap<ArrayIter<i32>,i32>^Iterator::fold<i32>(self, init, f) {
     let acc: i32;
     let item: i32;
     acc = init;
-    b132: block {
-        l133: loop {
+    b126: block {
+        l127: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = IterMap<ArrayIter<i32>,i32>^Iterator::next(self);
@@ -2635,9 +2749,9 @@ fn IterMap<ArrayIter<i32>,i32>^Iterator::fold<i32>(self, init, f) {
                     call_ref "functype/$canonical_closure_fn_3"(__indirect_call_0.func, __indirect_call_0.env, acc, item);
                 };
             } else {
-                break b132;
+                break b126;
             };
-            continue l133;
+            continue l127;
         };
     };
     return acc;
@@ -2651,8 +2765,8 @@ fn IterMap<IterFilter<ArrayIter<i32>>,i32>^Iterator::collect(self) {
         __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    b136: block {
-        l137: loop {
+    b130: block {
+        l131: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = IterMap<IterFilter<ArrayIter<i32>>,i32>^Iterator::next(self);
@@ -2660,9 +2774,9 @@ fn IterMap<IterFilter<ArrayIter<i32>>,i32>^Iterator::collect(self) {
                 item = __sroa___pattern_temp_0_payload_0;
                 Array<i32>::push(result, item);
             } else {
-                break b136;
+                break b130;
             };
-            continue l137;
+            continue l131;
         };
     };
     return result;
@@ -2759,23 +2873,64 @@ fn __Closure_18::__call(a, b) {
     return 1;
 }
 
+fn ArrayIter<i32>^Iterator::fold<i32>$__Closure_10(self, init) {
+    let acc: i32;
+    let item: i32;
+    acc = init;
+    b141: block {
+        l142: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(self);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                item = __sroa___pattern_temp_0_payload_0;
+                acc = acc + item;
+            } else {
+                break b141;
+            };
+            continue l142;
+        };
+    };
+    return acc;
+}
+
+fn ArrayIter<i32>^Iterator::fold<i32>$__Closure_11(self, init) {
+    let acc: i32;
+    let item: i32;
+    acc = init;
+    b144: block {
+        l145: loop {
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(self);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                item = __sroa___pattern_temp_0_payload_0;
+                acc = acc * item;
+            } else {
+                break b144;
+            };
+            continue l145;
+        };
+    };
+    return acc;
+}
+
 fn ArrayIter<i32>^Iterator::fold<i32>$__Closure_12(self, init) {
     let acc: i32;
     let item: i32;
-    let __pattern_temp_0: ref Option<i32>;
-    let __local_7: i32;
     acc = init;
     b147: block {
         l148: loop {
-            __pattern_temp_0 = ArrayIter<i32>^Iterator::next(self);
-            if ref.test Option<i32>::Some(__pattern_temp_0) {
-                item = ref.cast Option<i32>::Some(__pattern_temp_0).payload_0;
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(self);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                item = __sroa___pattern_temp_0_payload_0;
                 acc = __inline___Closure_12____call_0: block -> i32 {
-                    __local_7 = acc;
-                    if item > __local_7 {
+                    if item > acc {
                         break __inline___Closure_12____call_0: item;
                     };
-                    break __inline___Closure_12____call_0: __local_7;
+                    break __inline___Closure_12____call_0: acc;
                 };
             } else {
                 break b147;
@@ -2789,20 +2944,19 @@ fn ArrayIter<i32>^Iterator::fold<i32>$__Closure_12(self, init) {
 fn ArrayIter<i32>^Iterator::fold<i32>$__Closure_13(self, init) {
     let acc: i32;
     let item: i32;
-    let __pattern_temp_0: ref Option<i32>;
-    let __local_7: i32;
     acc = init;
     b151: block {
         l152: loop {
-            __pattern_temp_0 = ArrayIter<i32>^Iterator::next(self);
-            if ref.test Option<i32>::Some(__pattern_temp_0) {
-                item = ref.cast Option<i32>::Some(__pattern_temp_0).payload_0;
+            let __sroa___pattern_temp_0_discriminant: i32;
+            let __sroa___pattern_temp_0_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(self);
+            if __sroa___pattern_temp_0_discriminant == 0 {
+                item = __sroa___pattern_temp_0_payload_0;
                 acc = __inline___Closure_13____call_0: block -> i32 {
-                    __local_7 = acc;
                     if item > 2 {
-                        break __inline___Closure_13____call_0: __local_7 + 1;
+                        break __inline___Closure_13____call_0: acc + 1;
                     };
-                    break __inline___Closure_13____call_0: __local_7;
+                    break __inline___Closure_13____call_0: acc;
                 };
             } else {
                 break b151;

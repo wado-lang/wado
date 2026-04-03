@@ -33,14 +33,15 @@ The optimizer runs after lowering and before Wasm emission:
    3. Reference Elimination (`ref_elim.rs`)
    4. SROA (`sroa.rs`)
    5. Copy Propagation (`copy_prop.rs`)
-   6. Store-to-Load Forwarding (`store_load_forward.rs`)
-   7. Constant Propagation (`const_propagation.rs`)
-   8. Constant Folding (`const_folding.rs`)
-   9. Constant Global Promotion (`const_global_promotion.rs`)
-   10. Constant Branch Pruning (`const_branch_prune.rs`)
-   11. Loop-Invariant Code Motion (`licm.rs`)
-   12. Condition Implication (`condition_implication.rs`)
-   13. Template String Buffer Hoisting (`tmpl_hoist.rs`)
+   6. Common Subexpression Elimination (`cse.rs`)
+   7. Store-to-Load Forwarding (`store_load_forward.rs`)
+   8. Constant Propagation (`const_propagation.rs`)
+   9. Constant Folding (`const_folding.rs`)
+   10. Constant Global Promotion (`const_global_promotion.rs`)
+   11. Constant Branch Pruning (`const_branch_prune.rs`)
+   12. Loop-Invariant Code Motion (`licm.rs`)
+   13. Condition Implication (`condition_implication.rs`)
+   14. Template String Buffer Hoisting (`tmpl_hoist.rs`)
 3. **Hot Field Scalarization** (`field_scalarize.rs`): runs once after the loop converges
 4. **Final DCE**: clean up code made dead by optimizations (all levels)
 5. **Select Lowering** (`select_lowering.rs`): post-optimization rewrite (all levels)
@@ -109,9 +110,15 @@ Evaluates compile-time-known expressions into literal values: integer/float arit
 
 After constant propagation and folding reduce runtime initializations to scalar constants, promotes those globals back to immutable compile-time constants. Enables cascading optimization with constant propagation in subsequent iterations.
 
+### Common Subexpression Elimination (`cse.rs`)
+
+Eliminates duplicate pure binary expressions within loop bodies. When the same expression appears in the loop guard and in the loop body, and the operand locals are not modified between occurrences, the expression is computed once into a local and reused. Targets patterns left by idiomatic loops like `while p * p <= limit { ... multiple = p * p; ... }`.
+
 ### Constant Branch Pruning (`const_branch_prune.rs`)
 
 Eliminates branches with compile-time-known boolean conditions. Also simplifies degenerate block patterns (single-expression blocks, trivial labeled blocks, empty blocks).
+
+Additionally performs labeled block copy propagation: when a labeled block expression starts with `let x = y` (immutable copy from a local), and neither `x` nor `y` is modified within the block, substitutes `x` with `y` and removes the binding. This eliminates residual parameter copies left by function inlining. Combined with the existing `label: { break label: val; }` simplification, this flattens trivial labeled blocks entirely.
 
 ### Loop-Invariant Code Motion (`licm.rs`)
 
@@ -202,7 +209,7 @@ After parameter SROA, substitutes `StructGet(LocalGet(x), field)` with the inner
 
 - **Sparse Conditional Constant Propagation (SCCP)** — simultaneous constant propagation and dead branch elimination
 - **Interprocedural SCCP (IPSCCP)** — extends SCCP across function boundaries
-- **Common Subexpression Elimination / Global Value Numbering**
+- **Global Value Numbering** — generalized CSE with hash-consing (basic loop-level CSE is implemented in `cse.rs`)
 - **Peephole / Instruction Combining** — algebraic simplification (`x + 0 → x`, `x * 2 → x << 1`, etc.)
 - **Dead Store Elimination**
 - **Strength Reduction** — loop induction variable optimization
