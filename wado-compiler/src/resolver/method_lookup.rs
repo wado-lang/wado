@@ -36,12 +36,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     _ => unreachable!("ImplBlockRef::Loaded points to non-impl item"),
                 }
             }
-            ImplBlockRef::CurrentModule(item_idx) => {
-                match &self.current_module_items[*item_idx] {
-                    Item::Impl(impl_block) => impl_block,
-                    _ => unreachable!("ImplBlockRef::CurrentModule points to non-impl item"),
-                }
-            }
+            ImplBlockRef::CurrentModule(item_idx) => match &self.current_module_items[*item_idx] {
+                Item::Impl(impl_block) => impl_block,
+                _ => unreachable!("ImplBlockRef::CurrentModule points to non-impl item"),
+            },
         }
     }
 

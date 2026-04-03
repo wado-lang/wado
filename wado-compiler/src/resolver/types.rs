@@ -62,10 +62,7 @@ pub(super) struct EnumInfo {
 
 impl EnumInfo {
     pub(super) fn new(module_source: ModuleSource, cases: Vec<EnumCaseData>) -> Self {
-        let case_index = cases
-            .iter()
-            .map(|c| (c.name.clone(), c.index))
-            .collect();
+        let case_index = cases.iter().map(|c| (c.name.clone(), c.index)).collect();
         Self {
             module_source,
             cases,

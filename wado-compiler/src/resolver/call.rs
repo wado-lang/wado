@@ -1225,10 +1225,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Check if it's a local function (defined in this module)
                 if self.function_return_types.contains_key(&ident.name) {
                     // Clone params and type_params to avoid borrow issues
-                    let func_info: Option<(Vec<ast::Param>, Vec<ast::GenericParam>)> =
-                        self.lookup_current_func(&ident.name).map(|func| {
-                            (func.params.clone(), func.type_params.clone())
-                        });
+                    let func_info: Option<(Vec<ast::Param>, Vec<ast::GenericParam>)> = self
+                        .lookup_current_func(&ident.name)
+                        .map(|func| (func.params.clone(), func.type_params.clone()));
 
                     if let Some((params, type_params)) = func_info {
                         // Set up type params so resolve_type can find pack params
@@ -1289,10 +1288,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Local function
-        if self.function_return_types.contains_key(&ident.name) {
-            if let Some(func) = self.lookup_current_func(&ident.name) {
-                return func.params.iter().map(|p| p.is_mut).collect();
-            }
+        if self.function_return_types.contains_key(&ident.name)
+            && let Some(func) = self.lookup_current_func(&ident.name)
+        {
+            return func.params.iter().map(|p| p.is_mut).collect();
         }
 
         // Imported function
