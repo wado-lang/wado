@@ -3550,46 +3550,49 @@ fn flat_types_from_type_id_into(
             }
         }
         ResolvedType::GenericInstance {
-            name, type_args, ..
+            name,
+            type_args,
+            module_source,
         } => {
-            match name.as_str() {
-                "Option" if type_args.len() == 1 => {
-                    out.push(cm_abi::CmValType::I32); // discriminant
-                    flat_types_from_type_id_into(type_args[0], out, tir_modules, type_table);
+            if TypeTable::is_tuple_type(name, module_source) {
+                for &elem in type_args {
+                    flat_types_from_type_id_into(elem, out, tir_modules, type_table);
                 }
-                "Result" if type_args.len() == 2 => {
-                    out.push(cm_abi::CmValType::I32); // discriminant
-                    let mut ok_flat = Vec::new();
-                    let mut err_flat = Vec::new();
-                    flat_types_from_type_id_into(
-                        type_args[0],
-                        &mut ok_flat,
-                        tir_modules,
-                        type_table,
-                    );
-                    flat_types_from_type_id_into(
-                        type_args[1],
-                        &mut err_flat,
-                        tir_modules,
-                        type_table,
-                    );
-                    let max_len = ok_flat.len().max(err_flat.len());
-                    for i in 0..max_len {
-                        let ok_val = ok_flat.get(i).copied();
-                        let err_val = err_flat.get(i).copied();
-                        out.push(cm_abi::CmValType::join(ok_val, err_val));
+            } else {
+                match name.as_str() {
+                    "Option" if type_args.len() == 1 => {
+                        out.push(cm_abi::CmValType::I32); // discriminant
+                        flat_types_from_type_id_into(type_args[0], out, tir_modules, type_table);
                     }
-                }
-                "Array" => {
-                    out.push(cm_abi::CmValType::I32); // ptr
-                    out.push(cm_abi::CmValType::I32); // len
-                }
-                TypeTable::TUPLE_TYPE_NAME => {
-                    for &elem in type_args {
-                        flat_types_from_type_id_into(elem, out, tir_modules, type_table);
+                    "Result" if type_args.len() == 2 => {
+                        out.push(cm_abi::CmValType::I32); // discriminant
+                        let mut ok_flat = Vec::new();
+                        let mut err_flat = Vec::new();
+                        flat_types_from_type_id_into(
+                            type_args[0],
+                            &mut ok_flat,
+                            tir_modules,
+                            type_table,
+                        );
+                        flat_types_from_type_id_into(
+                            type_args[1],
+                            &mut err_flat,
+                            tir_modules,
+                            type_table,
+                        );
+                        let max_len = ok_flat.len().max(err_flat.len());
+                        for i in 0..max_len {
+                            let ok_val = ok_flat.get(i).copied();
+                            let err_val = err_flat.get(i).copied();
+                            out.push(cm_abi::CmValType::join(ok_val, err_val));
+                        }
                     }
+                    "Array" => {
+                        out.push(cm_abi::CmValType::I32); // ptr
+                        out.push(cm_abi::CmValType::I32); // len
+                    }
+                    _ => out.push(cm_abi::CmValType::I32),
                 }
-                _ => out.push(cm_abi::CmValType::I32),
             }
         }
         ResolvedType::Newtype { base_type, .. } => {

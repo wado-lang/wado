@@ -514,8 +514,8 @@ impl<'a> WirContext<'a> {
             ResolvedType::GenericInstance {
                 name,
                 type_args: elements,
-                ..
-            } if name == TypeTable::TUPLE_TYPE_NAME => {
+                module_source,
+            } if TypeTable::is_tuple_type(name, module_source) => {
                 if let Some(type_id) = self.tuple_type_map.get(elements) {
                     WirType::Ref {
                         type_id: type_id.clone(),

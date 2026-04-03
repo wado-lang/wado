@@ -633,9 +633,11 @@ fn generate_inspect_impls(module: &mut TirModule) {
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
         match resolved {
-            ResolvedType::GenericInstance { ref name, .. }
-                if name == TypeTable::TUPLE_TYPE_NAME =>
-            {
+            ResolvedType::GenericInstance {
+                ref name,
+                ref module_source,
+                ..
+            } if TypeTable::is_tuple_type(name, module_source) => {
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             ResolvedType::Function {
@@ -2084,7 +2086,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule) {
         }
         let ref_type = tt.make_ref(type_id);
         let resolved = tt.get(type_id).clone();
-        if matches!(resolved, ResolvedType::GenericInstance { ref name, .. } if name == TypeTable::TUPLE_TYPE_NAME)
+        if matches!(resolved, ResolvedType::GenericInstance { ref name, ref module_source, .. } if TypeTable::is_tuple_type(name, module_source))
         {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
         } else {
@@ -2867,6 +2869,9 @@ fn generate_display_fallback_impls(module: &mut TirModule) {
     // Parameterized types (function types, opaque types) — Display fallback
     // Tuples: Display is provided by variadic impl in core:prelude/tuple.wado
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
+        // TODO: collect_parameterized_types returns only base_name without module_source,
+        // so we cannot use TypeTable::is_tuple_type here. This is safe because
+        // collect_parameterized_types only returns TUPLE_TYPE_NAME for actual tuple types.
         if base_name == TypeTable::TUPLE_TYPE_NAME {
             continue;
         }
@@ -3436,8 +3441,10 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
             ResolvedType::GenericInstance {
-                name, type_args, ..
-            } if name == TypeTable::TUPLE_TYPE_NAME => {
+                name,
+                type_args,
+                module_source,
+            } if TypeTable::is_tuple_type(name, module_source) => {
                 if !type_args.iter().all(|e| is_concrete(*e)) {
                     return None;
                 }

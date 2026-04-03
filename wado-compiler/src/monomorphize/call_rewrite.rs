@@ -436,6 +436,9 @@ impl Monomorphizer {
             }
         }
         // Tuple variadic impl: rewrite Tuple^Eq::eq → Tuple<i32,i32,i32>^Eq::eq
+        // TODO: LocalMethodName.struct_name does not carry module_source,
+        // so we cannot use TypeTable::is_tuple_type here. This is safe because
+        // only built-in tuples use TUPLE_TYPE_NAME as struct_name in method info.
         if let Some(ref info) = method_func.method_info
             && info.struct_name == TypeTable::TUPLE_TYPE_NAME
         {

@@ -643,6 +643,9 @@ impl Monomorphizer {
                 // (e.g., Tuple^Eq::eq from variadic `impl<..T: Eq> Eq for [..T]`)
                 // The resolver already creates monomorph_info with the generic name and
                 // impl_type_args (the concrete tuple element types).
+                // TODO: LocalMethodName.struct_name does not carry module_source,
+                // so we cannot use TypeTable::is_tuple_type here. This is safe because
+                // only built-in tuples use TUPLE_TYPE_NAME as struct_name in method info.
                 if let Some(ref info) = method_func.method_info
                     && info.struct_name == TypeTable::TUPLE_TYPE_NAME
                 {
@@ -3594,7 +3597,7 @@ fn try_lower_comparison(
             module_source,
             ..
         } => {
-            if name == TypeTable::TUPLE_TYPE_NAME {
+            if TypeTable::is_tuple_type(name, module_source) {
                 // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
                 // and already lowered to method calls by the resolver.
                 return None;

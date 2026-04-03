@@ -874,8 +874,8 @@ fn trait_fmt_call(
         ResolvedType::GenericInstance {
             ref name,
             ref type_args,
-            ..
-        } if name == TypeTable::TUPLE_TYPE_NAME => {
+            ref module_source,
+        } if TypeTable::is_tuple_type(name, module_source) => {
             let elements = type_args.clone();
             let mut stmts = Vec::new();
             stmts.push(write_str_stmt("[", fmt.clone(), tt, span));

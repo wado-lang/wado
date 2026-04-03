@@ -534,8 +534,13 @@ impl TypeTable {
     pub const ERROR: TypeId = TypeId(18);
 
     /// Internal name for built-in tuple types in `GenericInstance`.
-    /// Uses `#` prefix to prevent collision with user-defined struct names.
-    pub const TUPLE_TYPE_NAME: &'static str = "#Tuple";
+    /// Distinguished from user-defined structs named "Tuple" by `module_source.is_core()`.
+    pub const TUPLE_TYPE_NAME: &'static str = "Tuple";
+
+    /// Check if a name and module_source identify a built-in tuple type.
+    pub fn is_tuple_type(name: &str, module_source: &ModuleSource) -> bool {
+        name == Self::TUPLE_TYPE_NAME && module_source.is_core()
+    }
 
     pub fn new() -> Self {
         let mut table = Self {
@@ -843,17 +848,23 @@ impl TypeTable {
         })
     }
 
-    /// Check if a type is a tuple (`GenericInstance` with name `TUPLE_TYPE_NAME`).
+    /// Check if a type is a built-in tuple (`GenericInstance` named "Tuple" from a core module).
     pub fn is_tuple(&self, id: TypeId) -> bool {
-        matches!(self.get(id), ResolvedType::GenericInstance { name, .. } if name == Self::TUPLE_TYPE_NAME)
+        matches!(
+            self.get(id),
+            ResolvedType::GenericInstance { name, module_source, .. }
+                if Self::is_tuple_type(name, module_source)
+        )
     }
 
-    /// If the type is a tuple, return its element types.
+    /// If the type is a built-in tuple, return its element types.
     pub fn as_tuple(&self, id: TypeId) -> Option<Vec<TypeId>> {
         if let ResolvedType::GenericInstance {
-            name, type_args, ..
+            name,
+            module_source,
+            type_args,
         } = self.get(id)
-            && name == Self::TUPLE_TYPE_NAME
+            && Self::is_tuple_type(name, module_source)
         {
             Some(type_args.clone())
         } else {
@@ -1405,10 +1416,12 @@ impl TypeTable {
                 format!("{}::{}", self.type_name(*param_id), assoc_name)
             }
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                module_source,
+                type_args,
             } => {
                 let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
-                if name == Self::TUPLE_TYPE_NAME {
+                if Self::is_tuple_type(name, module_source) {
                     format!("[{}]", arg_names.join(", "))
                 } else {
                     format!("{}<{}>", name, arg_names.join(", "))

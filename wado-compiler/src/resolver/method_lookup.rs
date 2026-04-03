@@ -358,7 +358,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 module_source,
                 type_args,
             } => {
-                if name == TypeTable::TUPLE_TYPE_NAME {
+                if TypeTable::is_tuple_type(name, module_source) {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {
@@ -2443,9 +2443,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
             ResolvedType::Struct { name, .. } => name,
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                module_source,
+                type_args,
             } => {
-                if name == TypeTable::TUPLE_TYPE_NAME {
+                if TypeTable::is_tuple_type(&name, &module_source) {
                     let parts: Vec<String> = type_args
                         .iter()
                         .map(|&t| self.type_id_to_string(t))

@@ -181,9 +181,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. } => (name.clone(), None),
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                module_source,
+                type_args,
             } => {
-                if name == TypeTable::TUPLE_TYPE_NAME {
+                if TypeTable::is_tuple_type(name, module_source) {
                     // Tuples implement a trait when all elements implement it
                     let elems = type_args.clone();
                     return elems

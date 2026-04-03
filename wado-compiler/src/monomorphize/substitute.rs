@@ -95,14 +95,16 @@ impl Monomorphizer {
             } => {
                 // Skip Array and Tuple - they have special codegen handling and should remain
                 // as GenericInstance, not be rewritten to Struct
-                if name == "Array" || name == TypeTable::TUPLE_TYPE_NAME {
+                if name == "Array"
+                    || TypeTable::is_tuple_type(&name, &module_source)
+                {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
                         .map(|&id| self.rewrite_type_id(id, type_table))
                         .collect();
                     return if new_args == type_args {
                         type_id
-                    } else if name == TypeTable::TUPLE_TYPE_NAME {
+                    } else if TypeTable::is_tuple_type(&name, &module_source) {
                         type_table.make_tuple(new_args)
                     } else {
                         type_table.make_generic_instance(name, module_source, new_args)
@@ -265,7 +267,7 @@ impl Monomorphizer {
                 }
 
                 // Tuples need TypePack expansion: splice pack elements into the type args
-                if name == TypeTable::TUPLE_TYPE_NAME {
+                if TypeTable::is_tuple_type(&name, &module_source) {
                     let mut new_elems: Vec<TypeId> = Vec::new();
                     for &e in &type_args {
                         match type_table.get(e).clone() {

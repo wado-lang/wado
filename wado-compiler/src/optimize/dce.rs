@@ -737,8 +737,8 @@ fn analyze_expr(
                     ResolvedType::GenericInstance {
                         name,
                         type_args,
-                        module_source: _,
-                    } if name == TypeTable::TUPLE_TYPE_NAME => {
+                        module_source,
+                    } if TypeTable::is_tuple_type(&name, &module_source) => {
                         // Tuple method call (e.g., Tuple<f64,f64>^Inspect::inspect)
                         // Synthesized as non-monomorphized methods with struct_name "Tuple<f64,f64>"
                         let type_arg_names: Vec<String> = type_args
