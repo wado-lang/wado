@@ -3432,7 +3432,9 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
 
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
-            ResolvedType::GenericInstance { name, type_args, .. } if name == "Tuple" => {
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } if name == "Tuple" => {
                 if !type_args.iter().all(|e| is_concrete(*e)) {
                     return None;
                 }

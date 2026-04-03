@@ -696,21 +696,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name, type_args, ..
             } => {
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
-                if name == "Tuple" {
-                    if let Ok(index) = field_name.parse::<usize>() {
-                        if index < type_args.len() {
-                            return (index as u32, type_args[index]);
-                        }
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message: format!(
-                                "tuple index {} out of bounds, tuple has {} elements",
-                                index,
-                                type_args.len()
-                            ),
-                            span,
-                        });
-                        return (0, TypeTable::UNKNOWN);
+                if name == "Tuple"
+                    && let Ok(index) = field_name.parse::<usize>()
+                {
+                    if index < type_args.len() {
+                        return (index as u32, type_args[index]);
                     }
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message: format!(
+                            "tuple index {} out of bounds, tuple has {} elements",
+                            index,
+                            type_args.len()
+                        ),
+                        span,
+                    });
+                    return (0, TypeTable::UNKNOWN);
                 }
                 // Clone fields to avoid borrow issues
                 let fields_clone = self.struct_fields.get(&name).cloned();
@@ -914,9 +914,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .iter()
                         .map(|&arg| self.substitute_type_params(arg, type_args))
                         .collect();
-                    self.type_table
-                        .borrow_mut()
-                        .make_generic_instance(name, module_source, new_args)
+                    self.type_table.borrow_mut().make_generic_instance(
+                        name,
+                        module_source,
+                        new_args,
+                    )
                 }
             }
             ResolvedType::AssocTypeProjection {
@@ -1038,7 +1040,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
-        if let ResolvedType::GenericInstance { ref name, type_args: ref elements, .. } = base_type
+        if let ResolvedType::GenericInstance {
+            ref name,
+            type_args: ref elements,
+            ..
+        } = base_type
             && name == "Tuple"
         {
             // Tuple indexing requires a constant integer index
@@ -2659,9 +2665,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let ty = self.type_table.borrow().get(type_id).clone();
         match ty {
             ResolvedType::TypePack { .. } => true,
-            ResolvedType::GenericInstance { name, type_args, .. } if name == "Tuple" => {
-                type_args.iter().any(|e| self.type_contains_pack(*e))
-            }
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } if name == "Tuple" => type_args.iter().any(|e| self.type_contains_pack(*e)),
             _ => false,
         }
     }
@@ -2714,7 +2720,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             elem.span(),
                         ));
                     }
-                } else if let ResolvedType::GenericInstance { name, type_args: inner_elems, .. } = spread_type
+                } else if let ResolvedType::GenericInstance {
+                    name,
+                    type_args: inner_elems,
+                    ..
+                } = spread_type
                     && name == "Tuple"
                 {
                     // For concrete tuples, expand inline via FieldAccess.

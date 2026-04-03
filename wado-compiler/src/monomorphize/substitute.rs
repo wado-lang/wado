@@ -269,7 +269,10 @@ impl Monomorphizer {
                     let mut new_elems: Vec<TypeId> = Vec::new();
                     for &e in &type_args {
                         match type_table.get(e).clone() {
-                            ResolvedType::TypePack { index, name: pack_name } => {
+                            ResolvedType::TypePack {
+                                index,
+                                name: pack_name,
+                            } => {
                                 let &pack_type =
                                     substitution.get(&index).unwrap_or_else(|| {
                                         panic!(
@@ -283,8 +286,7 @@ impl Monomorphizer {
                                 }
                             }
                             _ => {
-                                new_elems
-                                    .push(self.substitute_type(e, substitution, type_table));
+                                new_elems.push(self.substitute_type(e, substitution, type_table));
                             }
                         }
                     }

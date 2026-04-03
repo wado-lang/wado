@@ -255,10 +255,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Tuple.len() is a compile-time constant — return immediately without a function call.
-        if method_call.method == "len"
-            && self.type_table.borrow().is_tuple(base_type_id)
-        {
-            let len = self.type_table.borrow().as_tuple(base_type_id).unwrap().len() as i64;
+        if method_call.method == "len" && self.type_table.borrow().is_tuple(base_type_id) {
+            let len = self
+                .type_table
+                .borrow()
+                .as_tuple(base_type_id)
+                .unwrap()
+                .len() as i64;
             return TirExpr::new(
                 TirExprKind::IntLiteral {
                     value: len as u64,
@@ -271,9 +274,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Tuple.zip() transposes a tuple-of-tuples.
         // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
-        if method_call.method == "zip"
-            && self.type_table.borrow().is_tuple(base_type_id)
-        {
+        if method_call.method == "zip" && self.type_table.borrow().is_tuple(base_type_id) {
             let has_type_pack = self.type_contains_pack(base_type_id);
             if has_type_pack {
                 // TypePack present: defer expansion to monomorphization.

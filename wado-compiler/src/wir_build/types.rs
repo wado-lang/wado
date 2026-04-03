@@ -569,7 +569,11 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
         let type_table = &*tir_mod.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             let resolved = type_table.get(type_id);
-            if let ResolvedType::GenericInstance { name, type_args: elements, .. } = resolved
+            if let ResolvedType::GenericInstance {
+                name,
+                type_args: elements,
+                ..
+            } = resolved
                 && name == "Tuple"
             {
                 if ctx.tuple_type_map.contains_key(elements) {
@@ -1326,7 +1330,11 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 for tir_mod in ctx.project.tir_modules.values() {
                     let type_table = &*tir_mod.type_table.borrow();
                     for type_id in type_table.iter_type_ids() {
-                        if let ResolvedType::GenericInstance { name, type_args: elements, .. } = type_table.get(type_id)
+                        if let ResolvedType::GenericInstance {
+                            name,
+                            type_args: elements,
+                            ..
+                        } = type_table.get(type_id)
                             && name == "Tuple"
                             && field_idx < elements.len()
                         {

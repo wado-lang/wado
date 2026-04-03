@@ -1111,9 +1111,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .iter()
                     .map(|t| self.resolve_wasi_type_scoped(t, wasi_package))
                     .collect();
-                self.type_table
-                    .borrow_mut()
-                    .make_tuple(resolved)
+                self.type_table.borrow_mut().make_tuple(resolved)
             }
             _ => TypeTable::UNIT,
         }

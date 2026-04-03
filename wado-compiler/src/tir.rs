@@ -839,14 +839,16 @@ impl TypeTable {
         })
     }
 
-    /// Check if a type is a tuple (GenericInstance with name "Tuple").
+    /// Check if a type is a tuple (`GenericInstance` with name "Tuple").
     pub fn is_tuple(&self, id: TypeId) -> bool {
         matches!(self.get(id), ResolvedType::GenericInstance { name, .. } if name == "Tuple")
     }
 
     /// If the type is a tuple, return its element types.
     pub fn as_tuple(&self, id: TypeId) -> Option<Vec<TypeId>> {
-        if let ResolvedType::GenericInstance { name, type_args, .. } = self.get(id)
+        if let ResolvedType::GenericInstance {
+            name, type_args, ..
+        } = self.get(id)
             && name == "Tuple"
         {
             Some(type_args.clone())

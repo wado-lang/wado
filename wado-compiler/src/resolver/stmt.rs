@@ -1140,13 +1140,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Pattern::Tuple(patterns, has_rest) => {
                 // For tuple patterns, extract element types
-                let element_types = if let Some(types) =
-                    self.type_table.borrow().as_tuple(scrutinee_type)
-                {
-                    types
-                } else {
-                    vec![TypeTable::UNKNOWN; patterns.len()]
-                };
+                let element_types =
+                    if let Some(types) = self.type_table.borrow().as_tuple(scrutinee_type) {
+                        types
+                    } else {
+                        vec![TypeTable::UNKNOWN; patterns.len()]
+                    };
 
                 let resolved: Vec<TirPattern> = patterns
                     .iter()

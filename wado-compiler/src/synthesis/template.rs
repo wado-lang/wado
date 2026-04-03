@@ -871,7 +871,11 @@ fn trait_fmt_call(
         ResolvedType::Unit => {
             vec![write_str_stmt("()", fmt, tt, span)]
         }
-        ResolvedType::GenericInstance { ref name, ref type_args, .. } if name == "Tuple" => {
+        ResolvedType::GenericInstance {
+            ref name,
+            ref type_args,
+            ..
+        } if name == "Tuple" => {
             let elements = type_args.clone();
             let mut stmts = Vec::new();
             stmts.push(write_str_stmt("[", fmt.clone(), tt, span));

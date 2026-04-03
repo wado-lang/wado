@@ -2441,8 +2441,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name, type_args, ..
             } => {
                 if name == "Tuple" {
-                    let parts: Vec<String> =
-                        type_args.iter().map(|&t| self.type_id_to_string(t)).collect();
+                    let parts: Vec<String> = type_args
+                        .iter()
+                        .map(|&t| self.type_id_to_string(t))
+                        .collect();
                     format!("[{}]", parts.join(", "))
                 } else if type_args.is_empty() {
                     name
