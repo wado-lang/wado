@@ -90,18 +90,53 @@ impl G4Lexer {
             if self.at_end() {
                 return make_token(G4Token::Error, "unterminated string", start, self.pos);
             }
-            let c = self.advance();
-            match c {
-                '\'' => {
-                    return make_token(G4Token::StringLit, text, start, self.pos);
-                },
-                '\\' => {
-                    if !self.at_end() {
-                        text.push(self.advance());
-                    }
-                },
-                _ => text.push(c),
+            let c = self.chars[self.pos];
+            self.pos += 1;
+            if c == '\'' {
+                return make_token(G4Token::StringLit, text, start, self.pos);
+            } else if c == '\\' && !self.at_end() {
+                self.read_string_escape(&mut text);
+            } else {
+                text.push(c);
             }
+        }
+    }
+
+    fn read_string_escape(&mut self, text: &mut String) {
+        let ec = self.chars[self.pos];
+        self.pos += 1;
+        if ec == 'u' {
+            if !self.at_end() && self.chars[self.pos] == '{' {
+                self.pos += 1;
+                let mut val = 0;
+                while !self.at_end() && self.chars[self.pos] != '}' {
+                    val = val * 16 + hex_value(self.chars[self.pos]);
+                    self.pos += 1;
+                }
+                if !self.at_end() {
+                    self.pos += 1;
+                }
+                text.push(char::from_i32(val).unwrap());
+            } else {
+                let mut val = 0;
+                let mut hex_count = 0;
+                while hex_count < 4 && !self.at_end() {
+                    val = val * 16 + hex_value(self.chars[self.pos]);
+                    self.pos += 1;
+                    hex_count += 1;
+                }
+                text.push(char::from_i32(val).unwrap());
+            }
+        } else if ec == 'n' {
+            text.push('\n');
+        } else if ec == 'r' {
+            text.push('\r');
+        } else if ec == 't' {
+            text.push('\t');
+        } else if ec == 'f' {
+            text.push('\u000C');
+        } else {
+            text.push(ec);
         }
     }
 
@@ -114,19 +149,19 @@ impl G4Lexer {
             if self.at_end() {
                 return make_token(G4Token::Error, "unterminated char class", start, self.pos);
             }
-            let c = self.advance();
-            match c {
-                ']' => {
-                    text.push(']');
-                    return make_token(G4Token::CharClass, text, start, self.pos);
-                },
-                '\\' => {
-                    text.push(c);
-                    if !self.at_end() {
-                        text.push(self.advance());
-                    }
-                },
-                _ => text.push(c),
+            let c = self.chars[self.pos];
+            self.pos += 1;
+            if c == ']' {
+                text.push(']');
+                return make_token(G4Token::CharClass, text, start, self.pos);
+            } else if c == '\\' {
+                text.push(c);
+                if !self.at_end() {
+                    text.push(self.chars[self.pos]);
+                    self.pos += 1;
+                }
+            } else {
+                text.push(c);
             }
         }
     }
@@ -184,6 +219,12 @@ impl G4Lexer {
             '~' => G4Token::Tilde,
             '=' => G4Token::Assign,
             '#' => G4Token::Hash,
+            '{' => G4Token::LBrace,
+            '}' => G4Token::RBrace,
+            ',' => G4Token::Comma,
+            '@' => G4Token::At,
+            '<' => G4Token::LAngle,
+            '>' => G4Token::RAngle,
             '-' && !self.at_end() && self.chars[self.pos] == '>' => {
                 self.pos += 1;
                 return make_token(G4Token::Arrow, "->", start, self.pos);
@@ -216,4 +257,17 @@ fn is_ident_start(c: char) -> bool {
 
 fn is_ident_char(c: char) -> bool {
     return is_ident_start(c) || '0' <= c <= '9';
+}
+
+fn hex_value(c: char) -> i32 {
+    if '0' <= c <= '9' {
+        return c as i32 - '0' as i32;
+    }
+    if 'a' <= c <= 'f' {
+        return c as i32 - 'a' as i32 + 10;
+    }
+    if 'A' <= c <= 'F' {
+        return c as i32 - 'A' as i32 + 10;
+    }
+    return 0;
 }

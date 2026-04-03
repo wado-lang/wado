@@ -18,10 +18,12 @@ test "Grammar construction" {
         name: "JSON",
         parser_rules: [],
         lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
     };
     assert g.name == "JSON";
     assert g.parser_rules.is_empty();
     assert g.lexer_rules.is_empty();
+    assert g.mode_names.len() == 1;
 }
 
 test "ParserRule with alternatives" {
@@ -78,6 +80,9 @@ test "LexerRule construction" {
         name: "WS",
         is_fragment: false,
         skip: true,
+        mode: 0,
+        push_mode: -1,
+        pop_mode: false,
         body: [
             LexerAlt {
                 elements: [

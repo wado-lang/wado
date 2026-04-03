@@ -1,20 +1,25 @@
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { parse } from "./g4/parser.wado";
+use { Grammar, merge_grammars } from "./ir.wado";
 use { generate } from "./generator.wado";
 
 export fn run() with Stdout, Stderr, Environment, Preopens {
     let arguments = args();
 
     if arguments.len() >= 2 && arguments[0] == "gen" {
-        cmd_gen(arguments[1]);
+        let mut paths: Array<String> = [];
+        for let mut i = 1; i < arguments.len(); i += 1 {
+            paths.push(arguments[i]);
+        }
+        cmd_gen(paths);
         return;
     }
 
-    eprintln("Usage: gale gen <grammar.g4>");
+    eprintln("Usage: gale gen <grammar.g4> [grammar2.g4 ...]");
 }
 
-fn cmd_gen(path: String) with Stdout, Stderr, Preopens {
+fn cmd_gen(paths: Array<String>) with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("gale: no preopened directories available (try without --no-dir)");
@@ -22,31 +27,36 @@ fn cmd_gen(path: String) with Stdout, Stderr, Preopens {
     }
     let root = dirs[0].0;
 
-    let open_result = root.open_at(
-        PathFlags::none(),
-        path,
-        OpenFlags::none(),
-        DescriptorFlags::Read,
-    );
+    let mut grammars: Array<Grammar> = [];
+    for let path of paths {
+        let open_result = root.open_at(
+            PathFlags::none(),
+            path,
+            OpenFlags::none(),
+            DescriptorFlags::Read,
+        );
 
-    if let Err(_) = open_result {
-        eprintln(`gale: {path}: cannot open file`);
-        return;
-    }
-    let file = open_result.unwrap();
-
-    let bytes = read_all(&file);
-    let content = String::from_utf8_unchecked(bytes);
-
-    let grammar = match parse(content) {
-        Ok(g) => g,
-        Err(e) => {
-            eprintln(`gale: parse error: {e.message}`);
+        if let Err(_) = open_result {
+            eprintln(`gale: {path}: cannot open file`);
             return;
-        },
-    };
+        }
+        let file = open_result.unwrap();
 
-    print(generate(&grammar));
+        let bytes = read_all(&file);
+        let content = String::from_utf8_unchecked(bytes);
+
+        let grammar = match parse(content) {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln(`gale: {path}: parse error: {e.message}`);
+                return;
+            },
+        };
+        grammars.push(grammar);
+    }
+
+    let merged = merge_grammars(grammars);
+    print(generate(&merged));
 }
 
 fn read_all(file: &Descriptor) -> Array<u8> {
