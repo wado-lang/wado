@@ -21,6 +21,39 @@ mise run test-wado
 
 Gale has two layers of e2e testing, both driven by `.g4` files in `tests/grammars/`.
 
+### Driver Tests: S-expression Tree Assertions
+
+Driver tests verify generated parsers by parsing real input and checking the CST structure. Use `to_string_tree()` for ANTLR4-style S-expression output and `normalize_tree()` to write readable multi-line expected values:
+
+```wado
+use json from "./golden/json.wado";
+use { normalize_tree } from "./golden/json.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = json::parse(input).unwrap();
+    let tree = json::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "tree: nested object with array" {
+    assert_tree(&"{\"a\":[1,true,null]}", &"
+        (json
+          (value
+            (obj
+              { (pair \"a\"
+                  : (value
+                      (arr [ (value 1) , (value true) , (value null) ])))
+              })))
+    ");
+}
+```
+
+- **`to_string_tree()`** outputs `(ruleName child1 child2 ...)` with tokens as their text. EOF is omitted.
+- **`normalize_tree()`** collapses whitespace (preserving quoted strings) so multi-line indented expected values compare correctly with compact single-line output.
+- Both functions are defined in `runtime.wado` and available in all generated parsers.
+
 ### Layer 1: G4 Parse Tests (`g4/integration_test.wado`)
 
 Verify that the g4 parser can parse real-world `.g4` files into `Grammar` IR without errors. Each test uses `#include_str` to load the `.g4` file and calls `parse()`.
