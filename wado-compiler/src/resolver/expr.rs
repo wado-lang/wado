@@ -661,22 +661,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 module_source,
                 ..
             } => {
-                // Use the flat struct_fields map first. When there's a name collision
-                // (the entry is from a different module), re-resolve fields from the
-                // source module to get the correct struct definition.
-                if let Some(struct_info) = self.struct_fields.get(&name) {
-                    if struct_info.module_source == module_source {
-                        for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
-                            if fname == field_name {
-                                return (index as u32, *ftype);
-                            }
-                        }
-                    } else {
-                        // Name collision: re-resolve field type from the loaded module
-                        if let Some(ftype) =
-                            self.resolve_field_in_source_module(&name, field_name, &module_source)
-                        {
-                            return ftype;
+                if let Some(struct_info) = self.lookup_struct_fields(&name, &module_source) {
+                    for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
+                        if fname == field_name {
+                            return (index as u32, *ftype);
                         }
                     }
                 }
@@ -715,7 +703,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return (0, TypeTable::UNKNOWN);
                 }
                 // Clone fields to avoid borrow issues
-                let fields_clone = self.struct_fields.get(&name).cloned();
+                let fields_clone = self.lookup_struct_fields(&name, &module_source).cloned();
                 if let Some(struct_info) = fields_clone {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
@@ -729,64 +717,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             _ => {}
         }
         (0, TypeTable::UNKNOWN)
-    }
-
-    /// Resolve a struct field type from the source module where the struct is defined.
-    /// Used when the flat `struct_fields` map has a name collision (two modules define
-    /// a struct with the same name). This re-resolves the field type in the source
-    /// module's type context to get the correct result.
-    pub(super) fn resolve_field_in_source_module(
-        &mut self,
-        struct_name: &str,
-        field_name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<(u32, TypeId)> {
-        // Pre-populate module type maps cache before borrowing loaded_modules
-        self.ensure_module_maps_cached(module_source);
-
-        let loaded_module = self.loaded_modules.get(module_source)?;
-        // Find the struct declaration in the loaded module
-        let struct_decl = loaded_module.items.iter().find_map(|item| {
-            if let Item::Struct(s) = item
-                && s.name == struct_name
-            {
-                Some(s)
-            } else {
-                None
-            }
-        })?;
-
-        // Swap to source module's type context using cached maps (O(1))
-        let mut cached = self
-            .module_type_maps_cache
-            .shift_remove(module_source)
-            .expect("cache populated by ensure_module_maps_cached");
-        std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
-        std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
-        std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-        std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
-        std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
-        std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
-
-        // Find and resolve the field type
-        let result = struct_decl
-            .fields
-            .iter()
-            .enumerate()
-            .find(|(_, f)| f.name == field_name)
-            .map(|(index, f)| (index as u32, self.resolve_type(&f.ty)));
-
-        // Restore type maps and re-cache
-        std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
-        std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
-        std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-        std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
-        std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
-        std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
-        self.module_type_maps_cache
-            .insert(module_source.clone(), cached);
-
-        result
     }
 
     /// Check if a struct field is accessible from the current module.
@@ -821,7 +751,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Look up field visibility
-        if let Some(struct_info) = self.struct_fields.get(&struct_name) {
+        if let Some(struct_info) = self.lookup_struct_fields(&struct_name, &module_source) {
             for (fname, _, is_pub) in &struct_info.fields {
                 if fname == field_name && !is_pub {
                     let _ = self.logger.error(TypeError::TypeMismatch {

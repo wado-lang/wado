@@ -120,9 +120,9 @@
     (import "mem" "realloc" (func (;0;) (type 0)))
     (import "wasi" "task-return" (func (;1;) (type 1)))
     (import "mem" "memory" (memory (;0;) 1))
-    (export "run" (func $__cm_export__run))
-    (func $run (;2;) (type 2))
-    (func $__cm_export__run (;3;) (type 3)
+    (export "run" (func $wado-compiler/tests/format.fixtures/all.dirty.wado/__cm_export__run))
+    (func $wado-compiler/tests/format.fixtures/all.dirty.wado/run (;2;) (type 2))
+    (func $wado-compiler/tests/format.fixtures/all.dirty.wado/__cm_export__run (;3;) (type 3)
       (call 1
         (i32.const 0))
     )

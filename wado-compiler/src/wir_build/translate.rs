@@ -217,10 +217,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             let wrapper_fq = format!("closure/{wrapper_name}");
 
             let func = WirFunction {
-                name: WirName {
-                    display: wrapper_name,
-                    fq: wrapper_fq,
-                },
+                name: WirName { fq: wrapper_fq },
                 type_id: fn_type_id,
                 param_names,
                 body: Some(body),
@@ -1312,10 +1309,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let global_name = self.make_global_name(module_source, name);
                 WirInstr::GlobalGet {
-                    name: WirName {
-                        display: name.clone(),
-                        fq: global_name,
-                    },
+                    name: WirName { fq: global_name },
                     result_ty: self.wir_type(expr.type_id),
                 }
             }
@@ -1327,10 +1321,7 @@ impl FunctionTranslator<'_, '_> {
                 let global_name = self.make_global_name(module_source, name);
                 let val = self.translate_expr(value);
                 WirInstr::GlobalSet {
-                    name: WirName {
-                        display: name.clone(),
-                        fq: global_name,
-                    },
+                    name: WirName { fq: global_name },
                     value: Box::new(val),
                 }
             }

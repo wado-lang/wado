@@ -1,0 +1,16 @@
+// Module B: defines variant Status with Ok/Error cases (different from module A)
+pub variant Status {
+    Ok(String),
+    Error(i32),
+}
+
+pub fn make_ok(msg: String) -> Status {
+    return Status::Ok(msg);
+}
+
+pub fn status_msg(s: Status) -> String {
+    return match s {
+        Ok(msg) => msg,
+        Error(code) => `error:{code}`,
+    };
+}

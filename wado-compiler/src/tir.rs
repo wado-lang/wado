@@ -679,6 +679,29 @@ impl TypeTable {
             .copied()
     }
 
+    /// Find the `module_source` where a type with the given name is defined.
+    /// Searches `struct_name_index` first, then falls back to scanning for
+    /// `GenericInstance` types (for generic struct base names like "`IterFilter`").
+    pub fn find_struct_module_source(&self, name: &str) -> Option<ModuleSource> {
+        // Try struct_name_index first (for concrete struct types)
+        if let Some((_, ms)) = self.struct_name_index.keys().find(|(n, _)| n == name) {
+            return Some(ms.clone());
+        }
+        // Fall back to scanning GenericInstance types (for generic templates)
+        for id in self.types.keys() {
+            if let ResolvedType::GenericInstance {
+                name: gi_name,
+                module_source,
+                ..
+            } = self.get(*id)
+                && gi_name == name
+            {
+                return Some(module_source.clone());
+            }
+        }
+        None
+    }
+
     /// Remove all type entries whose `TypeId` is not in `keep`.
     ///
     /// This physically removes entries from the backing `IndexMap`s so that
@@ -2740,13 +2763,16 @@ pub struct TirImport {
     pub return_type: TypeId,
 }
 
-/// Tracks a requested instantiation of a generic item
-/// Note: Only `name`, `impl_type_args`, and `method_type_args` are used for equality/hashing.
+/// Tracks a requested instantiation of a generic item.
+/// `name`, `module_source`, `impl_type_args`, and `method_type_args` are used for equality/hashing.
 /// `method_info` is auxiliary metadata for name formatting.
 #[derive(Debug, Clone)]
 pub struct InstantiationKey {
     /// Name of the generic item (struct, function, or enum)
     pub name: String,
+    /// Module where the generic item is defined.
+    /// Distinguishes same-named generics from different modules.
+    pub module_source: ModuleSource,
     /// Impl-level type arguments (from the struct/type)
     pub impl_type_args: Vec<TypeId>,
     /// Method-level type arguments (from the method's own generics)
@@ -2759,6 +2785,7 @@ pub struct InstantiationKey {
 impl PartialEq for InstantiationKey {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
+            && self.module_source == other.module_source
             && self.impl_type_args == other.impl_type_args
             && self.method_type_args == other.method_type_args
     }
@@ -2769,6 +2796,7 @@ impl Eq for InstantiationKey {}
 impl std::hash::Hash for InstantiationKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.name.hash(state);
+        self.module_source.hash(state);
         self.impl_type_args.hash(state);
         self.method_type_args.hash(state);
     }

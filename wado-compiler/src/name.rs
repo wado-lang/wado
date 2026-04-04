@@ -881,13 +881,7 @@ impl StructName {
 
 impl fmt::Display for StructName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.module_source {
-            ModuleSource::EntryPoint { .. } => write!(f, "{}", self.name),
-            ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
-            ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
-            ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
-            ModuleSource::Remote { url } => write!(f, "{}/{}", url, self.name),
-        }
+        write!(f, "{}/{}", self.module_source, self.name)
     }
 }
 
@@ -1359,13 +1353,13 @@ mod tests {
     #[test]
     fn test_struct_name_from_strs() {
         let struct_name = StructName::from_strs(&["core", "internal"], "SomeType");
-        assert_eq!(struct_name.to_string(), "core/internal/SomeType");
+        assert_eq!(struct_name.to_string(), "core:internal/SomeType");
     }
 
     #[test]
     fn test_struct_name_empty_path() {
         let struct_name = StructName::from_path_and_name(&[], "Point");
-        assert_eq!(struct_name.to_string(), "Point");
+        assert_eq!(struct_name.to_string(), "<entry>/Point");
     }
 
     #[test]

@@ -1,0 +1,16 @@
+// Two modules define newtype Id with different base types.
+// Each module's Id type must remain distinct.
+
+use { make_id as make_id_a, id_value } from "./sub/cross_module_same_name_newtype_a.wado";
+use { make_id as make_id_b, id_label } from "./sub/cross_module_same_name_newtype_b.wado";
+
+test "cross-module same-name newtypes" {
+    let a = make_id_a(42);
+    assert id_value(a) == 42;
+
+    let b = make_id_b("hello");
+    assert id_label(b) == "hello";
+}
+
+__DATA__
+{"test": {}}

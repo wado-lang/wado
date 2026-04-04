@@ -1,0 +1,16 @@
+// Two modules define struct Item with different fields.
+// Each module's Item type must remain distinct.
+
+use { make_item as make_item_a, item_name } from "./sub/cross_module_same_name_struct_a.wado";
+use { make_item as make_item_b, item_value } from "./sub/cross_module_same_name_struct_b.wado";
+
+test "cross-module same-name structs" {
+    let a = make_item_a("hello");
+    assert item_name(a) == "hello";
+
+    let b = make_item_b(42);
+    assert item_value(b) == 42;
+}
+
+__DATA__
+{"test": {}}

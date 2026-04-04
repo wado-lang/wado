@@ -17,26 +17,9 @@ impl Monomorphizer {
     ) -> Option<TirStruct> {
         let mangled_name = self.structs.instantiated.get(key)?.clone();
 
-        // Find the GenericInstance's module_source from the type table.
-        // Use the generic's original module (where it was defined) for the struct type,
-        // ensuring consistency across modules that share the same type table.
-        let struct_module_source = type_table
-            .iter_type_ids()
-            .find_map(|id| {
-                if let ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args,
-                } = type_table.get(id)
-                    && name == &key.name
-                    && type_args == &key.impl_type_args
-                {
-                    Some(module_source.clone())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(|| self.current_module_source.clone());
+        // Use module_source from the InstantiationKey, which carries
+        // the module where the generic struct was defined.
+        let struct_module_source = key.module_source.clone();
 
         // Register the concrete struct type in the type table BEFORE substituting field types.
         // This is critical for self-referential structs like:
@@ -53,9 +36,12 @@ impl Monomorphizer {
         // so that substitute_type can use it for self-references
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                module_source,
+                type_args,
             } = type_table.get(id)
                 && name == &key.name
+                && module_source == &key.module_source
                 && type_args == &key.impl_type_args
             {
                 self.structs.type_substitutions.insert(id, concrete_type_id);

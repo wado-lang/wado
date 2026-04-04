@@ -125,10 +125,7 @@ impl WasmModuleInfo {
         for (i, func) in self.functions.iter().enumerate() {
             let fq: Rc<str> = Rc::from(format!("__wasm_mod_type_{i}"));
             wir.types.push(WirTypeDef::Func(WirFuncType {
-                name: WirName {
-                    display: func.export_name.clone(),
-                    fq: fq.to_string(),
-                },
+                name: WirName { fq: fq.to_string() },
                 params: vec![WirType::I32; func.param_names.len()],
                 results: func.results.clone(),
             }));
@@ -147,7 +144,6 @@ impl WasmModuleInfo {
             }
             wir.functions.push(WirFunction {
                 name: WirName {
-                    display: func.export_name.clone(),
                     fq: func_fq.to_string(),
                 },
                 type_id,
@@ -493,24 +489,22 @@ fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
 /// A globally-scoped name in WIR.
 ///
 /// Carries both forms needed by different consumers:
-/// - `display`: short name for unparse and error messages
+/// - `fq`: fully-qualified name for identity, unparse, and error messages
 /// - `fq`: module-qualified name for unique identity
 ///
 /// The `tir_to_wir` phase constructs `WirName`s from `name.rs` objects
 /// (`StructName`, `FunctionId`, etc.). WIR itself does not import `name.rs` types.
 #[derive(Debug, Clone)]
 pub struct WirName {
-    /// Short display name (e.g., "Point", "Array<i32>", "`Point::sum`").
-    /// Used by unparse and error messages.
-    pub display: String,
     /// Fully-qualified name (e.g., "core:prelude//Point", "./`geometry.wado/Point::sum`").
-    /// Used as the unique identity key for name→index resolution during emission.
+    /// Used as the unique identity key for name→index resolution during emission,
+    /// and also for display in unparse output and error messages.
     pub fq: String,
 }
 
 impl fmt::Display for WirName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.display)
+        write!(f, "{}", self.fq)
     }
 }
 
@@ -685,7 +679,7 @@ pub enum WirTypeDef {
 /// A struct type with named fields.
 #[derive(Debug)]
 pub struct WirStructType {
-    /// Name (display: "Point", fq: "core:prelude//Point").
+    /// Name (fq: "core:prelude//Point").
     pub name: WirName,
     /// Fields with names and types.
     pub fields: Vec<WirField>,
@@ -735,7 +729,7 @@ pub enum WirVariantRepr {
 /// Unless `repr` is `NullableRef`, in which case no Wasm types are emitted.
 #[derive(Debug)]
 pub struct WirVariantType {
-    /// Name (display: "Shape", fq: "./shapes.wado//Shape").
+    /// Name (fq: "./shapes.wado//Shape").
     pub name: WirName,
     /// Cases with names and optional payload types.
     pub cases: Vec<WirVariantCase>,
@@ -764,7 +758,7 @@ pub struct WirVariantCase {
 /// No Wasm type section entry — values are i32 discriminants.
 #[derive(Debug)]
 pub struct WirEnumType {
-    /// Name (display: "Color", fq: "./colors.wado//Color").
+    /// Name (fq: "./colors.wado//Color").
     pub name: WirName,
     /// Cases with names and discriminant values.
     pub cases: Vec<WirEnumCase>,
@@ -785,7 +779,7 @@ pub struct WirEnumCase {
 /// No Wasm type section entry — values are i32 bitfields.
 #[derive(Debug)]
 pub struct WirFlagsType {
-    /// Name (display: "Permissions", fq: "./perms.wado//Permissions").
+    /// Name (fq: "./perms.wado//Permissions").
     pub name: WirName,
     /// Flag bits with names and positions.
     pub bits: Vec<WirFlagBit>,
@@ -973,7 +967,7 @@ pub const COMP_FEATURE_TUPLE: u32 = 1 << 7;
 /// A function declaration with optional body.
 #[derive(Debug)]
 pub struct WirFunction {
-    /// Function name (display: "`Point::sum`", fq: "./`geometry.wado/Point::sum`").
+    /// Function name (fq: "./`geometry.wado//Point::sum`").
     pub name: WirName,
     /// Function type ID (references a `WirTypeDef::Func` in `WirModule.types`).
     pub type_id: WirTypeId,

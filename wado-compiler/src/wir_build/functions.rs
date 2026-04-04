@@ -63,7 +63,6 @@ fn register_imports(ctx: &mut WirContext<'_>) {
         let type_id = ctx.register_func_type(type_fq, params, results);
 
         let name = WirName {
-            display: import.canonical_name.clone(),
             fq: format!("{}/{}", import.namespace, import.canonical_name),
         };
 
@@ -217,7 +216,6 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             let type_id = ctx.register_func_type(type_fq, params, results);
 
             let name = WirName {
-                display: local_name.clone(),
                 fq: format!("wasi/{local_name}"),
             };
 
@@ -442,10 +440,7 @@ fn register_single_function(
     let type_id = ctx.register_func_type(type_fq, params, results);
 
     let wir_func = WirFunction {
-        name: WirName {
-            display: mangled_name,
-            fq,
-        },
+        name: WirName { fq },
         type_id,
         param_names,
         body: None, // Filled later by translate phase
@@ -591,10 +586,7 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             ctx.global_map.insert(global_name.clone(), idx);
 
             ctx.globals.push(WirGlobal {
-                name: WirName {
-                    display: global.name.clone(),
-                    fq: global_name,
-                },
+                name: WirName { fq: global_name },
                 ty: wir_type,
                 mutable: global.mutable,
                 init,
