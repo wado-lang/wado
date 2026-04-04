@@ -9,6 +9,8 @@ pub struct GenContext {
     rule_index: TreeMap<String, i32>,
     first_cache: TreeMap<String, Array<String>>,
     single_token_cache: TreeMap<String, bool>,
+    pub current_rule_name: String,
+    pub group_counter: i32,
 }
 
 impl GenContext {
@@ -23,6 +25,8 @@ impl GenContext {
             rule_index,
             first_cache: TreeMap::<String, Array<String>>::new(),
             single_token_cache: TreeMap::<String, bool>::new(),
+            current_rule_name: "",
+            group_counter: 0,
         };
     }
 

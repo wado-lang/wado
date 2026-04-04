@@ -1072,6 +1072,8 @@ fn gen_parser_struct(w: &mut CodeWriter) {
 }
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
+    ctx.current_rule_name = rule.name;
+    ctx.group_counter = 0;
     let type_name = rule_type_name(&rule.name);
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
 
@@ -1220,32 +1222,35 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
 }
 
 fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, ctx: &mut GenContext) {
+    let gc_start = ctx.group_counter;
     gen_alt_elements(w, &alt.elements, ctx);
 
+    ctx.group_counter = gc_start;
     if let Some(case) = variant_case {
         let sname = struct_name.unwrap();
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
         w.line("span: Span::new(start, p.last_end()),");
-        gen_field_assignments(w, &alt.elements);
+        gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("}));");
     } else {
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
         w.line("span: Span::new(start, p.last_end()),");
-        gen_field_assignments(w, &alt.elements);
+        gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("});");
     }
 }
 
 fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, ctx: &mut GenContext, skip: i32) {
+    let gc_start = ctx.group_counter;
     // Parse elements from `skip` onward (prefix already consumed).
     // Replay name counter for consumed elements so dedup_name stays in sync.
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < skip; i += 1 {
-        replay_element_names(&alt.elements[i], &mut name_counts);
+        replay_element_names(&alt.elements[i], &mut name_counts, ctx);
     }
     for let mut i = skip; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
@@ -1269,19 +1274,20 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
         }
     }
 
+    ctx.group_counter = gc_start;
     if let Some(case) = variant_case {
         let sname = struct_name.unwrap();
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case}({sname} \{`);
         w.indent();
         w.line("span: Span::new(start, p.last_end()),");
-        gen_field_assignments(w, &alt.elements);
+        gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("}));");
     } else {
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
         w.indent();
         w.line("span: Span::new(start, p.last_end()),");
-        gen_field_assignments(w, &alt.elements);
+        gen_field_assignments(w, &alt.elements, ctx);
         w.dedent();
         w.line("});");
     }
@@ -1430,7 +1436,7 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
     let first = ctx.first_of_element(inner, &mut visiting);
 
     if has_field(inner) {
-        let field_info = element_field_info(inner);
+        let field_info = element_field_info(inner, ctx);
         let is_group_store = is_group_with_store(inner);
         if let Star = rep.kind {
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
@@ -1562,7 +1568,7 @@ fn gen_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenC
     let while_cond = compute_non_greedy_condition(inner, follow_first, follow_second, ctx);
 
     if has_field(inner) {
-        let field_info = element_field_info(inner);
+        let field_info = element_field_info(inner, ctx);
         if is_plus {
             let mut nc: Array<[String, i32]> = [];
             gen_element(w, inner, ctx, &mut nc);
@@ -1635,7 +1641,7 @@ fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut Gen
     if first.len() == 0 {
         // All first tokens overlap with follow — always skip the optional.
         if has_field(inner) {
-            let field_info = element_field_info(inner);
+            let field_info = element_field_info(inner, ctx);
             let type_str = field_info.1;
             let opt_name = dedup_name(&field_info.0, name_counts);
             w.line(`let {opt_name}: Option<{type_str}> = null;`);
@@ -1644,7 +1650,7 @@ fn gen_repeat_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut Gen
     }
 
     if has_field(inner) {
-        let field_info = element_field_info(inner);
+        let field_info = element_field_info(inner, ctx);
         let type_str = field_info.1;
         let opt_name = dedup_name(&field_info.0, name_counts);
         w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(&first)}`);
@@ -2074,7 +2080,7 @@ fn gen_storable_optional_with_lookahead(w: &mut CodeWriter, inner: &Element, ctx
                 if in_shape {
                     gen_element(w, &elements[i], ctx, &mut nc);
                 } else {
-                    gen_absent_optional_field(w, &elements[i], &mut nc);
+                    gen_absent_optional_field(w, &elements[i], &mut nc, ctx);
                 }
             }
 
@@ -2083,7 +2089,7 @@ fn gen_storable_optional_with_lookahead(w: &mut CodeWriter, inner: &Element, ctx
             w.indent();
             let mut assign_nc: Array<[String, i32]> = [];
             for let elem of elements {
-                gen_field_assignment(w, &elem, &mut assign_nc);
+                gen_field_assignment(w, &elem, &mut assign_nc, ctx);
             }
             w.dedent();
             w.line("};");
@@ -2099,11 +2105,11 @@ fn gen_storable_optional_with_lookahead(w: &mut CodeWriter, inner: &Element, ctx
 }
 
 /// Generate a null assignment for an absent optional element's struct field.
-fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>) {
+fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>, ctx: &mut GenContext) {
     if let Repeat(rep) = elem {
         if let Optional = rep.kind {
             if has_field(&rep.element) {
-                let info = element_field_info(&rep.element);
+                let info = element_field_info(&rep.element, ctx);
                 let opt_field = dedup_name(&info.0, name_counts);
                 w.line(`let {opt_field}: Option<{info.1}> = null;`);
             }
@@ -2111,7 +2117,7 @@ fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &m
         return;
     }
     if let Label(lab) = elem {
-        gen_absent_optional_field(w, &lab.element, name_counts);
+        gen_absent_optional_field(w, &lab.element, name_counts, ctx);
         return;
     }
 }
@@ -2159,7 +2165,7 @@ fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx
             w.indent();
             let mut assign_nc: Array<[String, i32]> = [];
             for let elem of &alt.elements {
-                gen_field_assignment(w, &elem, &mut assign_nc);
+                gen_field_assignment(w, &elem, &mut assign_nc, ctx);
             }
             w.dedent();
             w.line("};");
@@ -2258,7 +2264,7 @@ fn has_field(elem: &Element) -> bool {
     return false;
 }
 
-fn element_field_info(elem: &Element) -> [String, String] {
+fn element_field_info(elem: &Element, ctx: &mut GenContext) -> [String, String] {
     if let TokenRef(name) = elem {
         return [to_lower(&name), "Token"];
     }
@@ -2269,7 +2275,7 @@ fn element_field_info(elem: &Element) -> [String, String] {
         return [to_snake_case(&name), rule_type_name(&name)];
     }
     if let Label(lab) = elem {
-        return element_field_info(&lab.element);
+        return element_field_info(&lab.element, ctx);
     }
     if let Group(alts) = elem {
         if is_simple_cst_group(&alts) {
@@ -2282,20 +2288,22 @@ fn element_field_info(elem: &Element) -> [String, String] {
             return [single_alt_group_field_name(&alts[0]), single_alt_group_type_name(&alts[0])];
         }
         if is_general_group(&alts) {
-            return [general_group_field_name(&alts), general_group_type_name(&alts)];
+            let idx = ctx.group_counter;
+            ctx.group_counter += 1;
+            return [general_group_field_name(idx), general_group_type_name(&ctx.current_rule_name, idx)];
         }
     }
     return ["_", "Token"];
 }
 
-fn gen_field_assignments(w: &mut CodeWriter, elements: &Array<Element>) {
+fn gen_field_assignments(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mut GenContext) {
     let mut name_counts: Array<[String, i32]> = [];
     for let elem of elements {
-        gen_field_assignment(w, &elem, &mut name_counts);
+        gen_field_assignment(w, &elem, &mut name_counts, ctx);
     }
 }
 
-fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>) {
+fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>, ctx: &mut GenContext) {
     if let TokenRef(name) = elem {
         let field_name = dedup_name(&to_lower(&name), name_counts);
         w.line(`{field_name},`);
@@ -2313,7 +2321,7 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
     }
     if let Repeat(rep) = elem {
         if has_field(&rep.element) {
-            let info = element_field_info(&rep.element);
+            let info = element_field_info(&rep.element, ctx);
             if let Star | Plus = rep.kind {
                 let field_name = dedup_name(&`{info.0}_list`, name_counts);
                 w.line(`{field_name},`);
@@ -2344,7 +2352,9 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
             let field_name = dedup_name(&single_alt_group_field_name(&alts[0]), name_counts);
             w.line(`{field_name},`);
         } else if is_general_group(&alts) {
-            let field_name = dedup_name(&general_group_field_name(&alts), name_counts);
+            let idx = ctx.group_counter;
+            ctx.group_counter += 1;
+            let field_name = dedup_name(&general_group_field_name(idx), name_counts);
             w.line(`{field_name},`);
         }
         return;
@@ -2353,7 +2363,7 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
 
 /// Replay name counting for an element without emitting code.
 /// This advances the dedup counter so subsequent elements get correct suffixes.
-fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) {
+fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>, ctx: &mut GenContext) {
     if let TokenRef(name) = elem {
         dedup_name(&to_lower(&name), name_counts);
         return;
@@ -2368,7 +2378,7 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) 
     }
     if let Repeat(rep) = elem {
         if has_field(&rep.element) {
-            let info = element_field_info(&rep.element);
+            let info = element_field_info(&rep.element, ctx);
             if let Star | Plus = rep.kind {
                 dedup_name(&`{info.0}_list`, name_counts);
             }
@@ -2392,7 +2402,9 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) 
         } else if is_single_alt_group(&alts) {
             dedup_name(&single_alt_group_field_name(&alts[0]), name_counts);
         } else if is_general_group(&alts) {
-            dedup_name(&general_group_field_name(&alts), name_counts);
+            let idx = ctx.group_counter;
+            ctx.group_counter += 1;
+            dedup_name(&general_group_field_name(idx), name_counts);
         }
         return;
     }
@@ -2680,7 +2692,7 @@ fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut
     w.indent();
     let mut assign_nc = nc_snapshot;
     for let elem of &alt.elements {
-        gen_field_assignment(w, &elem, &mut assign_nc);
+        gen_field_assignment(w, &elem, &mut assign_nc, ctx);
     }
     w.dedent();
     w.line("};");
@@ -2688,8 +2700,10 @@ fn gen_consume_single_alt_group(w: &mut CodeWriter, alt: &Alternative, ctx: &mut
 
 /// Generate a general group store with Option wrapper (standalone Group in an alternative).
 fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let var_name = dedup_name(&general_group_field_name(alts), name_counts);
-    let type_name = general_group_type_name(alts);
+    let group_index = ctx.group_counter;
+    ctx.group_counter += 1;
+    let var_name = dedup_name(&general_group_field_name(group_index), name_counts);
+    let type_name = general_group_type_name(&ctx.current_rule_name, group_index);
 
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
@@ -2722,11 +2736,11 @@ fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
 
         if group.len() == 1 {
             let alt_idx = group[0];
-            gen_general_alt_parse_and_store(w, alts, alt_idx, &type_name, &inner_var, ctx, name_counts);
+            gen_general_alt_parse_and_store(w, alts, alt_idx, &type_name, &inner_var, ctx, name_counts, group_index);
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_element_count(&mut sorted_group, alts);
-            gen_general_group_backtrack(w, alts, &sorted_group, &type_name, &inner_var, ctx, name_counts);
+            gen_general_group_backtrack(w, alts, &sorted_group, &type_name, &inner_var, ctx, name_counts, group_index);
         }
     }
     w.end();
@@ -2736,8 +2750,10 @@ fn gen_general_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
 
 /// Generate a general group store without Option wrapper (required, inside Repeat).
 fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
-    let var_name = dedup_name(&general_group_field_name(alts), name_counts);
-    let type_name = general_group_type_name(alts);
+    let group_index = ctx.group_counter;
+    ctx.group_counter += 1;
+    let var_name = dedup_name(&general_group_field_name(group_index), name_counts);
+    let type_name = general_group_type_name(&ctx.current_rule_name, group_index);
 
     let mut first_sets: Array<Array<String>> = [];
     for let alt of alts {
@@ -2759,7 +2775,7 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
             } else {
                 w.else_begin("else");
             }
-            gen_general_alt_construct(w, alts, alt_idx, &type_name, ctx, name_counts);
+            gen_general_alt_construct(w, alts, alt_idx, &type_name, ctx, name_counts, group_index);
         }
         w.end_with(";");
     } else {
@@ -2787,11 +2803,11 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
 
             if group.len() == 1 {
                 let alt_idx = group[0];
-                gen_general_alt_parse_and_store(w, alts, alt_idx, &type_name, &opt_var, ctx, name_counts);
+                gen_general_alt_parse_and_store(w, alts, alt_idx, &type_name, &opt_var, ctx, name_counts, group_index);
             } else {
                 let mut sorted_group = group.sorted();
                 sort_group_by_element_count(&mut sorted_group, alts);
-                gen_general_group_backtrack(w, alts, &sorted_group, &type_name, &opt_var, ctx, name_counts);
+                gen_general_group_backtrack(w, alts, &sorted_group, &type_name, &opt_var, ctx, name_counts, group_index);
             }
         }
         w.end();
@@ -2804,9 +2820,9 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
 }
 
 /// Parse one alt's elements and store into the variant Option variable.
-fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>, alt_idx: i32, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>, alt_idx: i32, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let alt = &alts[alt_idx];
-    let struct_name = general_group_alt_struct_name(alts, alt_idx);
+    let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
 
     let mut nc: Array<[String, i32]> = [];
     for let elem of &alt.elements {
@@ -2817,16 +2833,16 @@ fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>
     w.indent();
     let mut assign_nc: Array<[String, i32]> = [];
     for let elem of &alt.elements {
-        gen_field_assignment(w, &elem, &mut assign_nc);
+        gen_field_assignment(w, &elem, &mut assign_nc, ctx);
     }
     w.dedent();
     w.line("}));");
 }
 
 /// Parse one alt's elements and return as variant value (for if/else expression).
-fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_idx: i32, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_idx: i32, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let alt = &alts[alt_idx];
-    let struct_name = general_group_alt_struct_name(alts, alt_idx);
+    let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
 
     let mut nc: Array<[String, i32]> = [];
     for let elem of &alt.elements {
@@ -2837,14 +2853,14 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_
     w.indent();
     let mut assign_nc: Array<[String, i32]> = [];
     for let elem of &alt.elements {
-        gen_field_assignment(w, &elem, &mut assign_nc);
+        gen_field_assignment(w, &elem, &mut assign_nc, ctx);
     }
     w.dedent();
     w.line("})");
 }
 
 /// Backtracking for overlapping alts in a general group — try each, store on success.
-fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
     let saved = dedup_name(&"saved_pos", name_counts);
     let done = dedup_name(&"bt_done", name_counts);
     w.line(`let {saved} = p.pos;`);
@@ -2854,7 +2870,7 @@ fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, so
         let alt_idx = sorted_group[k];
         let is_last = k == sorted_group.len() - 1;
         let alt = &alts[alt_idx];
-        let struct_name = general_group_alt_struct_name(alts, alt_idx);
+        let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
 
         if is_last {
             w.begin(`if !{done}`);
@@ -2866,7 +2882,7 @@ fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, so
             w.indent();
             let mut assign_nc: Array<[String, i32]> = [];
             for let elem of &alt.elements {
-                gen_field_assignment(w, &elem, &mut assign_nc);
+                gen_field_assignment(w, &elem, &mut assign_nc, ctx);
             }
             w.dedent();
             w.line("}));");
@@ -2883,7 +2899,7 @@ fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, so
             w.indent();
             let mut assign_nc: Array<[String, i32]> = [];
             for let elem of &alt.elements {
-                gen_field_assignment(w, &elem, &mut assign_nc);
+                gen_field_assignment(w, &elem, &mut assign_nc, ctx);
             }
             w.dedent();
             w.line("}));");
@@ -3103,7 +3119,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         let mut field_counts: Array<[String, i32]> = [];
         dedup_name(&to_snake_case(&rule.name), &mut field_counts);
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
-            gen_field_assignment(w, &alt.elements[ei], &mut field_counts);
+            gen_field_assignment(w, &alt.elements[ei], &mut field_counts, ctx);
         }
         w.dedent();
         w.line("}));");

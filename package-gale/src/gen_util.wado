@@ -256,41 +256,21 @@ pub fn is_general_group(alts: &Array<Alternative>) -> bool {
 }
 
 /// Generate a variant type name for a general multi-alt group.
-pub fn general_group_type_name(alts: &Array<Alternative>) -> String {
-    let mut result = String::with_capacity(128);
-    for let mut i = 0; i < alts.len(); i += 1 {
-        if i > 0 {
-            result.push_str("Or");
-        }
-        for let elem of &alts[i].elements {
-            result.push_str(&to_pascal_case(&element_base_name(&elem)));
-        }
-    }
-    result.push_str("Group");
-    return result;
+/// Uses parent rule name + group index: "InsertStmtGroup0"
+pub fn general_group_type_name(rule_name: &String, group_index: i32) -> String {
+    return `{to_pascal_case(rule_name)}Group{group_index}`;
 }
 
 /// Generate a field base name for a general multi-alt group.
-pub fn general_group_field_name(alts: &Array<Alternative>) -> String {
-    let mut result = String::with_capacity(128);
-    for let mut i = 0; i < alts.len(); i += 1 {
-        if i > 0 {
-            result.push_str("_or_");
-        }
-        for let mut j = 0; j < alts[i].elements.len(); j += 1 {
-            if j > 0 {
-                result.push_str("_");
-            }
-            result.push_str(&element_base_name(&alts[i].elements[j]));
-        }
-    }
-    return result;
+/// Uses group index: "group_0"
+pub fn general_group_field_name(group_index: i32) -> String {
+    return `group_{group_index}`;
 }
 
 /// Generate a struct name for a specific alternative in a general group.
-pub fn general_group_alt_struct_name(alts: &Array<Alternative>, index: i32) -> String {
-    let base = strip_suffix(&general_group_type_name(alts), "Group");
-    return `{base}Alt{index}`;
+/// Uses parent rule name + group index + alt index: "InsertStmtGroup0Alt1"
+pub fn general_group_alt_struct_name(rule_name: &String, group_index: i32, alt_index: i32) -> String {
+    return `{to_pascal_case(rule_name)}Group{group_index}Alt{alt_index}`;
 }
 
 /// Get a field name for the elements in a single-alt group's element.
