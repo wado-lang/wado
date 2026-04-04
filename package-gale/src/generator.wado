@@ -3,9 +3,11 @@ use {
     to_pascal_case,
     to_snake_case,
     to_lower,
+    escape_ident,
     rule_type_name,
     literal_field_name,
     strip_suffix,
+    case_names_for_rule,
     is_simple_cst_group,
     is_token_only_group,
     is_single_alt_group,
@@ -82,24 +84,20 @@ fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule, emitted: &mut Arr
     if rule.alternatives.len() == 1 {
         gen_struct_for_alt(w, &type_name, &rule.alternatives[0], emitted, &rule.name, &mut group_counter);
     } else {
-        let all_labeled = all_alternatives_labeled(&rule.alternatives);
+        let case_names = case_names_for_rule(&rule.alternatives);
         let base = strip_suffix(&type_name, "Node");
         let mut v = VariantSpec::new(&type_name);
         v.set_pub();
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-            let alt = &rule.alternatives[i];
-            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
-            let struct_name = `{base}{case_name}`;
-            v.add_case_with_payload(&case_name, &struct_name);
+            let struct_name = `{base}{case_names[i]}`;
+            v.add_case_with_payload(&case_names[i], &struct_name);
         }
         v.emit(w);
         w.blank();
 
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-            let alt = &rule.alternatives[i];
-            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
-            let struct_name = `{base}{case_name}`;
-            gen_struct_for_alt(w, &struct_name, alt, emitted, &rule.name, &mut group_counter);
+            let struct_name = `{base}{case_names[i]}`;
+            gen_struct_for_alt(w, &struct_name, &rule.alternatives[i], emitted, &rule.name, &mut group_counter);
         }
     }
 }
@@ -340,13 +338,13 @@ fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
 fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<Field> {
     if let RuleRef(name) = elem {
         return Option::<Field>::Some(Field {
-            name: to_snake_case(name),
+            name: escape_ident(&to_snake_case(name)),
             type_str: rule_type_name(name),
         });
     }
     if let TokenRef(name) = elem {
         return Option::<Field>::Some(Field {
-            name: to_lower(name),
+            name: escape_ident(&to_lower(name)),
             type_str: "Token",
         });
     }
@@ -376,7 +374,7 @@ fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32)
     if let Label(lab) = elem {
         if let Some(inner) = element_to_field(&lab.element, rule_name, group_counter) {
             return Option::<Field>::Some(Field {
-                name: to_snake_case(&lab.name),
+                name: escape_ident(&to_snake_case(&lab.name)),
                 type_str: inner.type_str,
             });
         }
@@ -398,7 +396,7 @@ fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32)
         if is_single_alt_group(alts) {
             return Option::<Field>::Some(Field {
                 name: single_alt_group_field_name(&alts[0]),
-                type_str: `Option<{single_alt_group_type_name(&alts[0])}>`,
+                type_str: single_alt_group_type_name(&alts[0]),
             });
         }
         if is_general_group(alts) {
@@ -416,11 +414,4 @@ fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32)
     return null;
 }
 
-fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
-    for let alt of alts {
-        if let None = alt.label {
-            return false;
-        }
-    }
-    return true;
-}
+

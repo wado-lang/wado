@@ -979,65 +979,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Check if actual argument type matches expected parameter type (newtype-aware)
-    /// Returns true if there's a mismatch involving newtypes
-    pub(super) fn check_newtype_arg_mismatch(
-        &self,
-        actual: TypeId,
-        expected: TypeId,
-    ) -> Option<(String, String)> {
-        if actual == expected {
-            return None;
-        }
-
-        let type_table = self.type_table.borrow();
-
-        // Unwrap references to get the inner types
-        let actual_inner = match type_table.get(actual) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => actual,
-        };
-        let expected_inner = match type_table.get(expected) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => expected,
-        };
-
-        // Check if either inner type is a newtype or flags
-        let actual_is_newtype = matches!(
-            type_table.get(actual_inner),
-            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
-        );
-        let expected_is_newtype = matches!(
-            type_table.get(expected_inner),
-            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
-        );
-
-        // If either is a newtype/flags and they're different, that's a mismatch
-        if (actual_is_newtype || expected_is_newtype) && actual_inner != expected_inner {
-            let actual_name = type_table.type_name(actual);
-            let expected_name = type_table.type_name(expected);
-            return Some((expected_name, actual_name));
-        }
-
-        // Also check if one is the base type of the other (only for Newtype, not Flags)
-        if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner)
-            && *base_type == expected_inner
-        {
-            let actual_name = type_table.type_name(actual);
-            let expected_name = type_table.type_name(expected);
-            return Some((expected_name, actual_name));
-        }
-        if let ResolvedType::Newtype { base_type, .. } = type_table.get(expected_inner)
-            && *base_type == actual_inner
-        {
-            let actual_name = type_table.type_name(actual);
-            let expected_name = type_table.type_name(expected);
-            return Some((expected_name, actual_name));
-        }
-
-        None
-    }
-
     /// Infer method type arguments from actual argument types.
     /// Returns a list of inferred type args matching the method's type params order.
     /// Uses the position of type params in parameter types to map actual arg types.

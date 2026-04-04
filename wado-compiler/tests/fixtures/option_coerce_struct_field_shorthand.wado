@@ -1,0 +1,10 @@
+struct Inner { a: i32 }
+struct Outer { inner: Option<Inner> }
+
+test "should error" {
+    let inner = Inner { a: 1 };
+    let o = Outer { inner };
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'Option<Inner>', found 'Inner'"}

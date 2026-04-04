@@ -1,4 +1,13 @@
 use calc from "./golden/calculator.wado";
+use { normalize_tree } from "./golden/calculator.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = calc::parse(input).unwrap();
+    let tree = calc::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
 
 test "tokenize expression" {
     let tokens = calc::tokenize(&"1 + 2");
@@ -17,4 +26,29 @@ test "parse multiplication" {
     if let Err(e) = &result {
         panic(`parse failed: {e.message}`);
     }
+}
+
+test "tree: addition" {
+    assert_tree(&"1 + 2 = 3", &"
+        (equation
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 1)))))
+            + (multiplyingExpression (powExpression (signedAtom (atom (scientific 2))))))
+          (relop =)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 3)))))))
+    ");
+}
+
+test "tree: multiplication" {
+    assert_tree(&"2 * 3 = 6", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression (signedAtom (atom (scientific 2))))
+              * (powExpression (signedAtom (atom (scientific 3))))))
+          (relop =)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 6)))))))
+    ");
 }

@@ -1,5 +1,13 @@
 use json from "./golden/json.wado";
-use { CstNode, CstChild } from "./golden/json.wado";
+use { CstNode, CstChild, normalize_tree } from "./golden/json.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = json::parse(input).unwrap();
+    let tree = json::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
 
 /// Unparse a CstNode tree to XML-tagged text.
 /// Non-trivia tokens are wrapped in <KIND>text</KIND> tags.
@@ -17,7 +25,7 @@ fn unparse_xml(node: &CstNode) -> String {
             out.push_str(t.text);
             out.push_str(`</{kind_name}>`);
         } else if let Node(n) = *child {
-            out.push_str(&unparse_xml(n));
+            out.push_str(unparse_xml(n));
         }
     }
     out.push_str(`</{node.name}>`);
@@ -131,4 +139,51 @@ test "unparse_xml for array with multiple values" {
     // All values and comma separators must appear
     let expected = "<json><value><arr><TK_LIT_LBRACKET>[</TK_LIT_LBRACKET><value><NUMBER>1</NUMBER></value><TK_LIT_COMMA>,</TK_LIT_COMMA><value><NUMBER>2</NUMBER></value><TK_LIT_COMMA>,</TK_LIT_COMMA><value><NUMBER>3</NUMBER></value><TK_LIT_RBRACKET>]</TK_LIT_RBRACKET></arr></value><Eof></Eof></json>";
     assert xml == expected, `\nexpected: {expected}\ngot:      {xml}`;
+}
+
+// --- S-expression tree tests ---
+
+test "tree: true false null" {
+    assert_tree(&"true", &"(json (value true))");
+    assert_tree(&"false", &"(json (value false))");
+    assert_tree(&"null", &"(json (value null))");
+}
+
+test "tree: nested object with array" {
+    assert_tree(&"{\"a\":[1,true,null]}", &"
+        (json
+          (value
+            (obj
+              { (pair \"a\"
+                  : (value
+                      (arr [ (value 1) , (value true) , (value null) ])))
+              })))
+    ");
+}
+
+test "tree: multiple nested objects" {
+    assert_tree(&"{\"x\":{\"y\":1},\"z\":2}", &"
+        (json
+          (value
+            (obj
+              { (pair \"x\"
+                  : (value
+                      (obj { (pair \"y\" : (value 1)) })))
+              , (pair \"z\" : (value 2))
+              })))
+    ");
+}
+
+test "tree: string with escapes" {
+    assert_tree(&"\"hello\\nworld\"", &"
+        (json (value \"hello\\nworld\"))
+    ");
+}
+
+test "tree: negative number" {
+    assert_tree(&"-42", &"(json (value -42))");
+}
+
+test "tree: float with exponent" {
+    assert_tree(&"1.5e10", &"(json (value 1.5e10))");
 }

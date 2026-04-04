@@ -1,0 +1,61 @@
+use css3 from "./golden/css3.wado";
+
+fn assert_parses(input: &String) {
+    let result = css3::parse(input);
+    if let Err(e) = &result {
+        panic(`parse failed for [{*input}]: {e.message}`);
+    }
+}
+
+test "tokenize css" {
+    let tokens = css3::tokenize(&"body { color: red; }");
+    assert tokens.len() >= 3, `expected at least 3 tokens, got {tokens.len()}`;
+}
+
+test "parse simple rule" {
+    assert_parses(&"body { color: red; }");
+}
+
+test "parse multiple properties" {
+    assert_parses(&"h1 { font-size: 16px; margin: 0; }");
+}
+
+test "parse class selector" {
+    assert_parses(&".main { display: block; }");
+}
+
+test "parse id selector" {
+    assert_parses(&"#header { width: 100%; }");
+}
+
+test "parse child combinator" {
+    assert_parses(&"div > p { color: blue; }");
+}
+
+test "parse multiple selectors" {
+    assert_parses(&"h1, h2 { font-weight: bold; }");
+}
+
+test "parse import" {
+    assert_parses(&"@import url(\"style.css\");");
+}
+
+test "parse pseudo class" {
+    assert_parses(&"a:hover { color: red; }");
+}
+
+test "parse attribute selector" {
+    assert_parses(&"input[type=\"text\"] { border: 1px; }");
+}
+
+test "parse universal selector" {
+    assert_parses(&"* { margin: 0; }");
+}
+
+test "parse descendant combinator" {
+    assert_parses(&"div p { color: green; }");
+}
+
+test "parse multiple rules" {
+    assert_parses(&"h1 { color: red; } p { color: blue; }");
+}

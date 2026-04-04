@@ -265,6 +265,46 @@ test "generate html golden" {
     assert output == expected, "HTML golden mismatch";
 }
 
+#[timeout_ms(30000)]
+test "generate css3 golden" {
+    let lexer_g = parse_grammar(#include_str("../tests/grammars/css3Lexer.g4"));
+    let parser_g = parse_grammar(#include_str("../tests/grammars/css3Parser.g4"));
+    let grammar = merge_grammars([lexer_g, parser_g]);
+    let output = generate(&grammar);
+    let expected = #include_str("../tests/golden/css3.wado");
+    assert output == expected, "CSS3 golden mismatch";
+}
+
+#[timeout_ms(30000)]
+test "generate antlr4 golden" {
+    let lexer_g = parse_grammar(#include_str("../tests/grammars/ANTLRv4Lexer.g4"));
+    let parser_g = parse_grammar(#include_str("../tests/grammars/ANTLRv4Parser.g4"));
+    let grammar = merge_grammars([lexer_g, parser_g]);
+    let output = generate(&grammar);
+    let expected = #include_str("../tests/golden/antlr4.wado");
+    assert output == expected, "ANTLR4 golden mismatch";
+}
+
+#[timeout_ms(30000)]
+test "generate typescript golden" {
+    let lexer_g = parse_grammar(#include_str("../tests/grammars/TypeScriptLexer.g4"));
+    let parser_g = parse_grammar(#include_str("../tests/grammars/TypeScriptParser.g4"));
+    let grammar = merge_grammars([lexer_g, parser_g]);
+    let output = generate(&grammar);
+    let expected = #include_str("../tests/golden/typescript.wado");
+    assert output == expected, "TypeScript golden mismatch";
+}
+
+#[timeout_ms(30000)]
+test "generate rust golden" {
+    let lexer_g = parse_grammar(#include_str("../tests/grammars/RustLexer.g4"));
+    let parser_g = parse_grammar(#include_str("../tests/grammars/RustParser.g4"));
+    let grammar = merge_grammars([lexer_g, parser_g]);
+    let output = generate(&grammar);
+    let expected = #include_str("../tests/golden/rust.wado");
+    assert output == expected, "Rust golden mismatch";
+}
+
 fn str_contains(haystack: &String, needle: &String) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();

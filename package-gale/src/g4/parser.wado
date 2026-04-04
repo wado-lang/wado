@@ -96,7 +96,8 @@ impl G4Parser {
         let name = name_tok.text;
         self.expect(G4Token::Semicolon)?;
 
-        self.skip_preamble_blocks();
+        let mut virtual_tokens: Array<String> = [];
+        self.skip_preamble_blocks(&mut virtual_tokens);
 
         let mut parser_rules: Array<ParserRule> = [];
         let mut lexer_rules: Array<LexerRule> = [];
@@ -130,14 +131,32 @@ impl G4Parser {
             }
         }
 
+        // Add virtual tokens from `tokens { }` blocks that don't have real lexer rules
+        for let vt of virtual_tokens {
+            let mut found = false;
+            for let rule of &lexer_rules {
+                if rule.name == vt {
+                    found = true;
+                }
+            }
+            if !found {
+                lexer_rules.push(LexerRule::new(vt, false, false, []));
+            }
+        }
+
         return Result::<Grammar, ParseError>::Ok(Grammar { name, parser_rules, lexer_rules, mode_names });
     }
 
-    fn skip_preamble_blocks(&mut self) {
+    fn skip_preamble_blocks(&mut self, virtual_tokens: &mut Array<String>) {
         loop {
             if self.is_kind(G4Token::Identifier) {
                 let text = self.peek().text;
-                if text == "channels" || text == "options" || text == "tokens" {
+                if text == "tokens" {
+                    self.advance();
+                    self.parse_tokens_block(virtual_tokens);
+                    continue;
+                }
+                if text == "channels" || text == "options" {
                     self.advance();
                     self.skip_braced_block();
                     continue;
@@ -154,6 +173,27 @@ impl G4Parser {
                 continue;
             }
             break;
+        }
+    }
+
+    /// Parse `tokens { NAME, NAME, ... }` and collect token names.
+    fn parse_tokens_block(&mut self, virtual_tokens: &mut Array<String>) {
+        if !self.is_kind(G4Token::LBrace) {
+            return;
+        }
+        self.advance(); // skip '{'
+        while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
+            if self.is_kind(G4Token::Identifier) {
+                virtual_tokens.push(self.peek().text);
+                self.advance();
+            }
+            // Skip commas between token names
+            if self.is_kind(G4Token::Comma) {
+                self.advance();
+            }
+        }
+        if self.is_kind(G4Token::RBrace) {
+            self.advance();
         }
     }
 

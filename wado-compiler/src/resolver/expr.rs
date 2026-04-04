@@ -1041,7 +1041,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 _ => None,
             };
             if let Some(expected) = derefed_index_type {
-                self.check_ref_type_mismatch(index_type, expected, index.index.span());
+                self.check_type_mismatch(index_type, expected, index.index.span());
             }
 
             // First, try Index trait (returns reference)
@@ -2112,11 +2112,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some((_, expected_type_id)) =
                     struct_field_types.iter().find(|(n, _)| n == &field.name)
                 {
-                    self.check_ref_type_mismatch(
-                        value.type_id,
-                        *expected_type_id,
-                        field.value.span(),
-                    );
+                    self.check_type_mismatch(value.type_id, *expected_type_id, field.value.span());
                 }
 
                 TirStructField {

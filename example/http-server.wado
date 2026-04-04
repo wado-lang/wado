@@ -34,7 +34,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
             body_str = "Hello, world!\n";
         } else if p == "/echo" {
             status = 200;
-            body_str = headers_to_json(&req_headers);
+            body_str = headers_to_json(&(req_headers as Fields));
         } else {
             status = 404;
             body_str = "Not Found\n";

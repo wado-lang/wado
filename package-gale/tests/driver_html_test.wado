@@ -1,5 +1,13 @@
 use html from "./golden/html.wado";
-use { CstNode, CstChild } from "./golden/html.wado";
+use { CstNode, CstChild, normalize_tree } from "./golden/html.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = html::parse(input).unwrap();
+    let tree = html::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
 
 /// Unparse a CstNode tree to XML-tagged text.
 fn unparse_xml(node: &CstNode) -> String {
@@ -15,7 +23,7 @@ fn unparse_xml(node: &CstNode) -> String {
             out.push_str(t.text);
             out.push_str(`</{kind_name}>`);
         } else if let Node(n) = *child {
-            out.push_str(&unparse_xml(n));
+            out.push_str(unparse_xml(n));
         }
     }
     out.push_str(`</{node.name}>`);
@@ -69,4 +77,45 @@ test "unparse_xml for simple tag" {
     assert xml.len() > 0, "empty xml";
     // Verify the XML contains the key elements
     assert xml.len() > 20, `xml too short: {xml}`;
+}
+
+// --- S-expression tree tests ---
+
+test "tree: simple tag" {
+    assert_tree(&"<p>hello</p>", &"
+        (htmlDocument
+          (htmlElements
+            (htmlElement < p >)))
+    ");
+}
+
+test "tree: self-closing tag" {
+    assert_tree(&"<br/>", &"
+        (htmlDocument
+          (htmlElements
+            (htmlElement < br />)))
+    ");
+}
+
+test "tree: tag with attributes" {
+    assert_tree(&"<img src=\"a.png\" alt=\"pic\"/>", &"
+        (htmlDocument
+          (htmlElements
+            (htmlElement < img
+              (htmlAttribute src = \"a.png\")
+              (htmlAttribute alt = \"pic\")
+              />)))
+    ");
+}
+
+test "tree: nested tags" {
+    assert_tree(&"<div class=\"main\"><p>text</p></div>", &"
+        (htmlDocument
+          (htmlElements
+            (htmlElement < div
+              (htmlAttribute class = \"main\")
+              >))
+          (htmlElements
+            (htmlElement < p >)))
+    ");
 }

@@ -53,7 +53,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Check each argument type against expected parameter type
                     for (i, arg) in args.iter().enumerate() {
                         if let Some(&expected) = fn_params.get(i) {
-                            self.check_ref_type_mismatch(
+                            self.check_type_mismatch(
                                 arg.type_id,
                                 expected,
                                 call.args.get(i).map_or(call.span, ast::Expr::span),
@@ -114,7 +114,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Check each argument type against expected parameter type
                 for (i, arg) in args.iter().enumerate() {
                     if let Some(&expected) = fn_params.get(i) {
-                        self.check_ref_type_mismatch(
+                        self.check_type_mismatch(
                             arg.type_id,
                             expected,
                             call.args.get(i).map_or(call.span, ast::Expr::span),
@@ -743,7 +743,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
-                self.check_ref_type_mismatch(
+                self.check_type_mismatch(
                     arg.type_id,
                     expected,
                     call.args.get(i).map_or(call.span, ast::Expr::span),
@@ -1259,7 +1259,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
 
-                // Check imported functions
+                // Check imported functions — resolve param types using
+                // the definition module's newtypes to avoid same-name collisions
                 if let Some(symbol) = self.symbols.lookup(&ident.name) {
                     let src = symbol.module_source.clone();
                     let name = symbol.name.clone();
@@ -1271,7 +1272,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     )
                     .map(|func| func.params.clone());
                     if let Some(params) = params {
-                        return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                        let saved_newtypes =
+                            if let Some(module_newtypes) = self.all_newtypes.get(&src) {
+                                Some(std::mem::replace(
+                                    &mut self.newtypes,
+                                    module_newtypes.clone(),
+                                ))
+                            } else {
+                                None
+                            };
+                        let result = params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                        if let Some(saved) = saved_newtypes {
+                            self.newtypes = saved;
+                        }
+                        return result;
                     }
                 }
 

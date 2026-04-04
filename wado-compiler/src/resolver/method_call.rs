@@ -382,18 +382,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check each argument against expected parameter type
         for (i, (arg, &expected_type)) in args.iter().zip(expected_param_types.iter()).enumerate() {
-            if let Some((expected_name, actual_name)) =
-                self.check_newtype_arg_mismatch(arg.type_id, expected_type)
-            {
-                let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: format!("argument {} to be {}", i + 1, expected_name),
-                    found: actual_name,
-                    span: method_call
-                        .args
-                        .get(i)
-                        .map_or(method_call.span, super::ast::Expr::span),
-                });
-            }
+            let span = method_call
+                .args
+                .get(i)
+                .map_or(method_call.span, super::ast::Expr::span);
+            self.check_type_mismatch(arg.type_id, expected_type, span);
         }
 
         // Substitute return type for inherited newtype methods
@@ -865,12 +858,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Handle generic variant construction: Result::<i32, String>::Ok(42)
-        if let ResolvedType::GenericInstance {
-            name,
-            module_source: _,
-            type_args: _,
-        } = self.type_table.borrow().get(target_type_id).clone()
-        {
+        let generic_name = {
+            let tt = self.type_table.borrow();
+            if let ResolvedType::GenericInstance { name, .. } = tt.get(target_type_id) {
+                Some(name.clone())
+            } else {
+                None
+            }
+        };
+        if let Some(name) = generic_name {
             // Check if the base type is a variant
             if let Some(variant_info) = self.variant_cases.get(&name).cloned() {
                 // This is a generic variant like Result<T, E>
@@ -895,6 +891,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             span: static_call.span,
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                    }
+
+                    // Check payload type against the variant case's expected type
+                    if !args.is_empty()
+                        && let Some(&expected_type) = param_types.first()
+                    {
+                        let span = static_call
+                            .args
+                            .first()
+                            .map_or(static_call.span, super::ast::Expr::span);
+                        self.check_type_mismatch(args[0].type_id, expected_type, span);
                     }
 
                     // Payload was already resolved with the correct expected type

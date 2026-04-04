@@ -1,0 +1,10 @@
+struct Inner { a: i32 }
+struct Outer { inner: Option<Inner> }
+
+test "Option<Option<T>> vs Option<T>" {
+    let inner = Option::<Inner>::Some(Inner { a: 1 });
+    let o = Outer { inner: Option::<Inner>::Some(inner) };
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'Inner', found 'Option<Inner>'"}

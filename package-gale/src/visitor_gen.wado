@@ -2,9 +2,11 @@ use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, Re
 use {
     to_snake_case,
     to_lower,
+    escape_ident,
     to_pascal_case,
     rule_type_name,
     literal_field_name,
+    case_names_for_rule,
     is_simple_cst_group,
     is_token_only_group,
     is_single_alt_group,
@@ -35,12 +37,11 @@ fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule, rule_name: &String) {
         gen_walk_alt_body(w, &rule.alternatives[0], "node", rule_name, &mut group_counter);
         w.line(`v.exit_rule(&"{rule.name}", &node.span);`);
     } else {
-        let all_labeled = all_alternatives_labeled(&rule.alternatives);
+        let case_names = case_names_for_rule(&rule.alternatives);
         w.begin("match node");
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let alt = &rule.alternatives[i];
-            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
-            w.begin(`{case_name}(n) =>`);
+            w.begin(`{case_names[i]}(n) =>`);
             w.line(`v.enter_rule(&"{rule.name}", &n.span);`);
             gen_walk_alt_body(w, alt, "n", rule_name, &mut group_counter);
             w.line(`v.exit_rule(&"{rule.name}", &n.span);`);
@@ -85,8 +86,19 @@ fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
         WalkRule(rule_name) => w.line(`walk_{rule_name}(v, {expr});`),
         WalkGroup(cases) => gen_walk_group_match(w, expr, cases),
         WalkStruct(fields) => {
+            // Strip leading '&' from expr so child gen_walk_field calls
+            // can add their own '&' without creating '&&'.
+            let mut base = String::with_capacity(expr.len());
+            let mut skip = true;
+            for let c of expr.chars() {
+                if skip && c == '&' {
+                    skip = false;
+                } else {
+                    base.push(c);
+                }
+            }
             for let f of fields {
-                gen_walk_field(w, f, expr);
+                gen_walk_field(w, f, &base);
             }
         },
         WalkGeneralGroup(cases) => gen_walk_general_group_match(w, expr, cases),
@@ -226,14 +238,14 @@ fn collect_walk_fields(elements: &Array<Element>, rule_name: &String, group_coun
 fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<WalkField> {
     if let RuleRef(name) = elem {
         return Option::Some(WalkField {
-            name: to_snake_case(name),
+            name: escape_ident(&to_snake_case(name)),
             action: WalkAction::WalkRule(*name),
             wrapper: WalkWrapper::Direct,
         });
     }
     if let TokenRef(name) = elem {
         return Option::Some(WalkField {
-            name: to_lower(name),
+            name: escape_ident(&to_lower(name)),
             action: WalkAction::VisitToken,
             wrapper: WalkWrapper::Direct,
         });
@@ -270,7 +282,7 @@ fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut
     if let Label(lab) = elem {
         if let Some(inner) = element_to_walk_field(&lab.element, rule_name, group_counter) {
             return Option::Some(WalkField {
-                name: to_snake_case(&lab.name),
+                name: escape_ident(&to_snake_case(&lab.name)),
                 action: inner.action,
                 wrapper: inner.wrapper,
             });
@@ -305,7 +317,7 @@ fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut
             return Option::Some(WalkField {
                 name: single_alt_group_field_name(&alts[0]),
                 action: build_struct_walk_action(&alts[0], rule_name, group_counter),
-                wrapper: WalkWrapper::OptionalWrap,
+                wrapper: WalkWrapper::Direct,
             });
         }
         if is_general_group(alts) {
@@ -368,11 +380,3 @@ fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
     counts.push([*name, 1]);
 }
 
-fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
-    for let alt of alts {
-        if let None = alt.label {
-            return false;
-        }
-    }
-    return true;
-}
