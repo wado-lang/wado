@@ -341,7 +341,7 @@ pub struct HtmlContentGroup0Alt2 {
     pub html_comment: HtmlCommentNode,
 }
 
-pub struct ItemHtmlChardataItem {
+pub struct ItemHtmlChardataOptItem {
     pub group_0: Option<HtmlContentGroup0>,
     pub html_chardata: Option<HtmlChardataNode>,
 }
@@ -349,7 +349,7 @@ pub struct ItemHtmlChardataItem {
 pub struct HtmlContentNode {
     pub span: Span,
     pub html_chardata: Option<HtmlChardataNode>,
-    pub item_html_chardata_list: Array<ItemHtmlChardataItem>,
+    pub item_html_chardata_list: Array<ItemHtmlChardataOptItem>,
 }
 
 pub struct TagEqualsAttvalueValueItem {
@@ -1909,7 +1909,7 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
     } else {
         null
     };
-    let mut item_html_chardata_list: Array<ItemHtmlChardataItem> = [];
+    let mut item_html_chardata_list: Array<ItemHtmlChardataOptItem> = [];
     while p.peek_kind() matches { TK_TAG_OPEN | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT } {
         let mut group_0_inner: Option<HtmlContentGroup0> = null;
         let grp_kind = p.peek_kind();
@@ -1936,7 +1936,7 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
         } else {
             null
         };
-        let item_html_chardata = ItemHtmlChardataItem {
+        let item_html_chardata = ItemHtmlChardataOptItem {
             group_0,
             html_chardata,
         };

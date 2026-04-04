@@ -6,6 +6,7 @@ use {
     to_pascal_case,
     rule_type_name,
     literal_field_name,
+    case_names_for_rule,
     is_simple_cst_group,
     is_token_only_group,
     is_single_alt_group,
@@ -36,12 +37,11 @@ fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule, rule_name: &String) {
         gen_walk_alt_body(w, &rule.alternatives[0], "node", rule_name, &mut group_counter);
         w.line(`v.exit_rule(&"{rule.name}", &node.span);`);
     } else {
-        let all_labeled = all_alternatives_labeled(&rule.alternatives);
+        let case_names = case_names_for_rule(&rule.alternatives);
         w.begin("match node");
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let alt = &rule.alternatives[i];
-            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
-            w.begin(`{case_name}(n) =>`);
+            w.begin(`{case_names[i]}(n) =>`);
             w.line(`v.enter_rule(&"{rule.name}", &n.span);`);
             gen_walk_alt_body(w, alt, "n", rule_name, &mut group_counter);
             w.line(`v.exit_rule(&"{rule.name}", &n.span);`);
@@ -369,11 +369,3 @@ fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
     counts.push([*name, 1]);
 }
 
-fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
-    for let alt of alts {
-        if let None = alt.label {
-            return false;
-        }
-    }
-    return true;
-}

@@ -395,12 +395,27 @@ fn element_base_name(elem: &Element) -> String {
     };
 }
 
+/// Get a type-disambiguating base name for an element, including repeat suffixes.
+/// E.g. ','? -> "comma_opt", ','* -> "comma_list", ',' -> "comma"
+fn element_type_base_name(elem: &Element) -> String {
+    if let Repeat(rep) = elem {
+        let inner = element_base_name(&rep.element);
+        return match rep.kind {
+            Optional => `{inner}_opt`,
+            Star => `{inner}_list`,
+            Plus => `{inner}_list`,
+        };
+    }
+    return element_base_name(elem);
+}
+
 /// Generate a struct type name for a single-alt group from its elements.
 /// (',' pair) -> "CommaPairItem"
+/// (',' pair?) -> "CommaOptPairItem"  (distinguishes from non-optional)
 pub fn single_alt_group_type_name(alt: &Alternative) -> String {
     let mut result = String::with_capacity(64);
     for let elem of &alt.elements {
-        result.push_str(&to_pascal_case(&element_base_name(&elem)));
+        result.push_str(&to_pascal_case(&element_type_base_name(&elem)));
     }
     result.push_str("Item");
     return result;
@@ -461,4 +476,74 @@ pub fn str_set_insert_all(set: &mut TreeSet<String>, arr: &Array<String>) {
     for let item of arr {
         set.insert(*item);
     }
+}
+
+/// Build unique case names for labeled alternatives.
+/// When labels are unique, use them directly. When duplicated, append an index.
+pub fn build_case_names(alts: &Array<Alternative>, all_labeled: bool) -> Array<String> {
+    let mut names: Array<String> = [];
+    if !all_labeled {
+        for let mut i = 0; i < alts.len(); i += 1 {
+            names.push(`Alt{i}`);
+        }
+        return names;
+    }
+    // Count occurrences of each label
+    let mut label_counts: Array<[String, i32]> = [];
+    for let alt of alts {
+        let lab = alt.label.unwrap();
+        let mut found = false;
+        for let mut j = 0; j < label_counts.len(); j += 1 {
+            if label_counts[j].0 == lab {
+                label_counts[j] = [label_counts[j].0, label_counts[j].1 + 1];
+                found = true;
+            }
+        }
+        if !found {
+            label_counts.push([lab, 1]);
+        }
+    }
+    // Assign names: unique labels keep their name, duplicates get index
+    let mut label_indices: Array<[String, i32]> = [];
+    for let alt of alts {
+        let lab = alt.label.unwrap();
+        let mut is_dup = false;
+        for let lc of &label_counts {
+            if lc.0 == lab && lc.1 > 1 {
+                is_dup = true;
+            }
+        }
+        if is_dup {
+            let mut idx: i32 = 0;
+            let mut found_idx = false;
+            for let mut j = 0; j < label_indices.len(); j += 1 {
+                if label_indices[j].0 == lab {
+                    idx = label_indices[j].1 + 1;
+                    label_indices[j] = [label_indices[j].0, idx];
+                    found_idx = true;
+                }
+            }
+            if !found_idx {
+                label_indices.push([lab, 0]);
+            }
+            names.push(`{lab}{idx}`);
+        } else {
+            names.push(lab);
+        }
+    }
+    return names;
+}
+
+fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
+    for let alt of alts {
+        if let None = alt.label {
+            return false;
+        }
+    }
+    return true;
+}
+
+pub fn case_names_for_rule(alts: &Array<Alternative>) -> Array<String> {
+    let all_labeled = all_alternatives_labeled(alts);
+    return build_case_names(alts, all_labeled);
 }

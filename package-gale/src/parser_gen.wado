@@ -27,6 +27,7 @@ use {
     count_element_groups,
     str_set_from,
     str_set_insert_all,
+    case_names_for_rule,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
@@ -1138,7 +1139,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
         return;
     }
 
-    let all_labeled = all_alternatives_labeled(&rule.alternatives);
+    let case_names = case_names_for_rule(&rule.alternatives);
 
     let mut non_lr_indices: Array<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
@@ -1183,8 +1184,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
                 for let gi of group {
                     let alt_idx = non_lr_indices[gi];
                     let alt = &rule.alternatives[alt_idx];
-                    let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{alt_idx}` };
-                    let sname = `{strip_suffix(&type_name, "Node")}{case_name}`;
+                    let sname = `{strip_suffix(&type_name, "Node")}{case_names[alt_idx]}`;
                     let helper_name = `{fn_name}_bt_{alt_idx}`;
 
                     let mut f = FnSpec::new(&helper_name);
@@ -1196,7 +1196,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
                     gen_alt_body(
                         w,
                         &type_name,
-                        Option::<String>::Some(case_name),
+                        Option::<String>::Some(case_names[alt_idx]),
                         Option::<String>::Some(sname),
                         alt,
                         ctx,
@@ -1344,7 +1344,7 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
 }
 
 fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext) {
-    let all_labeled = all_alternatives_labeled(&rule.alternatives);
+    let case_names = case_names_for_rule(&rule.alternatives);
 
     let max_k = 5;
     let mut all_pos_sets: Array<Array<Array<String>>> = [];
@@ -1357,8 +1357,7 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
 
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         let alt = &rule.alternatives[i];
-        let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
-        let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+        let sname = `{strip_suffix(type_name, "Node")}{case_names[i]}`;
 
         let pos_sets = &all_pos_sets[i];
         let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
@@ -1374,7 +1373,7 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         gen_alt_body(
             w,
             type_name,
-            Option::<String>::Some(case_name),
+            Option::<String>::Some(case_names[i]),
             Option::<String>::Some(sname),
             alt,
             ctx,
@@ -3154,7 +3153,7 @@ fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &A
 fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext) {
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
     let prec_fn = `{fn_name}_prec`;
-    let all_labeled = all_alternatives_labeled(&rule.alternatives);
+    let case_names = case_names_for_rule(&rule.alternatives);
     let total_lr = lr_indices.len();
 
     let mut lr_pos = 0;
@@ -3167,8 +3166,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         }
         let own_prec = total_lr - lr_pos;
 
-        let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{lr_idx}` };
-        let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+        let sname = `{strip_suffix(type_name, "Node")}{case_names[lr_idx]}`;
         let suffix_fn = `{fn_name}_lr_{lr_idx}`;
 
         // Compute min_prec for self-recursive calls in this helper
@@ -3221,7 +3219,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         }
 
         let first_field = escape_ident(&to_snake_case(&rule.name));
-        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_name}({sname} \{`);
+        w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_names[lr_idx]}({sname} \{`);
         w.indent();
         w.line("span: Span::new(start, p.last_end()),");
         w.line(`{first_field}: left,`);
@@ -3506,15 +3504,14 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
             w.line(`return {*fn_name}_bt_{idx}(p);`);
         } else {
             // Consumed prefix tokens already — inline the remaining alt body.
-            let all_labeled = all_alternatives_labeled(alts);
+            let alt_case_names = case_names_for_rule(alts);
             let alt = &alts[*idx];
-            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{*idx}` };
-            let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+            let sname = `{strip_suffix(type_name, "Node")}{alt_case_names[*idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[*idx];
             gen_alt_body_skip(
                 w,
                 type_name,
-                Option::<String>::Some(case_name),
+                Option::<String>::Some(alt_case_names[*idx]),
                 Option::<String>::Some(sname),
                 alt,
                 ctx,
@@ -3524,8 +3521,20 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         return;
     }
     if let Consume(c) = node {
-        gen_element(w, &c.element, ctx, name_counts);
-        gen_prediction_code_inner(w, &c.child, fn_name, alts, type_name, ctx, skip + 1, name_counts);
+        // Verify the consumed element matches the expected element at position skip.
+        // If it doesn't (e.g. a RuleRef at position skip was expanded via Dispatch
+        // and the Consume is actually for a later element), the skip count would be
+        // wrong and the Leaf would generate incorrect code. In that case, don't
+        // increment skip — the Leaf will fall back to the backtracking helper.
+        let elem_matches = elements_match(&c.element, &alts[0].elements[skip]);
+        if elem_matches {
+            gen_element(w, &c.element, ctx, name_counts);
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, type_name, ctx, skip + 1, name_counts);
+        } else {
+            // Element mismatch — prediction consumed a later element.
+            // Don't emit the consume or increment skip; treat as skip=0 at the Leaf.
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, type_name, ctx, 0, name_counts);
+        }
         return;
     }
     if let Backtrack(indices) = node {
@@ -3580,8 +3589,33 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
     }
 }
 
+/// Check if a consumed element matches the expected element at a given skip position.
+/// Returns true only for exact terminal matches (TokenRef or Literal).
+/// Unwraps Labels to compare inner elements.
+fn elements_match(consumed: &Element, expected: &Element) -> bool {
+    let exp = unwrap_label(expected);
+    if let TokenRef(a) = consumed {
+        if let TokenRef(b) = exp {
+            return *a == *b;
+        }
+    }
+    if let Literal(a) = consumed {
+        if let Literal(b) = exp {
+            return *a == *b;
+        }
+    }
+    return false;
+}
+
+fn unwrap_label(elem: &Element) -> &Element with stores[elem] {
+    if let Label(lab) = elem {
+        return &lab.element;
+    }
+    return elem;
+}
+
 fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>) {
-    let all_labeled = all_alternatives_labeled(&rule.alternatives);
+    let case_names = case_names_for_rule(&rule.alternatives);
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
     w.line("let kind = p.peek_kind();");
 
@@ -3598,13 +3632,12 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         if group.len() == 1 {
             let alt_idx = non_lr_indices[group[0]];
             let alt = &rule.alternatives[alt_idx];
-            let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{alt_idx}` };
-            let sname = `{strip_suffix(type_name, "Node")}{case_name}`;
+            let sname = `{strip_suffix(type_name, "Node")}{case_names[alt_idx]}`;
             ctx.group_counter = ctx.alt_gc_starts[alt_idx];
             gen_alt_body(
                 w,
                 type_name,
-                Option::<String>::Some(case_name),
+                Option::<String>::Some(case_names[alt_idx]),
                 Option::<String>::Some(sname),
                 alt,
                 ctx,
@@ -3782,15 +3815,6 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
         }
     }
     counts.push([*name, 1]);
-}
-
-fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
-    for let alt of alts {
-        if let None = alt.label {
-            return false;
-        }
-    }
-    return true;
 }
 
 fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
