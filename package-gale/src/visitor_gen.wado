@@ -13,6 +13,7 @@ use {
     general_group_field_name,
     token_group_field_name,
     single_alt_group_field_name,
+    count_element_groups,
 } from "./gen_util.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
@@ -133,6 +134,8 @@ fn repeat_inner_walk_field(elem: &Element, rule_name: &String, group_counter: &m
                 wrapper: WalkWrapper::Direct,
             });
         }
+        // Non-storable group: advance counter for nested general groups
+        *group_counter += count_element_groups(elem);
         return null;
     }
     return element_to_walk_field(elem, rule_name, group_counter);
@@ -314,6 +317,8 @@ fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut
                 wrapper: WalkWrapper::OptionalWrap,
             });
         }
+        // Non-storable group: advance counter for nested general groups
+        *group_counter += count_element_groups(elem);
         return null;
     }
     return null;
@@ -325,15 +330,21 @@ fn build_struct_walk_action(alt: &Alternative, rule_name: &String, group_counter
 }
 
 fn build_general_group_walk_action(alts: &Array<Alternative>, rule_name: &String, group_counter: &mut i32) -> WalkAction {
+    let gc_before = *group_counter;
+    let mut gc_max = gc_before;
     let mut cases: Array<GeneralGroupCaseInfo> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
-        let mut gc: i32 = 0;
+        let mut gc = gc_before;
         let fields = collect_walk_fields(&alts[i].elements, rule_name, &mut gc);
+        if gc > gc_max {
+            gc_max = gc;
+        }
         cases.push(GeneralGroupCaseInfo {
             case_name: `Alt{i}`,
             fields,
         });
     }
+    *group_counter = gc_max;
     return WalkAction::WalkGeneralGroup(cases);
 }
 

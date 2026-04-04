@@ -233,17 +233,17 @@ pub struct HtmlContentTagOpenTagSlashTagNameTagCloseItem {
     pub tag_close: Token,
 }
 
-pub variant TagCloseItemOrTagSlashCloseGroup {
-    Alt0(TagCloseItemOrTagSlashCloseAlt0),
-    Alt1(TagCloseItemOrTagSlashCloseAlt1),
+pub variant HtmlElementGroup0 {
+    Alt0(HtmlElementGroup0Alt0),
+    Alt1(HtmlElementGroup0Alt1),
 }
 
-pub struct TagCloseItemOrTagSlashCloseAlt0 {
+pub struct HtmlElementGroup0Alt0 {
     pub tag_close: Token,
     pub html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem>,
 }
 
-pub struct TagCloseItemOrTagSlashCloseAlt1 {
+pub struct HtmlElementGroup0Alt1 {
     pub tag_slash_close: Token,
 }
 
@@ -252,7 +252,7 @@ pub struct HtmlElementAlt0 {
     pub tag_open: Token,
     pub tag_name: Token,
     pub html_attribute_list: Array<HtmlAttributeNode>,
-    pub tag_close_item_or_tag_slash_close: Option<TagCloseItemOrTagSlashCloseGroup>,
+    pub group_0: Option<HtmlElementGroup0>,
 }
 
 pub struct HtmlElementAlt1 {
@@ -270,26 +270,26 @@ pub struct HtmlElementAlt3 {
     pub style: StyleNode,
 }
 
-pub variant HtmlElementOrCdataOrHtmlCommentGroup {
-    Alt0(HtmlElementOrCdataOrHtmlCommentAlt0),
-    Alt1(HtmlElementOrCdataOrHtmlCommentAlt1),
-    Alt2(HtmlElementOrCdataOrHtmlCommentAlt2),
+pub variant HtmlContentGroup0 {
+    Alt0(HtmlContentGroup0Alt0),
+    Alt1(HtmlContentGroup0Alt1),
+    Alt2(HtmlContentGroup0Alt2),
 }
 
-pub struct HtmlElementOrCdataOrHtmlCommentAlt0 {
+pub struct HtmlContentGroup0Alt0 {
     pub html_element: HtmlElementNode,
 }
 
-pub struct HtmlElementOrCdataOrHtmlCommentAlt1 {
+pub struct HtmlContentGroup0Alt1 {
     pub cdata: Token,
 }
 
-pub struct HtmlElementOrCdataOrHtmlCommentAlt2 {
+pub struct HtmlContentGroup0Alt2 {
     pub html_comment: HtmlCommentNode,
 }
 
 pub struct ItemHtmlChardataItem {
-    pub html_element_or_cdata_or_html_comment: Option<HtmlElementOrCdataOrHtmlCommentGroup>,
+    pub group_0: Option<HtmlContentGroup0>,
     pub html_chardata: Option<HtmlChardataNode>,
 }
 
@@ -1765,7 +1765,7 @@ fn parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
             let html_attribute = parse_html_attribute(p)?;
             html_attribute_list.push(html_attribute);
         }
-        let mut tag_close_item_or_tag_slash_close_inner: Option<TagCloseItemOrTagSlashCloseGroup> = null;
+        let mut group_0_inner: Option<HtmlElementGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_TAG_CLOSE {
             let tag_close = p.expect(TK_TAG_CLOSE, "TAG_CLOSE")?;
@@ -1801,23 +1801,23 @@ fn parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
             } else {
                 null
             };
-            tag_close_item_or_tag_slash_close_inner = Option::<TagCloseItemOrTagSlashCloseGroup>::Some(TagCloseItemOrTagSlashCloseGroup::Alt0(TagCloseItemOrTagSlashCloseAlt0 {
+            group_0_inner = Option::<HtmlElementGroup0>::Some(HtmlElementGroup0::Alt0(HtmlElementGroup0Alt0 {
                 tag_close,
                 html_content_tag_open_tag_slash_tag_name_tag_close,
             }));
         } else if grp_kind == TK_TAG_SLASH_CLOSE {
             let tag_slash_close = p.expect(TK_TAG_SLASH_CLOSE, "TAG_SLASH_CLOSE")?;
-            tag_close_item_or_tag_slash_close_inner = Option::<TagCloseItemOrTagSlashCloseGroup>::Some(TagCloseItemOrTagSlashCloseGroup::Alt1(TagCloseItemOrTagSlashCloseAlt1 {
+            group_0_inner = Option::<HtmlElementGroup0>::Some(HtmlElementGroup0::Alt1(HtmlElementGroup0Alt1 {
                 tag_slash_close,
             }));
         }
-        let tag_close_item_or_tag_slash_close = tag_close_item_or_tag_slash_close_inner;
+        let group_0 = group_0_inner;
         return Result::<HtmlElementNode, ParseError>::Ok(HtmlElementNode::Alt0(HtmlElementAlt0 {
             span: Span::new(start, p.last_end()),
             tag_open,
             tag_name,
             html_attribute_list,
-            tag_close_item_or_tag_slash_close,
+            group_0,
         }));
     }
     if kind == TK_SCRIPTLET {
@@ -1858,25 +1858,25 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
     };
     let mut item_html_chardata_list: Array<ItemHtmlChardataItem> = [];
     while p.peek_kind() matches { TK_TAG_OPEN | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT } {
-        let mut html_element_or_cdata_or_html_comment_inner: Option<HtmlElementOrCdataOrHtmlCommentGroup> = null;
+        let mut group_0_inner: Option<HtmlContentGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind matches { TK_TAG_OPEN | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN } {
             let html_element = parse_html_element(p)?;
-            html_element_or_cdata_or_html_comment_inner = Option::<HtmlElementOrCdataOrHtmlCommentGroup>::Some(HtmlElementOrCdataOrHtmlCommentGroup::Alt0(HtmlElementOrCdataOrHtmlCommentAlt0 {
+            group_0_inner = Option::<HtmlContentGroup0>::Some(HtmlContentGroup0::Alt0(HtmlContentGroup0Alt0 {
                 html_element,
             }));
         } else if grp_kind == TK_CDATA {
             let cdata = p.expect(TK_CDATA, "CDATA")?;
-            html_element_or_cdata_or_html_comment_inner = Option::<HtmlElementOrCdataOrHtmlCommentGroup>::Some(HtmlElementOrCdataOrHtmlCommentGroup::Alt1(HtmlElementOrCdataOrHtmlCommentAlt1 {
+            group_0_inner = Option::<HtmlContentGroup0>::Some(HtmlContentGroup0::Alt1(HtmlContentGroup0Alt1 {
                 cdata,
             }));
         } else if grp_kind matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT } {
             let html_comment = parse_html_comment(p)?;
-            html_element_or_cdata_or_html_comment_inner = Option::<HtmlElementOrCdataOrHtmlCommentGroup>::Some(HtmlElementOrCdataOrHtmlCommentGroup::Alt2(HtmlElementOrCdataOrHtmlCommentAlt2 {
+            group_0_inner = Option::<HtmlContentGroup0>::Some(HtmlContentGroup0::Alt2(HtmlContentGroup0Alt2 {
                 html_comment,
             }));
         }
-        let html_element_or_cdata_or_html_comment = html_element_or_cdata_or_html_comment_inner;
+        let group_0 = group_0_inner;
         let html_chardata: Option<HtmlChardataNode> = if p.peek_kind() matches { TK_HTML_TEXT | TK_SEA_WS } {
             let html_chardata = parse_html_chardata(p)?;
             Option::<HtmlChardataNode>::Some(html_chardata)
@@ -1884,7 +1884,7 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
             null
         };
         let item_html_chardata = ItemHtmlChardataItem {
-            html_element_or_cdata_or_html_comment,
+            group_0,
             html_chardata,
         };
         item_html_chardata_list.push(item_html_chardata);
@@ -2076,7 +2076,7 @@ pub fn walk_htmlElement<V: Visitor>(v: &mut V, node: &HtmlElementNode) {
             for let item of &n.html_attribute_list {
                 walk_htmlAttribute(v, item);
             }
-            if let Some(item) = &n.tag_close_item_or_tag_slash_close {
+            if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
                         v.visit_token(&inner.tag_close);
@@ -2119,7 +2119,7 @@ pub fn walk_htmlContent<V: Visitor>(v: &mut V, node: &HtmlContentNode) {
         walk_htmlChardata(v, item);
     }
     for let item of &node.item_html_chardata_list {
-        if let Some(item) = &item.html_element_or_cdata_or_html_comment {
+        if let Some(item) = &item.group_0 {
             match item {
                 Alt0(inner) => {
                     walk_htmlElement(v, &inner.html_element);

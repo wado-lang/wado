@@ -1,6 +1,6 @@
 use { ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { literal_const_name, str_set_from } from "./gen_util.wado";
+use { literal_const_name, str_set_from, is_single_alt_group, is_general_group, single_alt_group_type_name, count_general_groups } from "./gen_util.wado";
 use { TreeMap } from "core:collections";
 
 pub struct GenContext {
@@ -11,6 +11,10 @@ pub struct GenContext {
     single_token_cache: TreeMap<String, bool>,
     pub current_rule_name: String,
     pub group_counter: i32,
+    pub alt_gc_starts: Array<i32>,
+    /// Maps single-alt group type name → the rule name that first defines it.
+    /// Used to resolve general group type names inside shared single-alt groups.
+    single_alt_owner: TreeMap<String, String>,
 }
 
 impl GenContext {
@@ -19,6 +23,7 @@ impl GenContext {
         for let mut i = 0; i < parser_rules.len(); i += 1 {
             rule_index[parser_rules[i].name] = i;
         }
+        let single_alt_owner = build_single_alt_owner_map(parser_rules);
         return GenContext {
             parser_rules: *parser_rules,
             lit_tokens: *lit_tokens,
@@ -27,6 +32,8 @@ impl GenContext {
             single_token_cache: TreeMap::<String, bool>::new(),
             current_rule_name: "",
             group_counter: 0,
+            alt_gc_starts: [],
+            single_alt_owner,
         };
     }
 
@@ -199,6 +206,72 @@ impl GenContext {
 
         return result;
     }
+
+    /// Get the rule name that owns the general group types inside a given
+    /// single-alt group. Returns the current_rule_name if no shared group found.
+    pub fn general_group_rule_name(&self, single_alt_type_name: &String) -> String {
+        if let Some(owner) = self.single_alt_owner.get(*single_alt_type_name) {
+            return owner;
+        }
+        return self.current_rule_name;
+    }
+}
+
+/// Build a map from single-alt group type name to the first rule that contains it.
+/// This ensures parser gen uses the same type names as the type gen for shared groups.
+fn build_single_alt_owner_map(parser_rules: &Array<ParserRule>) -> TreeMap<String, String> {
+    let mut map = TreeMap::<String, String>::new();
+    for let rule of parser_rules {
+        for let alt of &rule.alternatives {
+            scan_elements_for_single_alt_groups(&alt.elements, &rule.name, &mut map);
+        }
+    }
+    return map;
+}
+
+fn scan_elements_for_single_alt_groups(elements: &Array<Element>, rule_name: &String, map: &mut TreeMap<String, String>) {
+    for let elem of elements {
+        scan_element_for_single_alt_groups(elem, rule_name, map);
+    }
+}
+
+fn scan_element_for_single_alt_groups(elem: &Element, rule_name: &String, map: &mut TreeMap<String, String>) {
+    let alts = extract_group_alts_for_scan(elem);
+    if let Some(group_alts) = alts {
+        if is_single_alt_group(group_alts) {
+            let type_name = single_alt_group_type_name(&group_alts[0]);
+            if !map.contains_key(type_name) {
+                map[type_name] = *rule_name;
+            }
+            // Recurse into the single-alt group's elements
+            scan_elements_for_single_alt_groups(&group_alts[0].elements, rule_name, map);
+        } else {
+            // Recurse into multi-alt group alts
+            for let alt of group_alts {
+                scan_elements_for_single_alt_groups(&alt.elements, rule_name, map);
+            }
+        }
+        return;
+    }
+    if let Repeat(rep) = elem {
+        scan_element_for_single_alt_groups(&rep.element, rule_name, map);
+        return;
+    }
+    if let Label(lab) = elem {
+        scan_element_for_single_alt_groups(&lab.element, rule_name, map);
+    }
+}
+
+fn extract_group_alts_for_scan(elem: &Element) -> Option<&Array<Alternative>> {
+    if let Group(alts) = elem {
+        return Option::Some(alts);
+    }
+    if let Repeat(rep) = elem {
+        if let Group(alts) = &rep.element {
+            return Option::Some(alts);
+        }
+    }
+    return null;
 }
 
 pub fn is_nullable(elem: &Element) -> bool {

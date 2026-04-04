@@ -1,4 +1,4 @@
-use { Alternative } from "./ir.wado";
+use { Alternative, Element } from "./ir.wado";
 use { TreeSet } from "core:collections";
 
 pub fn to_pascal_case(name: &String) -> String {
@@ -253,6 +253,69 @@ pub fn is_general_group(alts: &Array<Alternative>) -> bool {
         return false;
     }
     return !is_simple_cst_group(alts) && !is_token_only_group(alts);
+}
+
+/// Count how many general groups are in an element list.
+/// Matches the type gen's counting logic (looks through Repeat wrappers).
+pub fn count_general_groups(elements: &Array<Element>) -> i32 {
+    let mut count: i32 = 0;
+    for let elem of elements {
+        count += count_element_groups(elem);
+    }
+    return count;
+}
+
+pub fn count_element_groups(elem: &Element) -> i32 {
+    if let Group(alts) = elem {
+        if is_general_group(alts) {
+            // 1 for the group itself + max nested count across alts
+            let mut max_nested: i32 = 0;
+            for let alt of alts {
+                let nested = count_general_groups(&alt.elements);
+                if nested > max_nested {
+                    max_nested = nested;
+                }
+            }
+            return 1 + max_nested;
+        }
+        // Non-matching group: recurse into alts to find nested general groups
+        let mut max_nested: i32 = 0;
+        for let alt of alts {
+            let nested = count_general_groups(&alt.elements);
+            if nested > max_nested {
+                max_nested = nested;
+            }
+        }
+        return max_nested;
+    }
+    if let Repeat(rep) = elem {
+        if let Group(alts) = &rep.element {
+            if is_general_group(alts) {
+                let mut max_nested: i32 = 0;
+                for let alt of alts {
+                    let nested = count_general_groups(&alt.elements);
+                    if nested > max_nested {
+                        max_nested = nested;
+                    }
+                }
+                return 1 + max_nested;
+            }
+            // Non-matching group inside Repeat: recurse into alts
+            let mut max_nested: i32 = 0;
+            for let alt of alts {
+                let nested = count_general_groups(&alt.elements);
+                if nested > max_nested {
+                    max_nested = nested;
+                }
+            }
+            return max_nested;
+        }
+        return count_element_groups(&rep.element);
+    }
+    if let Label(lab) = elem {
+        return count_element_groups(&lab.element);
+    }
+    return 0;
 }
 
 /// Generate a variant type name for a general multi-alt group.

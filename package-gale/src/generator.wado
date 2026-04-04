@@ -20,6 +20,8 @@ use {
     general_group_type_name,
     general_group_field_name,
     general_group_alt_struct_name,
+    count_element_groups,
+    count_general_groups,
 } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
@@ -145,6 +147,8 @@ fn repeat_inner_field(elem: &Element, rule_name: &String, group_counter: &mut i3
                 type_str: general_group_type_name(rule_name, idx),
             });
         }
+        // Non-storable group: advance counter for nested general groups
+        *group_counter += count_element_groups(elem);
         return null;
     }
     return element_to_field(elem, rule_name, group_counter);
@@ -170,6 +174,11 @@ fn gen_element_variant_types(w: &mut CodeWriter, elem: &Element, emitted: &mut A
             if !has_emitted(emitted, &type_name) {
                 emitted.push(type_name);
                 gen_single_alt_group_struct(w, &group_alts[0], emitted, rule_name, group_counter);
+            } else {
+                // Struct already emitted (shared across rules). Just advance counter
+                // for nested general groups. Don't emit types — they were already
+                // emitted under the first rule's name.
+                *group_counter += count_general_groups(&group_alts[0].elements);
             }
         } else if is_general_group(group_alts) {
             let idx = *group_counter;
@@ -177,7 +186,7 @@ fn gen_element_variant_types(w: &mut CodeWriter, elem: &Element, emitted: &mut A
             let type_name = general_group_type_name(rule_name, idx);
             if !has_emitted(emitted, &type_name) {
                 emitted.push(type_name);
-                gen_general_group_types(w, group_alts, emitted, rule_name, idx);
+                gen_general_group_types(w, group_alts, emitted, rule_name, idx, group_counter);
             }
         } else {
             // Recurse into multi-alt groups to find nested storable groups
@@ -235,9 +244,11 @@ fn gen_group_variant_type(w: &mut CodeWriter, alts: &Array<Alternative>) {
 }
 
 fn gen_single_alt_group_struct(w: &mut CodeWriter, alt: &Alternative, emitted: &mut Array<String>, rule_name: &String, group_counter: &mut i32) {
+    let gc_start = *group_counter;
     gen_group_variant_types(w, &alt.elements, emitted, rule_name, group_counter);
+    let mut gc = gc_start;
     let type_name = single_alt_group_type_name(alt);
-    let fields = collect_fields(&alt.elements);
+    let fields = collect_fields(&alt.elements, rule_name, &mut gc);
     let mut s = StructSpec::new(&type_name);
     s.set_pub();
     for let field of &fields {
@@ -247,13 +258,21 @@ fn gen_single_alt_group_struct(w: &mut CodeWriter, alt: &Alternative, emitted: &
     w.blank();
 }
 
-fn gen_general_group_types(w: &mut CodeWriter, alts: &Array<Alternative>, emitted: &mut Array<String>, rule_name: &String, group_index: i32) {
-    // Recurse into alts to generate nested storable group types first
-    // Note: nested groups within general group alts use the same rule_name context
-    let mut nested_counter: i32 = 0;
+fn gen_general_group_types(w: &mut CodeWriter, alts: &Array<Alternative>, emitted: &mut Array<String>, rule_name: &String, group_index: i32, group_counter: &mut i32) {
+    // Recurse into alts to generate nested storable group types first.
+    // Use the rule-level counter so nested group indices match the parser gen.
+    // Save counter before each alt's traversal, then process the alt,
+    // tracking the maximum counter reached across all alts.
+    let gc_before_alts = *group_counter;
+    let mut gc_max = gc_before_alts;
     for let alt of alts {
-        gen_group_variant_types(w, &alt.elements, emitted, rule_name, &mut nested_counter);
+        *group_counter = gc_before_alts;
+        gen_group_variant_types(w, &alt.elements, emitted, rule_name, group_counter);
+        if *group_counter > gc_max {
+            gc_max = *group_counter;
+        }
     }
+    *group_counter = gc_max;
     // Generate variant type
     let type_name = general_group_type_name(rule_name, group_index);
     let mut v = VariantSpec::new(&type_name);
@@ -267,7 +286,7 @@ fn gen_general_group_types(w: &mut CodeWriter, alts: &Array<Alternative>, emitte
     // Generate struct per alt
     for let mut i = 0; i < alts.len(); i += 1 {
         let struct_name = general_group_alt_struct_name(rule_name, group_index, i);
-        let mut gc: i32 = 0;
+        let mut gc = gc_before_alts;
         let fields = collect_fields(&alts[i].elements, rule_name, &mut gc);
         let mut s = StructSpec::new(&struct_name);
         s.set_pub();
@@ -390,6 +409,8 @@ fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32)
                 type_str: `Option<{general_group_type_name(rule_name, idx)}>`,
             });
         }
+        // Non-storable group: advance counter for nested general groups
+        *group_counter += count_element_groups(elem);
         return null;
     }
     return null;
