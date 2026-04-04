@@ -1,0 +1,14 @@
+// Error: passing newtype to function expecting base type without explicit cast
+
+use { println, Stdout } from "core:cli";
+
+type Label = String;
+
+export fn run() with Stdout {
+    let label: Label = "hello";
+    // ERROR: println expects String, got Label (newtype coercion requires explicit cast)
+    println(label);
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'String', found 'Label'"}
