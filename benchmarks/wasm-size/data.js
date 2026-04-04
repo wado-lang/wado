@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775258269505,
+  "lastUpdate": 1775262001953,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10085,6 +10085,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0dd36628979c7d7dd97d6077e88e0a382106251e"
         },
         "date": 1775258269302,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8975,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20408,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e4f98330422e4d08ad331ca2d2dc836ec385306e",
+          "message": "Merge pull request #766 from wado-lang/claude/fix-cross-module-types-WE3ky\n\nFix cross-module type identity and unify WirName",
+          "timestamp": "2026-04-04T09:17:10+09:00",
+          "tree_id": "96329b8a7a82f5e75b560918c1a3a4d80b1850b2",
+          "url": "https://github.com/wado-lang/wado/commit/e4f98330422e4d08ad331ca2d2dc836ec385306e"
+        },
+        "date": 1775262001733,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
