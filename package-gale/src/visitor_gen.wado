@@ -2,6 +2,7 @@ use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, Re
 use {
     to_snake_case,
     to_lower,
+    escape_ident,
     to_pascal_case,
     rule_type_name,
     literal_field_name,
@@ -226,14 +227,14 @@ fn collect_walk_fields(elements: &Array<Element>, rule_name: &String, group_coun
 fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<WalkField> {
     if let RuleRef(name) = elem {
         return Option::Some(WalkField {
-            name: to_snake_case(name),
+            name: escape_ident(&to_snake_case(name)),
             action: WalkAction::WalkRule(*name),
             wrapper: WalkWrapper::Direct,
         });
     }
     if let TokenRef(name) = elem {
         return Option::Some(WalkField {
-            name: to_lower(name),
+            name: escape_ident(&to_lower(name)),
             action: WalkAction::VisitToken,
             wrapper: WalkWrapper::Direct,
         });
@@ -270,7 +271,7 @@ fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut
     if let Label(lab) = elem {
         if let Some(inner) = element_to_walk_field(&lab.element, rule_name, group_counter) {
             return Option::Some(WalkField {
-                name: to_snake_case(&lab.name),
+                name: escape_ident(&to_snake_case(&lab.name)),
                 action: inner.action,
                 wrapper: inner.wrapper,
             });

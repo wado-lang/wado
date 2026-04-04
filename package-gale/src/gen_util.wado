@@ -1,6 +1,36 @@
 use { Alternative, Element } from "./ir.wado";
 use { TreeSet } from "core:collections";
 
+fn is_wado_reserved(name: &String) -> bool {
+    return match *name {
+        // Control flow
+        "if" | "else" | "while" | "for" | "loop" | "break" | "continue" | "return" | "match" | "matches" => true,
+        // Declarations
+        "fn" | "let" | "global" | "const" | "struct" | "enum" | "variant" | "impl" | "trait" => true,
+        "type" | "use" | "from" | "pub" | "import" | "export" | "test" => true,
+        // Modifiers
+        "as" | "with" | "mut" | "async" | "move" | "unique" | "in" | "of" | "stores" => true,
+        // Other keywords
+        "assert" | "effect" | "handler" | "reactive" | "resource" | "world" => true,
+        // Constants
+        "true" | "false" | "null" | "self" => true,
+        // Built-in types
+        "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" => true,
+        "bool" | "char" | "String" | "Array" | "Option" | "Result" | "Fn" => true,
+        // Other
+        "scope" | "task" | "flags" | "panic" | "unreachable" => true,
+        _ => false,
+    };
+}
+
+/// Escape an identifier that would collide with a Wado reserved word by appending '_'.
+pub fn escape_ident(name: &String) -> String {
+    if is_wado_reserved(name) {
+        return `{*name}_`;
+    }
+    return *name;
+}
+
 pub fn to_pascal_case(name: &String) -> String {
     let mut result = String::with_capacity(name.len());
     let mut capitalize_next = true;
@@ -356,11 +386,11 @@ pub fn general_group_alt_struct_name(rule_name: &String, group_index: i32, alt_i
 /// Get a field name for the elements in a single-alt group's element.
 fn element_base_name(elem: &Element) -> String {
     return match elem {
-        RuleRef(name) => to_snake_case(&name),
-        TokenRef(name) => to_lower(&name),
+        RuleRef(name) => escape_ident(&to_snake_case(&name)),
+        TokenRef(name) => escape_ident(&to_lower(&name)),
         Literal(text) => literal_field_name(&text),
         Repeat(rep) => element_base_name(&rep.element),
-        Label(lab) => to_snake_case(&lab.name),
+        Label(lab) => escape_ident(&to_snake_case(&lab.name)),
         _ => "item",
     };
 }

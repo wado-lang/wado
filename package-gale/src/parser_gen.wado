@@ -3,6 +3,7 @@ use {
     to_lower,
     to_snake_case,
     to_pascal_case,
+    escape_ident,
     rule_type_name,
     literal_field_name,
     strip_suffix,
@@ -1439,7 +1440,7 @@ fn is_ruleref_optional(elem: &Element) -> bool {
 fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(name) = elem {
         let const_name = `TK_{name}`;
-        let field_name = dedup_name(&to_lower(&name), name_counts);
+        let field_name = dedup_name(&escape_ident(&to_lower(&name)), name_counts);
         w.line(`let {field_name} = p.expect({const_name}, {escape_string(&name)})?;`);
         return;
     }
@@ -1452,7 +1453,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     }
     if let RuleRef(name) = elem {
         let fn_name = `parse_{to_snake_case(&name)}`;
-        let field_name = dedup_name(&to_snake_case(&name), name_counts);
+        let field_name = dedup_name(&escape_ident(&to_snake_case(&name)), name_counts);
         w.line(`let {field_name} = {fn_name}(p)?;`);
         return;
     }
@@ -2166,14 +2167,18 @@ fn gen_storable_optional_with_lookahead(w: &mut CodeWriter, inner: &Element, ctx
     }
 }
 
-/// Generate a null assignment for an absent optional element's struct field.
+/// Generate a default assignment for an absent element's struct field.
 fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>, ctx: &mut GenContext) {
     if let Repeat(rep) = elem {
-        if let Optional = rep.kind {
-            if has_field(&rep.element) {
-                let info = element_field_info(&rep.element, ctx);
+        if has_field(&rep.element) {
+            let info = element_field_info(&rep.element, ctx);
+            if let Optional = rep.kind {
                 let opt_field = dedup_name(&info.0, name_counts);
                 w.line(`let {opt_field}: Option<{info.1}> = null;`);
+            }
+            if let Star | Plus = rep.kind {
+                let list_field = dedup_name(&`{info.0}_list`, name_counts);
+                w.line(`let mut {list_field}: Array<{info.1}> = [];`);
             }
         }
         return;
@@ -2258,7 +2263,7 @@ fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx
 fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(name) = elem {
         let const_name = `TK_{name}`;
-        let field_name = dedup_name(&to_lower(&name), name_counts);
+        let field_name = dedup_name(&escape_ident(&to_lower(&name)), name_counts);
         let r_var = dedup_name(&"_bt_r", name_counts);
         w.line(`let {r_var} = p.expect({const_name}, {escape_string(&name)});`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
@@ -2277,7 +2282,7 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
     }
     if let RuleRef(name) = elem {
         let fn_name = `parse_{to_snake_case(&name)}`;
-        let field_name = dedup_name(&to_snake_case(&name), name_counts);
+        let field_name = dedup_name(&escape_ident(&to_snake_case(&name)), name_counts);
         let r_var = dedup_name(&"_bt_r", name_counts);
         w.line(`let {r_var} = {fn_name}(p);`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
@@ -2330,13 +2335,13 @@ fn has_field(elem: &Element) -> bool {
 
 fn element_field_info(elem: &Element, ctx: &mut GenContext) -> [String, String] {
     if let TokenRef(name) = elem {
-        return [to_lower(&name), "Token"];
+        return [escape_ident(&to_lower(&name)), "Token"];
     }
     if let Literal(text) = elem {
         return [literal_field_name(&text), "Token"];
     }
     if let RuleRef(name) = elem {
-        return [to_snake_case(&name), rule_type_name(&name)];
+        return [escape_ident(&to_snake_case(&name)), rule_type_name(&name)];
     }
     if let Label(lab) = elem {
         return element_field_info(&lab.element, ctx);
@@ -2371,7 +2376,7 @@ fn gen_field_assignments(w: &mut CodeWriter, elements: &Array<Element>, ctx: &mu
 
 fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>, ctx: &mut GenContext) {
     if let TokenRef(name) = elem {
-        let field_name = dedup_name(&to_lower(&name), name_counts);
+        let field_name = dedup_name(&escape_ident(&to_lower(&name)), name_counts);
         w.line(`{field_name},`);
         return;
     }
@@ -2381,7 +2386,7 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
         return;
     }
     if let RuleRef(name) = elem {
-        let field_name = dedup_name(&to_snake_case(&name), name_counts);
+        let field_name = dedup_name(&escape_ident(&to_snake_case(&name)), name_counts);
         w.line(`{field_name},`);
         return;
     }
@@ -2401,7 +2406,7 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
     }
     if let Label(lab) = elem {
         if has_field(&lab.element) {
-            let field_name = to_snake_case(&lab.name);
+            let field_name = escape_ident(&to_snake_case(&lab.name));
             dedup_name(&field_name, name_counts);
             w.line(`{field_name},`);
         }
@@ -2434,7 +2439,7 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
 /// This advances the dedup counter so subsequent elements get correct suffixes.
 fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>, ctx: &mut GenContext) {
     if let TokenRef(name) = elem {
-        dedup_name(&to_lower(&name), name_counts);
+        dedup_name(&escape_ident(&to_lower(&name)), name_counts);
         return;
     }
     if let Literal(text) = elem {
@@ -2442,7 +2447,7 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>, 
         return;
     }
     if let RuleRef(name) = elem {
-        dedup_name(&to_snake_case(&name), name_counts);
+        dedup_name(&escape_ident(&to_snake_case(&name)), name_counts);
         return;
     }
     if let Repeat(rep) = elem {
@@ -2459,7 +2464,7 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>, 
     }
     if let Label(lab) = elem {
         if has_field(&lab.element) {
-            dedup_name(&to_snake_case(&lab.name), name_counts);
+            dedup_name(&escape_ident(&to_snake_case(&lab.name)), name_counts);
         }
         return;
     }
@@ -3184,7 +3189,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         f.emit_begin(w);
 
         let mut name_counts: Array<[String, i32]> = [];
-        dedup_name(&to_snake_case(&rule.name), &mut name_counts);
+        dedup_name(&escape_ident(&to_snake_case(&rule.name)), &mut name_counts);
 
         ctx.group_counter = ctx.alt_gc_starts[lr_idx];
         let gc_lr = ctx.group_counter;
@@ -3192,11 +3197,11 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             let elem = &alt.elements[ei];
             if let RuleRef(name) = elem {
                 if *name == rule.name {
-                    let field_name = dedup_name(&to_snake_case(name), &mut name_counts);
+                    let field_name = dedup_name(&escape_ident(&to_snake_case(name)), &mut name_counts);
                     w.line(`let {field_name} = {prec_fn}(p, {inner_min_prec})?;`);
                 } else {
                     let elem_fn = `parse_{to_snake_case(&name)}`;
-                    let field_name = dedup_name(&to_snake_case(&name), &mut name_counts);
+                    let field_name = dedup_name(&escape_ident(&to_snake_case(&name)), &mut name_counts);
                     w.line(`let {field_name} = {elem_fn}(p)?;`);
                 }
             } else if let Group(alts) = elem {
@@ -3215,14 +3220,14 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             }
         }
 
-        let first_field = to_snake_case(&rule.name);
+        let first_field = escape_ident(&to_snake_case(&rule.name));
         w.line(`return Result::<{type_name}, ParseError>::Ok({type_name}::{case_name}({sname} \{`);
         w.indent();
         w.line("span: Span::new(start, p.last_end()),");
         w.line(`{first_field}: left,`);
         ctx.group_counter = gc_lr;
         let mut field_counts: Array<[String, i32]> = [];
-        dedup_name(&to_snake_case(&rule.name), &mut field_counts);
+        dedup_name(&escape_ident(&to_snake_case(&rule.name)), &mut field_counts);
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             gen_field_assignment(w, &alt.elements[ei], &mut field_counts, ctx);
         }
@@ -3661,14 +3666,12 @@ fn kind_check_str(tokens: &Array<String>, expr: &String) -> String {
         return `{expr} == {tokens[0]}`;
     }
     let mut result = String::with_capacity(64);
-    result.push_str(`{expr} matches \{ `);
     for let mut i = 0; i < tokens.len(); i += 1 {
         if i > 0 {
-            result.push_str(" | ");
+            result.push_str(" || ");
         }
-        result.push_str(&tokens[i]);
+        result.push_str(`{expr} == {tokens[i]}`);
     }
-    result.push_str(" }");
     return result;
 }
 
@@ -3683,14 +3686,14 @@ fn build_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> Str
         if tokens.len() == 1 {
             cond.push_str(`{check_expr} == {tokens[0]}`);
         } else {
-            cond.push_str(`{check_expr} matches \{ `);
+            cond.push_str("(");
             for let mut j = 0; j < tokens.len(); j += 1 {
                 if j > 0 {
-                    cond.push_str(" | ");
+                    cond.push_str(" || ");
                 }
-                cond.push_str(&tokens[j]);
+                cond.push_str(`{check_expr} == {tokens[j]}`);
             }
-            cond.push_str(" }");
+            cond.push_str(")");
         }
     }
     return cond;

@@ -3,6 +3,7 @@ use {
     to_pascal_case,
     to_snake_case,
     to_lower,
+    escape_ident,
     rule_type_name,
     literal_field_name,
     strip_suffix,
@@ -340,13 +341,13 @@ fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
 fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<Field> {
     if let RuleRef(name) = elem {
         return Option::<Field>::Some(Field {
-            name: to_snake_case(name),
+            name: escape_ident(&to_snake_case(name)),
             type_str: rule_type_name(name),
         });
     }
     if let TokenRef(name) = elem {
         return Option::<Field>::Some(Field {
-            name: to_lower(name),
+            name: escape_ident(&to_lower(name)),
             type_str: "Token",
         });
     }
@@ -376,7 +377,7 @@ fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32)
     if let Label(lab) = elem {
         if let Some(inner) = element_to_field(&lab.element, rule_name, group_counter) {
             return Option::<Field>::Some(Field {
-                name: to_snake_case(&lab.name),
+                name: escape_ident(&to_snake_case(&lab.name)),
                 type_str: inner.type_str,
             });
         }
