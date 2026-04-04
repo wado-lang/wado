@@ -2087,7 +2087,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 };
 
                 // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
-                let value = self.resolve_expr(&field.value, ctx, effective_expected);
+                let mut value = self.resolve_expr(&field.value, ctx, effective_expected);
 
                 // Track tuple literals whose coercion was deferred because the field
                 // type had unresolved type parameters. After type inference, we'll
@@ -2106,6 +2106,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         field_name: field.name.clone(),
                         span: field.span,
                     });
+                }
+
+                // Auto-coerce T to Option<T> when the field expects Option<T>
+                if let Some((_, expected_type_id)) =
+                    struct_field_types.iter().find(|(n, _)| n == &field.name)
+                {
+                    if value.type_id != *expected_type_id
+                        && value.type_id != TypeTable::UNKNOWN
+                        && value.type_id != TypeTable::NEVER
+                    {
+                        let tt = self.type_table.borrow();
+                        if let Some(inner) = tt.as_option(*expected_type_id) {
+                            if inner == value.type_id {
+                                drop(tt);
+                                value = crate::synthesis::common::option_some(
+                                    value,
+                                    *expected_type_id,
+                                );
+                            }
+                        }
+                    }
                 }
 
                 // Check field value type against declared struct field type

@@ -1,0 +1,14 @@
+struct Inner { a: i32 }
+struct Outer { inner: Option<Inner> }
+
+test "option coercion in struct field shorthand" {
+    let inner = Inner { a: 1 };
+    let o = Outer { inner };
+    assert o.inner matches { Some(_) };
+    if let Some(v) = o.inner {
+        assert v.a == 1;
+    }
+}
+
+__DATA__
+{"test": {}}
