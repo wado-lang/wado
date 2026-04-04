@@ -1818,7 +1818,7 @@ pub struct KeyframeSelectorLbraceWsDeclarationListOptRbraceWsItem {
 
 pub struct KeyframeBlockNode {
     pub span: Span,
-    pub keyframe_selector_lbrace_ws_declaration_list_rbrace_ws: Option<KeyframeSelectorLbraceWsDeclarationListOptRbraceWsItem>,
+    pub keyframe_selector_lbrace_ws_declaration_list_rbrace_ws: KeyframeSelectorLbraceWsDeclarationListOptRbraceWsItem,
 }
 
 pub struct CommaWsItemWsItem {
@@ -33511,16 +33511,14 @@ pub fn walk_keyframesRule<V: Visitor>(v: &mut V, node: &KeyframesRuleNode) {
 
 pub fn walk_keyframeBlock<V: Visitor>(v: &mut V, node: &KeyframeBlockNode) {
     v.enter_rule(&"keyframeBlock", &node.span);
-    if let Some(item) = &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws {
-        walk_keyframeSelector(v, &item.keyframe_selector);
-        v.visit_token(&item.lbrace);
-        walk_ws(v, &item.ws);
-        if let Some(item) = &item.declaration_list {
-            walk_declarationList(v, item);
-        }
-        v.visit_token(&item.rbrace);
-        walk_ws(v, &item.ws_2);
+    walk_keyframeSelector(v, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.keyframe_selector);
+    v.visit_token(&node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.lbrace);
+    walk_ws(v, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.ws);
+    if let Some(item) = &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.declaration_list {
+        walk_declarationList(v, item);
     }
+    v.visit_token(&node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.rbrace);
+    walk_ws(v, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.ws_2);
     v.exit_rule(&"keyframeBlock", &node.span);
 }
 

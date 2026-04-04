@@ -46,7 +46,7 @@ fn first_contains(first: &Array<String>, token: &String) -> bool {
 fn dedup_append_arr(arr: &mut Array<String>, source: &Array<String>) {
     for let tk of source {
         if !first_contains(arr, &tk) {
-            arr.push(tk);
+            arr.push(*tk);
         }
     }
 }
@@ -1684,7 +1684,7 @@ fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
     let mut result: Array<String> = [];
     for let x of a {
         if !b_set.contains(*x) {
-            result.push(x);
+            result.push(*x);
         }
     }
     return result;
@@ -3704,7 +3704,7 @@ fn kind_check_str(tokens: &Array<String>, expr: &String) -> String {
         if i > 0 {
             result.push_str(" | ");
         }
-        result.push_str(&tokens[i]);
+        result.push_str(tokens[i]);
     }
     result.push_str(" }");
     return result;
@@ -3726,7 +3726,7 @@ fn build_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> Str
                 if j > 0 {
                     cond.push_str(" | ");
                 }
-                cond.push_str(&tokens[j]);
+                cond.push_str(tokens[j]);
             }
             cond.push_str(" }");
         }

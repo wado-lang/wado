@@ -86,8 +86,19 @@ fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
         WalkRule(rule_name) => w.line(`walk_{rule_name}(v, {expr});`),
         WalkGroup(cases) => gen_walk_group_match(w, expr, cases),
         WalkStruct(fields) => {
+            // Strip leading '&' from expr so child gen_walk_field calls
+            // can add their own '&' without creating '&&'.
+            let mut base = String::with_capacity(expr.len());
+            let mut skip = true;
+            for let c of expr.chars() {
+                if skip && c == '&' {
+                    skip = false;
+                } else {
+                    base.push(c);
+                }
+            }
             for let f of fields {
-                gen_walk_field(w, f, expr);
+                gen_walk_field(w, f, &base);
             }
         },
         WalkGeneralGroup(cases) => gen_walk_general_group_match(w, expr, cases),
@@ -306,7 +317,7 @@ fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut
             return Option::Some(WalkField {
                 name: single_alt_group_field_name(&alts[0]),
                 action: build_struct_walk_action(&alts[0], rule_name, group_counter),
-                wrapper: WalkWrapper::OptionalWrap,
+                wrapper: WalkWrapper::Direct,
             });
         }
         if is_general_group(alts) {

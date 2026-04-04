@@ -1272,15 +1272,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     )
                     .map(|func| func.params.clone());
                     if let Some(params) = params {
-                        let saved_newtypes = if let Some(module_newtypes) =
-                            self.all_newtypes.get(&src)
-                        {
-                            Some(std::mem::replace(&mut self.newtypes, module_newtypes.clone()))
-                        } else {
-                            None
-                        };
-                        let result =
-                            params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                        let saved_newtypes =
+                            if let Some(module_newtypes) = self.all_newtypes.get(&src) {
+                                Some(std::mem::replace(
+                                    &mut self.newtypes,
+                                    module_newtypes.clone(),
+                                ))
+                            } else {
+                                None
+                            };
+                        let result = params.iter().map(|p| self.resolve_type(&p.ty)).collect();
                         if let Some(saved) = saved_newtypes {
                             self.newtypes = saved;
                         }

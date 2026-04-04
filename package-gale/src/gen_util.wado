@@ -81,14 +81,14 @@ fn escape_control(c: char) -> Option<String> {
 
 fn append_escaped_body(result: &mut String, c: char) {
     if let Some(esc) = escape_control(c) {
-        result.push_str(&esc);
+        result.push_str(esc);
     } else {
         let code = c as i32;
         if code >= 32 && code < 127 {
             result.push(c);
         } else {
             result.push_str("\\u{");
-            result.push_str(&i32_to_hex(code));
+            result.push_str(i32_to_hex(code));
             result.push_str("}");
         }
     }
@@ -232,7 +232,7 @@ pub fn group_variant_type_name(alts: &Array<Alternative>) -> String {
             result.push_str("Or");
         }
         if let RuleRef(name) = &alts[i].elements[0] {
-            result.push_str(&to_pascal_case(name));
+            result.push_str(to_pascal_case(name));
         }
     }
     result.push_str("Group");
@@ -246,7 +246,7 @@ pub fn group_field_base_name(alts: &Array<Alternative>) -> String {
             result.push_str("_or_");
         }
         if let RuleRef(name) = &alts[i].elements[0] {
-            result.push_str(&to_snake_case(name));
+            result.push_str(to_snake_case(name));
         }
     }
     return result;
@@ -415,7 +415,7 @@ fn element_type_base_name(elem: &Element) -> String {
 pub fn single_alt_group_type_name(alt: &Alternative) -> String {
     let mut result = String::with_capacity(64);
     for let elem of &alt.elements {
-        result.push_str(&to_pascal_case(&element_type_base_name(&elem)));
+        result.push_str(to_pascal_case(&element_type_base_name(&elem)));
     }
     result.push_str("Item");
     return result;
@@ -429,7 +429,7 @@ pub fn single_alt_group_field_name(alt: &Alternative) -> String {
         if i > 0 {
             result.push_str("_");
         }
-        result.push_str(&element_base_name(&alt.elements[i]));
+        result.push_str(element_base_name(&alt.elements[i]));
     }
     return result;
 }
@@ -442,7 +442,7 @@ pub fn token_group_field_name(alts: &Array<Alternative>) -> String {
         if i > 0 {
             result.push_str("_or_");
         }
-        result.push_str(&element_base_name(&alts[i].elements[0]));
+        result.push_str(element_base_name(&alts[i].elements[0]));
     }
     return result;
 }
@@ -456,7 +456,7 @@ pub fn literal_const_name(text: &String) -> String {
         } else if c.is_ascii_uppercase() || '0' <= c <= '9' {
             result.push(c);
         } else if let Some(names) = symbol_char_names(c) {
-            result.push_str(&names.1);
+            result.push_str(names.1);
         } else {
             result.push('_');
         }

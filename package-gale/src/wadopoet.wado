@@ -42,7 +42,7 @@ impl CodeWriter {
     /// Write a complete line (auto-indented, with trailing newline).
     pub fn line(&mut self, text: &String) {
         self.write_indent();
-        self.buf.push_str(text);
+        self.buf.push_str(*text);
         self.buf.push('\n');
         self.fresh_line = true;
     }
@@ -56,7 +56,7 @@ impl CodeWriter {
     /// Begin a block: emits "opener {" and increases indentation.
     pub fn begin(&mut self, opener: &String) {
         self.write_indent();
-        self.buf.push_str(opener);
+        self.buf.push_str(*opener);
         self.buf.push_str(" {\n");
         self.fresh_line = true;
         self.indent_level += 1;
@@ -75,7 +75,7 @@ impl CodeWriter {
         self.indent_level -= 1;
         self.write_indent();
         self.buf.push('}');
-        self.buf.push_str(suffix);
+        self.buf.push_str(*suffix);
         self.buf.push('\n');
         self.fresh_line = true;
     }
@@ -86,7 +86,7 @@ impl CodeWriter {
         self.indent_level -= 1;
         self.write_indent();
         self.buf.push_str("} ");
-        self.buf.push_str(opener);
+        self.buf.push_str(*opener);
         self.buf.push_str(" {\n");
         self.fresh_line = true;
         self.indent_level += 1;
@@ -111,7 +111,7 @@ impl CodeWriter {
 
     /// Append raw text with no indentation handling.
     pub fn raw(&mut self, text: &String) {
-        self.buf.push_str(text);
+        self.buf.push_str(*text);
         if text.len() > 0 {
             let chars: Array<char> = text.chars().collect();
             self.fresh_line = chars[chars.len() - 1] == '\n';

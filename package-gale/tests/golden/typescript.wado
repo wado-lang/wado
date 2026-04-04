@@ -928,7 +928,7 @@ pub struct AccessibilityModifierOptIdentifierOrPatternItemItem {
 pub struct OptionalParameterNode {
     pub span: Span,
     pub decorator_list: Option<DecoratorListNode>,
-    pub accessibility_modifier_identifier_or_pattern_item: Option<AccessibilityModifierOptIdentifierOrPatternItemItem>,
+    pub accessibility_modifier_identifier_or_pattern_item: AccessibilityModifierOptIdentifierOrPatternItemItem,
 }
 
 pub struct RestParameterNode {
@@ -1032,7 +1032,7 @@ pub variant ConstructorDeclarationGroup0 {
 }
 
 pub struct ConstructorDeclarationGroup0Alt0 {
-    pub lbrace_function_body_rbrace: Option<LbraceFunctionBodyRbraceItem>,
+    pub lbrace_function_body_rbrace: LbraceFunctionBodyRbraceItem,
 }
 
 pub struct ConstructorDeclarationGroup0Alt1 {
@@ -2005,7 +2005,7 @@ pub variant FunctionDeclarationGroup0 {
 }
 
 pub struct FunctionDeclarationGroup0Alt0 {
-    pub lbrace_function_body_rbrace: Option<LbraceFunctionBodyRbraceItem>,
+    pub lbrace_function_body_rbrace: LbraceFunctionBodyRbraceItem,
 }
 
 pub struct FunctionDeclarationGroup0Alt1 {
@@ -2115,7 +2115,7 @@ pub variant PropertyMemberDeclarationGroup0 {
 }
 
 pub struct PropertyMemberDeclarationGroup0Alt0 {
-    pub lbrace_function_body_rbrace: Option<LbraceFunctionBodyRbraceItem>,
+    pub lbrace_function_body_rbrace: LbraceFunctionBodyRbraceItem,
 }
 
 pub struct PropertyMemberDeclarationGroup0Alt1 {
@@ -2335,7 +2335,7 @@ pub struct LbracketElementListRbracketItem {
 
 pub struct ArrayLiteralNode {
     pub span: Span,
-    pub lbracket_element_list_rbracket: Option<LbracketElementListRbracketItem>,
+    pub lbracket_element_list_rbracket: LbracketElementListRbracketItem,
 }
 
 pub struct CommaListArrayElementItem {
@@ -17146,25 +17146,23 @@ pub fn walk_optionalParameter<V: Visitor>(v: &mut V, node: &OptionalParameterNod
     if let Some(item) = &node.decorator_list {
         walk_decoratorList(v, item);
     }
-    if let Some(item) = &node.accessibility_modifier_identifier_or_pattern_item {
-        if let Some(item) = &item.accessibility_modifier {
-            walk_accessibilityModifier(v, item);
-        }
-        walk_identifierOrPattern(v, &item.identifier_or_pattern);
-        if let Some(item) = &item.group_0 {
-            match item {
-                Alt0(inner) => {
-                    v.visit_token(&inner.lit__);
-                    if let Some(item) = &inner.type_annotation {
-                        walk_typeAnnotation(v, item);
-                    }
+    if let Some(item) = &node.accessibility_modifier_identifier_or_pattern_item.accessibility_modifier {
+        walk_accessibilityModifier(v, item);
+    }
+    walk_identifierOrPattern(v, &node.accessibility_modifier_identifier_or_pattern_item.identifier_or_pattern);
+    if let Some(item) = &node.accessibility_modifier_identifier_or_pattern_item.group_0 {
+        match item {
+            Alt0(inner) => {
+                v.visit_token(&inner.lit__);
+                if let Some(item) = &inner.type_annotation {
+                    walk_typeAnnotation(v, item);
                 }
-                Alt1(inner) => {
-                    if let Some(item) = &inner.type_annotation {
-                        walk_typeAnnotation(v, item);
-                    }
-                    walk_initializer(v, &inner.initializer);
+            }
+            Alt1(inner) => {
+                if let Some(item) = &inner.type_annotation {
+                    walk_typeAnnotation(v, item);
                 }
+                walk_initializer(v, &inner.initializer);
             }
         }
     }
@@ -17299,11 +17297,9 @@ pub fn walk_constructorDeclaration<V: Visitor>(v: &mut V, node: &ConstructorDecl
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                if let Some(item) = &inner.lbrace_function_body_rbrace {
-                    v.visit_token(&item.lbrace);
-                    walk_functionBody(v, &item.function_body);
-                    v.visit_token(&item.rbrace);
-                }
+                v.visit_token(&inner.lbrace_function_body_rbrace.lbrace);
+                walk_functionBody(v, &inner.lbrace_function_body_rbrace.function_body);
+                v.visit_token(&inner.lbrace_function_body_rbrace.rbrace);
             }
             Alt1(inner) => {
                 v.visit_token(&inner.semicolon);
@@ -18360,11 +18356,9 @@ pub fn walk_functionDeclaration<V: Visitor>(v: &mut V, node: &FunctionDeclaratio
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                if let Some(item) = &inner.lbrace_function_body_rbrace {
-                    v.visit_token(&item.lbrace);
-                    walk_functionBody(v, &item.function_body);
-                    v.visit_token(&item.rbrace);
-                }
+                v.visit_token(&inner.lbrace_function_body_rbrace.lbrace);
+                walk_functionBody(v, &inner.lbrace_function_body_rbrace.function_body);
+                v.visit_token(&inner.lbrace_function_body_rbrace.rbrace);
             }
             Alt1(inner) => {
                 v.visit_token(&inner.semicolon);
@@ -18487,11 +18481,9 @@ pub fn walk_propertyMemberDeclaration<V: Visitor>(v: &mut V, node: &PropertyMemb
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        if let Some(item) = &inner.lbrace_function_body_rbrace {
-                            v.visit_token(&item.lbrace);
-                            walk_functionBody(v, &item.function_body);
-                            v.visit_token(&item.rbrace);
-                        }
+                        v.visit_token(&inner.lbrace_function_body_rbrace.lbrace);
+                        walk_functionBody(v, &inner.lbrace_function_body_rbrace.function_body);
+                        v.visit_token(&inner.lbrace_function_body_rbrace.rbrace);
                     }
                     Alt1(inner) => {
                         v.visit_token(&inner.semicolon);
@@ -18750,11 +18742,9 @@ pub fn walk_sourceElements<V: Visitor>(v: &mut V, node: &SourceElementsNode) {
 
 pub fn walk_arrayLiteral<V: Visitor>(v: &mut V, node: &ArrayLiteralNode) {
     v.enter_rule(&"arrayLiteral", &node.span);
-    if let Some(item) = &node.lbracket_element_list_rbracket {
-        v.visit_token(&item.lbracket);
-        walk_elementList(v, &item.element_list);
-        v.visit_token(&item.rbracket);
-    }
+    v.visit_token(&node.lbracket_element_list_rbracket.lbracket);
+    walk_elementList(v, &node.lbracket_element_list_rbracket.element_list);
+    v.visit_token(&node.lbracket_element_list_rbracket.rbracket);
     v.exit_rule(&"arrayLiteral", &node.span);
 }
 

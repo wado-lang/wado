@@ -2112,11 +2112,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some((_, expected_type_id)) =
                     struct_field_types.iter().find(|(n, _)| n == &field.name)
                 {
-                    self.check_type_mismatch(
-                        value.type_id,
-                        *expected_type_id,
-                        field.value.span(),
-                    );
+                    self.check_type_mismatch(value.type_id, *expected_type_id, field.value.span());
                 }
 
                 TirStructField {
