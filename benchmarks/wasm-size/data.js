@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775289047943,
+  "lastUpdate": 1775301644615,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10163,6 +10163,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b9c72f34401466162bf89f45121b3b12d6baf79c"
         },
         "date": 1775289047720,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8975,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20408,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0e20ca06c532971087dff0294c0cb9b4a8625ed9",
+          "message": "Merge pull request #769 from wado-lang/claude/review-reactive-signals-GcEHL\n\ndocs: add WEP for reactive signals (push-pull algorithm)",
+          "timestamp": "2026-04-04T20:17:50+09:00",
+          "tree_id": "cd8a753d3dd17bcc8f204db0caff539072d676e9",
+          "url": "https://github.com/wado-lang/wado/commit/0e20ca06c532971087dff0294c0cb9b4a8625ed9"
+        },
+        "date": 1775301644393,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
