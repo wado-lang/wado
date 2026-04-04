@@ -9,12 +9,16 @@ use {
     is_simple_cst_group,
     is_token_only_group,
     is_single_alt_group,
+    is_general_group,
     group_variant_type_name,
     group_field_base_name,
     group_case_name,
     token_group_field_name,
     single_alt_group_field_name,
     single_alt_group_type_name,
+    general_group_type_name,
+    general_group_field_name,
+    general_group_alt_struct_name,
 } from "./gen_util.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
@@ -89,6 +93,7 @@ fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
                 gen_walk_field(w, f, expr);
             }
         },
+        WalkGeneralGroup(cases) => gen_walk_general_group_match(w, expr, cases),
     }
 }
 
@@ -124,6 +129,13 @@ fn repeat_inner_walk_field(elem: &Element) -> Option<WalkField> {
                 wrapper: WalkWrapper::Direct,
             });
         }
+        if is_general_group(alts) {
+            return Option::Some(WalkField {
+                name: general_group_field_name(alts),
+                action: build_general_group_walk_action(alts),
+                wrapper: WalkWrapper::Direct,
+            });
+        }
         return null;
     }
     return element_to_walk_field(elem);
@@ -134,6 +146,18 @@ fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GroupCa
     for let c of cases {
         w.begin(`{c.case_name}(inner) =>`);
         w.line(`walk_{c.rule_name}(v, inner);`);
+        w.end();
+    }
+    w.end();
+}
+
+fn gen_walk_general_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GeneralGroupCaseInfo>) {
+    w.begin(`match {expr}`);
+    for let c of cases {
+        w.begin(`{c.case_name}(inner) =>`);
+        for let f of &c.fields {
+            gen_walk_field(w, f, "inner");
+        }
         w.end();
     }
     w.end();
@@ -159,11 +183,17 @@ struct GroupCaseInfo {
     rule_name: String,
 }
 
+struct GeneralGroupCaseInfo {
+    case_name: String,
+    fields: Array<WalkField>,
+}
+
 variant WalkAction {
     VisitToken,
     WalkRule(String),
     WalkGroup(Array<GroupCaseInfo>),
     WalkStruct(Array<WalkField>),
+    WalkGeneralGroup(Array<GeneralGroupCaseInfo>),
 }
 
 enum WalkWrapper {
@@ -278,6 +308,13 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
                 wrapper: WalkWrapper::OptionalWrap,
             });
         }
+        if is_general_group(alts) {
+            return Option::Some(WalkField {
+                name: general_group_field_name(alts),
+                action: build_general_group_walk_action(alts),
+                wrapper: WalkWrapper::OptionalWrap,
+            });
+        }
         return null;
     }
     return null;
@@ -286,6 +323,18 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
 fn build_struct_walk_action(alt: &Alternative) -> WalkAction {
     let fields = collect_walk_fields(&alt.elements);
     return WalkAction::WalkStruct(fields);
+}
+
+fn build_general_group_walk_action(alts: &Array<Alternative>) -> WalkAction {
+    let mut cases: Array<GeneralGroupCaseInfo> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let fields = collect_walk_fields(&alts[i].elements);
+        cases.push(GeneralGroupCaseInfo {
+            case_name: `Alt{i}`,
+            fields,
+        });
+    }
+    return WalkAction::WalkGeneralGroup(cases);
 }
 
 fn get_name_count(counts: &Array<[String, i32]>, name: &String) -> i32 {

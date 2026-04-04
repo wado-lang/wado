@@ -324,13 +324,7 @@ fn gen_lexer_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, all_rules: &Ar
     }
 }
 
-fn gen_lexer_non_greedy_repeat(
-    w: &mut CodeWriter,
-    rep: &LexerRepeatElement,
-    rest: &LexerAlt,
-    all_rules: &Array<LexerRule>,
-    fail_action: &String,
-) {
+fn gen_lexer_non_greedy_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, rest: &LexerAlt, all_rules: &Array<LexerRule>, fail_action: &String) {
     let id = w.next_id();
     let label = `ng_{id}`;
     // For Plus, match at least one element first
@@ -462,7 +456,9 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                 for let lit of lit_tokens {
                     let fn_name = lit_try_fn_name(&lit.const_name);
                     w.line(`end = {fn_name}(&lexer.chars, start);`);
-                    w.line(`if end > best_end \{ best_end = end; best_kind = {lit.const_name}; best_push_mode = -1; best_pop_mode = false; \}`);
+                    w.line(
+                        `if end > best_end \{ best_end = end; best_kind = {lit.const_name}; best_push_mode = -1; best_pop_mode = false; \}`,
+                    );
                 }
             }
             for let rule of lexer_rules {

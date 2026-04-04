@@ -241,9 +241,56 @@ pub fn is_single_alt_group(alts: &Array<Alternative>) -> bool {
     return alts[0].elements.len() >= 2;
 }
 
-/// Check if a group has any storable pattern (simple, token-only, or single-alt).
+/// Check if a group has any storable pattern.
+/// All multi-alt groups are storable (general groups get variant types).
 pub fn is_storable_group(alts: &Array<Alternative>) -> bool {
-    return is_simple_cst_group(alts) || is_token_only_group(alts) || is_single_alt_group(alts);
+    return is_simple_cst_group(alts) || is_token_only_group(alts) || is_single_alt_group(alts) || is_general_group(alts);
+}
+
+/// A general multi-alt group: 2+ alternatives that don't match any specialized pattern.
+pub fn is_general_group(alts: &Array<Alternative>) -> bool {
+    if alts.len() < 2 {
+        return false;
+    }
+    return !is_simple_cst_group(alts) && !is_token_only_group(alts);
+}
+
+/// Generate a variant type name for a general multi-alt group.
+pub fn general_group_type_name(alts: &Array<Alternative>) -> String {
+    let mut result = String::with_capacity(128);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 {
+            result.push_str("Or");
+        }
+        for let elem of &alts[i].elements {
+            result.push_str(&to_pascal_case(&element_base_name(&elem)));
+        }
+    }
+    result.push_str("Group");
+    return result;
+}
+
+/// Generate a field base name for a general multi-alt group.
+pub fn general_group_field_name(alts: &Array<Alternative>) -> String {
+    let mut result = String::with_capacity(128);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 {
+            result.push_str("_or_");
+        }
+        for let mut j = 0; j < alts[i].elements.len(); j += 1 {
+            if j > 0 {
+                result.push_str("_");
+            }
+            result.push_str(&element_base_name(&alts[i].elements[j]));
+        }
+    }
+    return result;
+}
+
+/// Generate a struct name for a specific alternative in a general group.
+pub fn general_group_alt_struct_name(alts: &Array<Alternative>, index: i32) -> String {
+    let base = strip_suffix(&general_group_type_name(alts), "Group");
+    return `{base}Alt{index}`;
 }
 
 /// Get a field name for the elements in a single-alt group's element.

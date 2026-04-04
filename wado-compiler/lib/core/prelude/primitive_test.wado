@@ -341,20 +341,20 @@ test "char::eq_ignore_ascii_case different case" {
 
 test "char::eq_ignore_ascii_case non-alpha exact match" {
     assert '0'.eq_ignore_ascii_case(&'0');
-    assert !('0'.eq_ignore_ascii_case(&'1'));
+    assert !'0'.eq_ignore_ascii_case(&'1');
     assert ' '.eq_ignore_ascii_case(&' ');
-    assert !(' '.eq_ignore_ascii_case(&'!'));
+    assert !' '.eq_ignore_ascii_case(&'!');
 }
 
 test "char::eq_ignore_ascii_case different letters" {
-    assert !('A'.eq_ignore_ascii_case(&'B'));
-    assert !('a'.eq_ignore_ascii_case(&'b'));
-    assert !('A'.eq_ignore_ascii_case(&'z'));
+    assert !'A'.eq_ignore_ascii_case(&'B');
+    assert !'a'.eq_ignore_ascii_case(&'b');
+    assert !'A'.eq_ignore_ascii_case(&'z');
 }
 
 test "char::eq_ignore_ascii_case non-alpha with same bit pattern" {
     // '@' (0x40) | 0x20 == '`' (0x60), but neither is a letter
-    assert !('@'.eq_ignore_ascii_case(&'`'));
+    assert !'@'.eq_ignore_ascii_case(&'`');
     // '[' (0x5B) | 0x20 == '{' (0x7B), but neither is a letter
-    assert !('['.eq_ignore_ascii_case(&'{'));
+    assert !'['.eq_ignore_ascii_case(&'{');
 }

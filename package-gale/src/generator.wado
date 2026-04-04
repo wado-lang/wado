@@ -10,12 +10,16 @@ use {
     is_token_only_group,
     is_single_alt_group,
     is_storable_group,
+    is_general_group,
     group_variant_type_name,
     group_field_base_name,
     group_case_name,
     single_alt_group_type_name,
     single_alt_group_field_name,
     token_group_field_name,
+    general_group_type_name,
+    general_group_field_name,
+    general_group_alt_struct_name,
 } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
@@ -130,6 +134,12 @@ fn repeat_inner_field(elem: &Element) -> Option<Field> {
                 type_str: single_alt_group_type_name(&alts[0]),
             });
         }
+        if is_general_group(alts) {
+            return Option::<Field>::Some(Field {
+                name: general_group_field_name(alts),
+                type_str: general_group_type_name(alts),
+            });
+        }
         return null;
     }
     return element_to_field(elem);
@@ -155,6 +165,12 @@ fn gen_element_variant_types(w: &mut CodeWriter, elem: &Element, emitted: &mut A
             if !has_emitted(emitted, &type_name) {
                 emitted.push(type_name);
                 gen_single_alt_group_struct(w, &group_alts[0], emitted);
+            }
+        } else if is_general_group(group_alts) {
+            let type_name = general_group_type_name(group_alts);
+            if !has_emitted(emitted, &type_name) {
+                emitted.push(type_name);
+                gen_general_group_types(w, group_alts, emitted);
             }
         } else {
             // Recurse into multi-alt groups to find nested storable groups
@@ -222,6 +238,35 @@ fn gen_single_alt_group_struct(w: &mut CodeWriter, alt: &Alternative, emitted: &
     }
     s.emit(w);
     w.blank();
+}
+
+fn gen_general_group_types(w: &mut CodeWriter, alts: &Array<Alternative>, emitted: &mut Array<String>) {
+    // Recurse into alts to generate nested storable group types first
+    for let alt of alts {
+        gen_group_variant_types(w, &alt.elements, emitted);
+    }
+    // Generate variant type
+    let type_name = general_group_type_name(alts);
+    let mut v = VariantSpec::new(&type_name);
+    v.set_pub();
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let struct_name = general_group_alt_struct_name(alts, i);
+        v.add_case_with_payload(&`Alt{i}`, &struct_name);
+    }
+    v.emit(w);
+    w.blank();
+    // Generate struct per alt
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let struct_name = general_group_alt_struct_name(alts, i);
+        let fields = collect_fields(&alts[i].elements);
+        let mut s = StructSpec::new(&struct_name);
+        s.set_pub();
+        for let field of &fields {
+            s.add_pub_field(&field.name, &field.type_str);
+        }
+        s.emit(w);
+        w.blank();
+    }
 }
 
 struct Field {
@@ -325,6 +370,12 @@ fn element_to_field(elem: &Element) -> Option<Field> {
             return Option::<Field>::Some(Field {
                 name: single_alt_group_field_name(&alts[0]),
                 type_str: `Option<{single_alt_group_type_name(&alts[0])}>`,
+            });
+        }
+        if is_general_group(alts) {
+            return Option::<Field>::Some(Field {
+                name: general_group_field_name(alts),
+                type_str: `Option<{general_group_type_name(alts)}>`,
             });
         }
         return null;
