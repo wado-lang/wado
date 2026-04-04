@@ -739,11 +739,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 found: args.len(),
                 span: call.span,
             });
-            return TirExpr::new(
-                TirExprKind::Unit,
-                TypeTable::ERROR,
-                call.span,
-            );
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
         }
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
