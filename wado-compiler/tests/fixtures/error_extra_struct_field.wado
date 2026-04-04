@@ -1,0 +1,11 @@
+// Test: struct literal with extra field should produce a compile error.
+use { Inner } from "./sub/error_missing_struct_field_lib.wado";
+
+export fn run() {
+    // 'extra' is not a field on Inner
+    let i = Inner { value: 1, extra: 2 };
+    assert i.value == 1;
+}
+
+__DATA__
+{"compile_error": "not found on struct"}

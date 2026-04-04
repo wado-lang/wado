@@ -171,6 +171,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Missing field in struct literal
+    MissingField {
+        struct_name: String,
+        field_name: String,
+        span: Span,
+    },
+
     /// Duplicate field name in struct literal
     DuplicateField { name: String, span: Span },
 
@@ -289,6 +296,17 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, from, to, hint
                 )
             }
+            TypeError::MissingField {
+                struct_name,
+                field_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: missing field '{}' in struct literal '{}'",
+                    span.line, span.column, field_name, struct_name
+                )
+            }
             TypeError::DuplicateField { name, span } => {
                 write!(
                     f,
@@ -405,6 +423,15 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             } => (
                 Code::InvalidCast,
                 format!("cannot cast '{from}' to '{to}': {hint}"),
+                *span,
+            ),
+            TypeError::MissingField {
+                struct_name,
+                field_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!("missing field '{field_name}' in struct literal '{struct_name}'"),
                 *span,
             ),
             TypeError::DuplicateField { name, span } => (
