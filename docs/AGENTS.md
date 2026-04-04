@@ -95,3 +95,4 @@ It may include TODOs on WIP.
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [Redesign String and Array APIs](./wep-2026-03-29-redesign-string-array-api.md)
 - [WebIDL Binding Generator (`wado-from-idl`)](./wep-2026-04-01-tide.md)
+- [Reactive Signals](./wep-2026-04-04-reactive-signals.md)
