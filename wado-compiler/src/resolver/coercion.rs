@@ -999,7 +999,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Reference checks
         if actual_is_ref && !expected_is_ref {
-            // &T → non-ref: always an error
+            // &T → non-ref: always an error (auto-deref is only for method calls)
             let expected_name = type_table.type_name(expected);
             let found_name = type_table.type_name(actual);
             drop(type_table);
