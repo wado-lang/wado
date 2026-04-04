@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775262001953,
+  "lastUpdate": 1775289047943,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10124,6 +10124,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e4f98330422e4d08ad331ca2d2dc836ec385306e"
         },
         "date": 1775262001733,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8975,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20408,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9c72f34401466162bf89f45121b3b12d6baf79c",
+          "message": "Merge pull request #768 from wado-lang/claude/investigate-parser-generation-YdZi3\n\nFix CST walker coverage for general multi-alt groups",
+          "timestamp": "2026-04-04T16:47:54+09:00",
+          "tree_id": "ba022a3b1f649a1bd860c722417af9f1edd27ca1",
+          "url": "https://github.com/wado-lang/wado/commit/b9c72f34401466162bf89f45121b3b12d6baf79c"
+        },
+        "date": 1775289047720,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
