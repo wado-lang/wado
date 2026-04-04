@@ -88,15 +88,18 @@ fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>,
     return strip_dead_consume(tree);
 }
 
-/// Strip Consume nodes whose child is a Backtrack — fall back to
+/// Strip Consume nodes whose child contains any Backtrack — fall back to
 /// Backtrack from the original position rather than consuming then failing.
+/// This handles both direct Consume → Backtrack and indirect cases like
+/// Consume → Dispatch → (Branch → Backtrack).
 fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
     return match node {
         Consume(c) => {
             let child = strip_dead_consume(c.child);
-            if let Backtrack(_) = child {
-                // Consuming prefix didn't help — return Backtrack with original alts.
-                child;
+            if prediction_contains_backtrack(&child) {
+                let mut indices: Array<i32> = [];
+                prediction_collect_all_indices(&child, &mut indices);
+                PredictionNode::Backtrack(indices);
             } else {
                 PredictionNode::Consume(ConsumeNode { element: c.element, child });
             }
@@ -113,6 +116,39 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
         },
         _ => node,
     };
+}
+
+fn prediction_contains_backtrack(node: &PredictionNode) -> bool {
+    return match *node {
+        Backtrack(_) => true,
+        Consume(c) => prediction_contains_backtrack(&c.child),
+        Dispatch(d) => {
+            for let b of &d.branches {
+                if prediction_contains_backtrack(&b.child) { return true; }
+            }
+            return false;
+        },
+        Leaf(_) => false,
+    };
+}
+
+fn prediction_collect_all_indices(node: &PredictionNode, out: &mut Array<i32>) {
+    match *node {
+        Backtrack(indices) => {
+            for let i of &indices {
+                if !out.iter().any(|x: i32| x == *i) { out.push(*i); }
+            }
+        },
+        Leaf(idx) => {
+            if !out.iter().any(|x: i32| x == idx) { out.push(idx); }
+        },
+        Consume(c) => prediction_collect_all_indices(&c.child, out),
+        Dispatch(d) => {
+            for let b of &d.branches {
+                prediction_collect_all_indices(&b.child, out);
+            }
+        },
+    }
 }
 
 

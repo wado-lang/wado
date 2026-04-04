@@ -146,7 +146,48 @@ fn gen_lexer_match_fns(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
     for let rule of lexer_rules {
         if !rule.is_fragment {
             gen_lexer_match_fn(w, rule, lexer_rules);
+        } else if fragment_is_recursive(rule, lexer_rules) {
+            gen_lexer_match_fn(w, rule, lexer_rules);
         }
+    }
+}
+
+fn fragment_is_recursive(rule: &LexerRule, all_rules: &Array<LexerRule>) -> bool {
+    let mut visited: Array<String> = [];
+    return fragment_refs_self(&rule.name, &rule.body, all_rules, &mut visited);
+}
+
+fn fragment_refs_self(target: &String, alts: &Array<LexerAlt>, all_rules: &Array<LexerRule>, visited: &mut Array<String>) -> bool {
+    for let alt of alts {
+        for let elem of &alt.elements {
+            if fragment_elem_refs_self(target, elem, all_rules, visited) { return true; }
+        }
+    }
+    return false;
+}
+
+fn fragment_elem_refs_self(target: &String, elem: &LexerElement, all_rules: &Array<LexerRule>, visited: &mut Array<String>) -> bool {
+    match *elem {
+        RuleRef(name) => {
+            if name == *target { return true; }
+            if visited.iter().any(|v: String| v == name) { return false; }
+            visited.push(name);
+            let frag = find_fragment(all_rules, &name);
+            if let Some(f) = frag {
+                return fragment_refs_self(target, &f.body, all_rules, visited);
+            }
+            return false;
+        },
+        Group(alts) => {
+            return fragment_refs_self(target, &alts, all_rules, visited);
+        },
+        Repeat(rep) => {
+            return fragment_elem_refs_self(target, &rep.element, all_rules, visited);
+        },
+        Not(not_elem) => {
+            return fragment_elem_refs_self(target, &not_elem.element, all_rules, visited);
+        },
+        _ => { return false; },
     }
 }
 
@@ -235,7 +276,11 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &Array<Lex
             } else {
                 let frag = find_fragment(all_rules, &name);
                 if let Some(f) = frag {
-                    if f.body.len() == 1 {
+                    if fragment_is_recursive(f, all_rules) {
+                        let fn_name = `try_{to_lower(&name)}`;
+                        w.line(`pos = {fn_name}(chars, pos);`);
+                        w.line(`if pos < 0 \{ {fail_action}; \}`);
+                    } else if f.body.len() == 1 {
                         gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action);
                     } else {
                         gen_lexer_alts(w, &f.body, all_rules, fail_action);

@@ -57,9 +57,26 @@ fn append_escaped_body(result: &mut String, c: char) {
         if code >= 32 && code < 127 {
             result.push(c);
         } else {
-            result.push_str(`\\u\{{code:x}\}`);
+            result.push_str("\\u{");
+            result.push_str(&i32_to_hex(code));
+            result.push_str("}");
         }
     }
+}
+
+fn i32_to_hex(mut n: i32) -> String {
+    if n == 0 { return "0"; }
+    let digits: Array<char> = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
+    let mut buf: Array<char> = [];
+    while n > 0 {
+        buf.push(digits[n % 16]);
+        n = n / 16;
+    }
+    let mut out = String::with_capacity(buf.len());
+    for let mut i = buf.len() - 1; i >= 0; i -= 1 {
+        out.push(buf[i]);
+    }
+    return out;
 }
 
 pub fn escape_char(c: char) -> String {

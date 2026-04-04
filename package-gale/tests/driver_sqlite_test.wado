@@ -1,5 +1,13 @@
 use sqlite from "./golden/sqlite.wado";
-use { CstNode, CstChild } from "./golden/sqlite.wado";
+use { CstNode, CstChild, normalize_tree } from "./golden/sqlite.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = sqlite::parse(input).unwrap();
+    let tree = sqlite::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
 
 fn unparse_xml(node: &CstNode) -> String {
     let mut out = String::with_capacity(256);
@@ -103,4 +111,78 @@ test "begin" {
         "BEGIN;",
         "<parse><sql_stmt_list><sql_stmt><begin_stmt><K_BEGIN>BEGIN</K_BEGIN></begin_stmt></sql_stmt><TK_LIT_SEMI>;</TK_LIT_SEMI><sql_stmt></sql_stmt></sql_stmt_list><Eof></Eof></parse>",
     );
+}
+
+// --- S-expression tree tests ---
+
+test "tree: select literal" {
+    assert_tree(&"SELECT 1;", &"
+        (parse
+          (sql_stmt_list
+            (sql_stmt
+              (factored_select_stmt
+                (select_core SELECT
+                  (result_column (expr (literal_value 1))))))
+            ; (sql_stmt)))
+    ");
+}
+
+test "tree: select with join" {
+    assert_tree(&"SELECT a FROM t1 JOIN t2 ON t1.id = t2.id;", &"
+        (parse
+          (sql_stmt_list
+            (sql_stmt
+              (factored_select_stmt
+                (select_core SELECT
+                  (result_column (expr (column_name (any_name a))))
+                  FROM
+                  (join_clause
+                    (table_or_subquery (table_name (any_name t1)))
+                    (join_operator JOIN)
+                    (table_or_subquery (table_name (any_name t2)))
+                    (join_constraint ON
+                      (expr
+                        (expr (table_name (any_name t1)) . (column_name (any_name id)))
+                        =
+                        (expr (table_name (any_name t2)) . (column_name (any_name id)))))))))
+            ; (sql_stmt)))
+    ");
+}
+
+test "tree: create table with constraint" {
+    assert_tree(&"CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL);", &"
+        (parse
+          (sql_stmt_list
+            (sql_stmt
+              (create_table_stmt CREATE TABLE
+                (table_name (any_name t))
+                (
+                  (column_def
+                    (column_name (any_name id))
+                    (type_name (name (any_name INTEGER)))
+                    (column_constraint PRIMARY KEY (conflict_clause)))
+                  ,
+                  (column_def
+                    (column_name (any_name name))
+                    (type_name (name (any_name TEXT)))
+                    (column_constraint NOT NULL (conflict_clause)))
+                )))
+            ; (sql_stmt)))
+    ");
+}
+
+test "tree: delete with where" {
+    assert_tree(&"DELETE FROM t WHERE id = 1;", &"
+        (parse
+          (sql_stmt_list
+            (sql_stmt
+              (delete_stmt DELETE FROM
+                (qualified_table_name (table_name (any_name t)))
+                WHERE
+                (expr
+                  (expr (column_name (any_name id)))
+                  =
+                  (expr (literal_value 1)))))
+            ; (sql_stmt)))
+    ");
 }
