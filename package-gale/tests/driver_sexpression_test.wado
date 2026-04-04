@@ -1,4 +1,13 @@
 use sexpression from "./golden/sexpression.wado";
+use { normalize_tree } from "./golden/sexpression.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = sexpression::parse(input).unwrap();
+    let tree = sexpression::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
 
 test "tokenize simple atom" {
     let tokens = sexpression::tokenize(&"hello");
@@ -24,4 +33,28 @@ test "parse nested sexpression" {
     if let Err(e) = &result {
         panic(`parse failed: {e.message}`);
     }
+}
+
+test "tree: single atom" {
+    assert_tree(&"hello", &"(sexpr (item (atom hello)))");
+}
+
+test "tree: simple list" {
+    assert_tree(&"(a b c)", &"
+        (sexpr
+          (item
+            (list_ ( (item (atom a)) (item (atom b)) (item (atom c)) ))))
+    ");
+}
+
+test "tree: nested lists" {
+    assert_tree(&"(define (square x) (* x x))", &"
+        (sexpr
+          (item
+            (list_ (
+              (item (atom define))
+              (item (list_ ( (item (atom square)) (item (atom x)) )))
+              (item (list_ ( (item (atom *)) (item (atom x)) (item (atom x)) )))
+            ))))
+    ");
 }

@@ -80,6 +80,59 @@ pub struct CstNode {
     pub children: Array<CstChild>,
 }
 
+impl CstNode {
+    /// Produce an ANTLR4-style S-expression representation of this tree.
+    /// Rule nodes become `(name child1 child2 ...)`, tokens become their text.
+    /// Tokens with empty text (e.g. EOF) are omitted.
+    pub fn to_string_tree(&self) -> String {
+        let mut out = String::with_capacity(256);
+        cst_to_string_tree_impl(&mut out, self);
+        return out;
+    }
+}
+
+fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
+    out.push_str(`({node.name}`);
+    for let child of &node.children {
+        if let Token(t) = *child {
+            if !t.text.is_empty() {
+                out.push_str(` {t.text}`);
+            }
+        } else if let Node(n) = *child {
+            out.push_str(" ");
+            cst_to_string_tree_impl(out, n);
+        }
+    }
+    out.push_str(")");
+}
+
+/// Normalize a multi-line S-expression string for comparison.
+/// Collapses whitespace runs to single spaces and trims, while preserving
+/// whitespace inside double-quoted strings.
+pub fn normalize_tree(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_string = false;
+    let mut space_pending = false;
+    for let c of s.chars() {
+        if in_string {
+            out.push_str(`{c}`);
+            if c == '"' { in_string = false; }
+        } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+            if out.len() > 0 {
+                space_pending = true;
+            }
+        } else {
+            if space_pending {
+                out.push_str(" ");
+                space_pending = false;
+            }
+            if c == '"' { in_string = true; }
+            out.push_str(`{c}`);
+        }
+    }
+    return out;
+}
+
 /// Visitor trait for walking typed CST nodes.
 /// Default methods are no-ops; override to add behavior.
 pub trait Visitor {
