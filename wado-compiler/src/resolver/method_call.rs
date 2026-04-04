@@ -387,7 +387,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .get(i)
                 .map_or(method_call.span, super::ast::Expr::span);
             self.check_type_mismatch(arg.type_id, expected_type, span);
-            self.check_newtype_mismatch(arg.type_id, expected_type, span);
         }
 
         // Substitute return type for inherited newtype methods
@@ -902,7 +901,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .first()
                                 .map_or(static_call.span, super::ast::Expr::span);
                             self.check_type_mismatch(args[0].type_id, expected_type, span);
-                            self.check_newtype_mismatch(args[0].type_id, expected_type, span);
                         }
                     }
 
