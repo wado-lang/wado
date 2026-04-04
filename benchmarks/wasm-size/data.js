@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775301644615,
+  "lastUpdate": 1775345159996,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10202,6 +10202,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0e20ca06c532971087dff0294c0cb9b4a8625ed9"
         },
         "date": 1775301644393,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8975,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20408,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "24a675794789ce35ff9635e5a6e35bb6ca7ea050",
+          "message": "Merge pull request #770 from wado-lang/claude/research-antlr4-testing-K932W\n\nGale: add 4 grammar targets, unify type mismatch checks, fix cross-module newtype resolution",
+          "timestamp": "2026-04-05T08:23:00+09:00",
+          "tree_id": "9952bc87b925bbd7ae3288592cc1acbbb2b7c2b1",
+          "url": "https://github.com/wado-lang/wado/commit/24a675794789ce35ff9635e5a6e35bb6ca7ea050"
+        },
+        "date": 1775345159780,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
