@@ -1052,8 +1052,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
             return;
         }
-        if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner) {
-            if *base_type == expected_inner {
+        if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner)
+            && *base_type == expected_inner {
                 let expected_name = type_table.type_name(expected);
                 let found_name = type_table.type_name(actual);
                 drop(type_table);
@@ -1064,9 +1064,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 });
                 return;
             }
-        }
-        if let ResolvedType::Newtype { base_type, .. } = type_table.get(expected_inner) {
-            if *base_type == actual_inner {
+        if let ResolvedType::Newtype { base_type, .. } = type_table.get(expected_inner)
+            && *base_type == actual_inner {
                 let expected_name = type_table.type_name(expected);
                 let found_name = type_table.type_name(actual);
                 drop(type_table);
@@ -1077,7 +1076,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 });
                 return;
             }
-        }
 
         // Option checks: T vs Option<T>, Option<X> vs Option<T>
         let actual_is_option = type_table.as_option(actual).is_some();

@@ -894,15 +894,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
 
                     // Check payload type against the variant case's expected type
-                    if !args.is_empty() {
-                        if let Some(&expected_type) = param_types.first() {
+                    if !args.is_empty()
+                        && let Some(&expected_type) = param_types.first() {
                             let span = static_call
                                 .args
                                 .first()
                                 .map_or(static_call.span, super::ast::Expr::span);
                             self.check_type_mismatch(args[0].type_id, expected_type, span);
                         }
-                    }
 
                     // Payload was already resolved with the correct expected type
                     // (substituted in the param_types computation above).
