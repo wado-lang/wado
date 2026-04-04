@@ -13,6 +13,12 @@ test "parse create table as select" {
     assert r matches { Ok(_) };
 }
 
+test "parse create table multi column with constraint" {
+    let r = sqlite::parse(&"CREATE TABLE users (id INTEGER, name TEXT, PRIMARY KEY (id));");
+    if let Err(e) = r { log_stdout(`Error: {e.message}`); }
+    assert r matches { Ok(_) };
+}
+
 test "parse select" {
     let r = sqlite::parse(&"SELECT 1;");
     assert r matches { Ok(_) };

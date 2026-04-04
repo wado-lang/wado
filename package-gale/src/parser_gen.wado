@@ -2888,9 +2888,7 @@ fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>
 
     let mut nc: Array<[String, i32]> = [];
     let gc_start = ctx.group_counter;
-    for let elem of &alt.elements {
-        gen_element(w, &elem, ctx, &mut nc);
-    }
+    gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc);
 
     w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
@@ -2910,9 +2908,7 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_
 
     let mut nc: Array<[String, i32]> = [];
     let gc_start = ctx.group_counter;
-    for let elem of &alt.elements {
-        gen_element(w, &elem, ctx, &mut nc);
-    }
+    gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc);
 
     w.line(`{type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
@@ -2944,9 +2940,7 @@ fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, so
             w.begin(`if !{done}`);
             let mut nc: Array<[String, i32]> = [];
             let gc_last = ctx.group_counter;
-            for let elem of &alt.elements {
-                gen_element(w, &elem, ctx, &mut nc);
-            }
+            gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc);
             w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
             w.indent();
             ctx.group_counter = gc_last;
