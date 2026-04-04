@@ -243,7 +243,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 if !struct_field_types.iter().any(|(n, _)| n == &field.name)
                                     && !struct_field_types.is_empty()
                                 {
-                                    let _ = self.logger.error(TypeError::FieldNotFound {
+                                    let _ = self.logger.error(TypeError::ExtraField {
                                         struct_name: name.clone(),
                                         field_name: field.name.clone(),
                                         span: field.span,

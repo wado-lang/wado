@@ -178,6 +178,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Extra field in struct literal (field does not exist on the struct)
+    ExtraField {
+        struct_name: String,
+        field_name: String,
+        span: Span,
+    },
+
     /// Duplicate field name in struct literal
     DuplicateField { name: String, span: Span },
 
@@ -307,6 +314,17 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, field_name, struct_name
                 )
             }
+            TypeError::ExtraField {
+                struct_name,
+                field_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: struct '{}' has no field '{}'",
+                    span.line, span.column, struct_name, field_name
+                )
+            }
             TypeError::DuplicateField { name, span } => {
                 write!(
                     f,
@@ -432,6 +450,15 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             } => (
                 Code::TypeMismatch,
                 format!("missing field '{field_name}' in struct literal '{struct_name}'"),
+                *span,
+            ),
+            TypeError::ExtraField {
+                struct_name,
+                field_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!("struct '{struct_name}' has no field '{field_name}'"),
                 *span,
             ),
             TypeError::DuplicateField { name, span } => (
