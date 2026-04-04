@@ -10,12 +10,18 @@ use {
     is_token_only_group,
     is_single_alt_group,
     is_storable_group,
+    is_general_group,
     group_variant_type_name,
     group_field_base_name,
     group_case_name,
     single_alt_group_type_name,
     single_alt_group_field_name,
     token_group_field_name,
+    general_group_type_name,
+    general_group_field_name,
+    general_group_alt_struct_name,
+    count_element_groups,
+    count_general_groups,
 } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
@@ -72,8 +78,9 @@ fn gen_cst_types(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
 
 fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule, emitted: &mut Array<String>) {
     let type_name = rule_type_name(&rule.name);
+    let mut group_counter: i32 = 0;
     if rule.alternatives.len() == 1 {
-        gen_struct_for_alt(w, &type_name, &rule.alternatives[0], emitted);
+        gen_struct_for_alt(w, &type_name, &rule.alternatives[0], emitted, &rule.name, &mut group_counter);
     } else {
         let all_labeled = all_alternatives_labeled(&rule.alternatives);
         let base = strip_suffix(&type_name, "Node");
@@ -92,14 +99,16 @@ fn gen_parser_rule_type(w: &mut CodeWriter, rule: &ParserRule, emitted: &mut Arr
             let alt = &rule.alternatives[i];
             let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
             let struct_name = `{base}{case_name}`;
-            gen_struct_for_alt(w, &struct_name, alt, emitted);
+            gen_struct_for_alt(w, &struct_name, alt, emitted, &rule.name, &mut group_counter);
         }
     }
 }
 
-fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative, emitted: &mut Array<String>) {
-    gen_group_variant_types(w, &alt.elements, emitted);
-    let fields = collect_fields(&alt.elements);
+fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative, emitted: &mut Array<String>, rule_name: &String, group_counter: &mut i32) {
+    let gc_start = *group_counter;
+    gen_group_variant_types(w, &alt.elements, emitted, rule_name, group_counter);
+    let mut gc = gc_start;
+    let fields = collect_fields(&alt.elements, rule_name, &mut gc);
     let mut s = StructSpec::new(type_name);
     s.set_pub();
     s.add_pub_field("span", "Span");
@@ -110,7 +119,7 @@ fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative,
     w.blank();
 }
 
-fn repeat_inner_field(elem: &Element) -> Option<Field> {
+fn repeat_inner_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<Field> {
     if let Group(alts) = elem {
         if is_simple_cst_group(alts) {
             return Option::<Field>::Some(Field {
@@ -130,18 +139,28 @@ fn repeat_inner_field(elem: &Element) -> Option<Field> {
                 type_str: single_alt_group_type_name(&alts[0]),
             });
         }
+        if is_general_group(alts) {
+            let idx = *group_counter;
+            *group_counter += 1;
+            return Option::<Field>::Some(Field {
+                name: general_group_field_name(idx),
+                type_str: general_group_type_name(rule_name, idx),
+            });
+        }
+        // Non-storable group: advance counter for nested general groups
+        *group_counter += count_element_groups(elem);
         return null;
     }
-    return element_to_field(elem);
+    return element_to_field(elem, rule_name, group_counter);
 }
 
-fn gen_group_variant_types(w: &mut CodeWriter, elements: &Array<Element>, emitted: &mut Array<String>) {
+fn gen_group_variant_types(w: &mut CodeWriter, elements: &Array<Element>, emitted: &mut Array<String>, rule_name: &String, group_counter: &mut i32) {
     for let elem of elements {
-        gen_element_variant_types(w, &elem, emitted);
+        gen_element_variant_types(w, &elem, emitted, rule_name, group_counter);
     }
 }
 
-fn gen_element_variant_types(w: &mut CodeWriter, elem: &Element, emitted: &mut Array<String>) {
+fn gen_element_variant_types(w: &mut CodeWriter, elem: &Element, emitted: &mut Array<String>, rule_name: &String, group_counter: &mut i32) {
     let alts = extract_group_alts(elem);
     if let Some(group_alts) = alts {
         if is_simple_cst_group(group_alts) {
@@ -154,24 +173,37 @@ fn gen_element_variant_types(w: &mut CodeWriter, elem: &Element, emitted: &mut A
             let type_name = single_alt_group_type_name(&group_alts[0]);
             if !has_emitted(emitted, &type_name) {
                 emitted.push(type_name);
-                gen_single_alt_group_struct(w, &group_alts[0], emitted);
+                gen_single_alt_group_struct(w, &group_alts[0], emitted, rule_name, group_counter);
+            } else {
+                // Struct already emitted (shared across rules). Just advance counter
+                // for nested general groups. Don't emit types — they were already
+                // emitted under the first rule's name.
+                *group_counter += count_general_groups(&group_alts[0].elements);
+            }
+        } else if is_general_group(group_alts) {
+            let idx = *group_counter;
+            *group_counter += 1;
+            let type_name = general_group_type_name(rule_name, idx);
+            if !has_emitted(emitted, &type_name) {
+                emitted.push(type_name);
+                gen_general_group_types(w, group_alts, emitted, rule_name, idx, group_counter);
             }
         } else {
             // Recurse into multi-alt groups to find nested storable groups
             for let alt of group_alts {
-                gen_group_variant_types(w, &alt.elements, emitted);
+                gen_group_variant_types(w, &alt.elements, emitted, rule_name, group_counter);
             }
         }
         return;
     }
     // Recurse into repeat elements (non-group inner)
     if let Repeat(rep) = elem {
-        gen_element_variant_types(w, &rep.element, emitted);
+        gen_element_variant_types(w, &rep.element, emitted, rule_name, group_counter);
         return;
     }
     // Recurse into label elements
     if let Label(lab) = elem {
-        gen_element_variant_types(w, &lab.element, emitted);
+        gen_element_variant_types(w, &lab.element, emitted, rule_name, group_counter);
     }
 }
 
@@ -211,10 +243,12 @@ fn gen_group_variant_type(w: &mut CodeWriter, alts: &Array<Alternative>) {
     w.blank();
 }
 
-fn gen_single_alt_group_struct(w: &mut CodeWriter, alt: &Alternative, emitted: &mut Array<String>) {
-    gen_group_variant_types(w, &alt.elements, emitted);
+fn gen_single_alt_group_struct(w: &mut CodeWriter, alt: &Alternative, emitted: &mut Array<String>, rule_name: &String, group_counter: &mut i32) {
+    let gc_start = *group_counter;
+    gen_group_variant_types(w, &alt.elements, emitted, rule_name, group_counter);
+    let mut gc = gc_start;
     let type_name = single_alt_group_type_name(alt);
-    let fields = collect_fields(&alt.elements);
+    let fields = collect_fields(&alt.elements, rule_name, &mut gc);
     let mut s = StructSpec::new(&type_name);
     s.set_pub();
     for let field of &fields {
@@ -224,16 +258,56 @@ fn gen_single_alt_group_struct(w: &mut CodeWriter, alt: &Alternative, emitted: &
     w.blank();
 }
 
+fn gen_general_group_types(w: &mut CodeWriter, alts: &Array<Alternative>, emitted: &mut Array<String>, rule_name: &String, group_index: i32, group_counter: &mut i32) {
+    // Recurse into alts to generate nested storable group types first.
+    // Use the rule-level counter so nested group indices match the parser gen.
+    // Save counter before each alt's traversal, then process the alt,
+    // tracking the maximum counter reached across all alts.
+    let gc_before_alts = *group_counter;
+    let mut gc_max = gc_before_alts;
+    for let alt of alts {
+        *group_counter = gc_before_alts;
+        gen_group_variant_types(w, &alt.elements, emitted, rule_name, group_counter);
+        if *group_counter > gc_max {
+            gc_max = *group_counter;
+        }
+    }
+    *group_counter = gc_max;
+    // Generate variant type
+    let type_name = general_group_type_name(rule_name, group_index);
+    let mut v = VariantSpec::new(&type_name);
+    v.set_pub();
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let struct_name = general_group_alt_struct_name(rule_name, group_index, i);
+        v.add_case_with_payload(&`Alt{i}`, &struct_name);
+    }
+    v.emit(w);
+    w.blank();
+    // Generate struct per alt
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let struct_name = general_group_alt_struct_name(rule_name, group_index, i);
+        let mut gc = gc_before_alts;
+        let fields = collect_fields(&alts[i].elements, rule_name, &mut gc);
+        let mut s = StructSpec::new(&struct_name);
+        s.set_pub();
+        for let field of &fields {
+            s.add_pub_field(&field.name, &field.type_str);
+        }
+        s.emit(w);
+        w.blank();
+    }
+}
+
 struct Field {
     name: String,
     type_str: String,
 }
 
-fn collect_fields(elements: &Array<Element>) -> Array<Field> {
+fn collect_fields(elements: &Array<Element>, rule_name: &String, group_counter: &mut i32) -> Array<Field> {
     let mut fields: Array<Field> = [];
     let mut name_counts: Array<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
-        if let Some(field) = element_to_field(&elements[i]) {
+        if let Some(field) = element_to_field(&elements[i], rule_name, group_counter) {
             let count = get_name_count(&name_counts, &field.name);
             increment_name_count(&mut name_counts, &field.name);
             let final_name = if count > 0 { `{field.name}_{count + 1}` } else { field.name };
@@ -263,7 +337,7 @@ fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
     counts.push([*name, 1]);
 }
 
-fn element_to_field(elem: &Element) -> Option<Field> {
+fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<Field> {
     if let RuleRef(name) = elem {
         return Option::<Field>::Some(Field {
             name: to_snake_case(name),
@@ -283,7 +357,7 @@ fn element_to_field(elem: &Element) -> Option<Field> {
         });
     }
     if let Repeat(rep) = elem {
-        let inner_field = repeat_inner_field(&rep.element);
+        let inner_field = repeat_inner_field(&rep.element, rule_name, group_counter);
         if let Some(inner) = inner_field {
             let field = match rep.kind {
                 Star | Plus => Field {
@@ -300,7 +374,7 @@ fn element_to_field(elem: &Element) -> Option<Field> {
         return null;
     }
     if let Label(lab) = elem {
-        if let Some(inner) = element_to_field(&lab.element) {
+        if let Some(inner) = element_to_field(&lab.element, rule_name, group_counter) {
             return Option::<Field>::Some(Field {
                 name: to_snake_case(&lab.name),
                 type_str: inner.type_str,
@@ -327,6 +401,16 @@ fn element_to_field(elem: &Element) -> Option<Field> {
                 type_str: `Option<{single_alt_group_type_name(&alts[0])}>`,
             });
         }
+        if is_general_group(alts) {
+            let idx = *group_counter;
+            *group_counter += 1;
+            return Option::<Field>::Some(Field {
+                name: general_group_field_name(idx),
+                type_str: `Option<{general_group_type_name(rule_name, idx)}>`,
+            });
+        }
+        // Non-storable group: advance counter for nested general groups
+        *group_counter += count_element_groups(elem);
         return null;
     }
     return null;

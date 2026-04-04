@@ -2101,7 +2101,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if !struct_field_types.iter().any(|(n, _)| n == &field.name)
                     && !struct_field_types.is_empty()
                 {
-                    let _ = self.logger.error(TypeError::FieldNotFound {
+                    let _ = self.logger.error(TypeError::ExtraField {
                         struct_name: struct_name.clone(),
                         field_name: field.name.clone(),
                         span: field.span,
@@ -2128,6 +2128,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // struct_module_source was already determined above (before field resolution).
+
+        // Check for missing fields: all struct fields must be provided in the literal
+        if !struct_field_types.is_empty() {
+            let provided_names: IndexSet<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+            for (expected_name, _) in &struct_field_types {
+                if !provided_names.contains(expected_name.as_str()) {
+                    let _ = self.logger.error(TypeError::MissingField {
+                        struct_name: struct_name.clone(),
+                        field_name: expected_name.clone(),
+                        span: struct_lit.span,
+                    });
+                }
+            }
+        }
 
         // Check field visibility: non-pub fields cannot be set from other modules
         if struct_module_source != self.current_module_source

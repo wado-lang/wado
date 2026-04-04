@@ -1,4 +1,4 @@
-use { Alternative } from "./ir.wado";
+use { Alternative, Element } from "./ir.wado";
 use { TreeSet } from "core:collections";
 
 pub fn to_pascal_case(name: &String) -> String {
@@ -241,9 +241,99 @@ pub fn is_single_alt_group(alts: &Array<Alternative>) -> bool {
     return alts[0].elements.len() >= 2;
 }
 
-/// Check if a group has any storable pattern (simple, token-only, or single-alt).
+/// Check if a group has any storable pattern.
+/// All multi-alt groups are storable (general groups get variant types).
 pub fn is_storable_group(alts: &Array<Alternative>) -> bool {
-    return is_simple_cst_group(alts) || is_token_only_group(alts) || is_single_alt_group(alts);
+    return is_simple_cst_group(alts) || is_token_only_group(alts) || is_single_alt_group(alts) || is_general_group(alts);
+}
+
+/// A general multi-alt group: 2+ alternatives that don't match any specialized pattern.
+pub fn is_general_group(alts: &Array<Alternative>) -> bool {
+    if alts.len() < 2 {
+        return false;
+    }
+    return !is_simple_cst_group(alts) && !is_token_only_group(alts);
+}
+
+/// Count how many general groups are in an element list.
+/// Matches the type gen's counting logic (looks through Repeat wrappers).
+pub fn count_general_groups(elements: &Array<Element>) -> i32 {
+    let mut count: i32 = 0;
+    for let elem of elements {
+        count += count_element_groups(elem);
+    }
+    return count;
+}
+
+pub fn count_element_groups(elem: &Element) -> i32 {
+    if let Group(alts) = elem {
+        if is_general_group(alts) {
+            // 1 for the group itself + max nested count across alts
+            let mut max_nested: i32 = 0;
+            for let alt of alts {
+                let nested = count_general_groups(&alt.elements);
+                if nested > max_nested {
+                    max_nested = nested;
+                }
+            }
+            return 1 + max_nested;
+        }
+        // Non-matching group: recurse into alts to find nested general groups
+        let mut max_nested: i32 = 0;
+        for let alt of alts {
+            let nested = count_general_groups(&alt.elements);
+            if nested > max_nested {
+                max_nested = nested;
+            }
+        }
+        return max_nested;
+    }
+    if let Repeat(rep) = elem {
+        if let Group(alts) = &rep.element {
+            if is_general_group(alts) {
+                let mut max_nested: i32 = 0;
+                for let alt of alts {
+                    let nested = count_general_groups(&alt.elements);
+                    if nested > max_nested {
+                        max_nested = nested;
+                    }
+                }
+                return 1 + max_nested;
+            }
+            // Non-matching group inside Repeat: recurse into alts
+            let mut max_nested: i32 = 0;
+            for let alt of alts {
+                let nested = count_general_groups(&alt.elements);
+                if nested > max_nested {
+                    max_nested = nested;
+                }
+            }
+            return max_nested;
+        }
+        return count_element_groups(&rep.element);
+    }
+    if let Label(lab) = elem {
+        return count_element_groups(&lab.element);
+    }
+    return 0;
+}
+
+/// Generate a variant type name for a general multi-alt group.
+/// Uses parent rule name + group index: "InsertStmtGroup0"
+pub fn general_group_type_name(rule_name: &String, group_index: i32) -> String {
+    return `{to_pascal_case(rule_name)}Group{group_index}`;
+}
+
+/// Generate a field base name for a general multi-alt group.
+/// Uses group index: "group_0"
+pub fn general_group_field_name(group_index: i32) -> String {
+    return `group_{group_index}`;
+}
+
+/// Generate a struct name for a specific alternative in a general group.
+/// Uses parent rule name + group index + alt index: "InsertStmtGroup0Alt1"
+pub fn general_group_alt_struct_name(rule_name: &String, group_index: i32, alt_index: i32) -> String {
+    return `{to_pascal_case(rule_name)}Group{group_index}Alt{alt_index}`;
 }
 
 /// Get a field name for the elements in a single-alt group's element.

@@ -5,34 +5,34 @@ use {
     to_pascal_case,
     rule_type_name,
     literal_field_name,
-    strip_suffix,
     is_simple_cst_group,
     is_token_only_group,
     is_single_alt_group,
-    group_variant_type_name,
+    is_general_group,
     group_field_base_name,
-    group_case_name,
+    general_group_field_name,
     token_group_field_name,
     single_alt_group_field_name,
-    single_alt_group_type_name,
+    count_element_groups,
 } from "./gen_util.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
 /// Generate Visitor walk functions and to_tree for a grammar.
 pub fn gen_visitor(w: &mut CodeWriter, grammar: &Grammar) {
     for let rule of &grammar.parser_rules {
-        gen_walk_fn(w, rule);
+        gen_walk_fn(w, rule, &rule.name);
     }
     gen_to_tree_fn(w, grammar);
 }
 
-fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule) {
+fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule, rule_name: &String) {
     let type_name = rule_type_name(&rule.name);
     w.begin(&`pub fn walk_{rule.name}<V: Visitor>(v: &mut V, node: &{type_name})`);
 
+    let mut group_counter: i32 = 0;
     if rule.alternatives.len() == 1 {
         w.line(`v.enter_rule(&"{rule.name}", &node.span);`);
-        gen_walk_alt_body(w, &rule.alternatives[0], "node");
+        gen_walk_alt_body(w, &rule.alternatives[0], "node", rule_name, &mut group_counter);
         w.line(`v.exit_rule(&"{rule.name}", &node.span);`);
     } else {
         let all_labeled = all_alternatives_labeled(&rule.alternatives);
@@ -42,7 +42,7 @@ fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule) {
             let case_name = if all_labeled { alt.label.unwrap() } else { `Alt{i}` };
             w.begin(`{case_name}(n) =>`);
             w.line(`v.enter_rule(&"{rule.name}", &n.span);`);
-            gen_walk_alt_body(w, alt, "n");
+            gen_walk_alt_body(w, alt, "n", rule_name, &mut group_counter);
             w.line(`v.exit_rule(&"{rule.name}", &n.span);`);
             w.end();
         }
@@ -53,8 +53,8 @@ fn gen_walk_fn(w: &mut CodeWriter, rule: &ParserRule) {
     w.blank();
 }
 
-fn gen_walk_alt_body(w: &mut CodeWriter, alt: &Alternative, var: &String) {
-    let fields = collect_walk_fields(&alt.elements);
+fn gen_walk_alt_body(w: &mut CodeWriter, alt: &Alternative, var: &String, rule_name: &String, group_counter: &mut i32) {
+    let fields = collect_walk_fields(&alt.elements, rule_name, group_counter);
     for let field of &fields {
         gen_walk_field(w, field, var);
     }
@@ -89,10 +89,11 @@ fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
                 gen_walk_field(w, f, expr);
             }
         },
+        WalkGeneralGroup(cases) => gen_walk_general_group_match(w, expr, cases),
     }
 }
 
-fn repeat_inner_walk_field(elem: &Element) -> Option<WalkField> {
+fn repeat_inner_walk_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<WalkField> {
     if let Group(alts) = elem {
         if is_simple_cst_group(alts) {
             let mut cases: Array<GroupCaseInfo> = [];
@@ -120,13 +121,24 @@ fn repeat_inner_walk_field(elem: &Element) -> Option<WalkField> {
         if is_single_alt_group(alts) {
             return Option::Some(WalkField {
                 name: single_alt_group_field_name(&alts[0]),
-                action: build_struct_walk_action(&alts[0]),
+                action: build_struct_walk_action(&alts[0], rule_name, group_counter),
                 wrapper: WalkWrapper::Direct,
             });
         }
+        if is_general_group(alts) {
+            let idx = *group_counter;
+            *group_counter += 1;
+            return Option::Some(WalkField {
+                name: general_group_field_name(idx),
+                action: build_general_group_walk_action(alts, rule_name, group_counter),
+                wrapper: WalkWrapper::Direct,
+            });
+        }
+        // Non-storable group: advance counter for nested general groups
+        *group_counter += count_element_groups(elem);
         return null;
     }
-    return element_to_walk_field(elem);
+    return element_to_walk_field(elem, rule_name, group_counter);
 }
 
 fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GroupCaseInfo>) {
@@ -134,6 +146,18 @@ fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GroupCa
     for let c of cases {
         w.begin(`{c.case_name}(inner) =>`);
         w.line(`walk_{c.rule_name}(v, inner);`);
+        w.end();
+    }
+    w.end();
+}
+
+fn gen_walk_general_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GeneralGroupCaseInfo>) {
+    w.begin(`match {expr}`);
+    for let c of cases {
+        w.begin(`{c.case_name}(inner) =>`);
+        for let f of &c.fields {
+            gen_walk_field(w, f, "inner");
+        }
         w.end();
     }
     w.end();
@@ -159,11 +183,17 @@ struct GroupCaseInfo {
     rule_name: String,
 }
 
+struct GeneralGroupCaseInfo {
+    case_name: String,
+    fields: Array<WalkField>,
+}
+
 variant WalkAction {
     VisitToken,
     WalkRule(String),
     WalkGroup(Array<GroupCaseInfo>),
     WalkStruct(Array<WalkField>),
+    WalkGeneralGroup(Array<GeneralGroupCaseInfo>),
 }
 
 enum WalkWrapper {
@@ -178,11 +208,11 @@ struct WalkField {
     wrapper: WalkWrapper,
 }
 
-fn collect_walk_fields(elements: &Array<Element>) -> Array<WalkField> {
+fn collect_walk_fields(elements: &Array<Element>, rule_name: &String, group_counter: &mut i32) -> Array<WalkField> {
     let mut fields: Array<WalkField> = [];
     let mut name_counts: Array<[String, i32]> = [];
     for let elem of elements {
-        if let Some(field) = element_to_walk_field(&elem) {
+        if let Some(field) = element_to_walk_field(&elem, rule_name, group_counter) {
             let base_name = field.name;
             let count = get_name_count(&name_counts, &base_name);
             increment_name_count(&mut name_counts, &base_name);
@@ -193,7 +223,7 @@ fn collect_walk_fields(elements: &Array<Element>) -> Array<WalkField> {
     return fields;
 }
 
-fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
+fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<WalkField> {
     if let RuleRef(name) = elem {
         return Option::Some(WalkField {
             name: to_snake_case(name),
@@ -216,7 +246,7 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
         });
     }
     if let Repeat(rep) = elem {
-        let inner_field = repeat_inner_walk_field(&rep.element);
+        let inner_field = repeat_inner_walk_field(&rep.element, rule_name, group_counter);
         if let Some(inner) = inner_field {
             match rep.kind {
                 Star | Plus => {
@@ -238,7 +268,7 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
         return null;
     }
     if let Label(lab) = elem {
-        if let Some(inner) = element_to_walk_field(&lab.element) {
+        if let Some(inner) = element_to_walk_field(&lab.element, rule_name, group_counter) {
             return Option::Some(WalkField {
                 name: to_snake_case(&lab.name),
                 action: inner.action,
@@ -274,18 +304,48 @@ fn element_to_walk_field(elem: &Element) -> Option<WalkField> {
         if is_single_alt_group(alts) {
             return Option::Some(WalkField {
                 name: single_alt_group_field_name(&alts[0]),
-                action: build_struct_walk_action(&alts[0]),
+                action: build_struct_walk_action(&alts[0], rule_name, group_counter),
                 wrapper: WalkWrapper::OptionalWrap,
             });
         }
+        if is_general_group(alts) {
+            let idx = *group_counter;
+            *group_counter += 1;
+            return Option::Some(WalkField {
+                name: general_group_field_name(idx),
+                action: build_general_group_walk_action(alts, rule_name, group_counter),
+                wrapper: WalkWrapper::OptionalWrap,
+            });
+        }
+        // Non-storable group: advance counter for nested general groups
+        *group_counter += count_element_groups(elem);
         return null;
     }
     return null;
 }
 
-fn build_struct_walk_action(alt: &Alternative) -> WalkAction {
-    let fields = collect_walk_fields(&alt.elements);
+fn build_struct_walk_action(alt: &Alternative, rule_name: &String, group_counter: &mut i32) -> WalkAction {
+    let fields = collect_walk_fields(&alt.elements, rule_name, group_counter);
     return WalkAction::WalkStruct(fields);
+}
+
+fn build_general_group_walk_action(alts: &Array<Alternative>, rule_name: &String, group_counter: &mut i32) -> WalkAction {
+    let gc_before = *group_counter;
+    let mut gc_max = gc_before;
+    let mut cases: Array<GeneralGroupCaseInfo> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let mut gc = gc_before;
+        let fields = collect_walk_fields(&alts[i].elements, rule_name, &mut gc);
+        if gc > gc_max {
+            gc_max = gc;
+        }
+        cases.push(GeneralGroupCaseInfo {
+            case_name: `Alt{i}`,
+            fields,
+        });
+    }
+    *group_counter = gc_max;
+    return WalkAction::WalkGeneralGroup(cases);
 }
 
 fn get_name_count(counts: &Array<[String, i32]>, name: &String) -> i32 {

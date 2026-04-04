@@ -733,6 +733,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         } else {
             self.lookup_function_param_types_with_type_args(&call.callee, &type_args)
         };
+        if !check_param_types.is_empty() && args.len() != check_param_types.len() {
+            let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                expected: check_param_types.len(),
+                found: args.len(),
+                span: call.span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+        }
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
                 self.check_ref_type_mismatch(

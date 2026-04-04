@@ -507,7 +507,9 @@ impl G4Parser {
         if self.is_kind(G4Token::Question) {
             self.advance();
             return Result::<LexerElement, ParseError>::Ok(
-                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Optional, element: elem, non_greedy: false }),
+                LexerElement::Repeat(
+                    LexerRepeatElement { kind: RepeatKind::Optional, element: elem, non_greedy: false },
+                ),
             );
         }
         return Result::<LexerElement, ParseError>::Ok(elem);
