@@ -144,7 +144,9 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
 
 fn gen_lexer_match_fns(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
     for let rule of lexer_rules {
-        if !rule.is_fragment {
+        if rule.body.is_empty() {
+            // Virtual token (from `tokens { }` block): no match function needed
+        } else if !rule.is_fragment {
             gen_lexer_match_fn(w, rule, lexer_rules);
         } else if fragment_is_recursive(rule, lexer_rules) {
             gen_lexer_match_fn(w, rule, lexer_rules);
@@ -507,7 +509,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                 }
             }
             for let rule of lexer_rules {
-                if !rule.is_fragment && rule.mode == mi {
+                if !rule.is_fragment && !rule.body.is_empty() && rule.mode == mi {
                     let fn_name = `try_{to_lower(&rule.name)}`;
                     w.line(`end = {fn_name}(&lexer.chars, start);`);
                     let mut extra = String::with_capacity(64);
@@ -534,7 +536,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
             w.line(`if end > best_end \{ best_end = end; best_kind = {lit.const_name}; \}`);
         }
         for let rule of lexer_rules {
-            if !rule.is_fragment {
+            if !rule.is_fragment && !rule.body.is_empty() {
                 let fn_name = `try_{to_lower(&rule.name)}`;
                 w.line(`end = {fn_name}(&lexer.chars, start);`);
                 w.line(`if end > best_end \{ best_end = end; best_kind = TK_{rule.name}; \}`);
