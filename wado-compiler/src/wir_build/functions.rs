@@ -586,9 +586,7 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             ctx.global_map.insert(global_name.clone(), idx);
 
             ctx.globals.push(WirGlobal {
-                name: WirName {
-                    fq: global_name,
-                },
+                name: WirName { fq: global_name },
                 ty: wir_type,
                 mutable: global.mutable,
                 init,

@@ -125,9 +125,7 @@ impl WasmModuleInfo {
         for (i, func) in self.functions.iter().enumerate() {
             let fq: Rc<str> = Rc::from(format!("__wasm_mod_type_{i}"));
             wir.types.push(WirTypeDef::Func(WirFuncType {
-                name: WirName {
-                    fq: fq.to_string(),
-                },
+                name: WirName { fq: fq.to_string() },
                 params: vec![WirType::I32; func.param_names.len()],
                 results: func.results.clone(),
             }));
@@ -498,7 +496,7 @@ fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
 /// (`StructName`, `FunctionId`, etc.). WIR itself does not import `name.rs` types.
 #[derive(Debug, Clone)]
 pub struct WirName {
-    /// Fully-qualified name (e.g., "core:prelude//Point", "./geometry.wado/Point::sum").
+    /// Fully-qualified name (e.g., "core:prelude//Point", "./`geometry.wado/Point::sum`").
     /// Used as the unique identity key for name→index resolution during emission,
     /// and also for display in unparse output and error messages.
     pub fq: String,
@@ -969,7 +967,7 @@ pub const COMP_FEATURE_TUPLE: u32 = 1 << 7;
 /// A function declaration with optional body.
 #[derive(Debug)]
 pub struct WirFunction {
-    /// Function name (fq: "./geometry.wado//Point::sum").
+    /// Function name (fq: "./`geometry.wado//Point::sum`").
     pub name: WirName,
     /// Function type ID (references a `WirTypeDef::Func` in `WirModule.types`).
     pub type_id: WirTypeId,

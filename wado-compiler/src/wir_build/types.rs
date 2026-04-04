@@ -371,9 +371,7 @@ fn register_variant(
     let type_id = ctx.register_type(
         fq.clone(),
         WirTypeDef::Variant(WirVariantType {
-            name: WirName {
-                fq: fq.clone(),
-            },
+            name: WirName { fq: fq.clone() },
             cases: cases.clone(),
             repr: WirVariantRepr::default(),
             meta: WirMeta {
@@ -454,9 +452,7 @@ fn register_raw_array_type(
     let type_id = ctx.register_type(
         fq.clone(),
         WirTypeDef::Array(WirArrayType {
-            name: WirName {
-                fq,
-            },
+            name: WirName { fq },
             element_type: elem_wir_type,
             mutable: true,
             meta: WirMeta::default(),
@@ -939,9 +935,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
             let type_id = ctx.register_type(
                 fq.clone(),
                 WirTypeDef::Variant(WirVariantType {
-                    name: WirName {
-                        fq: fq.clone(),
-                    },
+                    name: WirName { fq: fq.clone() },
                     cases: wir_cases.clone(),
                     repr: WirVariantRepr::default(),
                     meta: WirMeta {
@@ -1372,7 +1366,13 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
         };
         let variant_module_source = vt.meta.module_source.clone();
         // Extract the base variant name from the FQ (e.g. "Module//Name" → "Name")
-        let variant_display = vt.name.fq.split("//").nth(1).unwrap_or(&vt.name.fq).to_string();
+        let variant_display = vt
+            .name
+            .fq
+            .split("//")
+            .nth(1)
+            .unwrap_or(&vt.name.fq)
+            .to_string();
         for (case_idx, case) in vt.cases.iter().enumerate() {
             for (payload_idx, payload_ty) in case.payload.iter().enumerate() {
                 if !is_abstract_ref(payload_ty) {
@@ -1570,9 +1570,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         let tt = tir_mod.type_table.borrow();
                         for tir_variant in &tir_mod.variants {
                             let v_base = v.name.fq.split("//").nth(1).unwrap_or(&v.name.fq);
-                            if tir_variant.name == v_base
-                                && case_idx < tir_variant.cases.len()
-                            {
+                            if tir_variant.name == v_base && case_idx < tir_variant.cases.len() {
                                 let payload_type_id = tir_variant.cases[case_idx].payload;
                                 if tt.get(payload_type_id) != &crate::tir::ResolvedType::Unit {
                                     let wir_type = ctx.type_id_to_wir_type(&tt, payload_type_id);

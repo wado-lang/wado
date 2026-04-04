@@ -1353,13 +1353,13 @@ mod tests {
     #[test]
     fn test_struct_name_from_strs() {
         let struct_name = StructName::from_strs(&["core", "internal"], "SomeType");
-        assert_eq!(struct_name.to_string(), "core/internal/SomeType");
+        assert_eq!(struct_name.to_string(), "core:internal/SomeType");
     }
 
     #[test]
     fn test_struct_name_empty_path() {
         let struct_name = StructName::from_path_and_name(&[], "Point");
-        assert_eq!(struct_name.to_string(), "Point");
+        assert_eq!(struct_name.to_string(), "<entry>/Point");
     }
 
     #[test]
