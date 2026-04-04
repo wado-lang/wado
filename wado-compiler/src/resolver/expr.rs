@@ -2131,8 +2131,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check for missing fields: all struct fields must be provided in the literal
         if !struct_field_types.is_empty() {
-            let provided_names: IndexSet<&str> =
-                fields.iter().map(|f| f.name.as_str()).collect();
+            let provided_names: IndexSet<&str> = fields.iter().map(|f| f.name.as_str()).collect();
             for (expected_name, _) in &struct_field_types {
                 if !provided_names.contains(expected_name.as_str()) {
                     let _ = self.logger.error(TypeError::MissingField {
