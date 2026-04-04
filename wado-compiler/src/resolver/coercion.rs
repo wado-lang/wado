@@ -959,17 +959,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Emit a type error when `actual` is a reference type (`&T` or `&mut T`)
-    /// but `expected` is not a reference type. This catches the specific pattern
-    /// that causes ICEs in codegen (Wasm type mismatch: expected i32, found ref).
+    /// Check for type mismatches that would cause ICEs in codegen.
     ///
-    /// Does NOT perform general type equality — only rejects `&T → non-ref`.
+    /// Detects:
+    /// - Reference mismatches: `&T` vs non-ref, non-ref vs `&T` (when boxing required)
+    /// - Newtype/flags mismatches: newtype vs base type or different newtype
+    /// - Option mismatches: `T` vs `Option<T>`, `Option<X>` vs `Option<T>`
+    ///
+    /// Skips checks when types involve unresolved generics (type params).
     /// Allows `&mut T → &T` coercion.
-    ///
-    /// Also rejects `T → &T` when T is a variant or primitive type, since these
-    /// require boxing (`Box<T>`) at the Wasm level. Struct/array/string types
-    /// are already GC references and don't need boxing, so `T → &T` is safe for them.
-    pub(super) fn check_ref_type_mismatch(&mut self, actual: TypeId, expected: TypeId, span: Span) {
+    pub(super) fn check_type_mismatch(&mut self, actual: TypeId, expected: TypeId, span: Span) {
         if actual == expected
             || actual == TypeTable::UNKNOWN
             || expected == TypeTable::UNKNOWN
@@ -980,31 +979,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let type_table = self.type_table.borrow();
 
-        let actual_is_ref = matches!(
-            type_table.get(actual),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        );
-        let expected_is_ref = matches!(
-            type_table.get(expected),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        );
-
-        // Allow &T → &T or &mut T → &T (ref-to-ref is fine)
-        if actual_is_ref && expected_is_ref {
+        // Skip when either side involves unresolved generics.
+        // These will be checked after monomorphization when types are concrete.
+        if type_table.contains_type_param(actual) || type_table.contains_type_param(expected) {
             return;
         }
 
-        // Check &T → non-ref (original check)
-        if actual_is_ref && !expected_is_ref {
-            // Skip if expected is a type parameter (generic placeholder)
-            if matches!(type_table.get(expected), ResolvedType::TypeParam { .. }) {
-                return;
-            }
+        // Unwrap references for inner type comparison
+        let actual_inner = match type_table.get(actual) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => actual,
+        };
+        let expected_inner = match type_table.get(expected) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => expected,
+        };
+        let actual_is_ref = actual_inner != actual;
+        let expected_is_ref = expected_inner != expected;
 
+        // Reference checks
+        if actual_is_ref && !expected_is_ref {
+            // &T → non-ref: always an error
             let expected_name = type_table.type_name(expected);
             let found_name = type_table.type_name(actual);
             drop(type_table);
-
             let _ = self.logger.error(TypeError::TypeMismatch {
                 expected: expected_name,
                 found: found_name,
@@ -1012,39 +1010,107 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
             return;
         }
-
-        // Check non-ref → &T when the inner type requires boxing (variant/primitive).
-        // For struct/array/string types, &T ≈ T at the Wasm level, so this coercion is safe.
-        // For variant and primitive types, &T requires Box<T>, so passing T directly is invalid.
         if !actual_is_ref && expected_is_ref {
-            let inner = match type_table.get(expected) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                _ => return,
-            };
-
-            // Skip if expected inner is a type parameter
-            if matches!(type_table.get(inner), ResolvedType::TypeParam { .. }) {
-                return;
-            }
-
+            // non-ref → &T: error only for types that require boxing (variant/primitive/enum).
+            // Struct/array/string types are already GC references — no boxing needed.
             let needs_box = matches!(
-                type_table.get(inner),
+                type_table.get(expected_inner),
                 ResolvedType::Variant { .. }
                     | ResolvedType::Primitive(_)
                     | ResolvedType::Enum { .. }
             );
-
             if needs_box {
                 let expected_name = type_table.type_name(expected);
                 let found_name = type_table.type_name(actual);
                 drop(type_table);
-
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: expected_name,
                     found: found_name,
                     span,
                 });
+                return;
             }
+        }
+
+        // Option checks: T vs Option<T>, Option<X> vs Option<T>
+        let actual_is_option = type_table.as_option(actual).is_some();
+        let expected_is_option = type_table.as_option(expected).is_some();
+        if actual_is_option != expected_is_option
+            || (actual_is_option && expected_is_option && actual != expected)
+        {
+            let expected_name = type_table.type_name(expected);
+            let found_name = type_table.type_name(actual);
+            drop(type_table);
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: expected_name,
+                found: found_name,
+                span,
+            });
+        }
+    }
+
+    /// Check for newtype/flags mismatches in method arguments.
+    ///
+    /// Newtypes share the same Wasm representation as their base type, so
+    /// mismatches don't cause ICEs. However, passing a base type where a
+    /// newtype is expected (or vice versa) is a semantic error in method calls.
+    ///
+    /// This is separate from `check_type_mismatch` because newtypes coerce
+    /// implicitly in many contexts (function calls, assignments, struct fields).
+    pub(super) fn check_newtype_mismatch(&mut self, actual: TypeId, expected: TypeId, span: Span) {
+        if actual == expected
+            || actual == TypeTable::UNKNOWN
+            || expected == TypeTable::UNKNOWN
+            || actual == TypeTable::NEVER
+        {
+            return;
+        }
+
+        let type_table = self.type_table.borrow();
+
+        if type_table.contains_type_param(actual) || type_table.contains_type_param(expected) {
+            return;
+        }
+
+        let actual_inner = match type_table.get(actual) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => actual,
+        };
+        let expected_inner = match type_table.get(expected) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => expected,
+        };
+
+        let actual_is_newtype = matches!(
+            type_table.get(actual_inner),
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
+        );
+        let expected_is_newtype = matches!(
+            type_table.get(expected_inner),
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
+        );
+
+        let is_mismatch = if (actual_is_newtype || expected_is_newtype)
+            && actual_inner != expected_inner
+        {
+            true
+        } else if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner) {
+            *base_type == expected_inner
+        } else if let ResolvedType::Newtype { base_type, .. } = type_table.get(expected_inner) {
+            *base_type == actual_inner
+        } else {
+            false
+        };
+
+        if is_mismatch {
+            let expected_name = type_table.type_name(expected);
+            let found_name = type_table.type_name(actual);
+            drop(type_table);
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: expected_name,
+                found: found_name,
+                span,
+            });
         }
     }
 

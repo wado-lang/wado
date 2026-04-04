@@ -764,7 +764,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check return value type matches function return type
         if let Some(value) = &value {
-            self.check_ref_type_mismatch(value.type_id, return_type, ret_stmt.span);
+            self.check_type_mismatch(value.type_id, return_type, ret_stmt.span);
             self.check_return_type_mismatch(value.type_id, return_type, ret_stmt.span);
         }
 

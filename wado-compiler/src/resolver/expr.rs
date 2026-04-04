@@ -1041,7 +1041,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 _ => None,
             };
             if let Some(expected) = derefed_index_type {
-                self.check_ref_type_mismatch(index_type, expected, index.index.span());
+                self.check_type_mismatch(index_type, expected, index.index.span());
             }
 
             // First, try Index trait (returns reference)
@@ -2108,31 +2108,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     });
                 }
 
-                // Check field value type against declared struct field type.
-                // Catch T vs Option<T> mismatches that would otherwise produce
-                // invalid Wasm (ICE) rather than a compile error.
+                // Check field value type against declared struct field type
                 if let Some((_, expected_type_id)) =
                     struct_field_types.iter().find(|(n, _)| n == &field.name)
                 {
-                    if value.type_id != *expected_type_id
-                        && value.type_id != TypeTable::UNKNOWN
-                        && value.type_id != TypeTable::NEVER
-                    {
-                        let tt = self.type_table.borrow();
-                        if let Some(inner) = tt.as_option(*expected_type_id) {
-                            if inner == value.type_id {
-                                let expected_name = tt.type_name(*expected_type_id);
-                                let found_name = tt.type_name(value.type_id);
-                                drop(tt);
-                                let _ = self.logger.error(TypeError::TypeMismatch {
-                                    expected: expected_name,
-                                    found: found_name,
-                                    span: field.value.span(),
-                                });
-                            }
-                        }
-                    }
-                    self.check_ref_type_mismatch(
+                    self.check_type_mismatch(
                         value.type_id,
                         *expected_type_id,
                         field.value.span(),
