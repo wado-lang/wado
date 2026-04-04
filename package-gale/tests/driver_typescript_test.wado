@@ -1,0 +1,68 @@
+/// Driver test for the TypeScript grammar parser.
+///
+/// The TypeScript grammar uses semantic predicates extensively, so full
+/// parsing is not supported without predicate evaluation. These tests
+/// verify tokenization of various TypeScript constructs.
+use ts from "./golden/typescript.wado";
+
+test "tokenize variable declaration" {
+    let tokens = ts::tokenize(&"let x = 42;");
+    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+    let first = ts::token_kind_name(tokens[0].kind);
+    assert first == "Let", `expected Let, got {first}`;
+}
+
+test "tokenize const declaration" {
+    let tokens = ts::tokenize(&"const name = \"hello\";");
+    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+    let first = ts::token_kind_name(tokens[0].kind);
+    assert first == "Const", `expected Const, got {first}`;
+}
+
+test "tokenize function declaration" {
+    let tokens = ts::tokenize(&"function add(a, b) { return a + b; }");
+    assert tokens.len() >= 10, `expected at least 10 tokens, got {tokens.len()}`;
+    let first = ts::token_kind_name(tokens[0].kind);
+    assert first == "Function_", `expected Function_, got {first}`;
+}
+
+test "tokenize class declaration" {
+    let tokens = ts::tokenize(&"class Foo extends Bar { constructor() {} }");
+    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+    let first = ts::token_kind_name(tokens[0].kind);
+    assert first == "Class", `expected Class, got {first}`;
+}
+
+test "tokenize arrow function" {
+    let tokens = ts::tokenize(&"const f = (x) => x + 1;");
+    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+}
+
+test "tokenize import statement" {
+    let tokens = ts::tokenize(&"import { foo } from 'bar';");
+    assert tokens.len() >= 6, `expected at least 6 tokens, got {tokens.len()}`;
+    let first = ts::token_kind_name(tokens[0].kind);
+    assert first == "Import", `expected Import, got {first}`;
+}
+
+test "tokenize template literal" {
+    let tokens = ts::tokenize(&"let s = `hello ${name}`;");
+    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+}
+
+test "tokenize operators" {
+    let tokens = ts::tokenize(&"a === b && c !== d || e > f");
+    assert tokens.len() >= 9, `expected at least 9 tokens, got {tokens.len()}`;
+}
+
+test "tokenize interface" {
+    let tokens = ts::tokenize(&"interface Foo { x: number; }");
+    assert tokens.len() >= 6, `expected at least 6 tokens, got {tokens.len()}`;
+}
+
+test "tokenize enum" {
+    let tokens = ts::tokenize(&"enum Color { Red, Green, Blue }");
+    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+    let first = ts::token_kind_name(tokens[0].kind);
+    assert first == "Enum", `expected Enum, got {first}`;
+}

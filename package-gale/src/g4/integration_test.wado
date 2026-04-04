@@ -237,6 +237,33 @@ test "parse TypeScriptParser.g4" {
     assert g.parser_rules.len() > 20;
 }
 
+test "merge ANTLR4 grammars" {
+    let lexer_g = parse(#include_str("../../tests/grammars/ANTLRv4Lexer.g4")).unwrap();
+    let parser_g = parse(#include_str("../../tests/grammars/ANTLRv4Parser.g4")).unwrap();
+    let merged = merge_grammars([lexer_g, parser_g]);
+    assert merged.name == "ANTLRv4";
+    assert merged.lexer_rules.len() > 10;
+    assert merged.parser_rules.len() > 10;
+}
+
+test "merge TypeScript grammars" {
+    let lexer_g = parse(#include_str("../../tests/grammars/TypeScriptLexer.g4")).unwrap();
+    let parser_g = parse(#include_str("../../tests/grammars/TypeScriptParser.g4")).unwrap();
+    let merged = merge_grammars([lexer_g, parser_g]);
+    assert merged.name == "TypeScript";
+    assert merged.lexer_rules.len() > 20;
+    assert merged.parser_rules.len() > 20;
+}
+
+test "merge Rust grammars" {
+    let lexer_g = parse(#include_str("../../tests/grammars/RustLexer.g4")).unwrap();
+    let parser_g = parse(#include_str("../../tests/grammars/RustParser.g4")).unwrap();
+    let merged = merge_grammars([lexer_g, parser_g]);
+    assert merged.name == "Rust";
+    assert merged.lexer_rules.len() > 20;
+    assert merged.parser_rules.len() > 30;
+}
+
 test "parse calculator.g4" {
     let input = #include_str("../../tests/grammars/calculator.g4");
     let g = parse(input).unwrap();
