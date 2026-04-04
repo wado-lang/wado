@@ -2087,7 +2087,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 };
 
                 // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
-                let mut value = self.resolve_expr(&field.value, ctx, effective_expected);
+                let value = self.resolve_expr(&field.value, ctx, effective_expected);
 
                 // Track tuple literals whose coercion was deferred because the field
                 // type had unresolved type parameters. After type inference, we'll
@@ -2108,7 +2108,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     });
                 }
 
-                // Auto-coerce T to Option<T> when the field expects Option<T>
+                // Check field value type against declared struct field type.
+                // Catch T vs Option<T> mismatches that would otherwise produce
+                // invalid Wasm (ICE) rather than a compile error.
                 if let Some((_, expected_type_id)) =
                     struct_field_types.iter().find(|(n, _)| n == &field.name)
                 {
@@ -2119,20 +2121,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let tt = self.type_table.borrow();
                         if let Some(inner) = tt.as_option(*expected_type_id) {
                             if inner == value.type_id {
+                                let expected_name = tt.type_name(*expected_type_id);
+                                let found_name = tt.type_name(value.type_id);
                                 drop(tt);
-                                value = crate::synthesis::common::option_some(
-                                    value,
-                                    *expected_type_id,
-                                );
+                                let _ = self.logger.error(TypeError::TypeMismatch {
+                                    expected: expected_name,
+                                    found: found_name,
+                                    span: field.value.span(),
+                                });
                             }
                         }
                     }
-                }
-
-                // Check field value type against declared struct field type
-                if let Some((_, expected_type_id)) =
-                    struct_field_types.iter().find(|(n, _)| n == &field.name)
-                {
                     self.check_ref_type_mismatch(
                         value.type_id,
                         *expected_type_id,
