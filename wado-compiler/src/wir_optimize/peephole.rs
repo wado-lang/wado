@@ -111,6 +111,11 @@ pub(super) fn run_peephole(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
         optimize_nested(instr, types);
     }
     fold_constant_comparisons(instrs);
+    // Re-run dead branch elimination after constant folding may have turned
+    // If conditions into I32Const(0)/I32Const(1).
+    for instr in instrs.iter_mut() {
+        eliminate_const_if(instr);
+    }
     fold_eqz_patterns(instrs);
     elide_redundant_value_copies(instrs);
     elide_copy_used_only_for_field_reads(instrs);
@@ -127,39 +132,15 @@ fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
             run_peephole(body, types);
         }
         WirInstr::If {
-            condition,
             then_body,
             else_body,
-            result,
+            ..
         } => {
             run_peephole(then_body, types);
             if let Some(eb) = else_body {
                 run_peephole(eb, types);
             }
-            // Dead If elimination: replace with surviving branch when condition is constant
-            if let Some(const_val) = try_fold_wir_to_bool(condition) {
-                if const_val {
-                    let then_instrs = std::mem::take(then_body);
-                    *instr = WirInstr::Block {
-                        label: None,
-                        result: result.clone(),
-                        body: then_instrs,
-                    };
-                } else if let Some(eb) = else_body {
-                    let else_instrs = std::mem::take(eb);
-                    *instr = WirInstr::Block {
-                        label: None,
-                        result: result.clone(),
-                        body: else_instrs,
-                    };
-                } else {
-                    *instr = WirInstr::Block {
-                        label: None,
-                        result: None,
-                        body: vec![WirInstr::Nop],
-                    };
-                }
-            }
+            eliminate_const_if(instr);
         }
         WirInstr::Seq(body) => {
             run_peephole(body, types);
@@ -210,6 +191,48 @@ fn try_fold_wir_to_bool(instr: &WirInstr) -> Option<bool> {
         WirInstr::I32Const(v) => Some(*v != 0),
         _ => None,
     }
+}
+
+/// Recursively replace `If` with a constant condition by the surviving branch.
+fn eliminate_const_if(instr: &mut WirInstr) {
+    struct ElimConstIf;
+    impl WirMutVisitor for ElimConstIf {
+        fn visit_instr(&mut self, instr: &mut WirInstr) {
+            self.walk_instr(instr);
+            if let WirInstr::If {
+                condition,
+                then_body,
+                else_body,
+                result,
+            } = instr
+            {
+                if let Some(const_val) = try_fold_wir_to_bool(condition) {
+                    if const_val {
+                        let then_instrs = std::mem::take(then_body);
+                        *instr = WirInstr::Block {
+                            label: None,
+                            result: result.clone(),
+                            body: then_instrs,
+                        };
+                    } else if let Some(eb) = else_body {
+                        let else_instrs = std::mem::take(eb);
+                        *instr = WirInstr::Block {
+                            label: None,
+                            result: result.clone(),
+                            body: else_instrs,
+                        };
+                    } else {
+                        *instr = WirInstr::Block {
+                            label: None,
+                            result: None,
+                            body: vec![WirInstr::Nop],
+                        };
+                    }
+                }
+            }
+        }
+    }
+    ElimConstIf.visit_instr(instr);
 }
 
 /// Recursively fold constant integer comparisons to `I32Const`.
