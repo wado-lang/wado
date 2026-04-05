@@ -61,3 +61,41 @@ test "index-loop double-indexed with TreeSet filter" {
     let result = index_version(&data, &indices, &skip);
     assert result.len() == 2, `index-loop: expected 2, got {result.len()}`;
 }
+
+test "break in for-of inside c-style for" {
+    let data: Array<Array<i32>> = [[1, 2, 3], [4, 5, 6]];
+    let mut result: Array<i32> = [];
+    for let mut k = 0; k < data.len(); k += 1 {
+        for let item of data[k] {
+            if item == 2 || item == 5 {
+                break;
+            }
+            result.push(item);
+        }
+    }
+    // First inner: 1 (break at 2). Second inner: 4 (break at 5).
+    assert result.len() == 2, `break: expected 2, got {result.len()}`;
+    assert result[0] == 1;
+    assert result[1] == 4;
+}
+
+test "continue in for-of inside c-style for" {
+    let data: Array<Array<i32>> = [[1, 2, 3], [4, 5, 6]];
+    let mut result: Array<i32> = [];
+    for let mut k = 0; k < data.len(); k += 1 {
+        for let item of data[k] {
+            if item % 2 == 0 {
+                continue;
+            }
+            result.push(item);
+        }
+    }
+    // Odd numbers only: 1, 3, 5
+    assert result.len() == 3, `continue: expected 3, got {result.len()}`;
+    assert result[0] == 1;
+    assert result[1] == 3;
+    assert result[2] == 5;
+}
+
+__DATA__
+{"test": {}}
