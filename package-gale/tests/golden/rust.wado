@@ -8442,34 +8442,6 @@ fn parse_macro_matcher(p: &mut Parser) -> Result<MacroMatcherNode, ParseError> {
     ));
 }
 
-fn parse_macro_match_bt_2(p: &mut Parser) -> Result<MacroMatchNode, ParseError> {
-    let start = p.peek().span.start;
-    let dollar = p.expect(TK_DOLLAR, "DOLLAR")?;
-    let mut group_0_inner: Option<MacroMatchGroup0> = null;
-    let grp_kind = p.peek_kind();
-    if grp_kind matches { TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES } {
-        let identifier = parse_identifier(p)?;
-        group_0_inner = Option::<MacroMatchGroup0>::Some(MacroMatchGroup0::Alt0(MacroMatchGroup0Alt0 {
-            identifier,
-        }));
-    } else if grp_kind == TK_KW_SELFVALUE {
-        let kw_selfvalue = p.expect(TK_KW_SELFVALUE, "KW_SELFVALUE")?;
-        group_0_inner = Option::<MacroMatchGroup0>::Some(MacroMatchGroup0::Alt1(MacroMatchGroup0Alt1 {
-            kw_selfvalue,
-        }));
-    }
-    let group_0 = group_0_inner;
-    let colon = p.expect(TK_COLON, "COLON")?;
-    let macro_frag_spec = parse_macro_frag_spec(p)?;
-    return Result::<MacroMatchNode, ParseError>::Ok(MacroMatchNode::Alt2(MacroMatchAlt2 {
-        span: Span::new(start, p.last_end()),
-        dollar,
-        group_0,
-        colon,
-        macro_frag_spec,
-    }));
-}
-
 fn parse_macro_match_bt_3(p: &mut Parser) -> Result<MacroMatchNode, ParseError> {
     let start = p.peek().span.start;
     let dollar = p.expect(TK_DOLLAR, "DOLLAR")?;
@@ -8497,6 +8469,34 @@ fn parse_macro_match_bt_3(p: &mut Parser) -> Result<MacroMatchNode, ParseError> 
         rparen,
         macro_rep_sep,
         macro_rep_op,
+    }));
+}
+
+fn parse_macro_match_bt_2(p: &mut Parser) -> Result<MacroMatchNode, ParseError> {
+    let start = p.peek().span.start;
+    let dollar = p.expect(TK_DOLLAR, "DOLLAR")?;
+    let mut group_0_inner: Option<MacroMatchGroup0> = null;
+    let grp_kind = p.peek_kind();
+    if grp_kind matches { TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES } {
+        let identifier = parse_identifier(p)?;
+        group_0_inner = Option::<MacroMatchGroup0>::Some(MacroMatchGroup0::Alt0(MacroMatchGroup0Alt0 {
+            identifier,
+        }));
+    } else if grp_kind == TK_KW_SELFVALUE {
+        let kw_selfvalue = p.expect(TK_KW_SELFVALUE, "KW_SELFVALUE")?;
+        group_0_inner = Option::<MacroMatchGroup0>::Some(MacroMatchGroup0::Alt1(MacroMatchGroup0Alt1 {
+            kw_selfvalue,
+        }));
+    }
+    let group_0 = group_0_inner;
+    let colon = p.expect(TK_COLON, "COLON")?;
+    let macro_frag_spec = parse_macro_frag_spec(p)?;
+    return Result::<MacroMatchNode, ParseError>::Ok(MacroMatchNode::Alt2(MacroMatchAlt2 {
+        span: Span::new(start, p.last_end()),
+        dollar,
+        group_0,
+        colon,
+        macro_frag_spec,
     }));
 }
 
@@ -15513,17 +15513,6 @@ fn parse_path_ident_segment(p: &mut Parser) -> Result<PathIdentSegmentNode, Pars
     ));
 }
 
-fn parse_generic_args_bt_0(p: &mut Parser) -> Result<GenericArgsNode, ParseError> {
-    let start = p.peek().span.start;
-    let lt = p.expect(TK_LT, "LT")?;
-    let gt = p.expect(TK_GT, "GT")?;
-    return Result::<GenericArgsNode, ParseError>::Ok(GenericArgsNode::Alt0(GenericArgsAlt0 {
-        span: Span::new(start, p.last_end()),
-        lt,
-        gt,
-    }));
-}
-
 fn parse_generic_args_bt_1(p: &mut Parser) -> Result<GenericArgsNode, ParseError> {
     let start = p.peek().span.start;
     let lt = p.expect(TK_LT, "LT")?;
@@ -15631,17 +15620,22 @@ fn parse_generic_args_bt_3(p: &mut Parser) -> Result<GenericArgsNode, ParseError
     }));
 }
 
+fn parse_generic_args_bt_0(p: &mut Parser) -> Result<GenericArgsNode, ParseError> {
+    let start = p.peek().span.start;
+    let lt = p.expect(TK_LT, "LT")?;
+    let gt = p.expect(TK_GT, "GT")?;
+    return Result::<GenericArgsNode, ParseError>::Ok(GenericArgsNode::Alt0(GenericArgsAlt0 {
+        span: Span::new(start, p.last_end()),
+        lt,
+        gt,
+    }));
+}
+
 fn parse_generic_args(p: &mut Parser) -> Result<GenericArgsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LT {
         let saved = p.pos;
-        let r_0 = parse_generic_args_bt_0(p);
-        if let Err(_) = r_0 {
-            p.pos = saved;
-        } else {
-            return r_0;
-        }
         let r_1 = parse_generic_args_bt_1(p);
         if let Err(_) = r_1 {
             p.pos = saved;
@@ -15654,7 +15648,13 @@ fn parse_generic_args(p: &mut Parser) -> Result<GenericArgsNode, ParseError> {
         } else {
             return r_2;
         }
-        return parse_generic_args_bt_3(p);
+        let r_3 = parse_generic_args_bt_3(p);
+        if let Err(_) = r_3 {
+            p.pos = saved;
+        } else {
+            return r_3;
+        }
+        return parse_generic_args_bt_0(p);
     }
     return Result::<GenericArgsNode, ParseError>::Err(ParseError::new(
         "expected genericArgs",

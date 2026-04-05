@@ -12021,46 +12021,6 @@ fn parse_if_statement(p: &mut Parser) -> Result<IfStatementNode, ParseError> {
     });
 }
 
-fn parse_iteration_statement_bt_2(p: &mut Parser) -> Result<IterationStatementNode, ParseError> {
-    let start = p.peek().span.start;
-    let for_ = p.expect(TK_For, "For")?;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
-    let expression_sequence: Option<ExpressionSequenceNode> = if p.peek_kind() matches { TK_Async | TK_Function_ | TK_Identifier | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_BinaryIntegerLiteral | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PLUSPLUS | TK_LIT_MINUSMINUS | TK_LIT_PLUS | TK_LIT_MINUS | TK_LIT_TILDE | TK_LIT_BANG | TK_LIT_LBRACE | TK_YieldStar | TK_BackTick | TK_RegularExpressionLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BigBinaryIntegerLiteral | TK_LIT_LT } {
-        let expression_sequence = parse_expression_sequence(p)?;
-        Option::<ExpressionSequenceNode>::Some(expression_sequence)
-    } else {
-        null
-    };
-    let semicolon = p.expect(TK_SemiColon, "SemiColon")?;
-    let expression_sequence_2: Option<ExpressionSequenceNode> = if p.peek_kind() matches { TK_Async | TK_Function_ | TK_Identifier | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_BinaryIntegerLiteral | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PLUSPLUS | TK_LIT_MINUSMINUS | TK_LIT_PLUS | TK_LIT_MINUS | TK_LIT_TILDE | TK_LIT_BANG | TK_LIT_LBRACE | TK_YieldStar | TK_BackTick | TK_RegularExpressionLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BigBinaryIntegerLiteral | TK_LIT_LT } {
-        let expression_sequence = parse_expression_sequence(p)?;
-        Option::<ExpressionSequenceNode>::Some(expression_sequence)
-    } else {
-        null
-    };
-    let semicolon_2 = p.expect(TK_SemiColon, "SemiColon")?;
-    let expression_sequence_3: Option<ExpressionSequenceNode> = if p.peek_kind() matches { TK_Async | TK_Function_ | TK_Identifier | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_BinaryIntegerLiteral | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PLUSPLUS | TK_LIT_MINUSMINUS | TK_LIT_PLUS | TK_LIT_MINUS | TK_LIT_TILDE | TK_LIT_BANG | TK_LIT_LBRACE | TK_YieldStar | TK_BackTick | TK_RegularExpressionLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BigBinaryIntegerLiteral | TK_LIT_LT } {
-        let expression_sequence = parse_expression_sequence(p)?;
-        Option::<ExpressionSequenceNode>::Some(expression_sequence)
-    } else {
-        null
-    };
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    let statement = parse_statement(p)?;
-    return Result::<IterationStatementNode, ParseError>::Ok(IterationStatementNode::ForStatement(IterationStatementForStatement {
-        span: Span::new(start, p.last_end()),
-        for_,
-        lparen,
-        expression_sequence,
-        semicolon,
-        expression_sequence_2,
-        semicolon_2,
-        expression_sequence_3,
-        rparen,
-        statement,
-    }));
-}
-
 fn parse_iteration_statement_bt_3(p: &mut Parser) -> Result<IterationStatementNode, ParseError> {
     let start = p.peek().span.start;
     let for_ = p.expect(TK_For, "For")?;
@@ -12093,90 +12053,6 @@ fn parse_iteration_statement_bt_3(p: &mut Parser) -> Result<IterationStatementNo
         expression_sequence,
         semicolon_2,
         expression_sequence_2,
-        rparen,
-        statement,
-    }));
-}
-
-fn parse_iteration_statement_bt_4(p: &mut Parser) -> Result<IterationStatementNode, ParseError> {
-    let start = p.peek().span.start;
-    let for_ = p.expect(TK_For, "For")?;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
-    let single_expression = parse_single_expression(p)?;
-    let in_ = p.expect(TK_In, "In")?;
-    let expression_sequence = parse_expression_sequence(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    let statement = parse_statement(p)?;
-    return Result::<IterationStatementNode, ParseError>::Ok(IterationStatementNode::ForInStatement(IterationStatementForInStatement {
-        span: Span::new(start, p.last_end()),
-        for_,
-        lparen,
-        single_expression,
-        in_,
-        expression_sequence,
-        rparen,
-        statement,
-    }));
-}
-
-fn parse_iteration_statement_bt_5(p: &mut Parser) -> Result<IterationStatementNode, ParseError> {
-    let start = p.peek().span.start;
-    let for_ = p.expect(TK_For, "For")?;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
-    let var_modifier = parse_var_modifier(p)?;
-    let variable_declaration = parse_variable_declaration(p)?;
-    let in_ = p.expect(TK_In, "In")?;
-    let expression_sequence = parse_expression_sequence(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    let statement = parse_statement(p)?;
-    return Result::<IterationStatementNode, ParseError>::Ok(IterationStatementNode::ForVarInStatement(IterationStatementForVarInStatement {
-        span: Span::new(start, p.last_end()),
-        for_,
-        lparen,
-        var_modifier,
-        variable_declaration,
-        in_,
-        expression_sequence,
-        rparen,
-        statement,
-    }));
-}
-
-fn parse_iteration_statement_bt_6(p: &mut Parser) -> Result<IterationStatementNode, ParseError> {
-    let start = p.peek().span.start;
-    let for_ = p.expect(TK_For, "For")?;
-    let await: Option<Token> = if p.peek_kind() == TK_Await {
-        let await = p.expect(TK_Await, "Await")?;
-        Option::<Token>::Some(await)
-    } else {
-        null
-    };
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
-    let single_expression = parse_single_expression(p)?;
-    let identifier = parse_identifier(p)?;
-    let expression_sequence = parse_expression_sequence(p)?;
-    let as__type_: Option<AsTypeItem> = if p.peek_kind() == TK_As {
-        let as_ = p.expect(TK_As, "As")?;
-        let type_ = parse_type_(p)?;
-        let as__type_ = AsTypeItem {
-            as_,
-            type_,
-        };
-        Option::<AsTypeItem>::Some(as__type_)
-    } else {
-        null
-    };
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    let statement = parse_statement(p)?;
-    return Result::<IterationStatementNode, ParseError>::Ok(IterationStatementNode::ForOfStatement(IterationStatementForOfStatement {
-        span: Span::new(start, p.last_end()),
-        for_,
-        await,
-        lparen,
-        single_expression,
-        identifier,
-        expression_sequence,
-        as__type_,
         rparen,
         statement,
     }));
@@ -12224,6 +12100,130 @@ fn parse_iteration_statement_bt_7(p: &mut Parser) -> Result<IterationStatementNo
     }));
 }
 
+fn parse_iteration_statement_bt_6(p: &mut Parser) -> Result<IterationStatementNode, ParseError> {
+    let start = p.peek().span.start;
+    let for_ = p.expect(TK_For, "For")?;
+    let await: Option<Token> = if p.peek_kind() == TK_Await {
+        let await = p.expect(TK_Await, "Await")?;
+        Option::<Token>::Some(await)
+    } else {
+        null
+    };
+    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    let single_expression = parse_single_expression(p)?;
+    let identifier = parse_identifier(p)?;
+    let expression_sequence = parse_expression_sequence(p)?;
+    let as__type_: Option<AsTypeItem> = if p.peek_kind() == TK_As {
+        let as_ = p.expect(TK_As, "As")?;
+        let type_ = parse_type_(p)?;
+        let as__type_ = AsTypeItem {
+            as_,
+            type_,
+        };
+        Option::<AsTypeItem>::Some(as__type_)
+    } else {
+        null
+    };
+    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let statement = parse_statement(p)?;
+    return Result::<IterationStatementNode, ParseError>::Ok(IterationStatementNode::ForOfStatement(IterationStatementForOfStatement {
+        span: Span::new(start, p.last_end()),
+        for_,
+        await,
+        lparen,
+        single_expression,
+        identifier,
+        expression_sequence,
+        as__type_,
+        rparen,
+        statement,
+    }));
+}
+
+fn parse_iteration_statement_bt_2(p: &mut Parser) -> Result<IterationStatementNode, ParseError> {
+    let start = p.peek().span.start;
+    let for_ = p.expect(TK_For, "For")?;
+    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    let expression_sequence: Option<ExpressionSequenceNode> = if p.peek_kind() matches { TK_Async | TK_Function_ | TK_Identifier | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_BinaryIntegerLiteral | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PLUSPLUS | TK_LIT_MINUSMINUS | TK_LIT_PLUS | TK_LIT_MINUS | TK_LIT_TILDE | TK_LIT_BANG | TK_LIT_LBRACE | TK_YieldStar | TK_BackTick | TK_RegularExpressionLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BigBinaryIntegerLiteral | TK_LIT_LT } {
+        let expression_sequence = parse_expression_sequence(p)?;
+        Option::<ExpressionSequenceNode>::Some(expression_sequence)
+    } else {
+        null
+    };
+    let semicolon = p.expect(TK_SemiColon, "SemiColon")?;
+    let expression_sequence_2: Option<ExpressionSequenceNode> = if p.peek_kind() matches { TK_Async | TK_Function_ | TK_Identifier | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_BinaryIntegerLiteral | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PLUSPLUS | TK_LIT_MINUSMINUS | TK_LIT_PLUS | TK_LIT_MINUS | TK_LIT_TILDE | TK_LIT_BANG | TK_LIT_LBRACE | TK_YieldStar | TK_BackTick | TK_RegularExpressionLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BigBinaryIntegerLiteral | TK_LIT_LT } {
+        let expression_sequence = parse_expression_sequence(p)?;
+        Option::<ExpressionSequenceNode>::Some(expression_sequence)
+    } else {
+        null
+    };
+    let semicolon_2 = p.expect(TK_SemiColon, "SemiColon")?;
+    let expression_sequence_3: Option<ExpressionSequenceNode> = if p.peek_kind() matches { TK_Async | TK_Function_ | TK_Identifier | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_BinaryIntegerLiteral | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PLUSPLUS | TK_LIT_MINUSMINUS | TK_LIT_PLUS | TK_LIT_MINUS | TK_LIT_TILDE | TK_LIT_BANG | TK_LIT_LBRACE | TK_YieldStar | TK_BackTick | TK_RegularExpressionLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BigBinaryIntegerLiteral | TK_LIT_LT } {
+        let expression_sequence = parse_expression_sequence(p)?;
+        Option::<ExpressionSequenceNode>::Some(expression_sequence)
+    } else {
+        null
+    };
+    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let statement = parse_statement(p)?;
+    return Result::<IterationStatementNode, ParseError>::Ok(IterationStatementNode::ForStatement(IterationStatementForStatement {
+        span: Span::new(start, p.last_end()),
+        for_,
+        lparen,
+        expression_sequence,
+        semicolon,
+        expression_sequence_2,
+        semicolon_2,
+        expression_sequence_3,
+        rparen,
+        statement,
+    }));
+}
+
+fn parse_iteration_statement_bt_5(p: &mut Parser) -> Result<IterationStatementNode, ParseError> {
+    let start = p.peek().span.start;
+    let for_ = p.expect(TK_For, "For")?;
+    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    let var_modifier = parse_var_modifier(p)?;
+    let variable_declaration = parse_variable_declaration(p)?;
+    let in_ = p.expect(TK_In, "In")?;
+    let expression_sequence = parse_expression_sequence(p)?;
+    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let statement = parse_statement(p)?;
+    return Result::<IterationStatementNode, ParseError>::Ok(IterationStatementNode::ForVarInStatement(IterationStatementForVarInStatement {
+        span: Span::new(start, p.last_end()),
+        for_,
+        lparen,
+        var_modifier,
+        variable_declaration,
+        in_,
+        expression_sequence,
+        rparen,
+        statement,
+    }));
+}
+
+fn parse_iteration_statement_bt_4(p: &mut Parser) -> Result<IterationStatementNode, ParseError> {
+    let start = p.peek().span.start;
+    let for_ = p.expect(TK_For, "For")?;
+    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    let single_expression = parse_single_expression(p)?;
+    let in_ = p.expect(TK_In, "In")?;
+    let expression_sequence = parse_expression_sequence(p)?;
+    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let statement = parse_statement(p)?;
+    return Result::<IterationStatementNode, ParseError>::Ok(IterationStatementNode::ForInStatement(IterationStatementForInStatement {
+        span: Span::new(start, p.last_end()),
+        for_,
+        lparen,
+        single_expression,
+        in_,
+        expression_sequence,
+        rparen,
+        statement,
+    }));
+}
+
 fn parse_iteration_statement(p: &mut Parser) -> Result<IterationStatementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
@@ -12263,29 +12263,17 @@ fn parse_iteration_statement(p: &mut Parser) -> Result<IterationStatementNode, P
     }
     if kind == TK_For {
         let saved = p.pos;
-        let r_2 = parse_iteration_statement_bt_2(p);
-        if let Err(_) = r_2 {
-            p.pos = saved;
-        } else {
-            return r_2;
-        }
         let r_3 = parse_iteration_statement_bt_3(p);
         if let Err(_) = r_3 {
             p.pos = saved;
         } else {
             return r_3;
         }
-        let r_4 = parse_iteration_statement_bt_4(p);
-        if let Err(_) = r_4 {
+        let r_7 = parse_iteration_statement_bt_7(p);
+        if let Err(_) = r_7 {
             p.pos = saved;
         } else {
-            return r_4;
-        }
-        let r_5 = parse_iteration_statement_bt_5(p);
-        if let Err(_) = r_5 {
-            p.pos = saved;
-        } else {
-            return r_5;
+            return r_7;
         }
         let r_6 = parse_iteration_statement_bt_6(p);
         if let Err(_) = r_6 {
@@ -12293,7 +12281,19 @@ fn parse_iteration_statement(p: &mut Parser) -> Result<IterationStatementNode, P
         } else {
             return r_6;
         }
-        return parse_iteration_statement_bt_7(p);
+        let r_2 = parse_iteration_statement_bt_2(p);
+        if let Err(_) = r_2 {
+            p.pos = saved;
+        } else {
+            return r_2;
+        }
+        let r_5 = parse_iteration_statement_bt_5(p);
+        if let Err(_) = r_5 {
+            p.pos = saved;
+        } else {
+            return r_5;
+        }
+        return parse_iteration_statement_bt_4(p);
     }
     return Result::<IterationStatementNode, ParseError>::Err(ParseError::new(
         "expected iterationStatement",
@@ -14153,14 +14153,16 @@ fn parse_single_expression_bt_7(p: &mut Parser) -> Result<SingleExpressionNode, 
     }));
 }
 
-fn parse_single_expression_bt_11(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
+fn parse_single_expression_bt_49(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
-    let delete = p.expect(TK_Delete, "Delete")?;
-    let single_expression = parse_single_expression(p)?;
-    return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::DeleteExpression(SingleExpressionDeleteExpression {
+    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    let expression_sequence = parse_expression_sequence(p)?;
+    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::ParenthesizedExpression(SingleExpressionParenthesizedExpression {
         span: Span::new(start, p.last_end()),
-        delete,
-        single_expression,
+        lparen,
+        expression_sequence,
+        rparen,
     }));
 }
 
@@ -14197,16 +14199,14 @@ fn parse_single_expression_bt_20(p: &mut Parser) -> Result<SingleExpressionNode,
     }));
 }
 
-fn parse_single_expression_bt_49(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
+fn parse_single_expression_bt_11(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
-    let expression_sequence = parse_expression_sequence(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
-    return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::ParenthesizedExpression(SingleExpressionParenthesizedExpression {
+    let delete = p.expect(TK_Delete, "Delete")?;
+    let single_expression = parse_single_expression(p)?;
+    return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::DeleteExpression(SingleExpressionDeleteExpression {
         span: Span::new(start, p.last_end()),
-        lparen,
-        expression_sequence,
-        rparen,
+        delete,
+        single_expression,
     }));
 }
 
@@ -14319,7 +14319,7 @@ fn parse_single_expression_bt_48(p: &mut Parser) -> Result<SingleExpressionNode,
 fn parse_single_expression_atom(p: &mut Parser) -> Result<SingleExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind matches { TK_Class | TK_New | TK_Delete | TK_Void | TK_Typeof | TK_Await | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_Async | TK_Function_ | TK_Yield | TK_YieldStar | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral | TK_BackTick | TK_RegularExpressionLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_BinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BigBinaryIntegerLiteral | TK_Identifier | TK_As | TK_From | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Case | TK_Else | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_In | TK_Try | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_ReadOnly | TK_Require | TK_Module } {
+    if kind matches { TK_Class | TK_New | TK_LIT_LPAREN | TK_Void | TK_Typeof | TK_Await | TK_Delete | TK_LIT_LBRACKET | TK_Async | TK_Function_ | TK_Yield | TK_YieldStar | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral | TK_BackTick | TK_RegularExpressionLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_BinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BigBinaryIntegerLiteral | TK_Identifier | TK_As | TK_From | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Case | TK_Else | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_In | TK_Try | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_ReadOnly | TK_Require | TK_Module } {
         if p.peek_kind() == TK_Class {
             let saved = p.pos;
             let r_1 = parse_single_expression_bt_1(p);
@@ -14811,9 +14811,13 @@ fn parse_single_expression_lr_25(p: &mut Parser, left: SingleExpressionNode, sta
                 let _bt_r_2 = p.expect(TK_LIT_GT, "'>'");
                 if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
                 let gt_2 = _bt_r_2.unwrap();
-                group_0_inner = Option::<SingleExpressionGroup0>::Some(SingleExpressionGroup0::Alt1(SingleExpressionGroup0Alt1 {
+                let _bt_r_3 = p.expect(TK_LIT_GT, "'>'");
+                if let Err(_) = _bt_r_3 { p.pos = saved_pos; break bt_try; }
+                let gt_3 = _bt_r_3.unwrap();
+                group_0_inner = Option::<SingleExpressionGroup0>::Some(SingleExpressionGroup0::Alt2(SingleExpressionGroup0Alt2 {
                     gt,
                     gt_2,
+                    gt_3,
                 }));
                 bt_done = true;
             }
@@ -14821,11 +14825,9 @@ fn parse_single_expression_lr_25(p: &mut Parser, left: SingleExpressionNode, sta
         if !bt_done {
             let gt = p.expect(TK_LIT_GT, "'>'")?;
             let gt_2 = p.expect(TK_LIT_GT, "'>'")?;
-            let gt_3 = p.expect(TK_LIT_GT, "'>'")?;
-            group_0_inner = Option::<SingleExpressionGroup0>::Some(SingleExpressionGroup0::Alt2(SingleExpressionGroup0Alt2 {
+            group_0_inner = Option::<SingleExpressionGroup0>::Some(SingleExpressionGroup0::Alt1(SingleExpressionGroup0Alt1 {
                 gt,
                 gt_2,
-                gt_3,
             }));
         }
     }
@@ -14940,7 +14942,7 @@ fn parse_single_expression_lr_34(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_35(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let lit__ = p.expect(TK_LIT__, "'?'")?;
-    let single_expression_2 = parse_single_expression_prec(p, 25)?;
+    let single_expression_2 = parse_single_expression_prec(p, 0)?;
     let colon = p.expect(TK_LIT_COLON, "':'")?;
     let single_expression_3 = parse_single_expression_prec(p, 25)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::TernaryExpression(SingleExpressionTernaryExpression {

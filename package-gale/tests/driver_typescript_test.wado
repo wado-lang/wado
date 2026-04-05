@@ -276,3 +276,17 @@ test "parse comma expression" {
         panic(`parse failed: {e.message}`);
     }
 }
+
+test "parse unsigned right shift" {
+    let result = ts::parse(&"= 1 >>> 2");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse nested ternary" {
+    let result = ts::parse(&"= 1 ? 2 ? 3 : 4 : 5");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}

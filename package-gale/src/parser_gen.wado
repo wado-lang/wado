@@ -3191,12 +3191,26 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
 
         ctx.group_counter = ctx.alt_gc_starts[lr_idx];
         let gc_lr = ctx.group_counter;
+
+        // Find the last self-recursive element index in the suffix.
+        // Non-final self-refs use min_prec 0 (delimited by following fixed tokens).
+        // Only the final self-ref uses inner_min_prec.
+        let mut last_self_ref_idx = -1;
+        for let mut ei2 = 1; ei2 < alt.elements.len(); ei2 += 1 {
+            if let RuleRef(name2) = &alt.elements[ei2] {
+                if *name2 == rule.name {
+                    last_self_ref_idx = ei2;
+                }
+            }
+        }
+
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
             if let RuleRef(name) = elem {
                 if *name == rule.name {
                     let field_name = dedup_name(&escape_ident(&to_snake_case(name)), &mut name_counts);
-                    w.line(`let {field_name} = {prec_fn}(p, {inner_min_prec})?;`);
+                    let prec = if ei == last_self_ref_idx { inner_min_prec } else { 0 };
+                    w.line(`let {field_name} = {prec_fn}(p, {prec})?;`);
                 } else {
                     let elem_fn = `parse_{to_snake_case(name)}`;
                     let field_name = dedup_name(&escape_ident(&to_snake_case(name)), &mut name_counts);
@@ -3931,8 +3945,8 @@ fn sort_group_by_element_count(group: &mut Array<i32>, alts: &Array<Alternative>
             let mut swap = false;
             if pj > pi {
                 swap = true;
-            } else if pj == pi && pi == 2 {
-                // Within multi-element tier: more elements = more specific = first
+            } else if pj == pi {
+                // Within same-priority tier: more elements = more specific = first
                 if alts[group[j]].elements.len() > alts[group[i]].elements.len() {
                     swap = true;
                 }
