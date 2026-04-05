@@ -182,6 +182,9 @@ mkdir -p package-gale/tests/golden
 ./target/debug/wado run package-gale/src/main.wado \
     gen --highlight "package-gale/tests/grammars/JSON.g4" \
     > "package-gale/tests/golden/json_highlight.wado"
+./target/debug/wado run package-gale/src/main.wado \
+    gen --highlight "package-gale/tests/grammars/SQLite.g4" \
+    > "package-gale/tests/golden/sqlite_highlight.wado"
 """
 
 [tasks.update-golden-format-fixtures]
@@ -348,6 +351,10 @@ run = "mise run -C benchmark json-catalog"
 [tasks.benchmark-sqlite-parse]
 description = "Run sqlite-parse benchmark"
 run = "mise run -C benchmark sqlite-parse"
+
+[tasks.benchmark-syntax-highlight]
+description = "Run syntax-highlight benchmark"
+run = "mise run -C benchmark syntax-highlight"
 
 [tasks.report-wasm-size]
 description = "Build all languages and report Wasm sizes"

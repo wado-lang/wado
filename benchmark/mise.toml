@@ -225,6 +225,22 @@ echo "=== Wado (Gale) ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. sqlite_parse/sqlite_parse.wado
 """
 
+[tasks.syntax-highlight]
+description = "Run syntax-highlight benchmark (Gale highlighter vs tree-sitter)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling tree-sitter benchmark ==="
+cargo build --release --manifest-path syntax_highlight/Cargo.toml --quiet
+
+echo "=== tree-sitter (native) ==="
+./syntax_highlight/target/release/syntax_highlight_bench
+
+echo "=== Wado (Gale) ==="
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. syntax_highlight/syntax_highlight.wado
+"""
+
 [tasks.all]
 description = "Run all benchmarks serially"
 run = """
@@ -239,6 +255,7 @@ MISE_JOBS=1 mise run json-twitter
 MISE_JOBS=1 mise run json-canada
 MISE_JOBS=1 mise run json-catalog
 MISE_JOBS=1 mise run sqlite-parse
+MISE_JOBS=1 mise run syntax-highlight
 """
 
 [tasks.clean]
@@ -247,5 +264,5 @@ run = """
 rm -f count_prime/*.wasm mandelbrot/*.wasm sieve/*.wasm zlib/zlib_c.wasm
 rm -f count_prime/count_prime_c mandelbrot/mandelbrot_c sieve/sieve_c
 rm -f fts/fts_c fts/fts_rs fts/fts_zig fts/fts_zig.o
-rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target
+rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target syntax_highlight/target
 """

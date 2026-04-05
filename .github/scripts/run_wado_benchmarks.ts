@@ -51,6 +51,9 @@ for (const opt of OPT_LEVELS) {
 
   output = runBench('benchmark/sqlite_parse/sqlite_parse.wado', opt, ['--dir', '.::.']);
   benchmarks.push({ name: `sqlite_parse (${label})`, unit: 'ms', value: parseMs(output) });
+
+  output = runBench('benchmark/syntax_highlight/syntax_highlight.wado', opt, ['--dir', '.::.']);
+  benchmarks.push({ name: `syntax_highlight (${label})`, unit: 'ms', value: parseMs(output) });
 }
 
 process.stdout.write(JSON.stringify(benchmarks, null, 2) + '\n');

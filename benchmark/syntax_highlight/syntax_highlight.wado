@@ -1,0 +1,55 @@
+// Syntax highlight benchmark: Gale-generated highlighter (from SQLite.g4)
+//
+// Highlights a collection of realistic SQLite statements repeatedly and measures throughput.
+// Comparison baseline: tree-sitter with tree-sitter-sql grammar.
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use sqlite from "../../package-gale/tests/golden/sqlite_highlight.wado";
+
+fn read_file(path: String) -> String with Preopens {
+    let dirs = Preopens::get_directories();
+    let root = dirs[0].0;
+    let file = match root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read) {
+        Ok(f) => f,
+        Err(_) => panic(`failed to open {path}`),
+    };
+    let [stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut buf = String::with_capacity(64 * 1024);
+    loop {
+        let chunk = stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        let start = buf.internal_reserve_uninit(chunk.len());
+        for let mut i = 0; i < chunk.len(); i += 1 {
+            buf.set_byte(start + i, chunk[i]);
+        }
+    }
+    stream.drop();
+    return buf;
+}
+
+export fn run() with Stdout, MonotonicClock, Preopens {
+    let sql = read_file("benchmark/sqlite_parse/queries.sql");
+    let iterations = 100;
+    println(`syntax-highlight (Gale): {sql.len()} bytes, {iterations} iterations`);
+
+    // Warm up
+    let warmup = sqlite::highlight(&sql);
+    assert warmup.len() > 0;
+
+    let start = MonotonicClock::now();
+    for let mut i = 0; i < iterations; i += 1 {
+        let html = sqlite::highlight(&sql);
+        assert html.len() > 0;
+    }
+    let end = MonotonicClock::now();
+    let elapsed_ns = (end - start) as u64;
+    let elapsed_us = elapsed_ns / 1000;
+    let per_iter_us = elapsed_us / iterations as u64;
+
+    println(`Elapsed: {elapsed_us / 1000}.{elapsed_us % 1000} ms ({iterations} iterations)`);
+    println(`Per iteration: {per_iter_us}.{elapsed_us * 1000 / iterations as u64 % 1000} us`);
+}

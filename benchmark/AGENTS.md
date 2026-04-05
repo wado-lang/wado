@@ -20,8 +20,10 @@ mise run zlib          # compression (zlib-rs native vs Wado)
 mise run fts           # float-to-string conversion
 mise run json-twitter  # JSON deserialization (twitter.json)
 mise run json-canada   # JSON deserialization (canada.json)
-mise run json-catalog  # JSON deserialization (citm_catalog.json)
-mise run clean         # remove build artifacts
+mise run json-catalog       # JSON deserialization (citm_catalog.json)
+mise run sqlite-parse       # SQLite parsing (Gale vs sqlparser-rs)
+mise run syntax-highlight   # syntax highlighting (Gale vs tree-sitter)
+mise run clean              # remove build artifacts
 ```
 
 ## Profiling
