@@ -1144,9 +1144,7 @@ fn transform_lb_stmt(
         let last_terminates = out.last().is_some_and(|s| {
             matches!(
                 s.kind,
-                TirStmtKind::Break { .. }
-                    | TirStmtKind::Return { .. }
-                    | TirStmtKind::Continue
+                TirStmtKind::Break { .. } | TirStmtKind::Return { .. } | TirStmtKind::Continue
             )
         });
         if !last_terminates {

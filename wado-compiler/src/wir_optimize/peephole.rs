@@ -205,29 +205,30 @@ fn eliminate_const_if(instr: &mut WirInstr) {
                 else_body,
                 result,
             } = instr
-                && let Some(const_val) = try_fold_wir_to_bool(condition) {
-                    if const_val {
-                        let then_instrs = std::mem::take(then_body);
-                        *instr = WirInstr::Block {
-                            label: None,
-                            result: result.clone(),
-                            body: then_instrs,
-                        };
-                    } else if let Some(eb) = else_body {
-                        let else_instrs = std::mem::take(eb);
-                        *instr = WirInstr::Block {
-                            label: None,
-                            result: result.clone(),
-                            body: else_instrs,
-                        };
-                    } else {
-                        *instr = WirInstr::Block {
-                            label: None,
-                            result: None,
-                            body: vec![WirInstr::Nop],
-                        };
-                    }
+                && let Some(const_val) = try_fold_wir_to_bool(condition)
+            {
+                if const_val {
+                    let then_instrs = std::mem::take(then_body);
+                    *instr = WirInstr::Block {
+                        label: None,
+                        result: result.clone(),
+                        body: then_instrs,
+                    };
+                } else if let Some(eb) = else_body {
+                    let else_instrs = std::mem::take(eb);
+                    *instr = WirInstr::Block {
+                        label: None,
+                        result: result.clone(),
+                        body: else_instrs,
+                    };
+                } else {
+                    *instr = WirInstr::Block {
+                        label: None,
+                        result: None,
+                        body: vec![WirInstr::Nop],
+                    };
                 }
+            }
         }
     }
     ElimConstIf.visit_instr(instr);
