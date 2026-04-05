@@ -25,7 +25,7 @@ pub(super) enum TypeCheckResult {
 /// Pure type compatibility check. Does NOT emit errors.
 ///
 /// Rules (in order):
-/// 1. Identity: same TypeId -> Compatible
+/// 1. Identity: same `TypeId` -> Compatible
 /// 2. Bottom/Top/Error: UNKNOWN, ERROR -> Deferred; NEVER -> Compatible
 /// 3. Type params: unresolved generics -> Deferred
 /// 4. References: &T->non-ref, &T->&mut T -> Incompatible; &mut T->&T -> Compatible
@@ -108,16 +108,14 @@ pub(super) fn check_assignable(
     if (actual_is_newtype || expected_is_newtype) && actual_inner != expected_inner {
         return TypeCheckResult::Incompatible;
     }
-    if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner) {
-        if *base_type == expected_inner {
+    if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner)
+        && *base_type == expected_inner {
             return TypeCheckResult::Incompatible;
         }
-    }
-    if let ResolvedType::Newtype { base_type, .. } = type_table.get(expected_inner) {
-        if *base_type == actual_inner {
+    if let ResolvedType::Newtype { base_type, .. } = type_table.get(expected_inner)
+        && *base_type == actual_inner {
             return TypeCheckResult::Incompatible;
         }
-    }
 
     // Rule 6: Option compatibility
     let actual_option = type_table.as_option(actual);
@@ -151,8 +149,7 @@ pub(super) fn check_assignable(
         type_args: actual_args,
         ..
     } = type_table.get(actual_inner)
-    {
-        if let ResolvedType::GenericInstance {
+        && let ResolvedType::GenericInstance {
             name: expected_name,
             type_args: expected_args,
             ..
@@ -173,7 +170,6 @@ pub(super) fn check_assignable(
             }
             return TypeCheckResult::Compatible;
         }
-    }
 
     // Rule 9: General catch-all -- different concrete types
     if actual_inner != expected_inner {
@@ -183,7 +179,7 @@ pub(super) fn check_assignable(
     TypeCheckResult::Compatible
 }
 
-/// Unwrap one layer of Ref/MutRef, returning (inner_type, was_ref).
+/// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).
 fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
     match type_table.get(type_id) {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (*inner, true),
