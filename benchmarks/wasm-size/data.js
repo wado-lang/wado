@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775350415233,
+  "lastUpdate": 1775363208212,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10295,6 +10295,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 20408,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d51a81a75d2619374cbe532d8529e394992a583d",
+          "message": "Merge pull request #773 from wado-lang/claude/refactor-resolver-typecheck-r0BDP\n\nRefactor resolver type checking into centralized typecheck.rs",
+          "timestamp": "2026-04-05T13:23:53+09:00",
+          "tree_id": "285f969a5fff0d7c7be19e35d047417df533ba3f",
+          "url": "https://github.com/wado-lang/wado/commit/d51a81a75d2619374cbe532d8529e394992a583d"
+        },
+        "date": 1775363208141,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20402,
             "unit": "bytes"
           }
         ]
