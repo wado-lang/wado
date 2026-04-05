@@ -280,65 +280,6 @@ fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
     return out;
 }
 
-/// Produce a complete HTML page with tree-sitter-compatible styles.
-pub fn highlight_html_page(source: &String, captures: &Array<HighlightCapture>) -> String {
-    let inner = highlight_html(source, captures);
-    let mut out = String::with_capacity(inner.len() + 2048);
-    out.push_str("<!doctype HTML>\n<head>\n  <title>Tree-sitter Highlighting</title>\n  <style>\n");
-    out.push_str("    body {\n      font-family: monospace\n    }\n");
-    out.push_str("    .line-number {\n      user-select: none;\n      text-align: right;\n      color: rgba(27,31,35,.3);\n      padding: 0 10px;\n    }\n");
-    out.push_str("    .line {\n      white-space: pre;\n    }\n");
-    out.push_str("  </style>\n  <style>\n");
-    out.push_str("    .attribute { font-style: italic;color: #af0000; }\n");
-    out.push_str("    .comment { font-style: italic;color: #8a8a8a; }\n");
-    out.push_str("    .constant { color: #875f00; }\n");
-    out.push_str("    .constant.builtin { font-weight: bold;color: #875f00; }\n");
-    out.push_str("    .constructor { color: #af8700; }\n");
-    out.push_str("    .function { color: #005fd7; }\n");
-    out.push_str("    .function.builtin { font-weight: bold;color: #005fd7; }\n");
-    out.push_str("    .keyword { color: #5f00d7; }\n");
-    out.push_str("    .module { color: #af8700; }\n");
-    out.push_str("    .number { font-weight: bold;color: #875f00; }\n");
-    out.push_str("    .operator { font-weight: bold;color: #4e4e4e; }\n");
-    out.push_str("    .property { color: #af0000; }\n");
-    out.push_str("    .property.builtin { font-weight: bold;color: #af0000; }\n");
-    out.push_str("    .punctuation { color: #4e4e4e; }\n");
-    out.push_str("    .punctuation.bracket { color: #4e4e4e; }\n");
-    out.push_str("    .punctuation.delimiter { color: #4e4e4e; }\n");
-    out.push_str("    .punctuation.special { color: #4e4e4e; }\n");
-    out.push_str("    .string { color: #008700; }\n");
-    out.push_str("    .string.special { color: #008787; }\n");
-    out.push_str("    .tag { color: #000087; }\n");
-    out.push_str("    .type { color: #005f5f; }\n");
-    out.push_str("    .type.builtin { font-weight: bold;color: #005f5f; }\n");
-    out.push_str("    .variable { color: #d0d0d0; }\n");
-    out.push_str("    .variable.builtin { font-weight: bold;color: #d0d0d0; }\n");
-    out.push_str("    .variable.parameter { text-decoration: underline;color: #d0d0d0; }\n");
-    out.push_str("  </style>\n\n</head>\n<body>\n\n<table>\n");
-    let lines = split_lines(&inner);
-    for let mut i = 0; i < lines.len(); i += 1 {
-        let line_num = i + 1;
-        out.push_str(`<tr><td class=line-number>{line_num}</td><td class=line>{lines[i]}\n</td></tr>\n`);
-    }
-    out.push_str("</table>\n\n</body>\n");
-    return out;
-}
-
-fn split_lines(s: &String) -> Array<String> {
-    let mut result: Array<String> = [];
-    let mut current = String::with_capacity(128);
-    for let c of s.chars() {
-        if c == '\n' {
-            result.push(current);
-            current = String::with_capacity(128);
-        } else {
-            current.push_str(`{c}`);
-        }
-    }
-    result.push(current);
-    return result;
-}
-
 /// Visitor trait for walking typed CST nodes.
 /// Default methods are no-ops; override to add behavior.
 pub trait Visitor {
@@ -1314,7 +1255,7 @@ pub fn highlight(input: &String) -> String {
             visitor.visit_token(token);
         }
     }
-    return highlight_html_page(input, &visitor.captures);
+    return highlight_html(input, &visitor.captures);
 }
 
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
