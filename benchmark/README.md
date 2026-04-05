@@ -27,12 +27,12 @@ Environment: Wado 2026-04-03, wasmtime 42.0.1, gcc 13.3.0, rustc 1.94.1, Zig 0.1
 
 ### Compute
 
-| Benchmark              | Baseline        | Baseline (ms) | Wado (ms) | Relative |
-| ---------------------- | --------------- | ------------- | --------- | -------- |
-| Mandelbrot (1024x768)  | C (gcc -O3)     | 131           | 139       | 1.06x    |
-| Prime counting (10M)   | C (gcc -O3)     | 3,284         | 3,307     | 1.01x    |
-| Sieve (10M)            | C (gcc -O3)     | 53            | 81        | 1.53x    |
-| Float-to-string (500K) | Zig (RelFast)   | 25            | 43        | 1.72x    |
+| Benchmark              | Baseline      | Baseline (ms) | Wado (ms) | Relative |
+| ---------------------- | ------------- | ------------- | --------- | -------- |
+| Mandelbrot (1024x768)  | C (gcc -O3)   | 131           | 139       | 1.06x    |
+| Prime counting (10M)   | C (gcc -O3)   | 3,284         | 3,307     | 1.01x    |
+| Sieve (10M)            | C (gcc -O3)   | 53            | 81        | 1.53x    |
+| Float-to-string (500K) | Zig (RelFast) | 25            | 43        | 1.72x    |
 
 ### Compression (twitter.json 631KB x 10 iterations)
 
@@ -43,18 +43,18 @@ Environment: Wado 2026-04-03, wasmtime 42.0.1, gcc 13.3.0, rustc 1.94.1, Zig 0.1
 
 ### JSON Parsing (Wado `core:json` vs Rust `serde_json`)
 
-| Dataset          | Rust (native) | Wado (Wasm) | Relative |
-| ---------------- | ------------- | ----------- | -------- |
-| twitter (631KB)  | 0.789 ms      | 16.542 ms   | 20.96x   |
-| canada (2.3MB)   | 7.972 ms      | 68.244 ms   | 8.56x    |
-| catalog (1.7MB)  | 2.347 ms      | 36.112 ms   | 15.38x   |
+| Dataset         | Rust (native) | Wado (Wasm) | Relative |
+| --------------- | ------------- | ----------- | -------- |
+| twitter (631KB) | 0.789 ms      | 16.542 ms   | 20.96x   |
+| canada (2.3MB)  | 7.972 ms      | 68.244 ms   | 8.56x    |
+| catalog (1.7MB) | 2.347 ms      | 36.112 ms   | 15.38x   |
 
 ### Parser & Highlighter (13KB SQL, 81 statements x 100 iterations)
 
-| Benchmark         | Baseline (native)    | Baseline (ms) | Wado (ms) | Relative |
-| ----------------- | -------------------- | ------------- | --------- | -------- |
-| SQLite parse      | sqlparser-rs (Rust)  | 167           | 3,910     | 23.42x   |
-| Syntax highlight  | tree-sitter (Rust)   | 450           | 27,660    | 61.47x   |
+| Benchmark        | Baseline (native)   | Baseline (ms) | Wado (ms) | Relative |
+| ---------------- | ------------------- | ------------- | --------- | -------- |
+| SQLite parse     | sqlparser-rs (Rust) | 167           | 3,910     | 23.42x   |
+| Syntax highlight | tree-sitter (Rust)  | 450           | 27,660    | 61.47x   |
 
 ## Profiling
 
