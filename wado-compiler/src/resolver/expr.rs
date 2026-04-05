@@ -756,14 +756,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Some(struct_info) = self.lookup_struct_fields(&struct_name, &module_source) {
             for (fname, _, is_pub) in &struct_info.fields {
                 if fname == field_name && !is_pub {
-                    let _ = self.logger.error(TypeError::TypeMismatch {
-                        expected: format!(
-                            "accessible field (field `{field_name}` of struct `{struct_name}` is private)"
-                        ),
-                        found: format!(
-                            "private field access from module `{}`",
-                            self.current_module_source
-                        ),
+                    let _ = self.logger.error(TypeError::PrivateFieldAccess {
+                        struct_name: struct_name.clone(),
+                        field_name: field_name.to_string(),
                         span,
                     });
                     return;
@@ -1148,9 +1143,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Fallback: report error for unsupported indexing
-        let _ = self.logger.error(TypeError::TypeMismatch {
-            expected: "array or type implementing Index or IndexValue trait".to_string(),
-            found: self.type_table.borrow().type_name(expr.type_id),
+        let type_name = self.type_table.borrow().type_name(expr.type_id);
+        let _ = self.logger.error(TypeError::MissingTraitImpl {
+            type_name,
+            trait_name: "Index or IndexValue".to_string(),
             span: index.span,
         });
         TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span)
@@ -2154,14 +2150,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         {
             for (fname, _, is_pub) in &struct_info.fields {
                 if !is_pub && fields.iter().any(|f| f.name == *fname) {
-                    let _ = self.logger.error(TypeError::TypeMismatch {
-                            expected: format!(
-                                "accessible field (field `{fname}` of struct `{struct_name}` is private)"
-                            ),
-                            found: format!(
-                                "private field in struct literal from module `{}`",
-                                self.current_module_source
-                            ),
+                    let _ = self.logger.error(TypeError::PrivateFieldAccess {
+                            struct_name: struct_name.clone(),
+                            field_name: fname.clone(),
                             span: struct_lit.span,
                         });
                 }
@@ -2797,9 +2788,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         drop(tt);
 
         if !is_option && !is_result {
-            let _ = self.logger.error(TypeError::TypeMismatch {
-                expected: "Result or Option".to_string(),
-                found: format!("cannot use ? on type {type_name}"),
+            let _ = self.logger.error(TypeError::InvalidQuestionMark {
+                message: format!("cannot use ? on type {type_name}"),
                 span: qm.span,
             });
             return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
@@ -2816,24 +2806,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
         drop(tt);
 
         if is_option && !ret_is_option {
-            let _ = self.logger.error(TypeError::TypeMismatch {
-                expected: "Option".to_string(),
-                found: "cannot use ? on Option in a function returning Result".to_string(),
+            let _ = self.logger.error(TypeError::InvalidQuestionMark {
+                message: "cannot use ? on Option in a function returning Result".to_string(),
                 span: qm.span,
             });
             return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
         }
         if is_result && !ret_is_result {
             if ret_is_option {
-                let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: "Result".to_string(),
-                    found: "cannot use ? on Result in a function returning Option".to_string(),
+                let _ = self.logger.error(TypeError::InvalidQuestionMark {
+                    message: "cannot use ? on Result in a function returning Option".to_string(),
                     span: qm.span,
                 });
             } else {
-                let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: "Result or Option".to_string(),
-                    found: "? requires function to return Result or Option".to_string(),
+                let _ = self.logger.error(TypeError::InvalidQuestionMark {
+                    message: "? requires function to return Result or Option".to_string(),
                     span: qm.span,
                 });
             }

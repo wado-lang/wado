@@ -397,10 +397,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             )
         {
             let type_name = self.type_table.borrow().type_name(target_type);
-            let _ = self.logger.error(TypeError::TypeMismatch {
-                expected: type_name,
-                found: "anonymous struct literal (target type does not implement KeyValueLiteral)"
-                    .into(),
+            let _ = self.logger.error(TypeError::MissingTraitImpl {
+                type_name,
+                trait_name: "KeyValueLiteral".to_string(),
                 span: expr.span(),
             });
         }

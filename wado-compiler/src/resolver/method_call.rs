@@ -234,12 +234,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             info
         } else {
             let type_name = self.type_table.borrow().type_name(base_type_id);
-            let _ = self.logger.error(TypeError::TypeMismatch {
-                expected: format!(
-                    "type '{}' to have method '{}'",
-                    type_name, method_call.method
-                ),
-                found: format!("no method '{}' found", method_call.method),
+            let _ = self.logger.error(TypeError::MethodNotFound {
+                type_name,
+                method_name: method_call.method.clone(),
+                hint: String::new(),
                 span: method_call.span,
             });
             // Default to Unknown type for error recovery
@@ -341,12 +339,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // e.g., `obj.static_method()` should be `Type::static_method()` instead.
         if self_kind == ast::SelfKind::None {
             let type_name = self.type_table.borrow().type_name(base_type_id);
-            let _ = self.logger.error(TypeError::TypeMismatch {
-                expected: format!(
-                    "'{}' to be an instance method (with &self or &mut self)",
-                    method_call.method
-                ),
-                found: format!(
+            let _ = self.logger.error(TypeError::MethodNotFound {
+                type_name: type_name.clone(),
+                method_name: method_call.method.clone(),
+                hint: format!(
                     "'{}' is a static method; use {}::{}() instead",
                     method_call.method, type_name, method_call.method
                 ),

@@ -773,9 +773,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             && let Some(local) = ctx.lookup(name)
             && !local.is_mut
         {
-            let _ = self.logger.error(TypeError::TypeMismatch {
-                expected: "mutable variable".to_string(),
-                found: format!("immutable variable '{name}'"),
+            let _ = self.logger.error(TypeError::CannotAssign {
+                message: format!("cannot take &mut of immutable variable '{name}'"),
                 span: unary.span,
             });
         }
