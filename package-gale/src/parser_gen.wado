@@ -3346,13 +3346,15 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
     let mut shared_tokens: Array<String> = [];
     let mut shared_seen = TreeSet::<String>::new();
     for let mut k = 0; k < group.len(); k += 1 {
-        for let tk of suffix_first_sets[group[k]] {
-            if emitted.contains(tk) {
+        let sfs = &suffix_first_sets[group[k]];
+        for let mut ti = 0; ti < sfs.len(); ti += 1 {
+            let tk = &sfs[ti];
+            if emitted.contains(*tk) {
                 continue;
             }
-            if !shared_seen.contains(tk) {
-                shared_seen.insert(tk);
-                shared_tokens.push(tk);
+            if !shared_seen.contains(*tk) {
+                shared_seen.insert(*tk);
+                shared_tokens.push(*tk);
             }
         }
     }

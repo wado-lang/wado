@@ -15142,6 +15142,20 @@ fn parse_single_expression_prec(p: &mut Parser, min_prec: i32) -> Result<SingleE
                 } else {
                     break;
                 }
+            } else if suffix_kind == TK_LIT_GT {
+                if p.peek_at(1) == TK_LIT_GT {
+                    if 16 >= min_prec {
+                        result = parse_single_expression_lr_25(p, result, start)?;
+                    } else {
+                        break;
+                    }
+                } else {
+                    if 15 >= min_prec {
+                        result = parse_single_expression_lr_26(p, result, start)?;
+                    } else {
+                        break;
+                    }
+                }
             }
         } else if suffix_kind == TK_Instanceof {
             if 14 >= min_prec {

@@ -2,7 +2,8 @@
 ///
 /// The ANTLR4 grammar uses semantic predicates to distinguish TOKEN_REF
 /// from RULE_REF, so full parsing of real ANTLR4 input is not supported.
-/// These tests verify tokenization and that the generated parser compiles.
+/// These tests verify tokenization, basic parsing, and that the generated
+/// parser compiles.
 use antlr4 from "./golden/antlr4.wado";
 
 test "tokenize grammar declaration" {
@@ -54,4 +55,14 @@ test "tokenize labels" {
 test "tokenize lexer commands" {
     let tokens = antlr4::tokenize(&"WS : [ \\t\\n]+ -> skip ;");
     assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
+}
+
+// --- Parser tests ---
+
+test "parse minimal grammar" {
+    // ANTLR4 lexer produces ID tokens, but the parser expects RULE_REF/TOKEN_REF
+    // (distinguished by semantic predicates based on case). Without predicates,
+    // any input with identifiers fails to parse. Verify the error is sensible.
+    let result = antlr4::parse(&"grammar Foo;");
+    assert result matches { Err(_) }, "expected parse to fail due to missing semantic predicates";
 }

@@ -989,11 +989,18 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
 /// - **Tuple iterable**: unrolls the loop body once per element (compile-time expansion)
 /// - **Non-tuple iterable**: desugars to `into_iter()` + `next()` iterator pattern
 fn desugar_for_of(f: &ForOfStmt, ctx: &mut DesugarContext) -> Stmt {
+    // Save and clear for_loop_labels so that break/continue inside the for-of body
+    // target the for-of loop itself (which the resolver will desugar into a loop),
+    // not an enclosing C-style for loop's body label.
+    let saved_labels = std::mem::take(&mut ctx.for_loop_labels);
+    let body = desugar_block(&f.body, ctx);
+    ctx.for_loop_labels = saved_labels;
+
     Stmt::ForOf(ForOfStmt {
         binding: desugar_pattern(&f.binding),
         is_mut: f.is_mut,
         iterable: desugar_expr(&f.iterable),
-        body: desugar_block(&f.body, ctx),
+        body,
         span: f.span,
     })
 }
