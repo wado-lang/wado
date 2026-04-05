@@ -115,7 +115,7 @@ pub fn normalize_tree(s: &String) -> String {
     let mut space_pending = false;
     for let c of s.chars() {
         if in_string {
-            out.push_str(`{c}`);
+            out.push(c);
             if c == '"' { in_string = false; }
         } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
             if out.len() > 0 {
@@ -123,11 +123,11 @@ pub fn normalize_tree(s: &String) -> String {
             }
         } else {
             if space_pending {
-                out.push_str(" ");
+                out.push(' ');
                 space_pending = false;
             }
             if c == '"' { in_string = true; }
-            out.push_str(`{c}`);
+            out.push(c);
         }
     }
     return out;
@@ -226,8 +226,28 @@ fn escape_html(out: &mut String, text: &String) {
         } else if c == '"' {
             out.push_str("&quot;");
         } else {
-            out.push_str(`{c}`);
+            out.push(c);
         }
+    }
+}
+
+fn escape_html_range(out: &mut String, chars: &Array<char>, start: i32, end: i32) {
+    let mut i = start;
+    let len = chars.len();
+    while i < end && i < len {
+        let c = chars[i];
+        if c == '&' {
+            out.push_str("&amp;");
+        } else if c == '<' {
+            out.push_str("&lt;");
+        } else if c == '>' {
+            out.push_str("&gt;");
+        } else if c == '"' {
+            out.push_str("&quot;");
+        } else {
+            out.push(c);
+        }
+        i += 1;
     }
 }
 
@@ -235,9 +255,9 @@ fn capture_to_class(capture: &String) -> String {
     let mut out = String::with_capacity(capture.len());
     for let c of capture.chars() {
         if c == '.' {
-            out.push_str(" ");
+            out.push(' ');
         } else {
-            out.push_str(`{c}`);
+            out.push(c);
         }
     }
     return out;
@@ -246,26 +266,23 @@ fn capture_to_class(capture: &String) -> String {
 /// Produce a highlighted HTML fragment from source text and captures.
 /// Captures must be sorted by start position (as produced by HighlightVisitor).
 pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> String {
-    let mut out = String::with_capacity(source.len() * 2);
+    let mut out = String::with_capacity(source.len() * 5);
     let mut pos = 0;
     let chars = source.chars().collect();
     for let cap of captures {
         if cap.start > pos {
-            let gap = substr(&chars, pos, cap.start);
-            escape_html(&mut out, &gap);
+            escape_html_range(&mut out, &chars, pos, cap.start);
         }
-        let text = substr(&chars, cap.start, cap.end);
         let cls = capture_to_class(&cap.capture);
         out.push_str(`<span class="{cls}">`);
-        escape_html(&mut out, &text);
+        escape_html_range(&mut out, &chars, cap.start, cap.end);
         out.push_str("</span>");
         if cap.end > pos {
             pos = cap.end;
         }
     }
     if pos < chars.len() {
-        let rest = substr(&chars, pos, chars.len());
-        escape_html(&mut out, &rest);
+        escape_html_range(&mut out, &chars, pos, chars.len());
     }
     return out;
 }
@@ -274,7 +291,7 @@ fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
     let mut out = String::with_capacity(end - start);
     let mut i = start;
     while i < end && i < chars.len() {
-        out.push_str(`{chars[i]}`);
+        out.push(chars[i]);
         i += 1;
     }
     return out;
