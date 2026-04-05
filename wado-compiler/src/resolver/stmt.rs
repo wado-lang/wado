@@ -211,12 +211,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         {
                             for (fname, _, is_pub) in &struct_info.fields {
                                 if !is_pub && struct_lit.fields.iter().any(|f| f.name == *fname) {
-                                    let _ =
-                                            self.logger.error(TypeError::PrivateFieldAccess {
-                                                struct_name: name.clone(),
-                                                field_name: fname.clone(),
-                                                span: struct_lit.span,
-                                            });
+                                    let _ = self.logger.error(TypeError::PrivateFieldAccess {
+                                        struct_name: name.clone(),
+                                        field_name: fname.clone(),
+                                        span: struct_lit.span,
+                                    });
                                 }
                             }
                         }
