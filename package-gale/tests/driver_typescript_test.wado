@@ -148,3 +148,131 @@ test "parse initializer ternary" {
         panic(`parse failed: {e.message}`);
     }
 }
+
+// --- Complex expression tests ---
+
+test "parse nested arithmetic" {
+    let result = ts::parse(&"= (1 + 2) * 3");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse logical and/or" {
+    let result = ts::parse(&"= true && false || true");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse bitwise operators" {
+    let result = ts::parse(&"= 1 | 2 & 3 ^ 4");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse comparison greater than" {
+    let result = ts::parse(&"= 1 > 2");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse comparison less than" {
+    let result = ts::parse(&"= 1 < 2");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse comparison less than or equal" {
+    let result = ts::parse(&"= 1 <= 2");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse comparison greater than or equal" {
+    let result = ts::parse(&"= 1 >= 2");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse shift left" {
+    let result = ts::parse(&"= 1 << 2");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse shift right" {
+    let result = ts::parse(&"= 1 >> 2");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse string concatenation" {
+    let result = ts::parse(&"= 'a' + 'b'");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse deeply nested parens" {
+    let result = ts::parse(&"= ((((1))))");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse complex mixed expression" {
+    let result = ts::parse(&"= (1 + 2) * 3 === 9 ? true : false");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse bitwise not" {
+    let result = ts::parse(&"= ~1");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse double negation" {
+    let result = ts::parse(&"= !!true");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse unary plus" {
+    let result = ts::parse(&"= +1");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse strict inequality" {
+    let result = ts::parse(&"= 1 !== 2");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse void" {
+    let result = ts::parse(&"= void 0");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse comma expression" {
+    let result = ts::parse(&"= (1, 2, 3)");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
