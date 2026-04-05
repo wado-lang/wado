@@ -128,7 +128,7 @@ if [ "$HAVE_C_WASM" -eq 1 ]; then
 fi
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. zlib/zlib_bench.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 zlib/zlib_bench.wado
 """
 
 [tasks.fts]
@@ -174,7 +174,7 @@ echo "=== Rust serde_json ==="
 ./json_twitter/target/release/json_twitter_bench
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. json_twitter/json_twitter.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 json_twitter/json_twitter.wado
 """
 
 [tasks.json-canada]
@@ -190,7 +190,7 @@ echo "=== Rust serde_json ==="
 ./json_canada/target/release/json_canada_bench
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. json_canada/json_canada.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 json_canada/json_canada.wado
 """
 
 [tasks.json-catalog]
@@ -206,7 +206,7 @@ echo "=== Rust serde_json ==="
 ./json_catalog/target/release/json_catalog_bench
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. json_catalog/json_catalog.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 json_catalog/json_catalog.wado
 """
 
 [tasks.sqlite-parse]
@@ -222,7 +222,41 @@ echo "=== Rust sqlparser-rs ==="
 ./sqlite_parse/target/release/sqlite_parse_bench
 
 echo "=== Wado (Gale) ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. sqlite_parse/sqlite_parse.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sqlite_parse/sqlite_parse.wado
+"""
+
+[tasks.syntax-highlight]
+description = "Run syntax-highlight benchmark (Gale highlighter vs tree-sitter)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling tree-sitter benchmark ==="
+cargo build --release --manifest-path syntax_highlight/Cargo.toml --quiet
+
+echo "=== Compiling tree-sitter Wasm benchmark ==="
+WASI_SDK="$(cd "$(dirname "$(command -v clang)")/.." 2>/dev/null && pwd)"
+if [ -d "$WASI_SDK/share/wasi-sysroot" ]; then
+    CC_wasm32_wasip1="$WASI_SDK/bin/clang" \
+    CFLAGS_wasm32_wasip1="--sysroot=$WASI_SDK/share/wasi-sysroot" \
+    AR_wasm32_wasip1="$WASI_SDK/bin/llvm-ar" \
+    cargo build --release --target wasm32-wasip1 --manifest-path syntax_highlight/Cargo.toml --quiet
+    HAVE_TS_WASM=1
+else
+    echo "SKIP: tree-sitter Wasm (install wasi-sdk)"
+    HAVE_TS_WASM=0
+fi
+
+echo "=== tree-sitter (native) ==="
+./syntax_highlight/target/release/syntax_highlight_bench
+
+if [ "$HAVE_TS_WASM" -eq 1 ]; then
+    echo "=== tree-sitter (Wasm/wasmtime) ==="
+    wasmtime --dir . syntax_highlight/target/wasm32-wasip1/release/syntax_highlight_bench.wasm
+fi
+
+echo "=== Wado (Gale) ==="
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 syntax_highlight/syntax_highlight.wado
 """
 
 [tasks.all]
@@ -239,6 +273,7 @@ MISE_JOBS=1 mise run json-twitter
 MISE_JOBS=1 mise run json-canada
 MISE_JOBS=1 mise run json-catalog
 MISE_JOBS=1 mise run sqlite-parse
+MISE_JOBS=1 mise run syntax-highlight
 """
 
 [tasks.clean]
@@ -247,5 +282,5 @@ run = """
 rm -f count_prime/*.wasm mandelbrot/*.wasm sieve/*.wasm zlib/zlib_c.wasm
 rm -f count_prime/count_prime_c mandelbrot/mandelbrot_c sieve/sieve_c
 rm -f fts/fts_c fts/fts_rs fts/fts_zig fts/fts_zig.o
-rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target
+rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target syntax_highlight/target
 """

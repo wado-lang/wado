@@ -1,350 +1,90 @@
 # Wado Benchmarks
 
-This directory contains performance benchmarks comparing Wado against C, Rust, Zig, and JavaScript.
+Performance benchmarks comparing Wado (Wasm/wasmtime) against native implementations.
 
-## Benchmarks
-
-### Mandelbrot Set (`mandelbrot.*`)
-
-Computes the Mandelbrot fractal by counting total iterations across a 1024x768 grid.
-
-- **Use case**: Fractal rendering, floating-point performance
-- **Operations**: Float arithmetic, nested loops, function calls
-- **Grid**: 1024x768 pixels, max 256 iterations per pixel
+## Running
 
 ```bash
-mise run benchmark-mandelbrot
+mise run benchmark-all              # run all benchmarks
+
+mise run benchmark-count-prime      # integer arithmetic
+mise run benchmark-mandelbrot       # float arithmetic
+mise run benchmark-sieve            # array operations
+mise run benchmark-zlib             # compression
+mise run benchmark-fts              # float-to-string
+mise run benchmark-json-twitter     # JSON parsing (631KB)
+mise run benchmark-json-canada      # JSON parsing (2.3MB)
+mise run benchmark-json-catalog     # JSON parsing (1.7MB)
+mise run benchmark-sqlite-parse     # SQL parsing (Gale vs sqlparser-rs)
+mise run benchmark-syntax-highlight # syntax highlighting (Gale vs tree-sitter)
 ```
 
-### Prime Counting (`count_prime.*`)
+Prerequisites: `cc`, `rustc`, `zig`, `node` (managed by `mise install`).
 
-Counts prime numbers up to 10,000,000 using trial division.
+## Results
 
-- **Use case**: Integer arithmetic, branching performance
-- **Operations**: Integer modulo, nested loops, branch prediction
-- **Reference**: π(10,000,000) = 664,579 primes
+Environment: Wado 2026-04-03, wasmtime 42.0.1, gcc 13.3.0, rustc 1.94.1, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
 
-```bash
-mise run benchmark-count-prime
-```
+### Compute
 
-### Sieve of Eratosthenes (`sieve.*`)
+| Benchmark              | Baseline      | Baseline (ms) | Wado (ms) | Relative |
+| ---------------------- | ------------- | ------------- | --------- | -------- |
+| Mandelbrot (1024x768)  | C (gcc -O3)   | 131           | 139       | 1.06x    |
+| Prime counting (10M)   | C (gcc -O3)   | 3,284         | 3,307     | 1.01x    |
+| Sieve (10M)            | C (gcc -O3)   | 53            | 81        | 1.53x    |
+| Float-to-string (500K) | Zig (RelFast) | 25            | 43        | 1.72x    |
 
-Counts prime numbers up to 10,000,000 using the sieve algorithm.
+### Compression (twitter.json 631KB x 10 iterations)
 
-- **Use case**: Array allocation, indexed access, memory performance
-- **Operations**: Array creation via append, indexed read/write, iteration
-- **Reference**: π(10,000,000) = 664,579 primes (same as count_prime)
+| Operation  | zlib-rs (native) | C zlib (Wasm) | Wado (pure) |
+| ---------- | ---------------- | ------------- | ----------- |
+| Compress   | 29 ms            | 72 ms         | 251 ms      |
+| Decompress | 4 ms             | 10 ms         | 96 ms       |
 
-```bash
-mise run benchmark-sieve
-```
+### JSON Parsing (Wado `core:json` vs Rust `serde_json`)
 
-### zlib Compression (`zlib/`)
+| Dataset         | Rust (native) | Wado (Wasm) | Relative |
+| --------------- | ------------- | ----------- | -------- |
+| twitter (631KB) | 0.789 ms      | 16.542 ms   | 20.96x   |
+| canada (2.3MB)  | 7.972 ms      | 68.244 ms   | 8.56x    |
+| catalog (1.7MB) | 2.347 ms      | 36.112 ms   | 15.38x   |
 
-Compresses and decompresses `twitter.json` (~631KB of real JSON data) for 10 iterations.
+### Parser & Highlighter (13KB SQL, 81 statements x 100 iterations)
 
-- **Use case**: Compression library performance, byte array throughput
-- **Operations**: zlib compress/decompress, large byte array manipulation
-- **Data**: `json_twitter/twitter.json` — realistic JSON from Twitter API (better than synthetic patterns)
-- **Comparison**: Wado (`core:zlib`, pure Wado) vs C zlib-1.3.1 (Wasm/wasmtime) vs zlib-rs (native Rust)
+| Benchmark        | Baseline (native)   | Baseline (ms) | Wado (ms) | Relative |
+| ---------------- | ------------------- | ------------- | --------- | -------- |
+| SQLite parse     | sqlparser-rs (Rust) | 167           | 3,910     | 23.42x   |
+| Syntax highlight | tree-sitter (Rust)  | 450           | 27,660    | 61.47x   |
 
-```bash
-mise run benchmark-zlib
-```
+Syntax highlight Wasm-to-Wasm comparison (both on wasmtime):
 
-### Float-to-String (`fts.*`)
+| Runtime                        | Time (ms) | Relative |
+| ------------------------------ | --------- | -------- |
+| tree-sitter (Wasm/wasmtime)    | 694       | 1.00x    |
+| **Wado** (Gale, Wasm/wasmtime) | 28,026    | 40.38x   |
 
-Converts 500,000 random f64 values (0.0–1.0) to decimal strings with 6 decimal places. Uses a linear congruential generator (seed=42) for a deterministic float sequence, ensuring all implementations produce identical output.
-
-- **Use case**: Float formatting, string allocation throughput
-- **Operations**: Float-to-string conversion, byte iteration, string buffer management
-- **Comparison**: C (`snprintf`), Rust (`write!`), Zig (`std.fmt`), Wado (pure Wado via template literal)
-
-```bash
-mise run benchmark-fts
-```
-
-### JSON Parsing (`json_twitter/`, `json_canada/`, `json_catalog/`)
-
-Parses real-world JSON datasets using typed deserialization (struct-based parsing, not DOM). Three datasets from [nativejson-benchmark](https://github.com/miloyip/nativejson-benchmark):
-
-- **twitter.json** (631KB): Twitter search API response with nested objects (statuses, users, entities)
-- **canada.json** (2.3MB): GeoJSON with deeply nested coordinate arrays (number-heavy)
-- **citm_catalog.json** (1.7MB): Event catalog with mixed types (strings, arrays, nested objects, maps)
-
-Each benchmark reads the JSON file once, then deserializes it into typed structs. Compares Wado (`core:json` + `core:serde`, pure Wado compiled to Wasm) against Rust (`serde_json`, native).
-
-```bash
-mise run benchmark-json-twitter
-mise run benchmark-json-canada
-mise run benchmark-json-catalog
-```
-
-### SQLite Parsing (`sqlite_parse/`)
-
-Parses 81 realistic SQLite statements (13KB of SQL) using a parser generated by Gale from the ANTLR4 `SQLite.g4` grammar. Compares Gale's auto-generated recursive descent parser (Wado, compiled to Wasm) against Rust's `sqlparser-rs` (hand-written recursive descent, native).
-
-- **Use case**: Parser generator output performance, tokenizer + parser throughput
-- **Operations**: Lexing (tokenization), recursive descent parsing, CST construction
-- **Data**: 81 statements — DDL (CREATE TABLE/INDEX/VIEW), DML (INSERT/UPDATE/DELETE), SELECTs with JOINs, CTEs, subqueries, CASE expressions, UNION/INTERSECT, built-in functions
-- **Comparison**: Gale-generated parser (Wado/Wasm) vs `sqlparser-rs` (native Rust)
-
-```bash
-mise run benchmark-sqlite-parse
-```
-
-## Prerequisites
-
-To run all benchmarks, ensure you have the following tools installed:
-
-- `cc` (C compiler, e.g., clang or gcc)
-- `rustc` (Rust compiler — for fts benchmark)
-- `zig` (Zig compiler — for fts benchmark)
-- `node` (Node.js)
-
-## Running Benchmarks
-
-```bash
-# Run all benchmarks at once
-mise run benchmark-all
-
-# Or run individually
-mise run benchmark-mandelbrot
-mise run benchmark-count-prime
-mise run benchmark-sieve
-mise run benchmark-zlib
-mise run benchmark-fts
-mise run benchmark-json-twitter
-mise run benchmark-json-canada
-mise run benchmark-json-catalog
-mise run benchmark-sqlite-parse
-```
-
-## Recent Results
-
-### Environment
-
-| Component  | Version      |
-| ---------- | ------------ |
-| Wado       | 2026-04-03   |
-| wasmtime   | 42.0.1       |
-| Node.js    | v24.14.1     |
-| C compiler | gcc 13.3.0   |
-| Rust       | rustc 1.94.1 |
-| Zig        | 0.15.2       |
-| Platform   | Linux x86_64 |
-
-### Mandelbrot (1024x768, max_iter=256)
-
-| Runtime     | Time (ms) | Relative |
-| ----------- | --------- | -------- |
-| C (gcc -O3) | 131       | 1.00x    |
-| **Wado**    | 139       | 1.06x    |
-| JavaScript  | 141       | 1.08x    |
-
-All implementations produce the same result: 47,407,790 total iterations.
-
-### Prime Counting (limit=10,000,000)
-
-| Runtime     | Time (ms) | Relative |
-| ----------- | --------- | -------- |
-| C (gcc -O3) | 3,284     | 1.00x    |
-| **Wado**    | 3,307     | 1.01x    |
-| JavaScript  | 3,320     | 1.01x    |
-
-All implementations produce the same result: 664,579 primes.
-
-### Sieve of Eratosthenes (limit=10,000,000)
-
-| Runtime     | Time (ms) | Relative |
-| ----------- | --------- | -------- |
-| C (gcc -O3) | 53        | 1.00x    |
-| JavaScript  | 77        | 1.45x    |
-| **Wado**    | 81        | 1.53x    |
-
-All implementations produce the same result: 664,579 primes.
-
-### zlib Compress (twitter.json 631KB x 10 iterations)
-
-| Runtime               | Time (ms) | Relative |
-| --------------------- | --------- | -------- |
-| zlib-rs (native Rust) | 29        | 1.00x    |
-| C zlib (Wasm)         | 72        | 2.48x    |
-| **Wado** (pure Wado)  | 251       | 8.66x    |
-
-### zlib Decompress (twitter.json 631KB x 10 iterations)
-
-| Runtime               | Time (ms) | Relative |
-| --------------------- | --------- | -------- |
-| zlib-rs (native Rust) | 4         | 1.00x    |
-| C zlib (Wasm)         | 10        | 2.50x    |
-| **Wado** (pure Wado)  | 96        | 24.00x   |
-
-zlib-rs runs natively; C zlib and Wado are compiled to Wasm and run on wasmtime. Wado's `core:zlib` is a pure Wado implementation. Compression ratio: ~8–9% (631KB → ~53KB).
-
-### Float-to-String (500,000 conversions, 6 decimal places)
-
-| Runtime             | Time (ms) | Relative |
-| ------------------- | --------- | -------- |
-| Zig (-OReleaseFast) | 25        | 1.00x    |
-| Rust (rustc -O)     | 35        | 1.40x    |
-| **Wado**            | 43        | 1.72x    |
-| C (gcc -O3)         | 57        | 2.28x    |
-
-All implementations produce: Total bytes: 4,000,000, byte sum: 204,501,007.
-
-### JSON Parsing — Twitter (631KB)
-
-| Runtime                    | Time (ms) | Relative |
-| -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 0.789     | 1.00x    |
-| **Wado** (core:json, Wasm) | 16.542    | 20.96x   |
-
-Both implementations parse 100 statuses from Twitter search results.
-
-### JSON Parsing — Canada (2.3MB)
-
-| Runtime                    | Time (ms) | Relative |
-| -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 7.972     | 1.00x    |
-| **Wado** (core:json, Wasm) | 68.244    | 8.56x    |
-
-Both implementations parse 55,563 coordinate points from GeoJSON.
-
-### JSON Parsing — CITM Catalog (1.7MB)
-
-| Runtime                    | Time (ms) | Relative |
-| -------------------------- | --------- | -------- |
-| Rust (serde_json, native)  | 2.347     | 1.00x    |
-| **Wado** (core:json, Wasm) | 36.112    | 15.38x   |
-
-Both implementations parse 184 events and 243 performances from CITM catalog data. Rust uses `BTreeMap` (ordered map) to match Wado's `TreeMap`.
-
-### SQLite Parsing (13KB, 81 statements x 100 iterations)
-
-| Runtime                                | Time (ms) | Per iteration (us) | Relative |
-| -------------------------------------- | --------- | ------------------ | -------- |
-| Rust (sqlparser-rs, native)            | 167       | 1,669              | 1.00x    |
-| **Wado** (Gale-generated parser, Wasm) | 3,910     | 39,098             | 23.42x   |
-
-Both implementations parse 81 SQL statements per iteration. The Gale parser is auto-generated from ANTLR4's `SQLite.g4` grammar; `sqlparser-rs` is a hand-tuned native Rust parser.
-
-## Profiling Wado Programs
-
-`wado run --profile <mode>` enables runtime profiling via wasmtime's profiling infrastructure.
-
-### Guest Profiling (All Platforms)
-
-Cross-platform in-process sampling profiler. Uses wasmtime's `GuestProfiler` with epoch-based interruption to collect stack samples at regular intervals. Output is Firefox Profiler JSON.
+## Profiling
 
 ```sh
-# Basic usage (writes profile.json with 10ms sampling interval)
+# Guest profiling (all platforms) — view at https://profiler.firefox.com/
 wado run --profile guest benchmark/count_prime/count_prime.wado
+wado run --profile guest,output.json,5 benchmark/count_prime/count_prime.wado  # custom path, 5ms interval
 
-# Custom output path
-wado run --profile guest,my_profile.json benchmark/mandelbrot/mandelbrot.wado
-
-# Custom output path and 5ms sampling interval
-wado run --profile guest,my_profile.json,5 benchmark/count_prime/count_prime.wado
-```
-
-View the output at https://profiler.firefox.com/ by uploading the JSON file.
-
-**How it works**: The engine is configured with epoch interruption. A background thread bumps the epoch at the specified interval. On each epoch tick, a callback calls `GuestProfiler::sample()` which captures the current Wasm call stack. After execution, the profile is serialized to the Firefox "processed profile format".
-
-**Limitations**:
-
-- Only measures time in WebAssembly guest code (not host or kernel)
-- Sampling granularity is limited to function entry points and loop headers (epoch check points)
-- Function names may show as `<wasm function N>` without DWARF debug info
-
-### JitDump Profiling (Linux)
-
-Detailed profiling using Linux `perf` with JIT dump integration. Wasmtime emits a jitdump file that `perf` can use for Wasm function name resolution.
-
-```sh
-# Record with perf (must use -k mono for clock synchronization)
+# Linux perf (jitdump — detailed, with JIT symbol resolution)
 perf record -k mono wado run --profile jitdump benchmark/count_prime/count_prime.wado
-
-# Merge JIT symbols into perf data
 perf inject --jit --input perf.data --output perf.jit.data
-
-# View the profile
 perf report --input perf.jit.data
-```
 
-**Advantages over guest profiling**:
-
-- Measures time in guest code, host runtime, and kernel
-- Hardware performance counter support
-- Higher precision timing from CPU counters
-
-### PerfMap Profiling (Linux)
-
-Simpler alternative to jitdump. Wasmtime generates a `/tmp/perf-<pid>.map` file with function name mappings that `perf` reads automatically.
-
-```sh
-# Record
+# Linux perf (perfmap — simpler, no inject step)
 perf record -k mono wado run --profile perfmap benchmark/mandelbrot/mandelbrot.wado
+perf report
 
-# View (no inject step needed)
-perf report --input perf.data
-```
-
-### Samply Profiling (Linux / macOS)
-
-[samply](https://github.com/mstange/samply) is a third-party profiler that supports perfmap. It opens Firefox Profiler UI automatically.
-
-```sh
+# samply (Linux/macOS)
 samply record wado run --profile perfmap benchmark/count_prime/count_prime.wado
 ```
 
-### Comparison
-
-| Mode      | Platform | Precision | Scope                 | Output                | Viewer                        |
-| --------- | -------- | --------- | --------------------- | --------------------- | ----------------------------- |
-| `guest`   | All      | Moderate  | Wasm guest only       | Firefox Profiler JSON | https://profiler.firefox.com/ |
-| `jitdump` | Linux    | High      | Guest + host + kernel | perf jitdump          | `perf report`                 |
-| `perfmap` | Linux    | High      | Guest + host + kernel | `/tmp/perf-<pid>.map` | `perf report` / samply        |
-
-### Tips
-
-- For quick cross-platform analysis, use `--profile guest`.
-- For production-level Linux profiling, use `--profile jitdump` with `perf`.
-- Combine with optimization levels (`-O0` through `-O3`) to compare optimized vs unoptimized performance.
-- The guest profiler adds a small overhead from epoch interruption (~10% slowdown).
-- The jitdump/perfmap profilers add no measurable overhead to Wasm execution itself.
-
-## Notes
-
-- C benchmarks use `-O3` optimization
-- C mandelbrot uses `-ffp-contract=off` to disable FMA for IEEE 754 consistency
-- Wado runs on wasmtime with WASI P3 and Wasm GC enabled
-- JavaScript runs on Node.js
-- Times include program initialization overhead
-- Wado CLI is built with `--release` for fair comparison with natively-compiled competitors
-- Wado benchmarks use `MonotonicClock::now()` from `wasi:clocks` for timing
-- zlib benchmark uses `twitter.json` (~631KB) as input; compares Wado's pure Wado zlib, C zlib-1.3.1 (Wasm/wasmtime), and native zlib-rs (Rust)
-- fts benchmark compares Wado, C (`snprintf`), Rust (`write!`), and Zig (`std.fmt`)
-- Rust benchmarks use `rustc -O` (release optimization)
-- Zig benchmarks use `-OReleaseFast`
-- JSON benchmarks compare Wado's `core:json` (pure Wado, Wasm) against Rust's `serde_json` (native). Rust uses `BTreeMap` for map fields to match Wado's `TreeMap`
-- JSON test data from [nativejson-benchmark](https://github.com/miloyip/nativejson-benchmark)
-- SQLite parser benchmark compares Gale-generated parser (Wado, Wasm) against Rust's `sqlparser-rs` (native hand-written recursive descent)
-
-## File Structure
-
-```
-benchmark/
-├── README.md
-├── count_prime/count_prime.{wado,c,js}
-├── fts/fts.{wado,c,rs,zig}
-├── json_canada/{json_canada.wado,serde_json.rs,canada.json}
-├── json_catalog/{json_catalog.wado,serde_json.rs,citm_catalog.json}
-├── json_twitter/{json_twitter.wado,serde_json.rs,twitter.json}
-├── mandelbrot/mandelbrot.{wado,c,js}
-├── sieve/sieve.{wado,c,js}
-├── sqlite_parse/{sqlite_parse.wado,sqlparser_rs.rs,queries.sql}
-└── zlib/{zlib_bench.wado,zlib_rs.rs,zlib_c.c}
-```
+| Mode      | Platform | Scope                 | Viewer                        |
+| --------- | -------- | --------------------- | ----------------------------- |
+| `guest`   | All      | Wasm guest only       | https://profiler.firefox.com/ |
+| `jitdump` | Linux    | Guest + host + kernel | `perf report`                 |
+| `perfmap` | Linux    | Guest + host + kernel | `perf report` / samply        |

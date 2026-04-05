@@ -1281,3 +1281,68 @@ pub fn to_tree(node: &JsonNode) -> CstNode {
     return recorder.build();
 }
 
+pub fn highlight_mapping() -> HighlightMapping {
+    let defaults: Array<String> = [
+        "string",  // TK_STRING
+        "number",  // TK_NUMBER
+        "",  // TK_WS
+        "",  // TK_EOF
+        "",  // TK_ERROR
+        "punctuation.bracket",  // TK_LIT_LBRACE
+        "punctuation.delimiter",  // TK_LIT_COMMA
+        "punctuation.bracket",  // TK_LIT_RBRACE
+        "operator",  // TK_LIT_COLON
+        "punctuation.bracket",  // TK_LIT_LBRACKET
+        "punctuation.bracket",  // TK_LIT_RBRACKET
+        "constant.builtin",  // TK_LIT_TRUE
+        "constant.builtin",  // TK_LIT_FALSE
+        "constant.builtin",  // TK_LIT_NULL
+    ];
+    let overrides: Array<HighlightOverride> = [];
+    return HighlightMapping { defaults, overrides };
+}
+
+pub fn highlight(input: &String) -> String {
+    let mapping = highlight_mapping();
+    let mut visitor = HighlightVisitor::new(mapping);
+    let parse_result = parse(input);
+    if let Ok(tree) = parse_result {
+        walk_json(&mut visitor, &tree);
+    } else {
+        let tokens = tokenize(input);
+        for let token of &tokens {
+            visitor.visit_token(token);
+        }
+    }
+    return highlight_html_page(input, &visitor.captures);
+}
+
+use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Environment, Preopens {
+    let arguments = args();
+    if arguments.len() < 1 {
+        eprintln("Usage: <highlighter> <input-file>");
+        return;
+    }
+    let path = arguments[0];
+    let dirs = Preopens::get_directories();
+    let root = dirs[0].0;
+    let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).unwrap();
+    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut bytes: Array<u8> = [];
+    loop {
+        let chunk = read_stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            bytes.push(b);
+        }
+    }
+    read_stream.drop();
+    let input = String::from_utf8_unchecked(bytes);
+    print(highlight(&input));
+}
+

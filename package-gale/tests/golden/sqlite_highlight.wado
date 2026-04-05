@@ -11569,7 +11569,7 @@ fn parse_expr_lr_20(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
         null
     };
     let k_between = p.expect(TK_K_BETWEEN, "K_BETWEEN")?;
-    let expr_2 = parse_expr_prec(p, 8)?;
+    let expr_2 = parse_expr_prec(p, 0)?;
     let k_and = p.expect(TK_K_AND, "K_AND")?;
     let expr_3 = parse_expr_prec(p, 8)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt20(ExprAlt20 {
@@ -17266,5 +17266,239 @@ pub fn to_tree(node: &ParseNode) -> CstNode {
     let mut recorder = TreeRecorder::new();
     walk_parse(&mut recorder, node);
     return recorder.build();
+}
+
+pub fn highlight_mapping() -> HighlightMapping {
+    let defaults: Array<String> = [
+        "",  // TK_SCOL
+        "",  // TK_DOT
+        "",  // TK_OPEN_PAR
+        "",  // TK_CLOSE_PAR
+        "",  // TK_COMMA
+        "",  // TK_ASSIGN
+        "",  // TK_STAR
+        "",  // TK_PLUS
+        "",  // TK_MINUS
+        "",  // TK_TILDE
+        "",  // TK_PIPE2
+        "",  // TK_DIV
+        "",  // TK_MOD
+        "",  // TK_LT2
+        "",  // TK_GT2
+        "",  // TK_AMP
+        "",  // TK_PIPE
+        "",  // TK_LT
+        "",  // TK_LT_EQ
+        "",  // TK_GT
+        "",  // TK_GT_EQ
+        "",  // TK_EQ
+        "",  // TK_NOT_EQ1
+        "",  // TK_NOT_EQ2
+        "",  // TK_K_ABORT
+        "",  // TK_K_ACTION
+        "",  // TK_K_ADD
+        "",  // TK_K_AFTER
+        "",  // TK_K_ALL
+        "",  // TK_K_ALTER
+        "",  // TK_K_ANALYZE
+        "",  // TK_K_AND
+        "",  // TK_K_AS
+        "",  // TK_K_ASC
+        "",  // TK_K_ATTACH
+        "",  // TK_K_AUTOINCREMENT
+        "",  // TK_K_BEFORE
+        "",  // TK_K_BEGIN
+        "",  // TK_K_BETWEEN
+        "",  // TK_K_BY
+        "",  // TK_K_CASCADE
+        "",  // TK_K_CASE
+        "",  // TK_K_CAST
+        "",  // TK_K_CHECK
+        "",  // TK_K_COLLATE
+        "",  // TK_K_COLUMN
+        "",  // TK_K_COMMIT
+        "",  // TK_K_CONFLICT
+        "",  // TK_K_CONSTRAINT
+        "",  // TK_K_CREATE
+        "",  // TK_K_CROSS
+        "",  // TK_K_CURRENT_DATE
+        "",  // TK_K_CURRENT_TIME
+        "",  // TK_K_CURRENT_TIMESTAMP
+        "",  // TK_K_DATABASE
+        "",  // TK_K_DEFAULT
+        "",  // TK_K_DEFERRABLE
+        "",  // TK_K_DEFERRED
+        "",  // TK_K_DELETE
+        "",  // TK_K_DESC
+        "",  // TK_K_DETACH
+        "",  // TK_K_DISTINCT
+        "",  // TK_K_DROP
+        "",  // TK_K_EACH
+        "",  // TK_K_ELSE
+        "",  // TK_K_END
+        "",  // TK_K_ESCAPE
+        "",  // TK_K_EXCEPT
+        "",  // TK_K_EXCLUSIVE
+        "",  // TK_K_EXISTS
+        "",  // TK_K_EXPLAIN
+        "",  // TK_K_FAIL
+        "",  // TK_K_FOR
+        "",  // TK_K_FOREIGN
+        "",  // TK_K_FROM
+        "",  // TK_K_FULL
+        "",  // TK_K_GLOB
+        "",  // TK_K_GROUP
+        "",  // TK_K_HAVING
+        "",  // TK_K_IF
+        "",  // TK_K_IGNORE
+        "",  // TK_K_IMMEDIATE
+        "",  // TK_K_IN
+        "",  // TK_K_INDEX
+        "",  // TK_K_INDEXED
+        "",  // TK_K_INITIALLY
+        "",  // TK_K_INNER
+        "",  // TK_K_INSERT
+        "",  // TK_K_INSTEAD
+        "",  // TK_K_INTERSECT
+        "",  // TK_K_INTO
+        "",  // TK_K_IS
+        "",  // TK_K_ISNULL
+        "",  // TK_K_JOIN
+        "",  // TK_K_KEY
+        "",  // TK_K_LEFT
+        "",  // TK_K_LIKE
+        "",  // TK_K_LIMIT
+        "",  // TK_K_MATCH
+        "",  // TK_K_NATURAL
+        "",  // TK_K_NO
+        "",  // TK_K_NOT
+        "",  // TK_K_NOTNULL
+        "",  // TK_K_NULL
+        "",  // TK_K_OF
+        "",  // TK_K_OFFSET
+        "",  // TK_K_ON
+        "",  // TK_K_OR
+        "",  // TK_K_ORDER
+        "",  // TK_K_OUTER
+        "",  // TK_K_PLAN
+        "",  // TK_K_PRAGMA
+        "",  // TK_K_PRIMARY
+        "",  // TK_K_QUERY
+        "",  // TK_K_RAISE
+        "",  // TK_K_RECURSIVE
+        "",  // TK_K_REFERENCES
+        "",  // TK_K_REGEXP
+        "",  // TK_K_REINDEX
+        "",  // TK_K_RELEASE
+        "",  // TK_K_RENAME
+        "",  // TK_K_REPLACE
+        "",  // TK_K_RESTRICT
+        "",  // TK_K_RIGHT
+        "",  // TK_K_ROLLBACK
+        "",  // TK_K_ROW
+        "",  // TK_K_SAVEPOINT
+        "",  // TK_K_SELECT
+        "",  // TK_K_SET
+        "",  // TK_K_TABLE
+        "",  // TK_K_TEMP
+        "",  // TK_K_TEMPORARY
+        "",  // TK_K_THEN
+        "",  // TK_K_TO
+        "",  // TK_K_TRANSACTION
+        "",  // TK_K_TRIGGER
+        "",  // TK_K_UNION
+        "",  // TK_K_UNIQUE
+        "",  // TK_K_UPDATE
+        "",  // TK_K_USING
+        "",  // TK_K_VACUUM
+        "",  // TK_K_VALUES
+        "",  // TK_K_VIEW
+        "",  // TK_K_VIRTUAL
+        "",  // TK_K_WHEN
+        "",  // TK_K_WHERE
+        "",  // TK_K_WITH
+        "",  // TK_K_WITHOUT
+        "",  // TK_IDENTIFIER
+        "number",  // TK_NUMERIC_LITERAL
+        "",  // TK_BIND_PARAMETER
+        "string",  // TK_STRING_LITERAL
+        "",  // TK_BLOB_LITERAL
+        "comment",  // TK_SINGLE_LINE_COMMENT
+        "comment",  // TK_MULTILINE_COMMENT
+        "",  // TK_SPACES
+        "",  // TK_UNEXPECTED_CHAR
+        "",  // TK_EOF
+        "",  // TK_ERROR
+        "punctuation.delimiter",  // TK_LIT_SEMI
+        "punctuation.delimiter",  // TK_LIT_DOT
+        "punctuation.delimiter",  // TK_LIT_COMMA
+        "punctuation.bracket",  // TK_LIT_LPAREN
+        "punctuation.bracket",  // TK_LIT_RPAREN
+        "operator",  // TK_LIT_EQ
+        "operator",  // TK_LIT_PIPEPIPE
+        "operator",  // TK_LIT_STAR
+        "operator",  // TK_LIT_SLASH
+        "operator",  // TK_LIT_PERCENT
+        "operator",  // TK_LIT_PLUS
+        "operator",  // TK_LIT_MINUS
+        "operator",  // TK_LIT_LTLT
+        "operator",  // TK_LIT_GTGT
+        "operator",  // TK_LIT_AMP
+        "operator",  // TK_LIT_PIPE
+        "operator",  // TK_LIT_LT
+        "operator",  // TK_LIT_LTEQ
+        "operator",  // TK_LIT_GT
+        "operator",  // TK_LIT_GTEQ
+        "operator",  // TK_LIT_EQEQ
+        "operator",  // TK_LIT_BANGEQ
+        "operator",  // TK_LIT_LTGT
+        "operator",  // TK_LIT_TILDE
+    ];
+    let overrides: Array<HighlightOverride> = [];
+    return HighlightMapping { defaults, overrides };
+}
+
+pub fn highlight(input: &String) -> String {
+    let mapping = highlight_mapping();
+    let mut visitor = HighlightVisitor::new(mapping);
+    let parse_result = parse(input);
+    if let Ok(tree) = parse_result {
+        walk_parse(&mut visitor, &tree);
+    } else {
+        let tokens = tokenize(input);
+        for let token of &tokens {
+            visitor.visit_token(token);
+        }
+    }
+    return highlight_html_page(input, &visitor.captures);
+}
+
+use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Environment, Preopens {
+    let arguments = args();
+    if arguments.len() < 1 {
+        eprintln("Usage: <highlighter> <input-file>");
+        return;
+    }
+    let path = arguments[0];
+    let dirs = Preopens::get_directories();
+    let root = dirs[0].0;
+    let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).unwrap();
+    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut bytes: Array<u8> = [];
+    loop {
+        let chunk = read_stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            bytes.push(b);
+        }
+    }
+    read_stream.drop();
+    let input = String::from_utf8_unchecked(bytes);
+    print(highlight(&input));
 }
 

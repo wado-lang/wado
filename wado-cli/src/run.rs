@@ -237,13 +237,15 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
-            let s = val.to_string_lossy().into_owned();
-            if input.is_none() {
-                input = Some(s);
-            } else {
-                // Arguments after the source file are passed to the program.
-                program_args.push(s);
+            input = Some(val.to_string_lossy().into_owned());
+            // Once the input file is captured, all remaining arguments
+            // (including --flags) are passed to the guest program.
+            if let Some(raw) = parser.try_raw_args() {
+                for raw_arg in raw {
+                    program_args.push(raw_arg.to_string_lossy().into_owned());
+                }
             }
+            break;
         } else {
             return Err(args::unexpected_arg(arg, &usage));
         }

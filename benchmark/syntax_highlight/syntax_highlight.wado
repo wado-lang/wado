@@ -1,11 +1,12 @@
-// SQLite parser benchmark: Gale-generated parser (from SQLite.g4)
+// Syntax highlight benchmark: Gale-generated highlighter (from SQLite.g4)
 //
-// Parses a collection of realistic SQLite statements repeatedly and measures throughput.
+// Highlights a collection of realistic SQLite statements repeatedly and measures throughput.
+// Comparison baseline: tree-sitter with tree-sitter-sql grammar.
 
 use { println, Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
-use sqlite from "../../package-gale/tests/golden/sqlite.wado";
+use sqlite from "../../package-gale/tests/golden/sqlite_highlight.wado";
 
 fn read_file(path: String) -> String with Preopens {
     let dirs = Preopens::get_directories();
@@ -30,7 +31,7 @@ fn read_file(path: String) -> String with Preopens {
     return buf;
 }
 
-#[timeout_ms(120000)]
+#[timeout_ms(600000)]
 test "benchmark" {
     run();
 }
@@ -38,20 +39,16 @@ test "benchmark" {
 export fn run() with Stdout, MonotonicClock, Preopens {
     let sql = read_file("sqlite_parse/queries.sql");
     let iterations = 100;
-    println(`sqlite-parse (Gale): {sql.len()} bytes, {iterations} iterations`);
+    println(`syntax-highlight (Gale): {sql.len()} bytes, {iterations} iterations`);
 
     // Warm up
-    let warmup = sqlite::parse(&sql);
-    if let Err(e) = warmup {
-        panic(`Parse error: {e.message}`);
-    }
+    let warmup = sqlite::highlight(&sql);
+    assert warmup.len() > 0;
 
     let start = MonotonicClock::now();
     for let mut i = 0; i < iterations; i += 1 {
-        let result = sqlite::parse(&sql);
-        if let Err(e) = result {
-            panic(`Parse error on iteration {i}: {e.message}`);
-        }
+        let html = sqlite::highlight(&sql);
+        assert html.len() > 0;
     }
     let end = MonotonicClock::now();
     let elapsed_ns = (end - start) as u64;

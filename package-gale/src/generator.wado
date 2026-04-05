@@ -28,10 +28,15 @@ use {
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
 use { gen_visitor } from "./visitor_gen.wado";
+use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 
-pub fn generate(grammar: &Grammar) -> String {
+pub struct GenerateOptions {
+    pub highlight: bool,
+}
+
+pub fn generate(grammar: &Grammar, options: &GenerateOptions) -> String {
     let mut w = CodeWriter::new();
     gen_header(&mut w, &grammar.name);
     gen_runtime(&mut w);
@@ -43,6 +48,9 @@ pub fn generate(grammar: &Grammar) -> String {
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     gen_parser(&mut w, grammar, &mut ctx);
     gen_visitor(&mut w, grammar);
+    if options.highlight {
+        gen_highlight(&mut w, grammar, &lit_tokens);
+    }
     return w.to_string();
 }
 
