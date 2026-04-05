@@ -57,3 +57,27 @@ test "highlight operator" {
     let html = sqlite_hl::highlight(&"SELECT 1 + 2");
     assert str_contains(&html, "class=\"operator\""), `missing operator class in: {html}`;
 }
+
+test "highlight with unicode string literal" {
+    let html = sqlite_hl::highlight(&"SELECT '日本語'");
+    assert str_contains(&html, "日本語"), `missing unicode text in: {html}`;
+    assert str_contains(&html, "class=\"string\""), `missing string class in: {html}`;
+    assert str_contains(&html, "<span class=\"keyword\">SELECT</span>"), `missing keyword in: {html}`;
+}
+
+test "highlight with emoji in string literal" {
+    let html = sqlite_hl::highlight(&"SELECT '🎉🚀'");
+    assert str_contains(&html, "🎉🚀"), `missing emoji in: {html}`;
+    assert str_contains(&html, "class=\"keyword\">SELECT</span>"), `missing keyword in: {html}`;
+}
+
+test "highlight with mixed unicode and operators" {
+    let html = sqlite_hl::highlight(&"SELECT '日本' || '語'");
+    assert str_contains(&html, "日本"), `missing unicode 1 in: {html}`;
+    assert str_contains(&html, "語"), `missing unicode 2 in: {html}`;
+}
+
+test "highlight with HTML special chars in unicode context" {
+    let html = sqlite_hl::highlight(&"SELECT '<日本語>'");
+    assert str_contains(&html, "&lt;日本語&gt;"), `missing escaped unicode in: {html}`;
+}

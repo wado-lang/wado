@@ -36,6 +36,22 @@ test "highlight escapes HTML entities" {
     assert str_contains(&html, "&gt;"), `missing escaped > in: {html}`;
 }
 
+test "highlight with unicode string values" {
+    let html = json_hl::highlight(&"{\"名前\": \"太郎\"}");
+    assert str_contains(&html, "名前"), `missing unicode key in: {html}`;
+    assert str_contains(&html, "太郎"), `missing unicode value in: {html}`;
+}
+
+test "highlight with emoji" {
+    let html = json_hl::highlight(&"\"🎉\"");
+    assert str_contains(&html, "🎉"), `missing emoji in: {html}`;
+}
+
+test "highlight with multibyte and HTML entities" {
+    let html = json_hl::highlight(&"\"<日本語>\"");
+    assert str_contains(&html, "&lt;日本語&gt;"), `missing escaped unicode in: {html}`;
+}
+
 fn str_contains(haystack: &String, needle: &String) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();
