@@ -27,17 +27,21 @@ pub struct TestOptions {
     pub paths: Vec<String>,
     pub filter: Option<String>,
     pub jobs: usize,
+    /// Preopened directories as `(host_path, guest_path)` pairs.
+    pub preopened_dirs: Vec<(String, String)>,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Filter,
     Parallel,
+    Dir,
+    NoDir,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::Filter, Self::Parallel, Self::Help];
+    const ALL: &[Self] = &[Self::Filter, Self::Parallel, Self::Dir, Self::NoDir, Self::Help];
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -52,6 +56,18 @@ impl Opt {
                 short: Some('p'),
                 value: Some("<N>"),
                 desc: "Number of parallel workers (default: num CPUs)",
+            },
+            Self::Dir => args::OptSpec {
+                long: Some("dir"),
+                short: None,
+                value: Some("<path>"),
+                desc: "Preopen directory for WASI filesystem access\nUse --dir host::guest to specify different guest path",
+            },
+            Self::NoDir => args::OptSpec {
+                long: Some("no-dir"),
+                short: None,
+                value: None,
+                desc: "Do not preopen any directories (disables the default)",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -136,6 +152,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut paths: Vec<String> = Vec::new();
     let mut filter: Option<String> = None;
     let mut jobs: Option<usize> = None;
+    let mut preopened_dirs: Vec<(String, String)> = Vec::new();
+    let mut explicit_dirs = false;
+    let mut no_dir = false;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
@@ -151,6 +170,17 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                         }
                     }
                 }
+                Opt::Dir => {
+                    let dir_spec = args::require_string(&mut parser)?;
+                    let (host, guest) = if let Some((h, g)) = dir_spec.split_once("::") {
+                        (h.to_owned(), g.to_owned())
+                    } else {
+                        (dir_spec.clone(), dir_spec)
+                    };
+                    preopened_dirs.push((host, guest));
+                    explicit_dirs = true;
+                }
+                Opt::NoDir => no_dir = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -158,6 +188,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         } else {
             return Err(args::unexpected_arg(arg, &usage));
         }
+    }
+
+    // Default: preopen the current directory unless --dir or --no-dir was given.
+    if !explicit_dirs && !no_dir {
+        preopened_dirs.push((".".to_owned(), ".".to_owned()));
     }
 
     // Resolve paths: expand directories to *_test.wado files
@@ -184,6 +219,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         paths,
         filter,
         jobs,
+        preopened_dirs,
     })
 }
 
@@ -381,11 +417,15 @@ async fn collect_test_jobs(
 }
 
 /// Run a single test in its own Store
-async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResult {
+async fn run_single_test(
+    module: &CompiledTestModule,
+    job: &TestJob,
+    preopened_dirs: &[(String, String)],
+) -> TestResult {
     let start = Instant::now();
 
     // Create fresh Store and Linker for this test
-    let mut store = match runtime::create_store(&module.engine, &[], &[]) {
+    let mut store = match runtime::create_store(&module.engine, preopened_dirs, &[]) {
         Ok(s) => s,
         Err(e) => {
             return TestResult {
@@ -502,6 +542,7 @@ async fn execute_tests_parallel(
     modules: &[Arc<CompiledTestModule>],
     jobs: Vec<TestJob>,
     num_workers: usize,
+    preopened_dirs: Arc<Vec<(String, String)>>,
 ) -> Vec<TestResult> {
     if jobs.is_empty() {
         return Vec::new();
@@ -533,6 +574,7 @@ async fn execute_tests_parallel(
             let modules = modules.to_vec();
             let jobs = jobs.clone();
             let tx = tx.clone();
+            let preopened_dirs = preopened_dirs.clone();
 
             tokio::spawn(async move {
                 loop {
@@ -546,7 +588,7 @@ async fn execute_tests_parallel(
 
                     // Execute test
                     let module = &modules[job.module_idx];
-                    let result = run_single_test(module, &job).await;
+                    let result = run_single_test(module, &job, &preopened_dirs).await;
 
                     // Send result (ignore error if receiver dropped)
                     let _ = tx.send(result).await;
@@ -607,7 +649,8 @@ pub async fn run(opts: TestOptions) {
     }
 
     // Phase 2: Execute tests in parallel
-    let results = execute_tests_parallel(&modules, jobs, opts.jobs).await;
+    let preopened_dirs = Arc::new(opts.preopened_dirs);
+    let results = execute_tests_parallel(&modules, jobs, opts.jobs, preopened_dirs).await;
 
     // Group results by file for display
     let mut results_by_file: indexmap::IndexMap<String, Vec<&TestResult>> =

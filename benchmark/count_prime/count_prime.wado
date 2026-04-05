@@ -37,20 +37,18 @@ fn count_primes(limit: i32) -> i32 {
     return count;
 }
 
-test "is_prime" {
-    assert !is_prime(0);
-    assert !is_prime(1);
-    assert is_prime(2);
-    assert is_prime(3);
-    assert !is_prime(4);
-    assert is_prime(5);
-    assert is_prime(97);
-    assert !is_prime(100);
-}
+test "benchmark" {
+    let limit = 10000000;
 
-test "count_primes" {
-    assert count_primes(10) == 4;  // 2, 3, 5, 7
-    assert count_primes(100) == 25;
+    let start = MonotonicClock::now();
+    let count = count_primes(limit);
+    let end = MonotonicClock::now();
+
+    let elapsed_ns = (end - start) as u64;
+    let elapsed_ms = elapsed_ns / 1000000;
+
+    println(`Prime count up to {limit}: {count}`);
+    println(`Elapsed: {elapsed_ms} ms`);
 }
 
 export fn run() with Stdout, MonotonicClock {

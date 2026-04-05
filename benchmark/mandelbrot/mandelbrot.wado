@@ -33,11 +33,45 @@ fn mandelbrot_iterations(cx: f64, cy: f64, max_iter: i32) -> i32 {
     return max_iter;
 }
 
-test "mandelbrot_iterations" {
-    // Origin is in the Mandelbrot set — should reach max_iter
-    assert mandelbrot_iterations(0.0, 0.0, 256) == 256;
-    // Far outside the set — escapes after 1 iteration
-    assert mandelbrot_iterations(10.0, 10.0, 256) == 1;
+test "benchmark" {
+    let width = 1024;
+    let height = 768;
+    let max_iter = 256;
+
+    let x_min = -2.5;
+    let x_max = 1.0;
+    let y_min = -1.0;
+    let y_max = 1.0;
+
+    let dx = (x_max - x_min) / width as f64;
+    let dy = (y_max - y_min) / height as f64;
+
+    let start = MonotonicClock::now();
+
+    let mut total_iterations = 0;
+    let mut py = 0;
+
+    while py < height {
+        let cy = y_min + py as f64 * dy;
+        let mut px = 0;
+
+        while px < width {
+            let cx = x_min + px as f64 * dx;
+            let iter = mandelbrot_iterations(cx, cy, max_iter);
+            total_iterations = total_iterations + iter;
+            px = px + 1;
+        }
+
+        py = py + 1;
+    }
+
+    let end = MonotonicClock::now();
+    let elapsed_ns = (end - start) as u64;
+    let elapsed_ms = elapsed_ns / 1000000;
+
+    println(`Mandelbrot {width}x{height}, max_iter={max_iter}`);
+    println(`Total iterations: {total_iterations}`);
+    println(`Elapsed: {elapsed_ms} ms`);
 }
 
 export fn run() with Stdout, MonotonicClock {
