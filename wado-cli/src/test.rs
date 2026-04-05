@@ -41,7 +41,13 @@ enum Opt {
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::Filter, Self::Parallel, Self::Dir, Self::NoDir, Self::Help];
+    const ALL: &[Self] = &[
+        Self::Filter,
+        Self::Parallel,
+        Self::Dir,
+        Self::NoDir,
+        Self::Help,
+    ];
 
     const fn spec(self) -> args::OptSpec {
         match self {
