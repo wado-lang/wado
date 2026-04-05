@@ -99,28 +99,28 @@ fn run() with Stdout {
     s8 = Shape { 2 };
     if Shape^Eq::eq(s1, s2) {
         "core:cli/println"(String { repr: array.new_data<u8>("circle == circle"), used: 16 });
-    };
+    }
     if Shape^Eq::eq(s1, s3) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("circle(3.14) != circle(2.0)"), used: 27 });
-    };
+    }
     if Shape^Eq::eq(s1, s4) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("circle != rectangle"), used: 19 });
-    };
+    }
     if Shape^Eq::eq(s4, s5) {
         "core:cli/println"(String { repr: array.new_data<u8>("rect == rect"), used: 12 });
-    };
+    }
     if Shape^Eq::eq(s4, s6) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("rect(1) != rect(3)"), used: 18 });
-    };
+    }
     if Shape^Eq::eq(s7, s8) {
         "core:cli/println"(String { repr: array.new_data<u8>("point == point"), used: 14 });
-    };
+    }
     if Shape^Eq::eq(s7, s1) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("point != circle"), used: 15 });
-    };
+    }
     if Shape^Eq::eq(s1, s3) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("!= works"), used: 8 });
-    };
+    }
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -145,7 +145,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -172,7 +172,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l10: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l10;
@@ -213,7 +213,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -231,8 +231,8 @@ fn Shape^Eq::eq(self, other) {
             };
         } else {
             return 0;
-        };
-    };
+        }
+    }
     if ref.test Shape::Rectangle(self) {
         if ref.test Shape::Rectangle(other) {
             return __inline_f64_Eq__eq_1: block -> bool {
@@ -242,11 +242,11 @@ fn Shape^Eq::eq(self, other) {
             };
         } else {
             return 0;
-        };
-    };
+        }
+    }
     if self.discriminant == 2 {
         return other.discriminant == 2;
-    };
+    }
     return 0;
 }
 

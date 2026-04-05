@@ -216,11 +216,11 @@ fn run() with Stdout {
         String::push(__local_18, 32);
         __local_19 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
         __local_57 = __local_19;
-        Formatter::pad(__local_57, if __sroa_s_g.1 -> ref String {
+        Formatter::pad(__local_57, (if __sroa_s_g.1 -> ref String {
             String { repr: array.new_data<u8>("true"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("false"), used: 5 };
-        });
+        }));
         String::push(__local_18, 44);
         String::push(__local_18, 32);
         String::push_str(__local_18, __sroa_s_g.2);
@@ -250,7 +250,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -277,7 +277,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l3: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l3;
@@ -299,7 +299,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -355,7 +355,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -364,7 +364,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -372,7 +372,7 @@ fn count_digits_i64(val) {
             l9: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l9;
@@ -395,7 +395,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l13: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -403,7 +403,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn u128::div_rem(self, divisor) {
@@ -413,17 +413,17 @@ fn u128::div_rem(self, divisor) {
     let bit: bool;
     let __local_7: ref u128;
     let __local_8: ref u128;
-    if if divisor.low == 0_i64 -> i32 {
+    if (if divisor.low == 0_i64 -> i32 {
         divisor.high == 0_i64;
     } else {
         0;
-    } {
+    }) {
         "core:internal/panic"(String { repr: array.new_data<u8>("u128 division by zero"), used: 21 });
         unreachable;
-    };
+    }
     if u128^Ord::cmp(self, divisor) == 0 {
         return "tuple/[u128, u128]" { 0: u128 { low: 0_i64, high: 0_i64 }, 1: self };
-    };
+    }
     if __inline_u128_Eq__eq_1: block -> bool {
         __local_7 = self;
         __local_8 = divisor;
@@ -431,11 +431,11 @@ fn u128::div_rem(self, divisor) {
             __local_7.high == __local_8.high;
         } else {
             0;
-        };
+        }
         break __inline_u128_Eq__eq_1;
     } {
         return "tuple/[u128, u128]" { 0: u128 { low: 1_i64, high: 0_i64 }, 1: u128 { low: 0_i64, high: 0_i64 } };
-    };
+    }
     quotient = u128 { low: 0_i64, high: 0_i64 };
     remainder = u128 { low: 0_i64, high: 0_i64 };
     i = 127;
@@ -443,16 +443,16 @@ fn u128::div_rem(self, divisor) {
         l21: loop {
             if (i >= 0) == 0 {
                 break b20;
-            };
+            }
             remainder = u128^Shl::shl(remainder, 1);
             bit = u128::get_bit(self, i);
             if bit {
                 remainder = u128 { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
-            };
+            }
             if u128^Ord::cmp(remainder, divisor) != 0 {
                 remainder = u128^Sub::sub(remainder, divisor);
                 quotient = u128::set_bit(quotient, i);
-            };
+            }
             i = i - 1;
             continue l21;
         };
@@ -469,7 +469,7 @@ fn u128::get_bit(self, i) {
     } else {
         s = builtin::i64_extend_i32_s(i - 64);
         return ((self.high >>u s) & 1_i64) != 0_i64;
-    };
+    }
 }
 
 fn u128::set_bit(self, i) {
@@ -481,22 +481,22 @@ fn u128::set_bit(self, i) {
     } else {
         s = builtin::i64_extend_i32_s(i - 64);
         return u128 { low: self.low, high: self.high | (1_i64 << s) };
-    };
+    }
 }
 
 fn u128^Ord::cmp(self, other) {
     if self.high <u other.high {
         return 0;
-    };
+    }
     if self.high >u other.high {
         return 2;
-    };
+    }
     if self.low <u other.low {
         return 0;
-    };
+    }
     if self.low >u other.low {
         return 2;
-    };
+    }
     return 1;
 }
 
@@ -515,14 +515,14 @@ fn u128^Shl::shl(self, rhs) {
     shift = rhs;
     if shift >= 128 {
         return u128 { low: 0_i64, high: 0_i64 };
-    };
+    }
     if shift >= 64 {
         s_3 = builtin::i64_extend_i32_s(shift - 64);
         return u128 { low: 0_i64, high: self.low << s_3 };
-    };
+    }
     if shift == 0 {
         return self;
-    };
+    }
     s_4 = builtin::i64_extend_i32_s(shift);
     inv_s = builtin::i64_extend_i32_s(64 - shift);
     return u128 { low: self.low << s_4, high: (self.high << s_4) | (self.low >>u inv_s) };
@@ -532,7 +532,7 @@ fn i128::sub(self, other) {
     let __local_2: i64;
     let __local_3: i64;
     multivalue_bind [__local_2, __local_3] = i64.sub128(self.low, self.high, other.low, other.high);
-    return __local_2; __local_3;
+    return __local_2, __local_3;
 }
 
 fn i128::abs_u128(self) {
@@ -541,7 +541,7 @@ fn i128::abs_u128(self) {
         let __sroa_neg_high: i64;
         multivalue_bind [__sroa_neg_low, __sroa_neg_high] = i128::sub(i128 { low: 0_i64, high: 0_i64 }, self);
         return u128 { low: __sroa_neg_low, high: __sroa_neg_high };
-    };
+    }
     return u128 { low: self.low, high: self.high };
 }
 
@@ -569,11 +569,11 @@ fn i128::fmt_decimal(self, f) {
     let __local_30: ref "tuple/[u128, u128]";
     is_neg = self.high < 0_i64;
     abs_val = i128::abs_u128(self);
-    if if abs_val.low == 0_i64 -> i32 {
+    if (if abs_val.low == 0_i64 -> i32 {
         abs_val.high == 0_i64;
     } else {
         0;
-    } {
+    }) {
         offset_4 = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, 1);
         arr_5 = __inline_String__internal_raw_bytes_1: block -> ref array<u8> {
             __local_16 = f.buf;
@@ -581,7 +581,7 @@ fn i128::fmt_decimal(self, f) {
         };
         builtin::array_set_u8(arr_5, offset_4, 48);
         return;
-    };
+    }
     ten = u128 { low: 10_i64, high: 0_i64 };
     digit_count = 0;
     __for_2: block {
@@ -590,7 +590,7 @@ fn i128::fmt_decimal(self, f) {
             l38: loop {
                 if (u128^Ord::cmp(temp_9, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_2;
-                };
+                }
                 digit_count = digit_count + 1;
                 temp_9 = __inline_u128_Div__div_4: block -> ref u128 {
                     __local_19 = temp_9;
@@ -613,7 +613,7 @@ fn i128::fmt_decimal(self, f) {
             l41: loop {
                 if (u128^Ord::cmp(temp_13, u128 { low: 0_i64, high: 0_i64 }) == 2) == 0 {
                     break __for_3;
-                };
+                }
                 pos = pos - 1;
                 digit = builtin::i32_wrap_i64(__inline_u128__low_8: block -> u64 {
                     __local_27 = __inline_u128_Rem__rem_7: block -> ref u128 {
@@ -642,11 +642,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -680,18 +680,18 @@ fn i64::fmt_decimal(self, f) {
         write_decimal_digits(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
     } else {
-        abs_val = if is_negative -> i64 {
+        abs_val = (if is_negative -> i64 {
             0_i64 - value;
         } else {
             value;
-        };
+        });
         digit_count_10 = count_digits_i64(abs_val);
         offset_11 = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);
         write_decimal_digits(__inline_String__internal_raw_bytes_1: block -> ref array<u8> {
             __local_13 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_13.repr;
         }, offset_11, abs_val, digit_count_10);
-    };
+    }
 }
 
 fn char^Display::fmt(self, f) {
@@ -704,7 +704,7 @@ fn char^Display::fmt(self, f) {
         s = String { repr: builtin::array_new<u8>(4), used: 0 };
         String::push(s, self);
         Formatter::pad(f, s);
-    };
+    }
 }
 
 fn String::grow(self, min_capacity) {
@@ -716,7 +716,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -735,7 +735,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -747,11 +747,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -761,7 +761,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -780,7 +780,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -793,7 +793,7 @@ fn Formatter::write_char_n(self, c, n) {
             l56: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l56;
@@ -809,14 +809,14 @@ fn Formatter::pad(self, content) {
     let left_pad: i32;
     let right_pad: i32;
     content_len = content.used;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         String::push_str(self.buf, content);
         return;
-    };
+    }
     padding = self.width - content_len;
     align = self.align;
     let __match_scrut_0: enum:Alignment;
@@ -833,7 +833,7 @@ fn Formatter::pad(self, content) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         String::push_str(self.buf, content);
-    };
+    }
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
@@ -852,44 +852,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -899,10 +899,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -910,12 +910,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 export fn __cm_export__run as "run"

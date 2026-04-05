@@ -335,7 +335,7 @@ fn __test_0_variant_serialize_unit_case() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -376,11 +376,11 @@ condition: json == `\"Point\"`
                 break __tmpl: __local_5;
             });
             unreachable;
-        };
+        }
     } else {
         "core:internal/panic"(String { repr: array.new_data<u8>("serialize Shape::Point failed"), used: 29 });
         unreachable;
-    };
+    }
 }
 
 fn __test_1_variant_serialize_payload_case() {
@@ -393,7 +393,7 @@ fn __test_1_variant_serialize_payload_case() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -434,11 +434,11 @@ condition: json == `\\{\"Circle\":5\\}`
                 break __tmpl: __local_5;
             });
             unreachable;
-        };
+        }
     } else {
         "core:internal/panic"(String { repr: array.new_data<u8>("serialize Shape::Circle failed"), used: 30 });
         unreachable;
-    };
+    }
 }
 
 fn __test_2_variant_roundtrip_unit_case() {
@@ -447,7 +447,7 @@ fn __test_2_variant_roundtrip_unit_case() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -467,15 +467,15 @@ fn __test_2_variant_roundtrip_unit_case() {
             } else {
                 "core:internal/panic"(String { repr: array.new_data<u8>("expected Point"), used: 14 });
                 unreachable;
-            };
+            }
         } else {
             "core:internal/panic"(String { repr: array.new_data<u8>("from_string Shape::Point failed"), used: 31 });
             unreachable;
-        };
+        }
     } else {
         "core:internal/panic"(String { repr: array.new_data<u8>("to_string Shape::Point failed"), used: 29 });
         unreachable;
-    };
+    }
 }
 
 fn __test_3_variant_roundtrip_payload_case() {
@@ -490,7 +490,7 @@ fn __test_3_variant_roundtrip_payload_case() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -536,19 +536,19 @@ condition: r == 3.14
                         break __tmpl: __local_8;
                     });
                     unreachable;
-                };
+                }
             } else {
                 "core:internal/panic"(String { repr: array.new_data<u8>("expected Circle"), used: 15 });
                 unreachable;
-            };
+            }
         } else {
             "core:internal/panic"(String { repr: array.new_data<u8>("from_string Shape::Circle failed"), used: 32 });
             unreachable;
-        };
+        }
     } else {
         "core:internal/panic"(String { repr: array.new_data<u8>("to_string Shape::Circle failed"), used: 30 });
         unreachable;
-    };
+    }
 }
 
 fn __cm_export____test_0_variant_serialize_unit_case() {
@@ -589,17 +589,17 @@ fn "core/json/from_string<Shape>"(input) {
             __local_7 = de.input;
             break __inline_String__len_0: __local_7.used;
         } {
-            return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__trailing_1: block -> ref "core:serde/DeserializeError" {
+            return 1, ref.null none, ref.as_non_null(__inline_DeserializeError__trailing_1: block -> ref "core:serde/DeserializeError" {
                 __local_8 = builtin::i64_extend_i32_s(de.pos);
                 break __inline_DeserializeError__trailing_1: "core:serde/DeserializeError" { kind: 7, message: String { repr: array.new_data<u8>("trailing data after value"), used: 25 }, offset: __local_8 };
             });
-        };
-        return 0; v; ref.null none;
-    };
+        }
+        return 0, v, ref.null none;
+    }
     if __sroa_r_discriminant == 1 {
         e = __sroa_r_case1_payload_0;
-        return 1; ref.null none; e;
-    };
+        return 1, ref.null none, e;
+    }
     "core:internal/unreachable"();
     unreachable;
 }
@@ -612,9 +612,9 @@ fn "core/json/to_string<Shape>"(value) {
     r = Shape^Serialize::serialize<JsonSerializer>(value, ser.buf);
     if ref.is_null(r) == 0 {
         e = value_copy "core:serde/SerializeError"(ref.as_non_null(r));
-        return 1; ref.null none; e;
-    };
-    return 0; ser.buf; ref.null none;
+        return 1, ref.null none, e;
+    }
+    return 0, ser.buf, ref.null none;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
@@ -625,7 +625,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l20: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l20;
@@ -647,7 +647,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -707,7 +707,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -726,15 +726,15 @@ fn unpack64(f) {
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
     if raw_exp == 0 {
         if raw_mantissa == 0_i64 {
-            return 0_i64; 0;
-        };
+            return 0_i64, 0;
+        }
         m_9 = raw_mantissa << 11_i64;
         s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
-        return m_9 << s; -1085 - builtin::i32_wrap_i64(s);
-    };
+        return m_9 << s, -1085 - builtin::i32_wrap_i64(s);
+    }
     m_12 = -9223372036854775808_i64 | (raw_mantissa << 11_i64);
     e = (raw_exp - 1) + -1085;
-    return m_12; e;
+    return m_12, e;
 }
 
 fn unrounded_div(u, d) {
@@ -780,57 +780,57 @@ fn pow10_coarse(i) {
                                                                                                                 unreachable;
                                                                                                                 break b26;
                                                                                                             };
-                                                                                                            return -9202643304706469457_i64; -2331608335343510137_i64;
+                                                                                                            return -9202643304706469457_i64, -2331608335343510137_i64;
                                                                                                         };
-                                                                                                        return -3512093806901185045_i64; -5910495864778290618_i64;
+                                                                                                        return -3512093806901185045_i64, -5910495864778290618_i64;
                                                                                                     };
-                                                                                                    return -6382629663588669918_i64; 5824576295778454961_i64;
+                                                                                                    return -6382629663588669918_i64, 5824576295778454961_i64;
                                                                                                 };
-                                                                                                return -8701430062309552535_i64; -6518754469289960082_i64;
+                                                                                                return -8701430062309552535_i64, -6518754469289960082_i64;
                                                                                             };
-                                                                                            return -2702340141148116919_i64; 5820440219632367201_i64;
+                                                                                            return -2702340141148116919_i64, 5820440219632367201_i64;
                                                                                         };
-                                                                                        return -5728515861582144019_i64; 4788037454677749836_i64;
+                                                                                        return -5728515861582144019_i64, 4788037454677749836_i64;
                                                                                     };
-                                                                                    return -8173041140997884609_i64; -6088502188546649757_i64;
+                                                                                    return -8173041140997884609_i64, -6088502188546649757_i64;
                                                                                 };
-                                                                                return -1848681798185579781_i64; -915538744049291539_i64;
+                                                                                return -1848681798185579781_i64, -915538744049291539_i64;
                                                                             };
-                                                                            return -5038936143766954516_i64; 7857851839894723564_i64;
+                                                                            return -5038936143766954516_i64, 7857851839894723564_i64;
                                                                         };
-                                                                        return -7616003081050118570_i64; -4209185567039092848_i64;
+                                                                        return -7616003081050118570_i64, -4209185567039092848_i64;
                                                                     };
-                                                                    return -948738275445456221_i64; 368606216923924028_i64;
+                                                                    return -948738275445456221_i64, 368606216923924028_i64;
                                                                 };
-                                                                return -4311967555482476979_i64; 6154202648235558777_i64;
+                                                                return -4311967555482476979_i64, 6154202648235558777_i64;
                                                             };
-                                                            return -7028762532061872567_i64; -8601490892183123070_i64;
+                                                            return -7028762532061872567_i64, -8601490892183123070_i64;
                                                         };
-                                                        return -9223372036854775808_i64; 0_i64;
+                                                        return -9223372036854775808_i64, 0_i64;
                                                     };
-                                                    return -3545582879861895366_i64; 0_i64;
+                                                    return -3545582879861895366_i64, 0_i64;
                                                 };
-                                                return -6409681921289327534_i64; 7381240676301154012_i64;
+                                                return -6409681921289327534_i64, 7381240676301154012_i64;
                                             };
-                                            return -8723282702051517698_i64; -7611128154919104932_i64;
+                                            return -8723282702051517698_i64, -7611128154919104932_i64;
                                         };
-                                        return -2737644984756826646_i64; 1725319251657714538_i64;
+                                        return -2737644984756826646_i64, 1725319251657714538_i64;
                                     };
-                                    return -5757034887131305499_i64; -6827560182880305040_i64;
+                                    return -5757034887131305499_i64, -6827560182880305040_i64;
                                 };
-                                return -8196078626372074882_i64; -1466078993672598280_i64;
+                                return -8196078626372074882_i64, -1466078993672598280_i64;
                             };
-                            return -1885900863153361278_i64; 8136200465769716229_i64;
+                            return -1885900863153361278_i64, 8136200465769716229_i64;
                         };
-                        return -5069001465015685406_i64; -7896285879677171347_i64;
+                        return -5069001465015685406_i64, -7896285879677171347_i64;
                     };
-                    return -7640289654143017766_i64; -5385653213018257807_i64;
+                    return -7640289654143017766_i64, -5385653213018257807_i64;
                 };
-                return -987975350460687152_i64; 4871985254153548563_i64;
+                return -987975350460687152_i64, 4871985254153548563_i64;
             };
-            return -4343663012265570552_i64; -758345818024902857_i64;
+            return -4343663012265570552_i64, -758345818024902857_i64;
         };
-        return -7054365918152680534_i64; -7784369436827535058_i64;
+        return -7054365918152680534_i64, -7784369436827535058_i64;
     };
 }
 
@@ -976,7 +976,7 @@ fn mul_pow10(p) {
     if r < 0 {
         q = q - 1;
         r = r + 27;
-    };
+    }
     let __sroa_c_hi: u64;
     let __sroa_c_lo: u64;
     multivalue_bind [__sroa_c_hi, __sroa_c_lo] = pow10_coarse(q - -13);
@@ -998,16 +998,16 @@ fn mul_pow10(p) {
         top_lo = top_lo + 1_i64;
         if top_lo == 0_i64 {
             top_hi = top_hi + 1_i64;
-        };
-    };
+        }
+    }
     if (top_hi >>u 63_i64) == 0_i64 {
         top_hi = (top_hi << 1_i64) | (top_lo >>u 63_i64);
         top_lo = top_lo << 1_i64;
-    };
+    }
     if top_lo != 0_i64 {
-        return top_hi + 1_i64; 0_i64 - top_lo;
-    };
-    return top_hi; 0_i64;
+        return top_hi + 1_i64, 0_i64 - top_lo;
+    }
+    return top_hi, 0_i64;
 }
 
 fn uscale(x, pm_hi, pm_lo, s) {
@@ -1031,7 +1031,7 @@ fn uscale(x, pm_hi, pm_lo, s) {
         mid2 = __local_11;
         sticky = builtin::i64_extend_i32_u((mid - mid2) >u 1_i64);
         hi = hi - builtin::i64_extend_i32_u(mid <u mid2);
-    };
+    }
     return (hi >>u builtin::i64_extend_i32_s(s)) | sticky;
 }
 
@@ -1072,17 +1072,17 @@ fn fixed_width_for_prec(f, precision) {
     s1 = 0 - ((e + lp1) + 3);
     u1 = uscale(m, __sroa_pm1_hi, __sroa_pm1_lo, s1);
     d1_floor = (u1 + 0_i64) >>u 2_i64;
-    decimal_pos = if d1_floor >=u 10_i64 -> i32 {
+    decimal_pos = (if d1_floor >=u 10_i64 -> i32 {
         2 - p1;
     } else {
         1 - p1;
-    };
+    });
     total_digits = decimal_pos + precision;
-    n = if total_digits > 18 -> i32 {
+    n = (if total_digits > 18 -> i32 {
         18;
     } else {
         select i32(total_digits < 1, 1, total_digits);
-    };
+    });
     p = (n - 1) - log10_e63;
     lp = (p * 108853) >> 15;
     let __sroa_pm_hi: u64;
@@ -1096,16 +1096,16 @@ fn fixed_width_for_prec(f, precision) {
         if n >= __local_30.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_30.repr, n);
     } {
         d = __inline_unrounded_round_8: block -> u64 {
             __local_29 = unrounded_div(u, 10_i64);
             break __inline_unrounded_round_8: ((__local_29 + 1_i64) + ((__local_29 >>u 2_i64) & 1_i64)) >>u 2_i64;
         };
-        return d; (0 - p) + 1;
-    };
-    return d; 0 - p;
+        return d, (0 - p) + 1;
+    }
+    return d, 0 - p;
 }
 
 fn short(f) {
@@ -1143,11 +1143,11 @@ fn short(f) {
     z = 11;
     p = 0;
     m_is_power_of_2 = m == -9223372036854775808_i64;
-    if if m_is_power_of_2 -> i32 {
+    if (if m_is_power_of_2 -> i32 {
         e > -1085;
     } else {
         0;
-    } {
+    }) {
         p = 0 - __inline_skewed_0: block -> i32 {
             __local_22 = e + 11;
             break __inline_skewed_0: ((__local_22 * 631305) - 261663) >> 21;
@@ -1156,13 +1156,13 @@ fn short(f) {
     } else {
         if e < -1085 {
             z = 11 + (-1085 - e);
-        };
+        }
         p = 0 - __inline_log10_pow2_1: block -> i32 {
             __local_23 = e + z;
             break __inline_log10_pow2_1: (__local_23 * 78913) >> 18;
         };
         min_m = m - (1_i64 << builtin::i64_extend_i32_s(z - 1));
-    };
+    }
     max_m = m + (1_i64 << builtin::i64_extend_i32_s(z - 1));
     odd = builtin::i32_wrap_i64((m >>u builtin::i64_extend_i32_s(z)) & 1_i64);
     lp = (p * 108853) >> 15;
@@ -1193,16 +1193,16 @@ fn short(f) {
         multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = trim_zeros(d_div_10, 0 - (p - 1));
         digits = __sroa___pattern_temp_0_0;
         exponent = __sroa___pattern_temp_0_1;
-        return digits; exponent;
-    };
+        return digits, exponent;
+    }
     d = dmin;
     if dmin <u dmax {
         d = __inline_unrounded_round_8: block -> u64 {
             __local_32 = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
             break __inline_unrounded_round_8: ((__local_32 + 1_i64) + ((__local_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
         };
-    };
-    return d; 0 - p;
+    }
+    return d, 0 - p;
 }
 
 fn trim_zeros(x, p) {
@@ -1236,8 +1236,8 @@ fn trim_zeros(x, p) {
         xv = d1;
         pv = pv + 1;
     } else {
-        return xv; pv;
-    };
+        return xv, pv;
+    }
     d8 = __inline_rotate_right_2: block -> u64 {
         __local_22 = __inline_u64_mul_3: block -> u64 {
             multivalue_bind [__local_26, _] = i64.mul_wide_u(xv, -4078282918271054303_i64);
@@ -1248,7 +1248,7 @@ fn trim_zeros(x, p) {
     if d8 <=u 184467440737_i64 {
         xv = d8;
         pv = pv + 8;
-    };
+    }
     d4 = __inline_rotate_right_4: block -> u64 {
         __local_27 = __inline_u64_mul_5: block -> u64 {
             multivalue_bind [__local_31, _] = i64.mul_wide_u(xv, -3276141747490816367_i64);
@@ -1259,7 +1259,7 @@ fn trim_zeros(x, p) {
     if d4 <=u 1844674407370955_i64 {
         xv = d4;
         pv = pv + 4;
-    };
+    }
     d2 = __inline_rotate_right_6: block -> u64 {
         __local_32 = __inline_u64_mul_7: block -> u64 {
             multivalue_bind [__local_36, _] = i64.mul_wide_u(xv, -8116567392432202711_i64);
@@ -1270,7 +1270,7 @@ fn trim_zeros(x, p) {
     if d2 <=u 184467440737095516_i64 {
         xv = d2;
         pv = pv + 2;
-    };
+    }
     d1b = __inline_rotate_right_8: block -> u64 {
         __local_37 = __inline_u64_mul_9: block -> u64 {
             multivalue_bind [__local_41, _] = i64.mul_wide_u(xv, -3689348814741910323_i64);
@@ -1281,8 +1281,8 @@ fn trim_zeros(x, p) {
     if d1b <=u 1844674407370955161_i64 {
         xv = d1b;
         pv = pv + 1;
-    };
-    return xv; pv;
+    }
+    return xv, pv;
 }
 
 fn write_digits_at(buf, offset, val, nd) {
@@ -1297,7 +1297,7 @@ fn write_digits_at(buf, offset, val, nd) {
         l104: loop {
             if (idx >= offset) == 0 {
                 break b103;
-            };
+            }
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
             builtin::array_set_u8(_licm_repr_9, idx, value);
             v = v /u 10_i64;
@@ -1341,7 +1341,7 @@ fn write_decimal(buf, d, p, nd) {
         builtin::array_copy<u8>(raw, (start_7 + decimal_pos) + 1, raw, start_7 + decimal_pos, nd - decimal_pos);
         index = start_7 + decimal_pos;
         builtin::array_set_u8(buf.repr, index, 46);
-    };
+    }
 }
 
 fn write_exp(buf, d, p, nd, upper) {
@@ -1374,20 +1374,20 @@ fn write_exp(buf, d, p, nd, upper) {
         start_8 = buf.used;
         String::append_byte_filled(buf, 48, 1);
         write_digits_at(buf, start_8, d, 1);
-    };
-    String::push_str(buf, if upper -> ref String {
+    }
+    String::push_str(buf, (if upper -> ref String {
         String { repr: array.new_data<u8>("E"), used: 1 };
     } else {
         String { repr: array.new_data<u8>("e"), used: 1 };
-    });
+    }));
     if exp < 0 {
         String::push(buf, 45);
-    };
-    abs_exp = if exp < 0 -> i32 {
+    }
+    abs_exp = (if exp < 0 -> i32 {
         0 - exp;
     } else {
         exp;
-    };
+    });
     if abs_exp < 10 {
         String::push(buf, __inline_char__from_u32_unchecked_6: block -> char {
             __local_20 = 48 + abs_exp;
@@ -1423,7 +1423,7 @@ fn write_exp(buf, d, p, nd, upper) {
             };
             break __inline_i2a_second_11;
         });
-    };
+    }
 }
 
 fn write_decimal_prec(buf, d, p, nd, precision) {
@@ -1453,7 +1453,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     if precision < 0 {
         write_decimal(buf, d, p, nd);
         return;
-    };
+    }
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
         leading_zeros = 0 - decimal_pos;
@@ -1462,7 +1462,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         if precision <= leading_zeros {
             String::append_byte_filled(buf, 48, precision);
             return;
-        };
+        }
         String::append_byte_filled(buf, 48, leading_zeros);
         remaining_prec = precision - leading_zeros;
         digits_to_output = select i32(remaining_prec < nd, remaining_prec, nd);
@@ -1473,7 +1473,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
             l118: loop {
                 if (skip_11 > 0) == 0 {
                     break b117;
-                };
+                }
                 trim_d_10 = trim_d_10 /u 10_i64;
                 skip_11 = skip_11 - 1;
                 continue l118;
@@ -1492,7 +1492,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         if precision > 0 {
             String::push(buf, 46);
             String::append_byte_filled(buf, 48, precision);
-        };
+        }
     } else {
         after_decimal = nd - decimal_pos;
         if precision <= after_decimal {
@@ -1503,7 +1503,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
                 l124: loop {
                     if (skip_17 > 0) == 0 {
                         break b123;
-                    };
+                    }
                     trim_d_16 = trim_d_16 /u 10_i64;
                     skip_17 = skip_17 - 1;
                     continue l124;
@@ -1518,7 +1518,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
             index_45 = start_19 + decimal_pos;
             builtin::array_set_u8(buf.repr, index_45, 46);
             return;
-        };
+        }
         trailing_21 = precision - after_decimal;
         start_22 = buf.used;
         n_49 = nd + 1;
@@ -1529,7 +1529,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         index_52 = start_22 + decimal_pos;
         builtin::array_set_u8(buf.repr, index_52, 46);
         String::append_byte_filled(buf, 48, trailing_21);
-    };
+    }
 }
 
 fn check_special(f) {
@@ -1537,19 +1537,19 @@ fn check_special(f) {
     let is_neg: bool;
     bits = builtin::i64_reinterpret_f64(f);
     if bits == 0_i64 {
-        return 1; 0; 1;
-    };
+        return 1, 0, 1;
+    }
     if bits == -9223372036854775808_i64 {
-        return 1; 1; 1;
-    };
+        return 1, 1, 1;
+    }
     is_neg = bits < 0_i64;
     if (bits & 9218868437227405312_i64) == 9218868437227405312_i64 {
         if (bits & 4503599627370495_i64) != 0_i64 {
-            return 1; 0; 3;
-        };
-        return 1; is_neg; 2;
-    };
-    return 0; is_neg; 0;
+            return 1, 0, 3;
+        }
+        return 1, is_neg, 2;
+    }
+    return 0, is_neg, 0;
 }
 
 fn pack64(m, e) {
@@ -1562,7 +1562,7 @@ fn pack64(m, e) {
             __local_5 = m;
             break __inline_f64__from_bits_0: builtin::f64_reinterpret_i64(__local_5);
         };
-    };
+    }
     mantissa_bits = m & -4503599627370497_i64;
     exp_bits = builtin::i64_extend_i32_s(1075 + e) << 52_i64;
     return __inline_f64__from_bits_1: block -> f64 {
@@ -1611,7 +1611,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -1619,7 +1619,7 @@ fn count_digits_i64(val) {
             l133: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l133;
@@ -1642,7 +1642,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l137: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -1650,7 +1650,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn fmt_float_special(f, is_neg, kind, zero_repr) {
@@ -1665,39 +1665,39 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         String::push(f.buf, 97);
         String::push(f.buf, 78);
     } else if kind == 2 {
-        String::push_str(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, (if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
-        });
+        }));
     } else {
-        String::push_str(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, (if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
-        });
+        }));
         String::push_str(f.buf, zero_repr);
-    };
+    }
     Formatter::apply_padding(f, mark);
 }
 
 fn "core:json/hex_digit"(v) {  // from core:json
     if v < 10 {
         return (48 + v) & 255;
-    };
+    }
     return ((97 + v) - 10) & 255;
 }
 
 fn "core:json/utf8_sequence_length"(leading_byte) {  // from core:json
     if leading_byte < 128 {
         return 1;
-    };
+    }
     if leading_byte < 224 {
         return 2;
-    };
+    }
     if leading_byte < 240 {
         return 3;
-    };
+    }
     return 4;
 }
 
@@ -1743,10 +1743,10 @@ fn "core:json/write_escaped_string"(buf, s) {  // from core:json
                     String::push(buf, "core:json/hex_digit"(lo));
                 } else {
                     String::push(buf, c);
-                };
+                }
             } else {
                 break b147;
-            };
+            }
             continue l148;
         };
     };
@@ -1758,7 +1758,7 @@ fn Array<u64>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u64>::grow(self);
-    };
+    }
     builtin::array_set<u64>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1785,7 +1785,7 @@ fn Array<u64>::grow(self) {
             l158: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
                 i = i + 1;
                 continue l158;
@@ -1797,16 +1797,16 @@ fn Array<u64>::grow(self) {
 
 fn char::from_u32(value) {
     if value >u 1114111 {
-        return 1; 0;
-    };
-    if if value >=u 55296 -> i32 {
+        return 1, 0;
+    }
+    if (if value >=u 55296 -> i32 {
         value <=u 57343;
     } else {
         0;
-    } {
-        return 1; 0;
-    };
-    return 0; value;
+    }) {
+        return 1, 0;
+    }
+    return 0, value;
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1816,11 +1816,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -1846,7 +1846,7 @@ fn f64::fmt_into(self, f) {
     if f.precision >= 0 {
         f64::fmt_fixed(self, f.precision, f);
         return;
-    };
+    }
     value = self;
     let __sroa___pattern_temp_0_0: bool;
     let __sroa___pattern_temp_0_1: bool;
@@ -1858,12 +1858,12 @@ fn f64::fmt_into(self, f) {
     if is_special {
         fmt_float_special(f, is_neg, kind, String { repr: array.new_data<u8>("0"), used: 1 });
         return;
-    };
-    abs_f = if is_neg -> f64 {
+    }
+    abs_f = (if is_neg -> f64 {
         builtin::f64_neg(value);
     } else {
         value;
-    };
+    });
     let __sroa_result_digits: u64;
     let __sroa_result_exponent: i32;
     multivalue_bind [__sroa_result_digits, __sroa_result_exponent] = short(abs_f);
@@ -1879,7 +1879,7 @@ fn f64::fmt_into(self, f) {
             if __local_14 >= __local_22.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_22.repr, __local_14);
         });
     };
@@ -1891,7 +1891,7 @@ fn f64::fmt_into(self, f) {
         String::push(f.buf, 45);
     } else if f.sign_plus {
         String::push(f.buf, 43);
-    };
+    }
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
 }
@@ -1914,7 +1914,7 @@ fn f64::inspect_into(self, f) {
     if f.precision >= 0 {
         f64::fmt_fixed(self, f.precision, f);
         return;
-    };
+    }
     value = self;
     let __sroa___pattern_temp_0_0: bool;
     let __sroa___pattern_temp_0_1: bool;
@@ -1926,12 +1926,12 @@ fn f64::inspect_into(self, f) {
     if is_special {
         fmt_float_special(f, is_neg, kind, String { repr: array.new_data<u8>("0.0"), used: 3 });
         return;
-    };
-    abs_f = if is_neg -> f64 {
+    }
+    abs_f = (if is_neg -> f64 {
         builtin::f64_neg(value);
     } else {
         value;
-    };
+    });
     let __sroa_result_digits: u64;
     let __sroa_result_exponent: i32;
     multivalue_bind [__sroa_result_digits, __sroa_result_exponent] = short(abs_f);
@@ -1947,7 +1947,7 @@ fn f64::inspect_into(self, f) {
             if __local_15 >= __local_23.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_23.repr, __local_15);
         });
     };
@@ -1960,12 +1960,12 @@ fn f64::inspect_into(self, f) {
         String::push(f.buf, 45);
     } else if f.sign_plus {
         String::push(f.buf, 43);
-    };
-    if if exp < -4 -> i32 {
+    }
+    if (if exp < -4 -> i32 {
         1;
     } else {
         exp >= 16;
-    } {
+    }) {
         write_exp(f.buf, d, p, nd, 0);
     } else if p >= 0 {
         write_decimal(f.buf, d, p, nd);
@@ -1973,7 +1973,7 @@ fn f64::inspect_into(self, f) {
         String::push(f.buf, 48);
     } else {
         write_decimal(f.buf, d, p, nd);
-    };
+    }
     Formatter::apply_padding(f, mark);
 }
 
@@ -2002,11 +2002,11 @@ fn f64::fmt_fixed(self, precision, f) {
     is_neg = __sroa___pattern_temp_0_1;
     kind = __sroa___pattern_temp_0_2;
     if is_special {
-        if if let __match_scrut_0: enum:SpecialKind; __match_scrut_0 = kind; if __match_scrut_0 == 3 -> bool {
+        if (if let __match_scrut_0: enum:SpecialKind; __match_scrut_0 = kind; (if __match_scrut_0 == 3 -> bool {
             1;
         } else {
             0;
-        } -> i32 {
+        }) -> i32 {
             1;
         } else {
             let __match_scrut_1: enum:SpecialKind;
@@ -2015,11 +2015,11 @@ fn f64::fmt_fixed(self, precision, f) {
                 1;
             } else {
                 0;
-            };
-        } {
+            }
+        }) {
             fmt_float_special(f, is_neg, kind, String { repr: array.new_data<u8>("0"), used: 1 });
             return;
-        };
+        }
         mark_7 = __inline_String__len_1: block -> i32 {
             __local_16 = f.buf;
             break __inline_String__len_1: __local_16.used;
@@ -2028,20 +2028,20 @@ fn f64::fmt_fixed(self, precision, f) {
             String::push(f.buf, 45);
         } else if f.sign_plus {
             String::push(f.buf, 43);
-        };
+        }
         String::push(f.buf, 48);
         if precision > 0 {
             String::push(f.buf, 46);
             String::append_byte_filled(f.buf, 48, precision);
-        };
+        }
         Formatter::apply_padding(f, mark_7);
         return;
-    };
-    abs_f = if is_neg -> f64 {
+    }
+    abs_f = (if is_neg -> f64 {
         builtin::f64_neg(value);
     } else {
         value;
-    };
+    });
     let __sroa_result_digits: u64;
     let __sroa_result_exponent: i32;
     multivalue_bind [__sroa_result_digits, __sroa_result_exponent] = fixed_width_for_prec(abs_f, precision);
@@ -2057,7 +2057,7 @@ fn f64::fmt_fixed(self, precision, f) {
             if __local_20 >= __local_28.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_28.repr, __local_20);
         });
     };
@@ -2069,7 +2069,7 @@ fn f64::fmt_fixed(self, precision, f) {
         String::push(f.buf, 45);
     } else if f.sign_plus {
         String::push(f.buf, 43);
-    };
+    }
     write_decimal_prec(f.buf, d, p, nd, precision);
     Formatter::apply_padding(f, mark_13);
 }
@@ -2084,7 +2084,7 @@ fn char^Display::fmt(self, f) {
         s = String { repr: builtin::array_new<u8>(4), used: 0 };
         String::push(s, self);
         Formatter::pad(f, s);
-    };
+    }
 }
 
 fn String::grow(self, min_capacity) {
@@ -2096,7 +2096,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -2115,7 +2115,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -2125,11 +2125,11 @@ fn String::append_byte_filled(self, byte, n) {
     let new_used: i32;
     if n <= 0 {
         return;
-    };
+    }
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_fill<u8>(self.repr, self.used, byte, n);
     self.used = new_used;
 }
@@ -2140,11 +2140,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -2154,7 +2154,7 @@ fn String^Eq::eq(self, other) {
     len_a = self.used;
     if len_a != other.used {
         return 0;
-    };
+    }
     return String^Eq::eq_bytes(self.repr, other.repr, len_a);
 }
 
@@ -2166,10 +2166,10 @@ fn String^Eq::eq_bytes(a, b, len) {
             l200: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
-                };
+                }
                 i = i + 1;
                 continue l200;
             };
@@ -2191,35 +2191,35 @@ fn StrCharIter^Iterator::next(self) {
     let code_10: u32;
     let __local_11: u32;
     if self.byte_index >= self.used {
-        return 1; 0;
-    };
+        return 1, 0;
+    }
     b0 = builtin::array_get_u8(self.repr, self.byte_index);
     self.byte_index = self.byte_index + 1;
     if b0 <u 128 {
-        return 0; __inline_char__from_u32_unchecked_0: block -> char {
+        return 0, __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
         };
-    };
+    }
     if b0 <u 224 {
         b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
         self.byte_index = self.byte_index + 1;
         code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
-        return 0; code_3;
-    };
+        return 0, code_3;
+    }
     if b0 <u 240 {
         b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
         b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
         self.byte_index = self.byte_index + 2;
         code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
-        return 0; code_6;
-    };
+        return 0, code_6;
+    }
     b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
     b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
     b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
     self.byte_index = self.byte_index + 3;
     code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
-    return 0; code_10;
+    return 0, code_10;
 }
 
 fn String::push(self, c) {
@@ -2227,7 +2227,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -2246,7 +2246,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
@@ -2284,24 +2284,24 @@ fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
                     drop(__inline_JsonVariantAccess_DeserializeVariant__end_3: block -> ref null "core:serde/DeserializeError" {
                         if va.is_object {
                             break __inline_JsonVariantAccess_DeserializeVariant__end_3: "core:json/JsonDeserializer::expect_char"(va.de, 125);
-                        };
+                        }
                         break __inline_JsonVariantAccess_DeserializeVariant__end_3: ref.null none;
                     });
-                    return 0; Shape::Circle { discriminant: 0, payload_0: __payload_7 }; ref.null none;
+                    return 0, Shape::Circle { discriminant: 0, payload_0: __payload_7 }, ref.null none;
                 } else {
-                    return 1; ref.null none; ref.cast Result<f64,DeserializeError>::Err(__p_r_8).payload_0;
-                };
-            };
+                    return 1, ref.null none, ref.cast Result<f64,DeserializeError>::Err(__p_r_8).payload_0;
+                }
+            }
             if __disc == 1 {
                 drop(__inline_JsonVariantAccess_DeserializeVariant__end_4: block -> ref null "core:serde/DeserializeError" {
                     if va.is_object {
                         break __inline_JsonVariantAccess_DeserializeVariant__end_4: "core:json/JsonDeserializer::expect_char"(va.de, 125);
-                    };
+                    }
                     break __inline_JsonVariantAccess_DeserializeVariant__end_4: ref.null none;
                 });
-                return 0; Shape { 1 }; ref.null none;
-            };
-            return 1; ref.null none; "core:serde/DeserializeError" { kind: 2, message: String { repr: array.new_data<u8>("unknown variant discriminant"), used: 28 }, offset: -1_i64 };
+                return 0, Shape { 1 }, ref.null none;
+            }
+            return 1, ref.null none, "core:serde/DeserializeError" { kind: 2, message: String { repr: array.new_data<u8>("unknown variant discriminant"), used: 28 }, offset: -1_i64 };
         } else {
             __name_r = Result<String,DeserializeError>::Ok { discriminant: 0, payload_0: va.variant };
             __pattern_temp_3 = __name_r;
@@ -2318,31 +2318,31 @@ fn Shape^Deserialize::deserialize<JsonDeserializer>(d) {
                         drop(__inline_JsonVariantAccess_DeserializeVariant__end_8: block -> ref null "core:serde/DeserializeError" {
                             if va.is_object {
                                 break __inline_JsonVariantAccess_DeserializeVariant__end_8: "core:json/JsonDeserializer::expect_char"(va.de, 125);
-                            };
+                            }
                             break __inline_JsonVariantAccess_DeserializeVariant__end_8: ref.null none;
                         });
-                        return 0; Shape::Circle { discriminant: 0, payload_0: __payload_9 }; ref.null none;
+                        return 0, Shape::Circle { discriminant: 0, payload_0: __payload_9 }, ref.null none;
                     } else {
-                        return 1; ref.null none; ref.cast Result<f64,DeserializeError>::Err(__p_r_10).payload_0;
-                    };
-                };
+                        return 1, ref.null none, ref.cast Result<f64,DeserializeError>::Err(__p_r_10).payload_0;
+                    }
+                }
                 if String^Eq::eq(__name, String { repr: array.new_data<u8>("Point"), used: 5 }) {
                     drop(__inline_JsonVariantAccess_DeserializeVariant__end_9: block -> ref null "core:serde/DeserializeError" {
                         if va.is_object {
                             break __inline_JsonVariantAccess_DeserializeVariant__end_9: "core:json/JsonDeserializer::expect_char"(va.de, 125);
-                        };
+                        }
                         break __inline_JsonVariantAccess_DeserializeVariant__end_9: ref.null none;
                     });
-                    return 0; Shape { 1 }; ref.null none;
-                };
-                return 1; ref.null none; "core:serde/DeserializeError" { kind: 2, message: String { repr: array.new_data<u8>("unknown variant"), used: 15 }, offset: -1_i64 };
+                    return 0, Shape { 1 }, ref.null none;
+                }
+                return 1, ref.null none, "core:serde/DeserializeError" { kind: 2, message: String { repr: array.new_data<u8>("unknown variant"), used: 15 }, offset: -1_i64 };
             } else {
-                return 1; ref.null none; ref.cast Result<String,DeserializeError>::Err(__name_r).payload_0;
-            };
-        };
+                return 1, ref.null none, ref.cast Result<String,DeserializeError>::Err(__name_r).payload_0;
+            }
+        }
     } else {
-        return 1; ref.null none; ref.cast Result<JsonVariantAccess,DeserializeError>::Err(__va_r).payload_0;
-    };
+        return 1, ref.null none, ref.cast Result<JsonVariantAccess,DeserializeError>::Err(__va_r).payload_0;
+    }
 }
 
 fn Shape^Serialize::serialize<JsonSerializer>(self, s) {
@@ -2369,7 +2369,7 @@ fn Shape^Serialize::serialize<JsonSerializer>(self, s) {
             };
         } else {
             return "core:serde/SerializeError" { kind: 1, message: String { repr: array.new_data<u8>("begin_variant failed"), used: 20 } };
-        };
+        }
     } else if __match_scrut_0.discriminant == 1 {
         return __inline_JsonSerializer_Serializer__serialize_unit_variant_1: block -> ref null "core:serde/SerializeError" {
             __local_8 = String { repr: array.new_data<u8>("Shape"), used: 5 };
@@ -2379,7 +2379,7 @@ fn Shape^Serialize::serialize<JsonSerializer>(self, s) {
         };
     } else {
         unreachable;
-    };
+    }
 }
 
 fn JsonVariantSerializer^SerializeVariant::payload<f64>(self, value) {
@@ -2397,13 +2397,13 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {  // from core
     let __local_5: ref "core:internal/Box<f64>";
     if v != v {
         return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
-    };
+    }
     if __inline_f64__is_finite_1: block -> bool {
         __local_5 = "core:internal/Box<f64>" { value: v };
         break __inline_f64__is_finite_1: (v - v) == 0;
     } == 0 {
         return "core:serde/SerializeError" { kind: 0, message: String { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
-    };
+    }
     String::push_str(self, __tmpl: block -> ref String {
         __local_2 = String { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
@@ -2417,7 +2417,7 @@ fn "core:json/JsonSerializer^Serializer::begin_variant"(self, variant_name) {  /
     String::push(self, 123);
     "core:json/write_escaped_string"(self, variant_name);
     String::push(self, 58);
-    return 0; "core:json/JsonVariantSerializer" { buf: self }; ref.null none;
+    return 0, "core:json/JsonVariantSerializer" { buf: self }, ref.null none;
 }
 
 fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
@@ -2436,29 +2436,29 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
             if (_hfs_pos_8 < _licm_used_6) == 0 {
                 self.pos = _hfs_pos_8;
                 break b229;
-            };
+            }
             b = __inline_String__get_byte_1: block -> u8 {
                 __local_4 = _hfs_pos_8;
                 break __inline_String__get_byte_1: builtin::array_get_u8(_licm_repr_7, __local_4);
             };
-            if if if if b == 32 -> i32 {
+            if (if (if (if b == 32 -> i32 {
                 1;
             } else {
                 b == 9;
-            } -> i32 {
+            }) -> i32 {
                 1;
             } else {
                 b == 10;
-            } -> i32 {
+            }) -> i32 {
                 1;
             } else {
                 b == 13;
-            } {
+            }) {
                 _hfs_pos_8 = _hfs_pos_8 + 1;
             } else {
                 self.pos = _hfs_pos_8;
                 return;
-            };
+            }
             continue l230;
         };
     };
@@ -2484,7 +2484,7 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {  // from core:json
             __local_6 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_6 };
         });
-    };
+    }
     b = __inline_String__get_byte_2: block -> u8 {
         __local_7 = self.input;
         __local_8 = self.pos;
@@ -2506,7 +2506,7 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {  // from core:json
             __local_13 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__malformed_6: "core:serde/DeserializeError" { kind: 6, message: __local_12, offset: __local_13 };
         });
-    };
+    }
     self.pos = self.pos + 1;
     return ref.null none;
 }
@@ -2599,22 +2599,22 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
         __local_39 = self.input;
         break __inline_String__len_0: __local_39.used;
     } {
-        return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
+        return 1, ref.null none, ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
             __local_40 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_40 };
         });
-    };
+    }
     if __inline_String__get_byte_2: block -> u8 {
         __local_41 = self.input;
         __local_42 = self.pos;
         break __inline_String__get_byte_2: builtin::array_get_u8(__local_41.repr, __local_42);
     } != 34 {
-        return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__unexpected_type_3: block -> ref "core:serde/DeserializeError" {
+        return 1, ref.null none, ref.as_non_null(__inline_DeserializeError__unexpected_type_3: block -> ref "core:serde/DeserializeError" {
             __local_43 = String { repr: array.new_data<u8>("expected string"), used: 15 };
             __local_44 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__unexpected_type_3: "core:serde/DeserializeError" { kind: 0, message: __local_43, offset: __local_44 };
         });
-    };
+    }
     self.pos = self.pos + 1;
     prefix_start = self.pos;
     scan_pos = self.pos;
@@ -2625,21 +2625,21 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
         l241: loop {
             if (scan_pos < _licm_used_90) == 0 {
                 break b240;
-            };
+            }
             sb = builtin::array_get_u8(_licm_repr_91, scan_pos);
-            if if sb == 34 -> i32 {
+            if (if sb == 34 -> i32 {
                 1;
             } else {
                 sb == 92;
-            } {
+            }) {
                 break b240;
-            };
+            }
             scan_pos = scan_pos + 1;
             continue l241;
         };
     };
     prefix_len = scan_pos - prefix_start;
-    if if scan_pos < __inline_String__len_6: block -> i32 {
+    if (if scan_pos < __inline_String__len_6: block -> i32 {
         __local_48 = self.input;
         break __inline_String__len_6: __local_48.used;
     } -> i32 {
@@ -2650,7 +2650,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
         } == 34;
     } else {
         0;
-    } {
+    }) {
         result_5 = String { repr: builtin::array_new<u8>(prefix_len), used: 0 };
         start_6 = String::internal_reserve_uninit(result_5, prefix_len);
         __for_0: block {
@@ -2662,7 +2662,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                 l248: loop {
                     if (i_7 < prefix_len) == 0 {
                         break __for_0;
-                    };
+                    }
                     index_53 = start_6 + i_7;
                     value_54 = __inline_String__get_byte_10: block -> u8 {
                         __local_56 = prefix_start + i_7;
@@ -2675,8 +2675,8 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             };
         };
         self.pos = scan_pos + 1;
-        return 0; result_5; ref.null none;
-    };
+        return 0, result_5, ref.null none;
+    }
     result_8 = __inline_String__with_capacity_11: block -> ref String {
         __local_57 = prefix_len + 32;
         break __inline_String__with_capacity_11: String { repr: builtin::array_new<u8>(__local_57), used: 0 };
@@ -2691,7 +2691,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             l251: loop {
                 if (i_10 < prefix_len) == 0 {
                     break __for_1;
-                };
+                }
                 index_59 = start_9 + i_10;
                 value_60 = __inline_String__get_byte_13: block -> u8 {
                     __local_62 = prefix_start + i_10;
@@ -2714,7 +2714,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             }) == 0 {
                 self.pos = _hfs_pos_98;
                 break b253;
-            };
+            }
             b = __inline_String__get_byte_15: block -> u8 {
                 __local_64 = self.input;
                 __local_65 = _hfs_pos_98;
@@ -2723,8 +2723,8 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
             if b == 34 {
                 _hfs_pos_98 = _hfs_pos_98 + 1;
                 self.pos = _hfs_pos_98;
-                return 0; result_8; ref.null none;
-            };
+                return 0, result_8, ref.null none;
+            }
             if b == 92 {
                 _hfs_pos_98 = _hfs_pos_98 + 1;
                 if _hfs_pos_98 >= __inline_String__len_16: block -> i32 {
@@ -2733,12 +2733,12 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     break __inline_String__len_16: __local_66.used;
                 } {
                     self.pos = _hfs_pos_98;
-                    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_17: block -> ref "core:serde/DeserializeError" {
+                    return 1, ref.null none, ref.as_non_null(__inline_DeserializeError__eof_17: block -> ref "core:serde/DeserializeError" {
                         __local_67 = builtin::i64_extend_i32_s(_hfs_pos_98);
                         self.pos = _hfs_pos_98;
                         break __inline_DeserializeError__eof_17: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_67 };
                     });
-                };
+                }
                 esc = __inline_String__get_byte_18: block -> u8 {
                     __local_68 = self.input;
                     __local_69 = _hfs_pos_98;
@@ -2770,15 +2770,15 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     if __sroa_r_discriminant == 0 {
                         c_14 = __sroa_r_case0_payload_0;
                         String::push(result_8, c_14);
-                    };
+                    }
                     if __sroa_r_discriminant == 1 {
                         e = __sroa_r_case1_payload_0;
                         self.pos = _hfs_pos_98;
-                        return 1; ref.null none; e;
-                    };
+                        return 1, ref.null none, e;
+                    }
                 } else {
                     self.pos = _hfs_pos_98;
-                    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__malformed_21: block -> ref "core:serde/DeserializeError" {
+                    return 1, ref.null none, ref.as_non_null(__inline_DeserializeError__malformed_21: block -> ref "core:serde/DeserializeError" {
                         __local_72 = __tmpl: block -> ref String {
                             __local_32 = String { repr: builtin::array_new<u8>(34), used: 0 };
                             String::push_str(__local_32, String { repr: array.new_data<u8>("invalid escape '\\"), used: 17 });
@@ -2792,7 +2792,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                         self.pos = _hfs_pos_98;
                         break __inline_DeserializeError__malformed_21: "core:serde/DeserializeError" { kind: 6, message: __local_72, offset: __local_73 };
                     });
-                };
+                }
                 _hfs_pos_98 = _hfs_pos_98 + 1;
             } else {
                 seq_len = "core:json/utf8_sequence_length"(b);
@@ -2802,12 +2802,12 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     break __inline_String__len_22: __local_74.used;
                 } {
                     self.pos = _hfs_pos_98;
-                    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_23: block -> ref "core:serde/DeserializeError" {
+                    return 1, ref.null none, ref.as_non_null(__inline_DeserializeError__eof_23: block -> ref "core:serde/DeserializeError" {
                         __local_75 = builtin::i64_extend_i32_s(_hfs_pos_98);
                         self.pos = _hfs_pos_98;
                         break __inline_DeserializeError__eof_23: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_75 };
                     });
-                };
+                }
                 if seq_len == 1 {
                     String::push(result_8, b & 255);
                 } else if seq_len == 2 {
@@ -2824,7 +2824,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     if __sroa___pattern_temp_2_discriminant == 0 {
                         c_20 = __sroa___pattern_temp_2_payload_0;
                         String::push(result_8, c_20);
-                    };
+                    }
                 } else if seq_len == 3 {
                     b0_21 = b;
                     b1_22 = __inline_String__get_byte_25: block -> u8 {
@@ -2844,7 +2844,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     if __sroa___pattern_temp_3_discriminant == 0 {
                         c_25 = __sroa___pattern_temp_3_payload_0;
                         String::push(result_8, c_25);
-                    };
+                    }
                 } else {
                     b0_26 = b;
                     b1_27 = __inline_String__get_byte_27: block -> u8 {
@@ -2869,15 +2869,15 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                     if __sroa___pattern_temp_4_discriminant == 0 {
                         c_31 = __sroa___pattern_temp_4_payload_0;
                         String::push(result_8, c_31);
-                    };
-                };
+                    }
+                }
                 _hfs_pos_98 = _hfs_pos_98 + seq_len;
-            };
+            }
             continue l254;
         };
     };
     self.pos = _hfs_pos_98;
-    return 1; ref.null none; ref.as_non_null(__inline_DeserializeError__eof_30: block -> ref "core:serde/DeserializeError" {
+    return 1, ref.null none, ref.as_non_null(__inline_DeserializeError__eof_30: block -> ref "core:serde/DeserializeError" {
         __local_88 = builtin::i64_extend_i32_s(self.pos);
         break __inline_DeserializeError__eof_30: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_88 };
     });
@@ -2905,11 +2905,11 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
         __local_7 = self.input;
         break __inline_String__len_0: __local_7.used;
     } {
-        return 1; 0; ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
+        return 1, 0, ref.as_non_null(__inline_DeserializeError__eof_1: block -> ref "core:serde/DeserializeError" {
             __local_8 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_8 };
         });
-    };
+    }
     code = 0;
     __for_2: block {
         i = 0;
@@ -2920,37 +2920,37 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
             l279: loop {
                 if (i < 4) == 0 {
                     break __for_2;
-                };
+                }
                 b = __inline_String__get_byte_2: block -> u8 {
                     __local_10 = _licm_pos_16 + i;
                     break __inline_String__get_byte_2: builtin::array_get_u8(_licm_repr_17, __local_10);
                 };
                 code = code * 16;
-                if if b >=u 48 -> i32 {
+                if (if b >=u 48 -> i32 {
                     b <=u 57;
                 } else {
                     0;
-                } {
+                }) {
                     code = (code + b) - 48;
-                } else if if b >=u 97 -> i32 {
+                } else if (if b >=u 97 -> i32 {
                     b <=u 102;
                 } else {
                     0;
-                } {
+                }) {
                     code = ((code + 10) + b) - 97;
-                } else if if b >=u 65 -> i32 {
+                } else if (if b >=u 65 -> i32 {
                     b <=u 70;
                 } else {
                     0;
-                } {
+                }) {
                     code = ((code + 10) + b) - 65;
                 } else {
-                    return 1; 0; ref.as_non_null(__inline_DeserializeError__malformed_3: block -> ref "core:serde/DeserializeError" {
+                    return 1, 0, ref.as_non_null(__inline_DeserializeError__malformed_3: block -> ref "core:serde/DeserializeError" {
                         __local_11 = String { repr: array.new_data<u8>("invalid unicode escape"), used: 22 };
                         __local_12 = builtin::i64_extend_i32_s(start);
                         break __inline_DeserializeError__malformed_3: "core:serde/DeserializeError" { kind: 6, message: __local_11, offset: __local_12 };
                     });
-                };
+                }
                 i = i + 1;
                 continue l279;
             };
@@ -2962,9 +2962,9 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {  // from core:json
     multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = char::from_u32(code);
     if __sroa___pattern_temp_0_discriminant == 0 {
         c = __sroa___pattern_temp_0_payload_0;
-        return 0; c; ref.null none;
-    };
-    return 1; 0; ref.as_non_null(__inline_DeserializeError__malformed_4: block -> ref "core:serde/DeserializeError" {
+        return 0, c, ref.null none;
+    }
+    return 1, 0, ref.as_non_null(__inline_DeserializeError__malformed_4: block -> ref "core:serde/DeserializeError" {
         __local_13 = String { repr: array.new_data<u8>("invalid unicode codepoint"), used: 25 };
         __local_14 = builtin::i64_extend_i32_s(start);
         break __inline_DeserializeError__malformed_4: "core:serde/DeserializeError" { kind: 6, message: __local_13, offset: __local_14 };
@@ -3031,7 +3031,7 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {  // from core:json
         break __inline_String__len_0: __local_20.used;
     } {
         return Result<f64,DeserializeError>::Err { discriminant: 1, payload_0: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start } };
-    };
+    }
     neg = 0;
     if __inline_String__get_byte_2: block -> u8 {
         __local_22 = self.input;
@@ -3040,7 +3040,7 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {  // from core:json
     } == 45 {
         neg = 1;
         self.pos = self.pos + 1;
-    };
+    }
     if self.pos >= __inline_String__len_3: block -> i32 {
         __local_24 = self.input;
         break __inline_String__len_3: __local_24.used;
@@ -3049,23 +3049,23 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {  // from core:json
             __local_25 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_4: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_25 };
         }) };
-    };
+    }
     first = __inline_String__get_byte_5: block -> u8 {
         __local_26 = self.input;
         __local_27 = self.pos;
         break __inline_String__get_byte_5: builtin::array_get_u8(__local_26.repr, __local_27);
     };
-    if if first < 48 -> i32 {
+    if (if first < 48 -> i32 {
         1;
     } else {
         first > 57;
-    } {
+    }) {
         return Result<f64,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_6: block -> ref "core:serde/DeserializeError" {
             __local_28 = String { repr: array.new_data<u8>("expected number"), used: 15 };
             __local_29 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__unexpected_type_6: "core:serde/DeserializeError" { kind: 0, message: __local_28, offset: __local_29 };
         }) };
-    };
+    }
     d = builtin::i64_extend_i32_s(first - 48);
     total_digits = 1;
     self.pos = self.pos + 1;
@@ -3078,31 +3078,31 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {  // from core:json
             if (_hfs_pos_57 < _licm_used_49) == 0 {
                 self.pos = _hfs_pos_57;
                 break b293;
-            };
+            }
             b_6 = __inline_String__get_byte_8: block -> u8 {
                 __local_32 = _hfs_pos_57;
                 break __inline_String__get_byte_8: builtin::array_get_u8(_licm_repr_50, __local_32);
             };
-            if if b_6 >= 48 -> i32 {
+            if (if b_6 >= 48 -> i32 {
                 b_6 <= 57;
             } else {
                 0;
-            } {
+            }) {
                 if total_digits < 19 {
                     d = (d * 10_i64) + builtin::i64_extend_i32_s(b_6 - 48);
-                };
+                }
                 total_digits = total_digits + 1;
                 _hfs_pos_57 = _hfs_pos_57 + 1;
             } else {
                 self.pos = _hfs_pos_57;
                 break b293;
-            };
+            }
             continue l294;
         };
     };
     self.pos = _hfs_pos_57;
     frac = 0;
-    if if self.pos < __inline_String__len_9: block -> i32 {
+    if (if self.pos < __inline_String__len_9: block -> i32 {
         __local_33 = self.input;
         break __inline_String__len_9: __local_33.used;
     } -> i32 {
@@ -3113,7 +3113,7 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {  // from core:json
         } == 46;
     } else {
         0;
-    } {
+    }) {
         self.pos = self.pos + 1;
         _licm_input_51 = self.input;
         _licm_used_52 = _licm_input_51.used;
@@ -3124,31 +3124,31 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {  // from core:json
                 if (_hfs_pos_58 < _licm_used_52) == 0 {
                     self.pos = _hfs_pos_58;
                     break b301;
-                };
+                }
                 b_8 = __inline_String__get_byte_12: block -> u8 {
                     __local_38 = _hfs_pos_58;
                     break __inline_String__get_byte_12: builtin::array_get_u8(_licm_repr_53, __local_38);
                 };
-                if if b_8 >= 48 -> i32 {
+                if (if b_8 >= 48 -> i32 {
                     b_8 <= 57;
                 } else {
                     0;
-                } {
+                }) {
                     if total_digits < 19 {
                         d = (d * 10_i64) + builtin::i64_extend_i32_s(b_8 - 48);
                         frac = frac + 1;
-                    };
+                    }
                     total_digits = total_digits + 1;
                     _hfs_pos_58 = _hfs_pos_58 + 1;
                 } else {
                     self.pos = _hfs_pos_58;
                     break b301;
-                };
+                }
                 continue l302;
             };
         };
         self.pos = _hfs_pos_58;
-    };
+    }
     exp = 0;
     if self.pos < __inline_String__len_13: block -> i32 {
         __local_39 = self.input;
@@ -3159,11 +3159,11 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {  // from core:json
             __local_41 = self.pos;
             break __inline_String__get_byte_14: builtin::array_get_u8(__local_40.repr, __local_41);
         };
-        if if eb == 101 -> i32 {
+        if (if eb == 101 -> i32 {
             1;
         } else {
             eb == 69;
-        } {
+        }) {
             self.pos = self.pos + 1;
             exp_neg = 0;
             if self.pos < __inline_String__len_15: block -> i32 {
@@ -3180,8 +3180,8 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {  // from core:json
                     self.pos = self.pos + 1;
                 } else if sb == 43 {
                     self.pos = self.pos + 1;
-                };
-            };
+                }
+            }
             _licm_input_54 = self.input;
             _licm_used_55 = _licm_input_54.used;
             _licm_repr_56 = _licm_input_54.repr;
@@ -3191,53 +3191,53 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {  // from core:json
                     if (_hfs_pos_59 < _licm_used_55) == 0 {
                         self.pos = _hfs_pos_59;
                         break b313;
-                    };
+                    }
                     b3 = __inline_String__get_byte_18: block -> u8 {
                         __local_47 = _hfs_pos_59;
                         break __inline_String__get_byte_18: builtin::array_get_u8(_licm_repr_56, __local_47);
                     };
-                    if if b3 >= 48 -> i32 {
+                    if (if b3 >= 48 -> i32 {
                         b3 <= 57;
                     } else {
                         0;
-                    } {
+                    }) {
                         exp = (exp * 10) + (b3 - 48);
                         _hfs_pos_59 = _hfs_pos_59 + 1;
                     } else {
                         self.pos = _hfs_pos_59;
                         break b313;
-                    };
+                    }
                     continue l314;
                 };
             };
             self.pos = _hfs_pos_59;
             if exp_neg {
                 exp = 0 - exp;
-            };
-        };
-    };
+            }
+        }
+    }
     if d == 0_i64 {
         v_14 = select f64(neg, -0, 0);
         return Result<f64,DeserializeError>::Ok { discriminant: 0, payload_0: v_14 };
-    };
-    extra_int_digits = if (total_digits - frac) > 19 -> i32 {
+    }
+    extra_int_digits = (if (total_digits - frac) > 19 -> i32 {
         (total_digits - frac) - 19;
     } else {
         0;
-    };
+    });
     eff_p = (exp - frac) + extra_int_digits;
     if eff_p > 350 {
         v_17 = select f64(neg, -inf, inf);
         return Result<f64,DeserializeError>::Ok { discriminant: 0, payload_0: v_17 };
-    };
+    }
     if eff_p < -351 {
         v_18 = select f64(neg, -0, 0);
         return Result<f64,DeserializeError>::Ok { discriminant: 0, payload_0: v_18 };
-    };
+    }
     v_19 = parse(d, eff_p);
     if neg {
         return Result<f64,DeserializeError>::Ok { discriminant: 0, payload_0: builtin::f64_neg(v_19) };
-    };
+    }
     return Result<f64,DeserializeError>::Ok { discriminant: 0, payload_0: v_19 };
 }
 
@@ -3264,7 +3264,7 @@ fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self) {  // from cor
             __local_18 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_1: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_18 };
         }) };
-    };
+    }
     b = __inline_String__get_byte_2: block -> u8 {
         __local_19 = self.input;
         __local_20 = self.pos;
@@ -3278,12 +3278,12 @@ fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self) {  // from cor
         if __sroa_r_4_discriminant == 0 {
             name_5 = __sroa_r_4_case0_payload_0;
             return Result<JsonVariantAccess,DeserializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonVariantAccess" { de: self, variant: name_5, is_object: 0 } };
-        };
+        }
         if __sroa_r_4_discriminant == 1 {
             e_6 = __sroa_r_4_case1_payload_0;
             return Result<JsonVariantAccess,DeserializeError>::Err { discriminant: 1, payload_0: e_6 };
-        };
-    };
+        }
+    }
     if b == 123 {
         self.pos = self.pos + 1;
         let __sroa_r_7_discriminant: i32;
@@ -3296,14 +3296,14 @@ fn "core:json/JsonDeserializer^Deserializer::begin_variant"(self) {  // from cor
             if ref.is_null(cr) == 0 {
                 e_10 = value_copy "core:serde/DeserializeError"(ref.as_non_null(cr));
                 return Result<JsonVariantAccess,DeserializeError>::Err { discriminant: 1, payload_0: e_10 };
-            };
+            }
             return Result<JsonVariantAccess,DeserializeError>::Ok { discriminant: 0, payload_0: "core:json/JsonVariantAccess" { de: self, variant: name_8, is_object: 1 } };
-        };
+        }
         if __sroa_r_7_discriminant == 1 {
             e_11 = __sroa_r_7_case1_payload_0;
             return Result<JsonVariantAccess,DeserializeError>::Err { discriminant: 1, payload_0: e_11 };
-        };
-    };
+        }
+    }
     return Result<JsonVariantAccess,DeserializeError>::Err { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_3: block -> ref "core:serde/DeserializeError" {
         __local_21 = String { repr: array.new_data<u8>("expected string or object for variant"), used: 37 };
         __local_22 = builtin::i64_extend_i32_s(self.pos);
@@ -3321,7 +3321,7 @@ fn Formatter::write_char_n(self, c, n) {
             l333: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l333;
@@ -3337,14 +3337,14 @@ fn Formatter::pad(self, content) {
     let left_pad: i32;
     let right_pad: i32;
     content_len = content.used;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         String::push_str(self.buf, content);
         return;
-    };
+    }
     padding = self.width - content_len;
     align = self.align;
     let __match_scrut_0: enum:Alignment;
@@ -3361,7 +3361,7 @@ fn Formatter::pad(self, content) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         String::push_str(self.buf, content);
-    };
+    }
 }
 
 fn Formatter::apply_padding(self, start_pos) {
@@ -3396,13 +3396,13 @@ fn Formatter::apply_padding(self, start_pos) {
         __local_12 = self.buf;
         break __inline_String__len_0: __local_12.used;
     } - start_pos;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         return;
-    };
+    }
     padding = self.width - content_len;
     fill_byte = self.fill & 255;
     align = self.align;
@@ -3421,7 +3421,7 @@ fn Formatter::apply_padding(self, start_pos) {
             l344: loop {
                 if (i_8 >= 0) == 0 {
                     break b343;
-                };
+                }
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_2: block -> u8 {
                     __local_17 = start_pos + i_8;
@@ -3440,7 +3440,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 l347: loop {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
-                    };
+                    }
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
@@ -3458,7 +3458,7 @@ fn Formatter::apply_padding(self, start_pos) {
             l350: loop {
                 if (i_10 >= 0) == 0 {
                     break b349;
-                };
+                }
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_5: block -> u8 {
                     __local_25 = start_pos + i_10;
@@ -3477,7 +3477,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 l353: loop {
                     if (j_11 < padding) == 0 {
                         break __for_2;
-                    };
+                    }
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
@@ -3485,7 +3485,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
             };
         };
-    };
+    }
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
@@ -3504,44 +3504,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -3551,10 +3551,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -3562,12 +3562,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 fn String^Inspect::inspect(self, f) {
@@ -3609,10 +3609,10 @@ fn String^Inspect::inspect(self, f) {
                     String::push(_licm_buf_33, 116);
                 } else {
                     String::push(_licm_buf_33, c);
-                };
+                }
             } else {
                 break b372;
-            };
+            }
             continue l373;
         };
     };

@@ -321,7 +321,7 @@ fn run() with Stdout {
         if ref.is_null(__local_50) == 0 {
             __local_49 = ref.as_non_null(__local_50);
             break __inline_TreeMap_String_i32___get_9: TreeMap<String,i32>::search_in_node(__local_47, __local_49, __local_48);
-        };
+        }
         break __inline_TreeMap_String_i32___get_9: Option<i32> { 1 };
     };
     if ref.test Option<i32>::Some(__pattern_temp_0_32) {
@@ -333,7 +333,7 @@ fn run() with Stdout {
             i32::fmt_decimal(val, __local_17);
             break __tmpl: __local_16;
         });
-    };
+    }
     __pattern_temp_1 = __inline_TreeMap_String_i32___get_14: block -> ref Option<i32> {
         __local_57 = map;
         __local_58 = String { repr: array.new_data<u8>("date"), used: 4 };
@@ -341,7 +341,7 @@ fn run() with Stdout {
         if ref.is_null(__local_60) == 0 {
             __local_59 = ref.as_non_null(__local_60);
             break __inline_TreeMap_String_i32___get_14: TreeMap<String,i32>::search_in_node(__local_57, __local_59, __local_58);
-        };
+        }
         break __inline_TreeMap_String_i32___get_14: Option<i32> { 1 };
     };
     if ref.test Option<i32>::Some(__pattern_temp_1) {
@@ -359,7 +359,7 @@ fn run() with Stdout {
             i32::fmt_decimal(val2, __local_19);
             break __tmpl: __local_18;
         });
-    };
+    }
     TreeMap<String,i32>::insert(map, String { repr: array.new_data<u8>("banana"), used: 6 }, 20);
     __pattern_temp_2 = __inline_TreeMap_String_i32___get_19: block -> ref Option<i32> {
         __local_67 = map;
@@ -368,7 +368,7 @@ fn run() with Stdout {
         if ref.is_null(__local_70) == 0 {
             __local_69 = ref.as_non_null(__local_70);
             break __inline_TreeMap_String_i32___get_19: TreeMap<String,i32>::search_in_node(__local_67, __local_69, __local_68);
-        };
+        }
         break __inline_TreeMap_String_i32___get_19: Option<i32> { 1 };
     };
     if ref.test Option<i32>::Some(__pattern_temp_2) {
@@ -380,7 +380,7 @@ fn run() with Stdout {
             i32::fmt_decimal(val3, __local_21);
             break __tmpl: __local_20;
         });
-    };
+    }
     "core:cli/println"(String { repr: array.new_data<u8>("
 === After deleting cherry ==="), used: 30 });
     drop(__inline_TreeMap_String_i32___delete_24: block -> bool {
@@ -390,7 +390,7 @@ fn run() with Stdout {
         if ref.is_null(__local_80) == 0 {
             __local_79 = ref.as_non_null(__local_80);
             break __inline_TreeMap_String_i32___delete_24: TreeMap<String,i32>::delete_in_node(__local_77, __local_79, __local_78);
-        };
+        }
         break __inline_TreeMap_String_i32___delete_24: 0;
     });
     "core:cli/println"(__tmpl: block -> ref String {
@@ -412,12 +412,12 @@ fn run() with Stdout {
         if ref.is_null(__local_91) == 0 {
             __local_90 = ref.as_non_null(__local_91);
             break __inline_TreeMap_String_i32___get_30: TreeMap<String,i32>::search_in_node(__local_88, __local_90, __local_89);
-        };
+        }
         break __inline_TreeMap_String_i32___get_30: Option<i32> { 1 };
     };
     if __pattern_temp_3.discriminant == 1 {
         "core:cli/println"(String { repr: array.new_data<u8>("cherry = (not found)"), used: 20 });
-    };
+    }
     "core:cli/println"(String { repr: array.new_data<u8>("
 === Iteration (sorted) ==="), used: 27 });
     entries = TreeMap<String,i32>::iter(map);
@@ -441,7 +441,7 @@ fn run() with Stdout {
                 });
             } else {
                 break b9;
-            };
+            }
             continue l10;
         };
     };
@@ -454,8 +454,8 @@ fn run() with Stdout {
             root = ref.as_non_null(__pattern_temp_0_101);
             BTreeNode<String,i32>::compact(root);
             map.deleted_count = 0;
-        };
-    };
+        }
+    }
     "core:cli/println"(__tmpl: block -> ref String {
         __local_26 = String { repr: builtin::array_new<u8>(22), used: 0 };
         String::push(__local_26, 83);
@@ -498,7 +498,7 @@ fn run() with Stdout {
                 });
             } else {
                 break b14;
-            };
+            }
             continue l15;
         };
     };
@@ -526,7 +526,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -553,7 +553,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l19: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l19;
@@ -575,7 +575,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -631,7 +631,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -640,7 +640,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -648,7 +648,7 @@ fn count_digits_i64(val) {
             l25: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l25;
@@ -671,7 +671,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l29: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -679,7 +679,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -689,11 +689,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -711,7 +711,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -730,7 +730,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -742,11 +742,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -756,7 +756,7 @@ fn String^Eq::eq(self, other) {
     len_a = self.used;
     if len_a != other.used {
         return 0;
-    };
+    }
     return String^Eq::eq_bytes(self.repr, other.repr, len_a);
 }
 
@@ -768,10 +768,10 @@ fn String^Eq::eq_bytes(a, b, len) {
             l38: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
-                };
+                }
                 i = i + 1;
                 continue l38;
             };
@@ -800,15 +800,15 @@ fn String^Ord::cmp(self, other) {
             l42: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
-                };
+                }
                 a_byte = builtin::array_get_u8(a_repr, i);
                 b_byte = builtin::array_get_u8(b_repr, i);
                 if a_byte <u b_byte {
                     return 0;
-                };
+                }
                 if a_byte >u b_byte {
                     return 2;
-                };
+                }
                 i = i + 1;
                 continue l42;
             };
@@ -816,10 +816,10 @@ fn String^Ord::cmp(self, other) {
     };
     if len_a < len_b {
         return 0;
-    };
+    }
     if len_a > len_b {
         return 2;
-    };
+    }
     return 1;
 }
 
@@ -828,7 +828,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -847,7 +847,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Array<String>::push(self, value) {
@@ -855,7 +855,7 @@ fn Array<String>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<String>::grow(self);
-    };
+    }
     builtin::array_set<ref String>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -882,7 +882,7 @@ fn Array<String>::grow(self) {
             l54: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
                 i = i + 1;
                 continue l54;
@@ -940,12 +940,12 @@ fn BTreeNode<String,i32>::compact(self) {
             l57: loop {
                 if (i_7 < _licm_used_31) == 0 {
                     break __for_1;
-                };
+                }
                 if __inline_Array_bool__IndexValue__index_value_10: block -> bool {
                     if i_7 >= _licm_used_32 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    };
+                    }
                     break __inline_Array_bool__IndexValue__index_value_10: builtin::array_get<bool>(_licm_repr_33, i_7);
                 } == 0 {
                     Array<String>::push(new_keys, builtin::array_get<ref String>(_licm_repr_34, i_7));
@@ -953,11 +953,11 @@ fn BTreeNode<String,i32>::compact(self) {
                         if i_7 >= _licm_used_35 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
-                        };
+                        }
                         break __inline_Array_i32__IndexValue__index_value_12: builtin::array_get<i32>(_licm_repr_36, i_7);
                     });
                     Array<bool>::push(new_deleted, 0);
-                };
+                }
                 i_7 = i_7 + 1;
                 continue l57;
             };
@@ -976,14 +976,14 @@ fn BTreeNode<String,i32>::compact(self) {
                 l64: loop {
                     if (i_8 < _licm_used_38) == 0 {
                         break __for_2;
-                    };
+                    }
                     BTreeNode<String,i32>::compact(builtin::array_get<ref BTreeNode<String,i32>>(_licm_repr_39, i_8));
                     i_8 = i_8 + 1;
                     continue l64;
                 };
             };
         };
-    };
+    }
 }
 
 fn Array<bool>::push(self, value) {
@@ -991,7 +991,7 @@ fn Array<bool>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<bool>::grow(self);
-    };
+    }
     builtin::array_set<bool>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1018,7 +1018,7 @@ fn Array<bool>::grow(self) {
             l68: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
                 i = i + 1;
                 continue l68;
@@ -1033,7 +1033,7 @@ fn Array<i32>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<i32>::grow(self);
-    };
+    }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1060,7 +1060,7 @@ fn Array<i32>::grow(self) {
             l72: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
                 continue l72;
@@ -1071,18 +1071,18 @@ fn Array<i32>::grow(self) {
 }
 
 fn TreeMap<String,i32>::needs_compaction(self) {
-    return if self.deleted_count > 0 -> i32 {
+    return (if self.deleted_count > 0 -> i32 {
         (self.deleted_count * 4) > (self.size + self.deleted_count);
     } else {
         0;
-    };
+    });
 }
 
 fn ArrayIter<Tuple<String,i32>>^Iterator::next(self) {
     let item: ref "tuple/[String, i32]";
     if self.index >= self.used {
         return ref.null none;
-    };
+    }
     item = builtin::array_get<ref "tuple/[String, i32]">(self.repr, self.index);
     self.index = self.index + 1;
     return item;
@@ -1101,7 +1101,7 @@ fn TreeMap<String,i32>::iter(self) {
     if ref.is_null(__pattern_temp_0) == 0 {
         root = ref.as_non_null(__pattern_temp_0);
         TreeMap<String,i32>::collect_entries(self, root, result);
-    };
+    }
     return result;
 }
 
@@ -1141,57 +1141,57 @@ fn TreeMap<String,i32>::collect_entries(self, node, result) {
         l78: loop {
             if (i < _licm_used_22) == 0 {
                 break b77;
-            };
-            if if _licm_is_leaf_18 == 0 -> i32 {
+            }
+            if (if _licm_is_leaf_18 == 0 -> i32 {
                 i < _licm_used_23;
             } else {
                 0;
-            } {
+            }) {
                 TreeMap<String,i32>::collect_entries(self, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_2: block -> ref BTreeNode<String,i32> {
                     if i >= _licm_used_23 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    };
+                    }
                     break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_2: builtin::array_get<ref BTreeNode<String,i32>>(_licm_repr_24, i);
                 }, result);
-            };
+            }
             if __inline_Array_bool__IndexValue__index_value_3: block -> bool {
                 if i >= _licm_used_25 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                };
+                }
                 break __inline_Array_bool__IndexValue__index_value_3: builtin::array_get<bool>(_licm_repr_26, i);
             } == 0 {
                 Array<Tuple<String,i32>>::push(result, "tuple/[String, i32]" { 0: builtin::array_get<ref String>(_licm_repr_27, i), 1: __inline_Array_i32__IndexValue__index_value_5: block -> i32 {
                     if i >= _licm_used_28 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    };
+                    }
                     break __inline_Array_i32__IndexValue__index_value_5: builtin::array_get<i32>(_licm_repr_29, i);
                 } });
-            };
+            }
             i = i + 1;
             continue l78;
         };
     };
-    if if node.is_leaf == 0 -> i32 {
+    if (if node.is_leaf == 0 -> i32 {
         __inline_Array_BTreeNode_String_i32____len_6: block -> i32 {
             __local_14 = node.children;
             break __inline_Array_BTreeNode_String_i32____len_6: __local_14.used;
         } > i;
     } else {
         0;
-    } {
+    }) {
         TreeMap<String,i32>::collect_entries(self, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_7: block -> ref BTreeNode<String,i32> {
             __local_15 = node.children;
             __local_16 = i;
             if __local_16 >= __local_15.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_7: builtin::array_get<ref BTreeNode<String,i32>>(__local_15.repr, __local_16);
         }, result);
-    };
+    }
 }
 
 fn Array<Tuple<String,i32>>::push(self, value) {
@@ -1199,7 +1199,7 @@ fn Array<Tuple<String,i32>>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<Tuple<String,i32>>::grow(self);
-    };
+    }
     builtin::array_set<ref "tuple/[String, i32]">(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1226,7 +1226,7 @@ fn Array<Tuple<String,i32>>::grow(self) {
             l91: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref "tuple/[String, i32]">(new_repr, i, builtin::array_get<ref "tuple/[String, i32]">(old_repr, i));
                 i = i + 1;
                 continue l91;
@@ -1256,24 +1256,24 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
     _licm_repr_19 = _licm_keys_17.repr;
     b93: block {
         l94: loop {
-            if if i < _licm_used_18 -> i32 {
+            if (if i < _licm_used_18 -> i32 {
                 String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_1: block -> ref String {
                     if i >= _licm_used_18 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    };
+                    }
                     break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_19, i);
                 }) == 2;
             } else {
                 0;
-            } == 0 {
+            }) == 0 {
                 break b93;
-            };
+            }
             i = i + 1;
             continue l94;
         };
     };
-    if if i < __inline_Array_String___len_2: block -> i32 {
+    if (if i < __inline_Array_String___len_2: block -> i32 {
         __local_7 = node.keys;
         break __inline_Array_String___len_2: __local_7.used;
     } -> i32 {
@@ -1283,19 +1283,19 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
             if __local_9 >= __local_8.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_String__IndexValue__index_value_3: builtin::array_get<ref String>(__local_8.repr, __local_9);
         });
     } else {
         0;
-    } {
+    }) {
         if __inline_Array_bool__IndexValue__index_value_4: block -> bool {
             __local_10 = node.deleted;
             __local_11 = i;
             if __local_11 >= __local_10.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_bool__IndexValue__index_value_4: builtin::array_get<bool>(__local_10.repr, __local_11);
         } == 0 {
             self_12 = node.deleted;
@@ -1303,24 +1303,24 @@ fn TreeMap<String,i32>::delete_in_node(self, node, key) {
             if index >= self_12.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             builtin::array_set<bool>(self_12.repr, index, 1);
             self.deleted_count = self.deleted_count + 1;
             self.size = self.size - 1;
             return 1;
-        };
+        }
         return 0;
-    };
+    }
     if node.is_leaf {
         return 0;
-    };
+    }
     return TreeMap<String,i32>::delete_in_node(self, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: block -> ref BTreeNode<String,i32> {
         __local_15 = node.children;
         __local_16 = i;
         if __local_16 >= __local_15.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: builtin::array_get<ref BTreeNode<String,i32>>(__local_15.repr, __local_16);
     }, key);
 }
@@ -1345,24 +1345,24 @@ fn TreeMap<String,i32>::search_in_node(self, node, key) {
     _licm_repr_18 = _licm_keys_16.repr;
     b106: block {
         l107: loop {
-            if if i < _licm_used_17 -> i32 {
+            if (if i < _licm_used_17 -> i32 {
                 String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_1: block -> ref String {
                     if i >= _licm_used_17 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    };
+                    }
                     break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_18, i);
                 }) == 2;
             } else {
                 0;
-            } == 0 {
+            }) == 0 {
                 break b106;
-            };
+            }
             i = i + 1;
             continue l107;
         };
     };
-    if if i < __inline_Array_String___len_2: block -> i32 {
+    if (if i < __inline_Array_String___len_2: block -> i32 {
         __local_7 = node.keys;
         break __inline_Array_String___len_2: __local_7.used;
     } -> i32 {
@@ -1372,19 +1372,19 @@ fn TreeMap<String,i32>::search_in_node(self, node, key) {
             if __local_9 >= __local_8.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_String__IndexValue__index_value_3: builtin::array_get<ref String>(__local_8.repr, __local_9);
         });
     } else {
         0;
-    } {
+    }) {
         if __inline_Array_bool__IndexValue__index_value_4: block -> bool {
             __local_10 = node.deleted;
             __local_11 = i;
             if __local_11 >= __local_10.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_bool__IndexValue__index_value_4: builtin::array_get<bool>(__local_10.repr, __local_11);
         } == 0 {
             return Option<i32>::Some { discriminant: 0, payload_0: __inline_Array_i32__IndexValue__index_value_5: block -> i32 {
@@ -1393,22 +1393,22 @@ fn TreeMap<String,i32>::search_in_node(self, node, key) {
                 if __local_13 >= __local_12.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                };
+                }
                 break __inline_Array_i32__IndexValue__index_value_5: builtin::array_get<i32>(__local_12.repr, __local_13);
             } };
-        };
+        }
         return Option<i32> { 1 };
-    };
+    }
     if node.is_leaf {
         return Option<i32> { 1 };
-    };
+    }
     return TreeMap<String,i32>::search_in_node(self, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: block -> ref BTreeNode<String,i32> {
         __local_14 = node.children;
         __local_15 = i;
         if __local_15 >= __local_14.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_6: builtin::array_get<ref BTreeNode<String,i32>>(__local_14.repr, __local_15);
     }, key);
 }
@@ -1430,7 +1430,7 @@ fn TreeMap<String,i32>::insert(self, key, value) {
         self.root = new_root_3;
         self.size = 1;
         return;
-    };
+    }
     __pattern_temp_1 = value_copy Option<BTreeNode<String,i32>>(self.root);
     if ref.is_null(__pattern_temp_1) == 0 {
         root = ref.as_non_null(__pattern_temp_1);
@@ -1439,13 +1439,13 @@ fn TreeMap<String,i32>::insert(self, key, value) {
             Array<BTreeNode<String,i32>>::push(new_root_5.children, root);
             TreeMap<String,i32>::split_child(self, new_root_5, 0);
             self.root = new_root_5;
-        };
+        }
         __pattern_temp_2 = value_copy Option<BTreeNode<String,i32>>(self.root);
         if ref.is_null(__pattern_temp_2) == 0 {
             r = ref.as_non_null(__pattern_temp_2);
             TreeMap<String,i32>::insert_non_full(self, r, key, value);
-        };
-    };
+        }
+    }
 }
 
 fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
@@ -1479,24 +1479,24 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
         _licm_repr_32 = _licm_keys_30.repr;
         b124: block {
             l125: loop {
-                if if pos_4 < _licm_used_31 -> i32 {
+                if (if pos_4 < _licm_used_31 -> i32 {
                     String^Ord::cmp(__inline_Array_String__IndexValue__index_value_1: block -> ref String {
                         if pos_4 >= _licm_used_31 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
-                        };
+                        }
                         break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(_licm_repr_32, pos_4);
                     }, key) == 0;
                 } else {
                     0;
-                } == 0 {
+                }) == 0 {
                     break b124;
-                };
+                }
                 pos_4 = pos_4 + 1;
                 continue l125;
             };
         };
-        if if pos_4 < __inline_Array_String___len_2: block -> i32 {
+        if (if pos_4 < __inline_Array_String___len_2: block -> i32 {
             __local_9 = node.keys;
             break __inline_Array_String___len_2: __local_9.used;
         } -> i32 {
@@ -1506,18 +1506,18 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
                 if __local_11 >= __local_10.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                };
+                }
                 break __inline_Array_String__IndexValue__index_value_3: builtin::array_get<ref String>(__local_10.repr, __local_11);
             }, key);
         } else {
             0;
-        } {
+        }) {
             self_12 = node.values;
             index_13 = pos_4;
             if index_13 >= self_12.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             builtin::array_set<i32>(self_12.repr, index_13, value);
             if __inline_Array_bool__IndexValue__index_value_5: block -> bool {
                 __local_15 = node.deleted;
@@ -1525,7 +1525,7 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
                 if __local_16 >= __local_15.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                };
+                }
                 break __inline_Array_bool__IndexValue__index_value_5: builtin::array_get<bool>(__local_15.repr, __local_16);
             } {
                 self_17 = node.deleted;
@@ -1533,12 +1533,12 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
                 if index_18 >= self_17.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                };
+                }
                 builtin::array_set<bool>(self_17.repr, index_18, 0);
                 self.deleted_count = self.deleted_count - 1;
-            };
+            }
             return;
-        };
+        }
         Array<String>::push(node.keys, key);
         Array<i32>::push(node.values, value);
         Array<bool>::push(node.deleted, 0);
@@ -1551,19 +1551,19 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
         _licm_repr_35 = _licm_keys_33.repr;
         b136: block {
             l137: loop {
-                if if pos_5 < _licm_used_34 -> i32 {
+                if (if pos_5 < _licm_used_34 -> i32 {
                     String^Ord::cmp(key, __inline_Array_String__IndexValue__index_value_8: block -> ref String {
                         if pos_5 >= _licm_used_34 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
-                        };
+                        }
                         break __inline_Array_String__IndexValue__index_value_8: builtin::array_get<ref String>(_licm_repr_35, pos_5);
                     }) == 2;
                 } else {
                     0;
-                } == 0 {
+                }) == 0 {
                     break b136;
-                };
+                }
                 pos_5 = pos_5 + 1;
                 continue l137;
             };
@@ -1574,7 +1574,7 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
             if __local_24 >= __local_23.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_9: builtin::array_get<ref BTreeNode<String,i32>>(__local_23.repr, __local_24);
         }, (2 * self.t) - 1) {
             TreeMap<String,i32>::split_child(self, node, pos_5);
@@ -1584,22 +1584,22 @@ fn TreeMap<String,i32>::insert_non_full(self, node, key, value) {
                 if __local_27 >= __local_26.used {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                };
+                }
                 break __inline_Array_String__IndexValue__index_value_11: builtin::array_get<ref String>(__local_26.repr, __local_27);
             }) == 2 {
                 pos_5 = pos_5 + 1;
-            };
-        };
+            }
+        }
         TreeMap<String,i32>::insert_non_full(self, __inline_Array_BTreeNode_String_i32___IndexValue__index_value_12: block -> ref BTreeNode<String,i32> {
             __local_28 = node.children;
             __local_29 = pos_5;
             if __local_29 >= __local_28.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_12: builtin::array_get<ref BTreeNode<String,i32>>(__local_28.repr, __local_29);
         }, key, value);
-    };
+    }
 }
 
 fn TreeMap<String,i32>::sort_node_entries(node) {
@@ -1641,14 +1641,14 @@ fn TreeMap<String,i32>::sort_node_entries(node) {
             l147: loop {
                 if (i < _licm_used_46) == 0 {
                     break __for_5;
-                };
+                }
                 __for_6: block {
                     j = i + 1;
                     block {
                         l150: loop {
                             if (j < _licm_used_46) == 0 {
                                 break __for_6;
-                            };
+                            }
                             if String^Ord::cmp(builtin::array_get<ref String>(_licm_repr_47, i), builtin::array_get<ref String>(_licm_repr_47, j)) == 2 {
                                 temp_k = builtin::array_get<ref String>(_licm_repr_47, i);
                                 index_16 = i;
@@ -1656,7 +1656,7 @@ fn TreeMap<String,i32>::sort_node_entries(node) {
                                 if index_16 >= _licm_used_46 {
                                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                     unreachable;
-                                };
+                                }
                                 builtin::array_set<ref String>(_licm_repr_47, index_16, value_17);
                                 index_21 = j;
                                 builtin::array_set<ref String>(_licm_repr_47, index_21, temp_k);
@@ -1664,7 +1664,7 @@ fn TreeMap<String,i32>::sort_node_entries(node) {
                                     if i >= _licm_used_48 {
                                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                         unreachable;
-                                    };
+                                    }
                                     break __inline_Array_i32__IndexValue__index_value_8: builtin::array_get<i32>(_licm_repr_49, i);
                                 };
                                 index_26 = i;
@@ -1672,25 +1672,25 @@ fn TreeMap<String,i32>::sort_node_entries(node) {
                                     if j >= _licm_used_48 {
                                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                         unreachable;
-                                    };
+                                    }
                                     break __inline_Array_i32__IndexValue__index_value_10: builtin::array_get<i32>(_licm_repr_49, j);
                                 };
                                 if index_26 >= _licm_used_48 {
                                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                     unreachable;
-                                };
+                                }
                                 builtin::array_set<i32>(_licm_repr_49, index_26, value_27);
                                 index_31 = j;
                                 if index_31 >= _licm_used_48 {
                                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                     unreachable;
-                                };
+                                }
                                 builtin::array_set<i32>(_licm_repr_49, index_31, temp_v);
                                 temp_d = __inline_Array_bool__IndexValue__index_value_12: block -> bool {
                                     if i >= _licm_used_50 {
                                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                         unreachable;
-                                    };
+                                    }
                                     break __inline_Array_bool__IndexValue__index_value_12: builtin::array_get<bool>(_licm_repr_51, i);
                                 };
                                 index_36 = i;
@@ -1698,21 +1698,21 @@ fn TreeMap<String,i32>::sort_node_entries(node) {
                                     if j >= _licm_used_50 {
                                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                         unreachable;
-                                    };
+                                    }
                                     break __inline_Array_bool__IndexValue__index_value_14: builtin::array_get<bool>(_licm_repr_51, j);
                                 };
                                 if index_36 >= _licm_used_50 {
                                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                     unreachable;
-                                };
+                                }
                                 builtin::array_set<bool>(_licm_repr_51, index_36, value_37);
                                 index_41 = j;
                                 if index_41 >= _licm_used_50 {
                                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                                     unreachable;
-                                };
+                                }
                                 builtin::array_set<bool>(_licm_repr_51, index_41, temp_d);
-                            };
+                            }
                             j = j + 1;
                             continue l150;
                         };
@@ -1759,13 +1759,13 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
         if child_index >= __local_11.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_BTreeNode_String_i32___IndexValue__index_value_0: builtin::array_get<ref BTreeNode<String,i32>>(__local_11.repr, child_index);
     };
     new_sibling = BTreeNode<String,i32>::new_leaf();
     if full_child.is_leaf == 0 {
         new_sibling = BTreeNode<String,i32>::new_internal();
-    };
+    }
     mid = self.t - 1;
     __for_3: block {
         i_6 = mid + 1;
@@ -1785,20 +1785,20 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
             l165: loop {
                 if (i_6 < _licm_used_35) == 0 {
                     break __for_3;
-                };
+                }
                 Array<String>::push(_licm_keys_30, builtin::array_get<ref String>(_licm_repr_36, i_6));
                 Array<i32>::push(_licm_values_31, __inline_Array_i32__IndexValue__index_value_3: block -> i32 {
                     if i_6 >= _licm_used_37 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    };
+                    }
                     break __inline_Array_i32__IndexValue__index_value_3: builtin::array_get<i32>(_licm_repr_38, i_6);
                 });
                 Array<bool>::push(_licm_deleted_33, __inline_Array_bool__IndexValue__index_value_4: block -> bool {
                     if i_6 >= _licm_used_39 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    };
+                    }
                     break __inline_Array_bool__IndexValue__index_value_4: builtin::array_get<bool>(_licm_repr_40, i_6);
                 });
                 i_6 = i_6 + 1;
@@ -1817,20 +1817,20 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
                 l171: loop {
                     if (i_7 < _licm_used_43) == 0 {
                         break __for_4;
-                    };
+                    }
                     Array<BTreeNode<String,i32>>::push(_licm_children_42, builtin::array_get<ref BTreeNode<String,i32>>(_licm_repr_44, i_7));
                     i_7 = i_7 + 1;
                     continue l171;
                 };
             };
         };
-    };
+    }
     promoted_key = __inline_Array_String__IndexValue__index_value_7: block -> ref String {
         __local_23 = full_child.keys;
         if mid >= __local_23.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_String__IndexValue__index_value_7: builtin::array_get<ref String>(__local_23.repr, mid);
     };
     promoted_value = __inline_Array_i32__IndexValue__index_value_8: block -> i32 {
@@ -1838,7 +1838,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
         if mid >= __local_25.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_8: builtin::array_get<i32>(__local_25.repr, mid);
     };
     promoted_deleted = __inline_Array_bool__IndexValue__index_value_9: block -> bool {
@@ -1846,7 +1846,7 @@ fn TreeMap<String,i32>::split_child(self, parent, child_index) {
         if mid >= __local_27.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_bool__IndexValue__index_value_9: builtin::array_get<bool>(__local_27.repr, mid);
     };
     Array<String>::push(parent.keys, promoted_key);
@@ -1861,7 +1861,7 @@ fn Array<BTreeNode<String,i32>>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<BTreeNode<String,i32>>::grow(self);
-    };
+    }
     builtin::array_set<ref BTreeNode<String,i32>>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1888,7 +1888,7 @@ fn Array<BTreeNode<String,i32>>::grow(self) {
             l178: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref BTreeNode<String,i32>>(new_repr, i, builtin::array_get<ref BTreeNode<String,i32>>(old_repr, i));
                 i = i + 1;
                 continue l178;
@@ -1938,16 +1938,16 @@ fn BTreeNode<String,i32>::is_full(self, max_keys) {
             l181: loop {
                 if (i < _licm_used_9) == 0 {
                     break __for_0;
-                };
+                }
                 if __inline_Array_bool__IndexValue__index_value_1: block -> bool {
                     if i >= _licm_used_10 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    };
+                    }
                     break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_11, i);
                 } == 0 {
                     count = count + 1;
-                };
+                }
                 i = i + 1;
                 continue l181;
             };
@@ -1986,7 +1986,7 @@ fn Formatter::write_char_n(self, c, n) {
             l186: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l186;
@@ -2011,44 +2011,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -2058,10 +2058,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -2069,12 +2069,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 export fn __cm_export__run as "run"

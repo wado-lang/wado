@@ -696,6 +696,36 @@ impl<'a> WirUnparser<'a> {
             }
         }
 
+        // Render statement-level If directly to avoid the parentheses that
+        // unparse_instr_inline adds around value-producing If expressions.
+        if let WirInstr::If {
+            condition,
+            result,
+            then_body,
+            else_body,
+        } = instr
+        {
+            self.write_indent();
+            self.push_label(LabelBlockKind::If, None);
+            self.write("if ");
+            self.unparse_instr_inline(condition);
+            if let Some(ty) = result {
+                let ty_str = self.fmt_type(ty);
+                self.write(&format!(" -> {ty_str}"));
+            }
+            self.write(" {");
+            self.newline();
+            self.indent += 1;
+            for sub in then_body {
+                self.unparse_instr(sub);
+            }
+            self.indent -= 1;
+            self.unparse_else_chain(else_body.as_deref());
+            self.pop_label();
+            self.newline();
+            return;
+        }
+
         self.write_indent();
         self.unparse_instr_inline(instr);
         self.write(";");
@@ -1654,6 +1684,13 @@ impl<'a> WirUnparser<'a> {
                 then_body,
                 else_body,
             } => {
+                // Wrap value-producing If expressions (those with a result type) in
+                // parentheses so they don't produce ambiguous `if if ...` when nested
+                // inside another condition or expression.
+                let wrap = result.is_some();
+                if wrap {
+                    self.write("(");
+                }
                 // Push If onto the label stack so `br N` inside can correctly
                 // count depths, but don't show a label since `if` is not a
                 // labeled construct in pseudo-Wado.
@@ -1673,6 +1710,9 @@ impl<'a> WirUnparser<'a> {
                 self.indent -= 1;
                 self.unparse_else_chain(else_body.as_deref());
                 self.pop_label();
+                if wrap {
+                    self.write(")");
+                }
             }
             WirInstr::BranchHint { likely, expr } => {
                 let hint = if *likely { "likely" } else { "unlikely" };
@@ -1729,7 +1769,18 @@ impl<'a> WirUnparser<'a> {
                 self.write("return");
                 if let Some(v) = value {
                     self.write(" ");
-                    self.unparse_instr_inline(v);
+                    // Multi-value return: render comma-separated instead of
+                    // Seq's default semicolon separator.
+                    if let WirInstr::Seq(instrs) = v.as_ref() {
+                        for (i, instr) in instrs.iter().enumerate() {
+                            if i > 0 {
+                                self.write(", ");
+                            }
+                            self.unparse_instr_inline(instr);
+                        }
+                    } else {
+                        self.unparse_instr_inline(v);
+                    }
                 }
             }
             WirInstr::Unreachable => self.write("unreachable"),

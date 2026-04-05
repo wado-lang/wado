@@ -100,15 +100,15 @@ fn run() with Stderr {
         "wasi/waitable-join"(__fr_handle_2, 0);
         "wasi/waitable-set-drop"(__fr_ws_2);
         __fr_result_2 = 0;
-    }; let __fr_opt_3: ref null Result<unit,ErrorCode>; __fr_opt_3 = if (__fr_result_2 & 15) == 0 -> ref null Result<unit,ErrorCode> {
-        ref.as_non_null(if builtin::load_i32(__fr_ptr_2) == 0 -> ref Result<unit,ErrorCode> {
+    }; let __fr_opt_3: ref null Result<unit,ErrorCode>; __fr_opt_3 = (if (__fr_result_2 & 15) == 0 -> ref null Result<unit,ErrorCode> {
+        ref.as_non_null((if builtin::load_i32(__fr_ptr_2) == 0 -> ref Result<unit,ErrorCode> {
             Result<unit,ErrorCode> { 0 };
         } else {
             unreachable;
-        });
+        }));
     } else {
         ref.null none;
-    }; drop("mem/realloc"(__fr_ptr_2, 40, 8, 0)); __fr_opt_3);
+    }); drop("mem/realloc"(__fr_ptr_2, 40, 8, 0)); __fr_opt_3);
 }
 
 fn __cm_binding__Stderr_write_via_stream(data) {
@@ -128,7 +128,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l4: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l4;
@@ -175,7 +175,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
     result = "wasi/stream-write"(handle, ptr, len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, len, 1, 0));
 }
 
@@ -184,7 +184,7 @@ fn Array<u8>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u8>::grow(self);
-    };
+    }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
@@ -211,7 +211,7 @@ fn Array<u8>::grow(self) {
             l9: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
                 continue l9;

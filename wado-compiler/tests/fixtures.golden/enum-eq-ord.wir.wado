@@ -75,37 +75,37 @@ fn run() with Stdout {
     c = 0;
     if a == c {
         "core:cli/println"(String { repr: array.new_data<u8>("low == low"), used: 10 });
-    };
+    }
     if a != b {
         "core:cli/println"(String { repr: array.new_data<u8>("low != medium"), used: 13 });
-    };
+    }
     if a == b {
         "core:cli/println"(String { repr: array.new_data<u8>("BUG: low == medium"), used: 18 });
-    };
+    }
     if a < b {
         "core:cli/println"(String { repr: array.new_data<u8>("low < medium"), used: 12 });
-    };
+    }
     if b > a {
         "core:cli/println"(String { repr: array.new_data<u8>("medium > low"), used: 12 });
-    };
+    }
     if a <= c {
         "core:cli/println"(String { repr: array.new_data<u8>("low <= low"), used: 10 });
-    };
+    }
     if a >= c {
         "core:cli/println"(String { repr: array.new_data<u8>("low >= low"), used: 10 });
-    };
+    }
     h = 2;
     cr = 3;
     if h < cr {
         "core:cli/println"(String { repr: array.new_data<u8>("high < critical"), used: 15 });
-    };
-    if if a < b -> i32 {
+    }
+    if (if a < b -> i32 {
         b < h;
     } else {
         0;
-    } {
+    }) {
         "core:cli/println"(String { repr: array.new_data<u8>("low < medium < high"), used: 19 });
-    };
+    }
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -130,7 +130,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -157,7 +157,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l12: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l12;
@@ -198,7 +198,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
