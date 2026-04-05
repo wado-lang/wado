@@ -1,0 +1,58 @@
+use json_hl from "./golden/json_highlight.wado";
+
+test "highlight produces HTML" {
+    let html = json_hl::highlight(&"{\"key\": 42}");
+    assert html.len() > 0, "highlight returned empty string";
+}
+
+test "highlight contains string span" {
+    let html = json_hl::highlight(&"{\"key\": 42}");
+    assert str_contains(&html, "class=\"string\""), `missing string class in: {html}`;
+}
+
+test "highlight contains number span" {
+    let html = json_hl::highlight(&"{\"key\": 42}");
+    assert str_contains(&html, "class=\"number\""), `missing number class in: {html}`;
+}
+
+test "highlight contains bracket span" {
+    let html = json_hl::highlight(&"[1, 2]");
+    assert str_contains(&html, "class=\"punctuation bracket\""), `missing bracket class in: {html}`;
+}
+
+test "highlight contains keyword span for true" {
+    let html = json_hl::highlight(&"true");
+    assert str_contains(&html, "class=\"constant builtin\""), `missing constant.builtin class in: {html}`;
+}
+
+test "highlight contains delimiter span for comma" {
+    let html = json_hl::highlight(&"[1, 2]");
+    assert str_contains(&html, "class=\"punctuation delimiter\""), `missing delimiter class in: {html}`;
+}
+
+test "highlight escapes HTML entities" {
+    let html = json_hl::highlight(&"\"<script>\"");
+    assert str_contains(&html, "&lt;"), `missing escaped < in: {html}`;
+    assert str_contains(&html, "&gt;"), `missing escaped > in: {html}`;
+}
+
+fn str_contains(haystack: &String, needle: &String) -> bool {
+    let h_len = haystack.len();
+    let n_len = needle.len();
+    if n_len > h_len {
+        return false;
+    }
+    for let mut i = 0; i <= h_len - n_len; i += 1 {
+        let mut found = true;
+        for let mut j = 0; j < n_len; j += 1 {
+            if haystack.get_byte(i + j) != needle.get_byte(j) {
+                found = false;
+                break;
+            }
+        }
+        if found {
+            return true;
+        }
+    }
+    return false;
+}

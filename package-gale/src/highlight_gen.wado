@@ -1,0 +1,203 @@
+use { Grammar, LexerRule, ParserRule, Alternative, Element } from "./ir.wado";
+use { LitToken } from "./lexer_gen.wado";
+use { CodeWriter, FnSpec, GlobalSpec } from "./wadopoet.wado";
+use { escape_string } from "./gen_util.wado";
+
+pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
+    gen_highlight_mapping(w, &grammar.lexer_rules, lit_tokens);
+    gen_highlight_fn(w, &grammar.parser_rules);
+    gen_highlight_run(w);
+}
+
+fn gen_highlight_mapping(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>) {
+    let mut f = FnSpec::new("highlight_mapping");
+    f.set_pub();
+    f.set_return_type("HighlightMapping");
+    f.emit_begin(w);
+
+    w.line("let defaults: Array<String> = [");
+    w.indent();
+
+    for let rule of lexer_rules {
+        if !rule.is_fragment {
+            let capture = classify_lexer_rule(rule);
+            w.line(`{escape_string(&capture)},  // TK_{rule.name}`);
+        }
+    }
+    w.line(`"",  // TK_EOF`);
+    w.line(`"",  // TK_ERROR`);
+
+    for let lit of lit_tokens {
+        let capture = classify_literal(&lit.text);
+        w.line(`{escape_string(&capture)},  // {lit.const_name}`);
+    }
+    w.dedent();
+    w.line("];");
+
+    w.line("let overrides: Array<HighlightOverride> = [];");
+    w.line("return HighlightMapping { defaults, overrides };");
+
+    w.end();
+    w.blank();
+}
+
+fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
+    let root_rule = if parser_rules.len() > 0 { parser_rules[0].name } else { "" };
+
+    let mut f = FnSpec::new("highlight");
+    f.set_pub();
+    f.add_param("input", "&String");
+    f.set_return_type("String");
+    f.emit_begin(w);
+
+    w.line("let mapping = highlight_mapping();");
+    w.line("let mut visitor = HighlightVisitor::new(mapping);");
+    w.line("let parse_result = parse(input);");
+    w.begin("if let Ok(tree) = parse_result");
+    w.line(`walk_{root_rule}(&mut visitor, &tree);`);
+    w.else_begin("else");
+    w.line("let tokens = tokenize(input);");
+    w.begin("for let token of &tokens");
+    w.line("visitor.visit_token(token);");
+    w.end();
+    w.end();
+    w.line("return highlight_html_page(input, &visitor.captures);");
+
+    w.end();
+    w.blank();
+}
+
+fn gen_highlight_run(w: &mut CodeWriter) {
+    w.line("use { args, print, eprintln, Stdout, Stderr, Environment } from \"core:cli\";");
+    w.line("use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from \"wasi:filesystem\";");
+    w.blank();
+    w.begin("export fn run() with Stdout, Stderr, Environment, Preopens");
+    w.line("let arguments = args();");
+    w.begin("if arguments.len() < 1");
+    w.line("eprintln(\"Usage: <highlighter> <input-file>\");");
+    w.line("return;");
+    w.end();
+    w.line("let path = arguments[0];");
+    w.line("let dirs = Preopens::get_directories();");
+    w.line("let root = dirs[0].0;");
+    w.line("let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).unwrap();");
+    w.line("let [read_stream, _done] = file.read_via_stream(0 as Filesize);");
+    w.line("let mut bytes: Array<u8> = [];");
+    w.begin("loop");
+    w.line("let chunk = read_stream.read(65536);");
+    w.begin("if chunk.len() == 0");
+    w.line("break;");
+    w.end();
+    w.begin("for let b of chunk");
+    w.line("bytes.push(b);");
+    w.end();
+    w.end();
+    w.line("read_stream.drop();");
+    w.line("let input = String::from_utf8_unchecked(bytes);");
+    w.line("print(highlight(&input));");
+    w.end();
+    w.blank();
+}
+
+fn classify_lexer_rule(rule: &LexerRule) -> String {
+    let name = rule.name;
+    if rule.skip {
+        if contains_upper(&name, "WS") || contains_upper(&name, "WHITESPACE") || contains_upper(&name, "NEWLINE") {
+            return "";
+        }
+    }
+    if contains_upper(&name, "COMMENT") || contains_upper(&name, "LINE_COMMENT") || contains_upper(&name, "BLOCK_COMMENT") {
+        return "comment";
+    }
+    if contains_upper(&name, "DOC_COMMENT") {
+        return "comment";
+    }
+    if name == "STRING" || name == "STRING_LITERAL" || name == "QUOTED_STRING" || contains_upper(&name, "STRING") {
+        return "string";
+    }
+    if name == "CHAR" || name == "CHAR_LITERAL" || contains_upper(&name, "CHAR_LIT") {
+        return "string";
+    }
+    if name == "NUMBER" || name == "INT" || name == "INTEGER" || name == "FLOAT" || name == "DECIMAL"
+        || name == "INTEGER_LITERAL" || name == "FLOAT_LITERAL"
+        || contains_upper(&name, "NUMBER") || contains_upper(&name, "NUMERIC") {
+        return "number";
+    }
+    if name == "IDENTIFIER" || name == "ID" || name == "NAME" || name == "IDENT" {
+        return "";
+    }
+    if rule.skip {
+        return "";
+    }
+    return "";
+}
+
+fn classify_literal(text: &String) -> String {
+    if is_constant_builtin(text) {
+        return "constant.builtin";
+    }
+    if is_all_alpha(text) {
+        return "keyword";
+    }
+    if is_bracket(text) {
+        return "punctuation.bracket";
+    }
+    if is_delimiter(text) {
+        return "punctuation.delimiter";
+    }
+    if !is_all_alpha(text) && !text.is_empty() {
+        return "operator";
+    }
+    return "";
+}
+
+fn is_constant_builtin(text: &String) -> bool {
+    let t = *text;
+    return t == "true" || t == "false" || t == "null"
+        || t == "nil" || t == "none" || t == "None"
+        || t == "True" || t == "False"
+        || t == "undefined" || t == "NaN" || t == "Infinity";
+}
+
+fn is_all_alpha(text: &String) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+    for let c of text.chars() {
+        if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn is_bracket(text: &String) -> bool {
+    let t = *text;
+    return t == "(" || t == ")" || t == "[" || t == "]" || t == "{" || t == "}";
+}
+
+fn is_delimiter(text: &String) -> bool {
+    let t = *text;
+    return t == "," || t == ";" || t == ".";
+}
+
+fn contains_upper(haystack: &String, needle: &String) -> bool {
+    let h = haystack.chars().collect();
+    let n = needle.chars().collect();
+    if n.len() > h.len() {
+        return false;
+    }
+    for let mut i = 0; i <= h.len() - n.len(); i += 1 {
+        let mut match_ = true;
+        for let mut j = 0; j < n.len(); j += 1 {
+            if h[i + j] != n[j] {
+                match_ = false;
+                break;
+            }
+        }
+        if match_ {
+            return true;
+        }
+    }
+    return false;
+}

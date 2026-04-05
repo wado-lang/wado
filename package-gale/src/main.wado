@@ -2,24 +2,29 @@ use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { parse } from "./g4/parser.wado";
 use { Grammar, merge_grammars } from "./ir.wado";
-use { generate } from "./generator.wado";
+use { generate, GenerateOptions } from "./generator.wado";
 
 export fn run() with Stdout, Stderr, Environment, Preopens {
     let arguments = args();
 
     if arguments.len() >= 2 && arguments[0] == "gen" {
         let mut paths: Array<String> = [];
+        let mut options = GenerateOptions { highlight: false };
         for let mut i = 1; i < arguments.len(); i += 1 {
-            paths.push(arguments[i]);
+            if arguments[i] == "--highlight" {
+                options.highlight = true;
+            } else {
+                paths.push(arguments[i]);
+            }
         }
-        cmd_gen(paths);
+        cmd_gen(paths, &options);
         return;
     }
 
-    eprintln("Usage: gale gen <grammar.g4> [grammar2.g4 ...]");
+    eprintln("Usage: gale gen [--highlight] <grammar.g4> [grammar2.g4 ...]");
 }
 
-fn cmd_gen(paths: Array<String>) with Stdout, Stderr, Preopens {
+fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("gale: no preopened directories available (try without --no-dir)");
@@ -56,7 +61,7 @@ fn cmd_gen(paths: Array<String>) with Stdout, Stderr, Preopens {
     }
 
     let merged = merge_grammars(grammars);
-    print(generate(&merged));
+    print(generate(&merged, options));
 }
 
 fn read_all(file: &Descriptor) -> Array<u8> {
