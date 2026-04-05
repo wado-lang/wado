@@ -1,0 +1,59 @@
+use sqlite_hl from "./golden/sqlite_highlight.wado";
+
+fn str_contains(haystack: &String, needle: &String) -> bool {
+    let h_len = haystack.len();
+    let n_len = needle.len();
+    if n_len > h_len {
+        return false;
+    }
+    for let mut i = 0; i <= h_len - n_len; i += 1 {
+        let mut found = true;
+        for let mut j = 0; j < n_len; j += 1 {
+            if haystack.get_byte(i + j) != needle.get_byte(j) {
+                found = false;
+                break;
+            }
+        }
+        if found {
+            return true;
+        }
+    }
+    return false;
+}
+
+test "highlight SELECT keyword" {
+    let html = sqlite_hl::highlight(&"SELECT 1");
+    assert str_contains(&html, "<span class=\"keyword\">SELECT</span>"), `missing keyword SELECT in: {html}`;
+}
+
+test "highlight CREATE TABLE keywords" {
+    let html = sqlite_hl::highlight(&"CREATE TABLE t (id INTEGER)");
+    assert str_contains(&html, "<span class=\"keyword\">CREATE</span>"), `missing keyword CREATE in: {html}`;
+    assert str_contains(&html, "<span class=\"keyword\">TABLE</span>"), `missing keyword TABLE in: {html}`;
+}
+
+test "highlight string literal" {
+    let html = sqlite_hl::highlight(&"SELECT 'hello'");
+    assert str_contains(&html, "class=\"string\""), `missing string class in: {html}`;
+}
+
+test "highlight number literal" {
+    let html = sqlite_hl::highlight(&"SELECT 42");
+    assert str_contains(&html, "class=\"number\""), `missing number class in: {html}`;
+}
+
+test "highlight comment" {
+    let html = sqlite_hl::highlight(&"-- comment\nSELECT 1");
+    assert str_contains(&html, "class=\"comment\""), `missing comment class in: {html}`;
+}
+
+test "highlight punctuation" {
+    let html = sqlite_hl::highlight(&"SELECT (1, 2)");
+    assert str_contains(&html, "class=\"punctuation bracket\""), `missing bracket class in: {html}`;
+    assert str_contains(&html, "class=\"punctuation delimiter\""), `missing delimiter class in: {html}`;
+}
+
+test "highlight operator" {
+    let html = sqlite_hl::highlight(&"SELECT 1 + 2");
+    assert str_contains(&html, "class=\"operator\""), `missing operator class in: {html}`;
+}

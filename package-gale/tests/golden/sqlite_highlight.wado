@@ -280,65 +280,6 @@ fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
     return out;
 }
 
-/// Produce a complete HTML page with tree-sitter-compatible styles.
-pub fn highlight_html_page(source: &String, captures: &Array<HighlightCapture>) -> String {
-    let inner = highlight_html(source, captures);
-    let mut out = String::with_capacity(inner.len() + 2048);
-    out.push_str("<!doctype HTML>\n<head>\n  <title>Tree-sitter Highlighting</title>\n  <style>\n");
-    out.push_str("    body {\n      font-family: monospace\n    }\n");
-    out.push_str("    .line-number {\n      user-select: none;\n      text-align: right;\n      color: rgba(27,31,35,.3);\n      padding: 0 10px;\n    }\n");
-    out.push_str("    .line {\n      white-space: pre;\n    }\n");
-    out.push_str("  </style>\n  <style>\n");
-    out.push_str("    .attribute { font-style: italic;color: #af0000; }\n");
-    out.push_str("    .comment { font-style: italic;color: #8a8a8a; }\n");
-    out.push_str("    .constant { color: #875f00; }\n");
-    out.push_str("    .constant.builtin { font-weight: bold;color: #875f00; }\n");
-    out.push_str("    .constructor { color: #af8700; }\n");
-    out.push_str("    .function { color: #005fd7; }\n");
-    out.push_str("    .function.builtin { font-weight: bold;color: #005fd7; }\n");
-    out.push_str("    .keyword { color: #5f00d7; }\n");
-    out.push_str("    .module { color: #af8700; }\n");
-    out.push_str("    .number { font-weight: bold;color: #875f00; }\n");
-    out.push_str("    .operator { font-weight: bold;color: #4e4e4e; }\n");
-    out.push_str("    .property { color: #af0000; }\n");
-    out.push_str("    .property.builtin { font-weight: bold;color: #af0000; }\n");
-    out.push_str("    .punctuation { color: #4e4e4e; }\n");
-    out.push_str("    .punctuation.bracket { color: #4e4e4e; }\n");
-    out.push_str("    .punctuation.delimiter { color: #4e4e4e; }\n");
-    out.push_str("    .punctuation.special { color: #4e4e4e; }\n");
-    out.push_str("    .string { color: #008700; }\n");
-    out.push_str("    .string.special { color: #008787; }\n");
-    out.push_str("    .tag { color: #000087; }\n");
-    out.push_str("    .type { color: #005f5f; }\n");
-    out.push_str("    .type.builtin { font-weight: bold;color: #005f5f; }\n");
-    out.push_str("    .variable { color: #d0d0d0; }\n");
-    out.push_str("    .variable.builtin { font-weight: bold;color: #d0d0d0; }\n");
-    out.push_str("    .variable.parameter { text-decoration: underline;color: #d0d0d0; }\n");
-    out.push_str("  </style>\n\n</head>\n<body>\n\n<table>\n");
-    let lines = split_lines(&inner);
-    for let mut i = 0; i < lines.len(); i += 1 {
-        let line_num = i + 1;
-        out.push_str(`<tr><td class=line-number>{line_num}</td><td class=line>{lines[i]}\n</td></tr>\n`);
-    }
-    out.push_str("</table>\n\n</body>\n");
-    return out;
-}
-
-fn split_lines(s: &String) -> Array<String> {
-    let mut result: Array<String> = [];
-    let mut current = String::with_capacity(128);
-    for let c of s.chars() {
-        if c == '\n' {
-            result.push(current);
-            current = String::with_capacity(128);
-        } else {
-            current.push_str(`{c}`);
-        }
-    }
-    result.push(current);
-    return result;
-}
-
 /// Visitor trait for walking typed CST nodes.
 /// Default methods are no-ops; override to add behavior.
 pub trait Visitor {
@@ -11569,7 +11510,7 @@ fn parse_expr_lr_20(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNo
         null
     };
     let k_between = p.expect(TK_K_BETWEEN, "K_BETWEEN")?;
-    let expr_2 = parse_expr_prec(p, 0)?;
+    let expr_2 = parse_expr_prec(p, 8)?;
     let k_and = p.expect(TK_K_AND, "K_AND")?;
     let expr_3 = parse_expr_prec(p, 8)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt20(ExprAlt20 {
@@ -17294,130 +17235,130 @@ pub fn highlight_mapping() -> HighlightMapping {
         "",  // TK_EQ
         "",  // TK_NOT_EQ1
         "",  // TK_NOT_EQ2
-        "",  // TK_K_ABORT
-        "",  // TK_K_ACTION
-        "",  // TK_K_ADD
-        "",  // TK_K_AFTER
-        "",  // TK_K_ALL
-        "",  // TK_K_ALTER
-        "",  // TK_K_ANALYZE
-        "",  // TK_K_AND
-        "",  // TK_K_AS
-        "",  // TK_K_ASC
-        "",  // TK_K_ATTACH
-        "",  // TK_K_AUTOINCREMENT
-        "",  // TK_K_BEFORE
-        "",  // TK_K_BEGIN
-        "",  // TK_K_BETWEEN
-        "",  // TK_K_BY
-        "",  // TK_K_CASCADE
-        "",  // TK_K_CASE
-        "",  // TK_K_CAST
-        "",  // TK_K_CHECK
-        "",  // TK_K_COLLATE
-        "",  // TK_K_COLUMN
-        "",  // TK_K_COMMIT
-        "",  // TK_K_CONFLICT
-        "",  // TK_K_CONSTRAINT
-        "",  // TK_K_CREATE
-        "",  // TK_K_CROSS
-        "",  // TK_K_CURRENT_DATE
-        "",  // TK_K_CURRENT_TIME
-        "",  // TK_K_CURRENT_TIMESTAMP
-        "",  // TK_K_DATABASE
-        "",  // TK_K_DEFAULT
-        "",  // TK_K_DEFERRABLE
-        "",  // TK_K_DEFERRED
-        "",  // TK_K_DELETE
-        "",  // TK_K_DESC
-        "",  // TK_K_DETACH
-        "",  // TK_K_DISTINCT
-        "",  // TK_K_DROP
-        "",  // TK_K_EACH
-        "",  // TK_K_ELSE
-        "",  // TK_K_END
-        "",  // TK_K_ESCAPE
-        "",  // TK_K_EXCEPT
-        "",  // TK_K_EXCLUSIVE
-        "",  // TK_K_EXISTS
-        "",  // TK_K_EXPLAIN
-        "",  // TK_K_FAIL
-        "",  // TK_K_FOR
-        "",  // TK_K_FOREIGN
-        "",  // TK_K_FROM
-        "",  // TK_K_FULL
-        "",  // TK_K_GLOB
-        "",  // TK_K_GROUP
-        "",  // TK_K_HAVING
-        "",  // TK_K_IF
-        "",  // TK_K_IGNORE
-        "",  // TK_K_IMMEDIATE
-        "",  // TK_K_IN
-        "",  // TK_K_INDEX
-        "",  // TK_K_INDEXED
-        "",  // TK_K_INITIALLY
-        "",  // TK_K_INNER
-        "",  // TK_K_INSERT
-        "",  // TK_K_INSTEAD
-        "",  // TK_K_INTERSECT
-        "",  // TK_K_INTO
-        "",  // TK_K_IS
-        "",  // TK_K_ISNULL
-        "",  // TK_K_JOIN
-        "",  // TK_K_KEY
-        "",  // TK_K_LEFT
-        "",  // TK_K_LIKE
-        "",  // TK_K_LIMIT
-        "",  // TK_K_MATCH
-        "",  // TK_K_NATURAL
-        "",  // TK_K_NO
-        "",  // TK_K_NOT
-        "",  // TK_K_NOTNULL
-        "",  // TK_K_NULL
-        "",  // TK_K_OF
-        "",  // TK_K_OFFSET
-        "",  // TK_K_ON
-        "",  // TK_K_OR
-        "",  // TK_K_ORDER
-        "",  // TK_K_OUTER
-        "",  // TK_K_PLAN
-        "",  // TK_K_PRAGMA
-        "",  // TK_K_PRIMARY
-        "",  // TK_K_QUERY
-        "",  // TK_K_RAISE
-        "",  // TK_K_RECURSIVE
-        "",  // TK_K_REFERENCES
-        "",  // TK_K_REGEXP
-        "",  // TK_K_REINDEX
-        "",  // TK_K_RELEASE
-        "",  // TK_K_RENAME
-        "",  // TK_K_REPLACE
-        "",  // TK_K_RESTRICT
-        "",  // TK_K_RIGHT
-        "",  // TK_K_ROLLBACK
-        "",  // TK_K_ROW
-        "",  // TK_K_SAVEPOINT
-        "",  // TK_K_SELECT
-        "",  // TK_K_SET
-        "",  // TK_K_TABLE
-        "",  // TK_K_TEMP
-        "",  // TK_K_TEMPORARY
-        "",  // TK_K_THEN
-        "",  // TK_K_TO
-        "",  // TK_K_TRANSACTION
-        "",  // TK_K_TRIGGER
-        "",  // TK_K_UNION
-        "",  // TK_K_UNIQUE
-        "",  // TK_K_UPDATE
-        "",  // TK_K_USING
-        "",  // TK_K_VACUUM
-        "",  // TK_K_VALUES
-        "",  // TK_K_VIEW
-        "",  // TK_K_VIRTUAL
-        "",  // TK_K_WHEN
-        "",  // TK_K_WHERE
-        "",  // TK_K_WITH
-        "",  // TK_K_WITHOUT
+        "keyword",  // TK_K_ABORT
+        "keyword",  // TK_K_ACTION
+        "keyword",  // TK_K_ADD
+        "keyword",  // TK_K_AFTER
+        "keyword",  // TK_K_ALL
+        "keyword",  // TK_K_ALTER
+        "keyword",  // TK_K_ANALYZE
+        "keyword",  // TK_K_AND
+        "keyword",  // TK_K_AS
+        "keyword",  // TK_K_ASC
+        "keyword",  // TK_K_ATTACH
+        "keyword",  // TK_K_AUTOINCREMENT
+        "keyword",  // TK_K_BEFORE
+        "keyword",  // TK_K_BEGIN
+        "keyword",  // TK_K_BETWEEN
+        "keyword",  // TK_K_BY
+        "keyword",  // TK_K_CASCADE
+        "keyword",  // TK_K_CASE
+        "keyword",  // TK_K_CAST
+        "keyword",  // TK_K_CHECK
+        "keyword",  // TK_K_COLLATE
+        "keyword",  // TK_K_COLUMN
+        "keyword",  // TK_K_COMMIT
+        "keyword",  // TK_K_CONFLICT
+        "keyword",  // TK_K_CONSTRAINT
+        "keyword",  // TK_K_CREATE
+        "keyword",  // TK_K_CROSS
+        "keyword",  // TK_K_CURRENT_DATE
+        "keyword",  // TK_K_CURRENT_TIME
+        "keyword",  // TK_K_CURRENT_TIMESTAMP
+        "keyword",  // TK_K_DATABASE
+        "keyword",  // TK_K_DEFAULT
+        "keyword",  // TK_K_DEFERRABLE
+        "keyword",  // TK_K_DEFERRED
+        "keyword",  // TK_K_DELETE
+        "keyword",  // TK_K_DESC
+        "keyword",  // TK_K_DETACH
+        "keyword",  // TK_K_DISTINCT
+        "keyword",  // TK_K_DROP
+        "keyword",  // TK_K_EACH
+        "keyword",  // TK_K_ELSE
+        "keyword",  // TK_K_END
+        "keyword",  // TK_K_ESCAPE
+        "keyword",  // TK_K_EXCEPT
+        "keyword",  // TK_K_EXCLUSIVE
+        "keyword",  // TK_K_EXISTS
+        "keyword",  // TK_K_EXPLAIN
+        "keyword",  // TK_K_FAIL
+        "keyword",  // TK_K_FOR
+        "keyword",  // TK_K_FOREIGN
+        "keyword",  // TK_K_FROM
+        "keyword",  // TK_K_FULL
+        "keyword",  // TK_K_GLOB
+        "keyword",  // TK_K_GROUP
+        "keyword",  // TK_K_HAVING
+        "keyword",  // TK_K_IF
+        "keyword",  // TK_K_IGNORE
+        "keyword",  // TK_K_IMMEDIATE
+        "keyword",  // TK_K_IN
+        "keyword",  // TK_K_INDEX
+        "keyword",  // TK_K_INDEXED
+        "keyword",  // TK_K_INITIALLY
+        "keyword",  // TK_K_INNER
+        "keyword",  // TK_K_INSERT
+        "keyword",  // TK_K_INSTEAD
+        "keyword",  // TK_K_INTERSECT
+        "keyword",  // TK_K_INTO
+        "keyword",  // TK_K_IS
+        "keyword",  // TK_K_ISNULL
+        "keyword",  // TK_K_JOIN
+        "keyword",  // TK_K_KEY
+        "keyword",  // TK_K_LEFT
+        "keyword",  // TK_K_LIKE
+        "keyword",  // TK_K_LIMIT
+        "keyword",  // TK_K_MATCH
+        "keyword",  // TK_K_NATURAL
+        "keyword",  // TK_K_NO
+        "keyword",  // TK_K_NOT
+        "keyword",  // TK_K_NOTNULL
+        "keyword",  // TK_K_NULL
+        "keyword",  // TK_K_OF
+        "keyword",  // TK_K_OFFSET
+        "keyword",  // TK_K_ON
+        "keyword",  // TK_K_OR
+        "keyword",  // TK_K_ORDER
+        "keyword",  // TK_K_OUTER
+        "keyword",  // TK_K_PLAN
+        "keyword",  // TK_K_PRAGMA
+        "keyword",  // TK_K_PRIMARY
+        "keyword",  // TK_K_QUERY
+        "keyword",  // TK_K_RAISE
+        "keyword",  // TK_K_RECURSIVE
+        "keyword",  // TK_K_REFERENCES
+        "keyword",  // TK_K_REGEXP
+        "keyword",  // TK_K_REINDEX
+        "keyword",  // TK_K_RELEASE
+        "keyword",  // TK_K_RENAME
+        "keyword",  // TK_K_REPLACE
+        "keyword",  // TK_K_RESTRICT
+        "keyword",  // TK_K_RIGHT
+        "keyword",  // TK_K_ROLLBACK
+        "keyword",  // TK_K_ROW
+        "keyword",  // TK_K_SAVEPOINT
+        "keyword",  // TK_K_SELECT
+        "keyword",  // TK_K_SET
+        "keyword",  // TK_K_TABLE
+        "keyword",  // TK_K_TEMP
+        "keyword",  // TK_K_TEMPORARY
+        "keyword",  // TK_K_THEN
+        "keyword",  // TK_K_TO
+        "keyword",  // TK_K_TRANSACTION
+        "keyword",  // TK_K_TRIGGER
+        "keyword",  // TK_K_UNION
+        "keyword",  // TK_K_UNIQUE
+        "keyword",  // TK_K_UPDATE
+        "keyword",  // TK_K_USING
+        "keyword",  // TK_K_VACUUM
+        "keyword",  // TK_K_VALUES
+        "keyword",  // TK_K_VIEW
+        "keyword",  // TK_K_VIRTUAL
+        "keyword",  // TK_K_WHEN
+        "keyword",  // TK_K_WHERE
+        "keyword",  // TK_K_WITH
+        "keyword",  // TK_K_WITHOUT
         "",  // TK_IDENTIFIER
         "number",  // TK_NUMERIC_LITERAL
         "",  // TK_BIND_PARAMETER
@@ -17470,7 +17411,7 @@ pub fn highlight(input: &String) -> String {
             visitor.visit_token(token);
         }
     }
-    return highlight_html_page(input, &visitor.captures);
+    return highlight_html(input, &visitor.captures);
 }
 
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";

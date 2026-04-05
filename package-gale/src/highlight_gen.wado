@@ -61,7 +61,7 @@ fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
     w.line("visitor.visit_token(token);");
     w.end();
     w.end();
-    w.line("return highlight_html_page(input, &visitor.captures);");
+    w.line("return highlight_html(input, &visitor.captures);");
 
     w.end();
     w.blank();
@@ -126,6 +126,14 @@ fn classify_lexer_rule(rule: &LexerRule) -> String {
     if name == "IDENTIFIER" || name == "ID" || name == "NAME" || name == "IDENT" {
         return "";
     }
+    // Lexer rules starting with K_ or KW_ are keyword tokens (e.g. K_SELECT, KW_IF)
+    if starts_with(&name, "K_") || starts_with(&name, "KW_") {
+        return "keyword";
+    }
+    // Lexer rules containing KEYWORD are keyword tokens
+    if contains_upper(&name, "KEYWORD") {
+        return "keyword";
+    }
     if rule.skip {
         return "";
     }
@@ -179,6 +187,20 @@ fn is_bracket(text: &String) -> bool {
 fn is_delimiter(text: &String) -> bool {
     let t = *text;
     return t == "," || t == ";" || t == ".";
+}
+
+fn starts_with(haystack: &String, prefix: &String) -> bool {
+    let h = haystack.chars().collect();
+    let p = prefix.chars().collect();
+    if p.len() > h.len() {
+        return false;
+    }
+    for let mut i = 0; i < p.len(); i += 1 {
+        if h[i] != p[i] {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn contains_upper(haystack: &String, needle: &String) -> bool {

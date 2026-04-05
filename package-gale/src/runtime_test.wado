@@ -1,7 +1,7 @@
 use {
     Span, Token, ParseError, CstNode, CstChild, TreeRecorder, Visitor, normalize_tree,
     HighlightMapping, HighlightOverride, HighlightCapture, HighlightVisitor,
-    highlight_html, highlight_html_page,
+    highlight_html,
 } from "./runtime.wado";
 
 test "Span::new creates span" {
@@ -239,33 +239,3 @@ test "HighlightVisitor handles trivia" {
     assert visitor.captures[1].start == 9;
 }
 
-test "highlight_html_page produces complete HTML" {
-    let source = "42";
-    let captures: Array<HighlightCapture> = [
-        HighlightCapture { capture: "number", start: 0, end: 2 },
-    ];
-    let html = highlight_html_page(&source, &captures);
-    assert html.len() > 0;
-    let has_doctype = html.chars().collect()[0] == '<';
-    assert has_doctype;
-    // Check it contains the number span
-    let expected_span = `<span class="number">42</span>`;
-    let mut found = false;
-    // Simple substring check by searching for the expected content
-    let html_chars = html.chars().collect();
-    let exp_chars = expected_span.chars().collect();
-    for let mut i = 0; i <= html_chars.len() - exp_chars.len(); i += 1 {
-        let mut match_ = true;
-        for let mut j = 0; j < exp_chars.len(); j += 1 {
-            if html_chars[i + j] != exp_chars[j] {
-                match_ = false;
-                break;
-            }
-        }
-        if match_ {
-            found = true;
-            break;
-        }
-    }
-    assert found, "expected HTML to contain number span";
-}
