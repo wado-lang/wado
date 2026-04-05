@@ -300,7 +300,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Type check: if type annotation is present, verify value type matches.
         // Uses direct comparison instead of typecheck() because we need to catch
         // type-param-to-concrete mismatches (e.g., `let n: i32 = x` where x: T)
-        // at definition time, which check_assignable would defer.
+        // at definition time. check_assignable defers all type param cases because
+        // trait impls legitimately use TypeParam-vs-concrete (monomorphized later).
         if let_stmt.ty.is_some()
             && value.type_id != type_id
             && value.type_id != TypeTable::UNKNOWN

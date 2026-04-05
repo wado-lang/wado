@@ -1327,7 +1327,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 &import_original_names,
                             ),
                         );
+                        let saved_flags_cases = std::mem::replace(
+                            &mut self.flags_cases,
+                            Self::build_module_map(
+                                &self.all_flags_cases,
+                                &src,
+                                &imported_type_sources,
+                                &import_original_names,
+                            ),
+                        );
+                        let saved_resource_types = std::mem::replace(
+                            &mut self.resource_types,
+                            Self::build_module_map(
+                                &self.all_resource_types,
+                                &src,
+                                &imported_type_sources,
+                                &import_original_names,
+                            ),
+                        );
                         let result = params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                        self.resource_types = saved_resource_types;
+                        self.flags_cases = saved_flags_cases;
                         self.variant_cases = saved_variant_cases;
                         self.struct_fields = saved_struct_fields;
                         self.enum_cases = saved_enum_cases;

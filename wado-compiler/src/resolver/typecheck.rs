@@ -31,7 +31,7 @@ pub(super) enum TypeCheckResult {
 /// 4. References: &T->non-ref, &T->&mut T -> Incompatible; &mut T->&T -> Compatible
 /// 5. Newtype/flags: distinct from base type and each other
 /// 6. Option: T vs Option<T>, Option<X> vs Option<Y>
-/// 7. Function types: structural equivalence is complex -> Deferred
+/// 7. Function types: structural comparison of params + return type
 /// 8. Generic instances: compare name + type args recursively
 /// 9. Catch-all: different concrete types -> Incompatible
 pub(super) fn check_assignable(
@@ -57,6 +57,9 @@ pub(super) fn check_assignable(
     }
 
     // Rule 3: Type params -- defer until monomorphization.
+    // Note: We can't reject TypeParam-vs-concrete here because trait impls
+    // legitimately pass concrete types where type params are expected
+    // (e.g., `I` -> `ArrayIter<T>` in Iterator blanket impls).
     if type_table.contains_type_param(actual) || type_table.contains_type_param(expected) {
         return TypeCheckResult::Deferred;
     }
@@ -125,10 +128,7 @@ pub(super) fn check_assignable(
             if actual_t == TypeTable::UNKNOWN || expected_t == TypeTable::UNKNOWN {
                 return TypeCheckResult::Compatible;
             }
-            if actual_t != expected_t {
-                return TypeCheckResult::Incompatible;
-            }
-            return TypeCheckResult::Compatible;
+            return check_assignable(actual_t, expected_t, type_table);
         }
         (Some(_), None) | (None, Some(_)) => {
             return TypeCheckResult::Incompatible;
@@ -136,14 +136,38 @@ pub(super) fn check_assignable(
         (None, None) => {}
     }
 
-    // Rule 7: Function types -- structural equivalence is complex, defer
+    // Rule 7: Function types -- structural comparison of params + return type
+    if let ResolvedType::Function {
+        params: actual_params,
+        return_type: actual_ret,
+        ..
+    } = type_table.get(actual_inner)
+        && let ResolvedType::Function {
+            params: expected_params,
+            return_type: expected_ret,
+            ..
+        } = type_table.get(expected_inner)
+    {
+        if actual_params.len() != expected_params.len() {
+            return TypeCheckResult::Incompatible;
+        }
+        for (a, e) in actual_params.iter().zip(expected_params.iter()) {
+            match check_assignable(*a, *e, type_table) {
+                TypeCheckResult::Incompatible => return TypeCheckResult::Incompatible,
+                TypeCheckResult::Deferred => return TypeCheckResult::Deferred,
+                TypeCheckResult::Compatible => {}
+            }
+        }
+        return check_assignable(*actual_ret, *expected_ret, type_table);
+    }
+    // One is function, the other isn't -> incompatible
     if matches!(type_table.get(actual_inner), ResolvedType::Function { .. })
         || matches!(
             type_table.get(expected_inner),
             ResolvedType::Function { .. }
         )
     {
-        return TypeCheckResult::Deferred;
+        return TypeCheckResult::Incompatible;
     }
 
     // Rule 8: Generic instances -- compare name + type args
