@@ -22,37 +22,7 @@ struct core:prelude/format.wado//Formatter {
 
 array builtin::array<i32> (mut i32);
 
-array builtin::array<String> (mut ref String);
-
 array builtin::array<Array<i32>> (mut ref Array<i32>);
-
-array builtin::array<TreeMapEntry<String,unit>> (mut ref "core:collections/TreeMapEntry<String,unit>");
-
-array builtin::array<Array<String>> (mut ref Array<String>);
-
-struct core:collections//TreeMapNode<String> {  // from core:collections  // TreeMapNode<T> with T=String
-    mut key: ref String,
-    mut index: i32,
-    mut level: i32,
-    mut left: ref null "core:collections/TreeMapNode<String>",
-    mut right: ref null "core:collections/TreeMapNode<String>",
-}
-
-struct core:collections//TreeMapEntry<String,unit> {  // from core:collections  // TreeMapEntry<T> with T=String, unit
-    mut key: ref String,
-    mut deleted: bool,
-}
-
-struct core:collections//TreeMap<String,unit> {  // from core:collections  // TreeMap<T> with T=String, unit
-    mut root: ref null "core:collections/TreeMapNode<String>",
-    mut entries: ref Array<TreeMapEntry<String,unit>>,
-    mut size: i32,
-    mut deleted_count: i32,
-}
-
-struct core:collections//TreeSet<String> {  // from core:collections  // TreeSet<T> with T=String
-    mut inner: ref "core:collections/TreeMap<String,unit>",
-}
 
 struct core:prelude/array.wado//ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut repr: ref array<i32>,
@@ -60,34 +30,8 @@ struct core:prelude/array.wado//ArrayIter<i32> {  // ArrayIter<T> with T=i32
     mut index: i32,
 }
 
-struct core:prelude/array.wado//ArrayIter<String> {  // ArrayIter<T> with T=String
-    mut repr: ref array<String>,
-    mut used: i32,
-    mut index: i32,
-}
-
-variant core:prelude/types.wado//Option<TreeMapNode<String>> {
-    Some(ref "core:collections/TreeMapNode<String>"),
-    None,
-}
-
-struct core:prelude//Array<String> {  // Array<T> with T=String
-    mut repr: ref array<String>,
-    mut used: i32,
-}
-
 struct core:prelude//Array<i32> {  // Array<T> with T=i32
     mut repr: ref array<i32>,
-    mut used: i32,
-}
-
-struct core:prelude//Array<TreeMapEntry<String,unit>> {  // Array<T> with T=TreeMapEntry<String,unit>
-    mut repr: ref array<TreeMapEntry<String,unit>>,
-    mut used: i32,
-}
-
-struct core:prelude//Array<Array<String>> {  // Array<T> with T=Array<String>
-    mut repr: ref array<Array<String>>,
     mut used: i32,
 }
 
@@ -95,8 +39,6 @@ struct core:prelude//Array<Array<i32>> {  // Array<T> with T=Array<i32>
     mut repr: ref array<Array<i32>>,
     mut used: i32,
 }
-
-enum core:prelude/traits.wado//enum:Ordering { Less = 0, Equal = 1, Greater = 2 };
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };
 
@@ -116,9 +58,9 @@ type "" = fn(i32, i32) -> i32;
 
 type "" = fn(i32) -> i32;
 
-type "" = fn();
+type "" = fn(ref Array<Array<i32>>) -> ref Array<i32>;
 
-type "" = fn();
+type "" = fn(ref Array<Array<i32>>) -> ref Array<i32>;
 
 type "" = fn();
 
@@ -156,41 +98,15 @@ type "" = fn(ref String, i32) -> i32;
 
 type "" = fn(ref String, ref String);
 
-type "" = fn(ref String, ref String) -> bool;
-
-type "" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
-
-type "" = fn(ref String, ref String) -> enum:Ordering;
-
 type "" = fn(ref String, char);
-
-type "" = fn(ref Array<i32>, i32);
-
-type "" = fn(ref Array<i32>);
 
 type "" = fn(ref Array<Array<i32>>, ref Array<i32>);
 
 type "" = fn(ref Array<Array<i32>>);
 
-type "" = fn(ref "core:collections/TreeMap<String,unit>", ref String);
+type "" = fn(ref Array<i32>, i32);
 
-type "" = fn(ref "core:collections/TreeMap<String,unit>", ref null "core:collections/TreeMapNode<String>", ref String, i32) -> ref null "core:collections/TreeMapNode<String>";
-
-type "" = fn(ref Array<TreeMapEntry<String,unit>>, ref "core:collections/TreeMapEntry<String,unit>");
-
-type "" = fn(ref Array<TreeMapEntry<String,unit>>);
-
-type "" = fn(ref "core:collections/TreeMap<String,unit>", ref String) -> i32;
-
-type "" = fn(ref Array<Array<String>>, ref Array<String>);
-
-type "" = fn(ref Array<Array<String>>);
-
-type "" = fn(ref Array<String>, ref String);
-
-type "" = fn(ref Array<String>);
-
-type "" = fn(ref ArrayIter<String>) -> ref null String;
+type "" = fn(ref Array<i32>);
 
 type "" = fn(ref Formatter, char, i32);
 
@@ -204,17 +120,7 @@ type "" = fn(i32);
 
 type "" = fn(ref ArrayIter<i32>) -> [i32, i32];
 
-type "" = fn(ref Array<Array<String>>, ref Array<i32>, ref "core:collections/TreeMap<String,unit>") -> ref Array<String>;
-
-type "" = fn(ref Array<Array<String>>, ref Array<i32>, ref "core:collections/TreeMap<String,unit>") -> ref Array<String>;
-
 type "" = fn(i32, ref Formatter);
-
-type "" = fn(ref "core:collections/TreeMap<String,unit>", ref String) -> bool;
-
-type "" = fn(ref null "core:collections/TreeMapNode<String>") -> ref null "core:collections/TreeMapNode<String>";
-
-type "" = fn(ref null "core:collections/TreeMapNode<String>") -> ref null "core:collections/TreeMapNode<String>";
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -229,60 +135,47 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn for_of_version(data, indices, skip) {
-    let __local_3: ref Array<String>;
-    let result: ref Array<String>;
+fn for_of_with_continue(data) {
+    let __local_1: ref Array<i32>;
+    let result: ref Array<i32>;
     let k: i32;
-    let __iter_6: ref ArrayIter<String>;
-    let item: ref String;
-    let __pattern_temp_0: ref null String;
-    let __local_13: ref Array<String>;
-    let __local_17: i32;
-    let _licm_used_20: i32;
-    let _licm_repr_21: ref array<i32>;
-    let _licm_used_22: i32;
-    let _licm_repr_23: ref array<Array<String>>;
-    let _licm_inner_24: ref "core:collections/TreeMap<String,unit>";
-    result = __seq_lit: block -> ref Array<String> {
-        __local_3 = Array<String> { repr: builtin::array_new<ref String>(0), used: 0 };
-        break __seq_lit: __local_3;
+    let __iter_4: ref ArrayIter<i32>;
+    let item: i32;
+    let __local_11: ref Array<i32>;
+    let _licm_used_14: i32;
+    let _licm_repr_15: ref array<Array<i32>>;
+    result = __seq_lit: block -> ref Array<i32> {
+        __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
+        break __seq_lit: __local_1;
     };
     __for_0: block {
         k = 0;
-        _licm_used_20 = indices.used;
-        _licm_repr_21 = indices.repr;
-        _licm_used_22 = data.used;
-        _licm_repr_23 = data.repr;
-        _licm_inner_24 = skip;
+        _licm_used_14 = data.used;
+        _licm_repr_15 = data.repr;
         block {
             l1: loop {
-                if (k < _licm_used_20) == 0 {
+                if (k < _licm_used_14) == 0 {
                     break __for_0;
                 };
-                __iter_6 = __inline_Array_String__IntoIterator__into_iter_4: block -> ref ArrayIter<String> {
-                    __local_13 = __inline_Array_Array_String___IndexValue__index_value_6: block -> ref Array<String> {
-                        __local_17 = builtin::array_get<i32>(_licm_repr_21, k);
-                        if __local_17 >= _licm_used_22 {
-                            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                            unreachable;
-                        };
-                        break __inline_Array_Array_String___IndexValue__index_value_6: builtin::array_get<ref Array<String>>(_licm_repr_23, __local_17);
-                    };
-                    break __inline_Array_String__IntoIterator__into_iter_4: ArrayIter<String> { repr: __local_13.repr, used: __local_13.used, index: 0 };
+                __iter_4 = __inline_Array_i32__IntoIterator__into_iter_4: block -> ref ArrayIter<i32> {
+                    __local_11 = builtin::array_get<ref Array<i32>>(_licm_repr_15, k);
+                    break __inline_Array_i32__IntoIterator__into_iter_4: ArrayIter<i32> { repr: __local_11.repr, used: __local_11.used, index: 0 };
                 };
-                b4: block {
-                    l5: loop {
-                        __pattern_temp_0 = ArrayIter<String>^Iterator::next(__iter_6);
-                        if ref.is_null(__pattern_temp_0) == 0 {
-                            item = value_copy String(ref.as_non_null(__pattern_temp_0));
-                            if TreeMap<String,unit>::find_index(_licm_inner_24, item) >= 0 {
-                                continue l5;
+                b3: block {
+                    l4: loop {
+                        let __sroa___pattern_temp_0_discriminant: i32;
+                        let __sroa___pattern_temp_0_payload_0: i32;
+                        multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
+                        if __sroa___pattern_temp_0_discriminant == 0 {
+                            item = __sroa___pattern_temp_0_payload_0;
+                            if (item % 2) == 0 {
+                                continue l4;
                             };
-                            Array<String>::push(result, item);
+                            Array<i32>::push(result, item);
                         } else {
-                            break b4;
+                            break b3;
                         };
-                        continue l5;
+                        continue l4;
                     };
                 };
                 k = k + 1;
@@ -293,252 +186,73 @@ fn for_of_version(data, indices, skip) {
     return result;
 }
 
-fn index_version(data, indices, skip) {
-    let __local_3: ref Array<String>;
-    let result: ref Array<String>;
+fn for_of_with_break(data) {
+    let __local_1: ref Array<i32>;
+    let result: ref Array<i32>;
     let k: i32;
-    let inner: ref Array<String>;
-    let i: i32;
-    let __local_15: i32;
-    let __local_20: ref String;
-    let _licm_used_23: i32;
-    let _licm_repr_24: ref array<i32>;
-    let _licm_used_25: i32;
-    let _licm_repr_26: ref array<Array<String>>;
-    let _licm_inner_27: ref "core:collections/TreeMap<String,unit>";
-    let _licm_used_28: i32;
-    let _licm_repr_29: ref array<String>;
-    result = __seq_lit: block -> ref Array<String> {
-        __local_3 = Array<String> { repr: builtin::array_new<ref String>(0), used: 0 };
-        break __seq_lit: __local_3;
+    let __iter_4: ref ArrayIter<i32>;
+    let item: i32;
+    let __local_11: ref Array<i32>;
+    let _licm_used_14: i32;
+    let _licm_repr_15: ref array<Array<i32>>;
+    result = __seq_lit: block -> ref Array<i32> {
+        __local_1 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
+        break __seq_lit: __local_1;
     };
     __for_1: block {
         k = 0;
-        _licm_used_23 = indices.used;
-        _licm_repr_24 = indices.repr;
-        _licm_used_25 = data.used;
-        _licm_repr_26 = data.repr;
-        _licm_inner_27 = skip;
+        _licm_used_14 = data.used;
+        _licm_repr_15 = data.repr;
         block {
-            l9: loop {
-                if (k < _licm_used_23) == 0 {
+            l8: loop {
+                if (k < _licm_used_14) == 0 {
                     break __for_1;
                 };
-                inner = __inline_Array_Array_String___IndexValue__index_value_5: block -> ref Array<String> {
-                    __local_15 = builtin::array_get<i32>(_licm_repr_24, k);
-                    if __local_15 >= _licm_used_25 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    };
-                    break __inline_Array_Array_String___IndexValue__index_value_5: builtin::array_get<ref Array<String>>(_licm_repr_26, __local_15);
+                __iter_4 = __inline_Array_i32__IntoIterator__into_iter_4: block -> ref ArrayIter<i32> {
+                    __local_11 = builtin::array_get<ref Array<i32>>(_licm_repr_15, k);
+                    break __inline_Array_i32__IntoIterator__into_iter_4: ArrayIter<i32> { repr: __local_11.repr, used: __local_11.used, index: 0 };
                 };
-                __for_2: block {
-                    i = 0;
-                    _licm_used_28 = inner.used;
-                    _licm_repr_29 = inner.repr;
-                    block {
-                        l13: loop {
-                            if (i < _licm_used_28) == 0 {
-                                break __for_2;
+                b10: block {
+                    l11: loop {
+                        let __sroa___pattern_temp_0_discriminant: i32;
+                        let __sroa___pattern_temp_0_payload_0: i32;
+                        multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
+                        if __sroa___pattern_temp_0_discriminant == 0 {
+                            item = __sroa___pattern_temp_0_payload_0;
+                            if item > 2 {
+                                break b10;
                             };
-                            __for_2_body: block {
-                                if __inline_TreeSet_String___contains_8: block -> bool {
-                                    __local_20 = builtin::array_get<ref String>(_licm_repr_29, i);
-                                    break __inline_TreeSet_String___contains_8: TreeMap<String,unit>::find_index(_licm_inner_27, __local_20) >= 0;
-                                } {
-                                    break __for_2_body;
-                                };
-                                Array<String>::push(result, builtin::array_get<ref String>(_licm_repr_29, i));
-                            };
-                            i = i + 1;
-                            continue l13;
+                            Array<i32>::push(result, item);
+                        } else {
+                            break b10;
                         };
+                        continue l11;
                     };
                 };
                 k = k + 1;
-                continue l9;
+                continue l8;
             };
         };
     };
     return result;
 }
 
-fn __test_0_for_of_double_indexed_with_treeset_filter() {
-    let __local_0: ref Array<Array<String>>;
-    let __local_1: ref Array<String>;
-    let __local_2: ref Array<String>;
-    let data: ref Array<Array<String>>;
-    let __local_4: ref Array<i32>;
-    let indices: ref Array<i32>;
-    let skip: ref "core:collections/TreeSet<String>";
-    let result: ref Array<String>;
-    let __v0: i32;
-    let __cond: bool;
-    let __local_10: ref String;
-    let __local_11: ref Formatter;
-    let __local_12: ref String;
-    let __local_13: ref Formatter;
-    let __local_47: ref Array<TreeMapEntry<String,unit>>;
-    let __local_52: ref Formatter;
-    let __local_64: ref Formatter;
-    data = __seq_lit: block -> ref Array<Array<String>> {
-        __local_0 = Array<Array<String>> { repr: array.new_fixed<ref Array<String>>(__seq_lit: block -> ref Array<String> {
-            __local_1 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("a"), used: 1 }, String { repr: array.new_data<u8>("b"), used: 1 }), used: 2 };
-            break __seq_lit: __local_1;
-        }, __seq_lit: block -> ref Array<String> {
-            __local_2 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("c"), used: 1 }, String { repr: array.new_data<u8>("b"), used: 1 }, String { repr: array.new_data<u8>("d"), used: 1 }, String { repr: array.new_data<u8>("e"), used: 1 }), used: 4 };
-            break __seq_lit: __local_2;
-        }), used: 2 };
-        break __seq_lit: __local_0;
-    };
-    indices = __seq_lit: block -> ref Array<i32> {
-        __local_4 = Array<i32> { repr: array.new_fixed<i32>(0, 1), used: 2 };
-        break __seq_lit: __local_4;
-    };
-    skip = "core:collections/TreeSet<String>" { inner: "core:collections/TreeMap<String,unit>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,unit>> {
-        __local_47 = Array<TreeMapEntry<String,unit>> { repr: builtin::array_new<ref "core:collections/TreeMapEntry<String,unit>">(0), used: 0 };
-        break __seq_lit: __local_47;
-    }), size: 0, deleted_count: 0 } };
-    drop(TreeSet<String>::insert(skip.inner, String { repr: array.new_data<u8>("a"), used: 1 }));
-    drop(TreeSet<String>::insert(skip.inner, String { repr: array.new_data<u8>("c"), used: 1 }));
-    drop(TreeSet<String>::insert(skip.inner, String { repr: array.new_data<u8>("d"), used: 1 }));
-    drop(TreeSet<String>::insert(skip.inner, String { repr: array.new_data<u8>("e"), used: 1 }));
-    result = for_of_version(data, indices, skip.inner);
-    __v0 = result.used;
-    __cond = __v0 == 2;
-    if __cond == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_12 = String { repr: builtin::array_new<u8>(152), used: 0 };
-            String::push_str(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_12, String { repr: array.new_data<u8>("__test_0_for_of_double_indexed_with_treeset_filter"), used: 50 });
-            String::push(__local_12, 32);
-            String::push(__local_12, 97);
-            String::push(__local_12, 116);
-            String::push(__local_12, 32);
-            String::push_str(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
-            String::push(__local_12, 58);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-            __local_52 = __local_13;
-            i32::fmt_decimal(47, __local_52);
-            String::push(__local_12, 58);
-            String::push(__local_12, 32);
-            String::push_str(__local_12, __tmpl: block -> ref String {
-                __local_10 = String { repr: builtin::array_new<u8>(40), used: 0 };
-                String::push_str(__local_10, String { repr: array.new_data<u8>("for-of: expected 2, got "), used: 24 });
-                __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-                i32::fmt_decimal(result.used, __local_11);
-                break __tmpl: __local_10;
-            });
-            String::push_str(__local_12, String { repr: array.new_data<u8>("
-condition: result.len() == 2
-"), used: 30 });
-            String::push_str(__local_12, String { repr: array.new_data<u8>("result.len(): "), used: 14 });
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-            __local_64 = __local_13;
-            i32::fmt_decimal(__v0, __local_64);
-            String::push(__local_12, 10);
-            break __tmpl: __local_12;
-        });
-        unreachable;
-    };
-}
-
-fn __test_1_index_loop_double_indexed_with_treeset_filter() {
-    let __local_0: ref Array<Array<String>>;
-    let __local_1: ref Array<String>;
-    let __local_2: ref Array<String>;
-    let data: ref Array<Array<String>>;
-    let __local_4: ref Array<i32>;
-    let indices: ref Array<i32>;
-    let skip: ref "core:collections/TreeSet<String>";
-    let result: ref Array<String>;
-    let __v0: i32;
-    let __cond: bool;
-    let __local_10: ref String;
-    let __local_11: ref Formatter;
-    let __local_12: ref String;
-    let __local_13: ref Formatter;
-    let __local_47: ref Array<TreeMapEntry<String,unit>>;
-    let __local_52: ref Formatter;
-    let __local_64: ref Formatter;
-    data = __seq_lit: block -> ref Array<Array<String>> {
-        __local_0 = Array<Array<String>> { repr: array.new_fixed<ref Array<String>>(__seq_lit: block -> ref Array<String> {
-            __local_1 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("a"), used: 1 }, String { repr: array.new_data<u8>("b"), used: 1 }), used: 2 };
-            break __seq_lit: __local_1;
-        }, __seq_lit: block -> ref Array<String> {
-            __local_2 = Array<String> { repr: array.new_fixed<ref String>(String { repr: array.new_data<u8>("c"), used: 1 }, String { repr: array.new_data<u8>("b"), used: 1 }, String { repr: array.new_data<u8>("d"), used: 1 }, String { repr: array.new_data<u8>("e"), used: 1 }), used: 4 };
-            break __seq_lit: __local_2;
-        }), used: 2 };
-        break __seq_lit: __local_0;
-    };
-    indices = __seq_lit: block -> ref Array<i32> {
-        __local_4 = Array<i32> { repr: array.new_fixed<i32>(0, 1), used: 2 };
-        break __seq_lit: __local_4;
-    };
-    skip = "core:collections/TreeSet<String>" { inner: "core:collections/TreeMap<String,unit>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref Array<TreeMapEntry<String,unit>> {
-        __local_47 = Array<TreeMapEntry<String,unit>> { repr: builtin::array_new<ref "core:collections/TreeMapEntry<String,unit>">(0), used: 0 };
-        break __seq_lit: __local_47;
-    }), size: 0, deleted_count: 0 } };
-    drop(TreeSet<String>::insert(skip.inner, String { repr: array.new_data<u8>("a"), used: 1 }));
-    drop(TreeSet<String>::insert(skip.inner, String { repr: array.new_data<u8>("c"), used: 1 }));
-    drop(TreeSet<String>::insert(skip.inner, String { repr: array.new_data<u8>("d"), used: 1 }));
-    drop(TreeSet<String>::insert(skip.inner, String { repr: array.new_data<u8>("e"), used: 1 }));
-    result = index_version(data, indices, skip.inner);
-    __v0 = result.used;
-    __cond = __v0 == 2;
-    if __cond == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_12 = String { repr: builtin::array_new<u8>(152), used: 0 };
-            String::push_str(__local_12, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_12, String { repr: array.new_data<u8>("__test_1_index_loop_double_indexed_with_treeset_filter"), used: 54 });
-            String::push(__local_12, 32);
-            String::push(__local_12, 97);
-            String::push(__local_12, 116);
-            String::push(__local_12, 32);
-            String::push_str(__local_12, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
-            String::push(__local_12, 58);
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-            __local_52 = __local_13;
-            i32::fmt_decimal(62, __local_52);
-            String::push(__local_12, 58);
-            String::push(__local_12, 32);
-            String::push_str(__local_12, __tmpl: block -> ref String {
-                __local_10 = String { repr: builtin::array_new<u8>(44), used: 0 };
-                String::push_str(__local_10, String { repr: array.new_data<u8>("index-loop: expected 2, got "), used: 28 });
-                __local_11 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-                i32::fmt_decimal(result.used, __local_11);
-                break __tmpl: __local_10;
-            });
-            String::push_str(__local_12, String { repr: array.new_data<u8>("
-condition: result.len() == 2
-"), used: 30 });
-            String::push_str(__local_12, String { repr: array.new_data<u8>("result.len(): "), used: 14 });
-            __local_13 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-            __local_64 = __local_13;
-            i32::fmt_decimal(__v0, __local_64);
-            String::push(__local_12, 10);
-            break __tmpl: __local_12;
-        });
-        unreachable;
-    };
-}
-
-fn __test_2_break_in_for_of_inside_c_style_for() {
+fn __test_0_continue_in_for_of_inside_c_style_for() {
     let __local_0: ref Array<Array<i32>>;
     let __local_1: ref Array<i32>;
     let __local_2: ref Array<i32>;
     let data: ref Array<Array<i32>>;
-    let __local_4: ref Array<i32>;
     let result: ref Array<i32>;
-    let k: i32;
-    let __iter_7: ref ArrayIter<i32>;
-    let item: i32;
+    let __v0_5: i32;
+    let __cond_6: bool;
+    let __v0_7: i32;
+    let __cond_8: bool;
     let __v0_9: i32;
     let __cond_10: bool;
     let __v0_11: i32;
     let __cond_12: bool;
-    let __v0_13: i32;
-    let __cond_14: bool;
+    let __local_13: ref String;
+    let __local_14: ref Formatter;
     let __local_15: ref String;
     let __local_16: ref Formatter;
     let __local_17: ref String;
@@ -547,15 +261,14 @@ fn __test_2_break_in_for_of_inside_c_style_for() {
     let __local_20: ref Formatter;
     let __local_21: ref String;
     let __local_22: ref Formatter;
-    let __local_54: ref Array<i32>;
-    let __local_61: ref Formatter;
+    let __local_53: ref Formatter;
+    let __local_65: ref Formatter;
     let __local_73: ref Formatter;
-    let __local_81: ref Formatter;
+    let __local_78: ref Formatter;
     let __local_86: ref Formatter;
-    let __local_94: ref Formatter;
+    let __local_91: ref Formatter;
     let __local_99: ref Formatter;
-    let _licm_used_102: i32;
-    let _licm_repr_103: ref array<Array<i32>>;
+    let __local_104: ref Formatter;
     data = __seq_lit: block -> ref Array<Array<i32>> {
         __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref Array<i32>>(__seq_lit: block -> ref Array<i32> {
             __local_1 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
@@ -566,56 +279,57 @@ fn __test_2_break_in_for_of_inside_c_style_for() {
         }), used: 2 };
         break __seq_lit: __local_0;
     };
-    result = __seq_lit: block -> ref Array<i32> {
-        __local_4 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
-        break __seq_lit: __local_4;
-    };
-    __for_3: block {
-        k = 0;
-        _licm_used_102 = 2;
-        _licm_repr_103 = data.repr;
-        block {
-            l19: loop {
-                if (k < _licm_used_102) == 0 {
-                    break __for_3;
-                };
-                __iter_7 = __inline_Array_i32__IntoIterator__into_iter_23: block -> ref ArrayIter<i32> {
-                    __local_54 = builtin::array_get<ref Array<i32>>(_licm_repr_103, k);
-                    break __inline_Array_i32__IntoIterator__into_iter_23: ArrayIter<i32> { repr: __local_54.repr, used: __local_54.used, index: 0 };
-                };
-                b21: block {
-                    l22: loop {
-                        let __sroa___pattern_temp_0_discriminant: i32;
-                        let __sroa___pattern_temp_0_payload_0: i32;
-                        multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_7);
-                        if __sroa___pattern_temp_0_discriminant == 0 {
-                            item = __sroa___pattern_temp_0_payload_0;
-                            if if item == 2 -> i32 {
-                                1;
-                            } else {
-                                item == 5;
-                            } {
-                                break b21;
-                            };
-                            Array<i32>::push(result, item);
-                        } else {
-                            break b21;
-                        };
-                        continue l22;
-                    };
-                };
-                k = k + 1;
-                continue l19;
-            };
-        };
-    };
-    __v0_9 = result.used;
-    __cond_10 = __v0_9 == 2;
-    if __cond_10 == 0 {
+    result = for_of_with_continue(data);
+    __v0_5 = result.used;
+    __cond_6 = __v0_5 == 3;
+    if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
-            __local_17 = String { repr: builtin::array_new<u8>(152), used: 0 };
+            __local_15 = String { repr: builtin::array_new<u8>(152), used: 0 };
+            String::push_str(__local_15, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_15, String { repr: array.new_data<u8>("__test_0_continue_in_for_of_inside_c_style_for"), used: 46 });
+            String::push(__local_15, 32);
+            String::push(__local_15, 97);
+            String::push(__local_15, 116);
+            String::push(__local_15, 32);
+            String::push_str(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
+            String::push(__local_15, 58);
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
+            __local_53 = __local_16;
+            i32::fmt_decimal(35, __local_53);
+            String::push(__local_15, 58);
+            String::push(__local_15, 32);
+            String::push_str(__local_15, __tmpl: block -> ref String {
+                __local_13 = String { repr: builtin::array_new<u8>(32), used: 0 };
+                String::push_str(__local_13, String { repr: array.new_data<u8>("expected 3, got "), used: 16 });
+                __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+                i32::fmt_decimal(result.used, __local_14);
+                break __tmpl: __local_13;
+            });
+            String::push_str(__local_15, String { repr: array.new_data<u8>("
+condition: result.len() == 3
+"), used: 30 });
+            String::push_str(__local_15, String { repr: array.new_data<u8>("result.len(): "), used: 14 });
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
+            __local_65 = __local_16;
+            i32::fmt_decimal(__v0_5, __local_65);
+            String::push(__local_15, 10);
+            break __tmpl: __local_15;
+        });
+        unreachable;
+    };
+    __v0_7 = __inline_Array_i32__IndexValue__index_value_32: block -> i32 {
+        if 0 >= result.used {
+            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_i32__IndexValue__index_value_32: builtin::array_get<i32>(result.repr, 0);
+    };
+    __cond_8 = __v0_7 == 1;
+    if __cond_8 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_17 = String { repr: builtin::array_new<u8>(128), used: 0 };
             String::push_str(__local_17, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_17, String { repr: array.new_data<u8>("__test_2_break_in_for_of_inside_c_style_for"), used: 43 });
+            String::push_str(__local_17, String { repr: array.new_data<u8>("__test_0_continue_in_for_of_inside_c_style_for"), used: 46 });
             String::push(__local_17, 32);
             String::push(__local_17, 97);
             String::push(__local_17, 116);
@@ -623,42 +337,33 @@ fn __test_2_break_in_for_of_inside_c_style_for() {
             String::push_str(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
             String::push(__local_17, 58);
             __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
-            __local_61 = __local_18;
-            i32::fmt_decimal(77, __local_61);
-            String::push(__local_17, 58);
-            String::push(__local_17, 32);
-            String::push_str(__local_17, __tmpl: block -> ref String {
-                __local_15 = String { repr: builtin::array_new<u8>(39), used: 0 };
-                String::push_str(__local_15, String { repr: array.new_data<u8>("break: expected 2, got "), used: 23 });
-                __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
-                i32::fmt_decimal(result.used, __local_16);
-                break __tmpl: __local_15;
-            });
-            String::push_str(__local_17, String { repr: array.new_data<u8>("
-condition: result.len() == 2
-"), used: 30 });
-            String::push_str(__local_17, String { repr: array.new_data<u8>("result.len(): "), used: 14 });
-            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
             __local_73 = __local_18;
-            i32::fmt_decimal(__v0_9, __local_73);
+            i32::fmt_decimal(36, __local_73);
+            String::push_str(__local_17, String { repr: array.new_data<u8>("
+condition: result[0] == 1
+"), used: 27 });
+            String::push_str(__local_17, String { repr: array.new_data<u8>("result[0]: "), used: 11 });
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+            __local_78 = __local_18;
+            i32::fmt_decimal(__v0_7, __local_78);
             String::push(__local_17, 10);
             break __tmpl: __local_17;
         });
         unreachable;
     };
-    __v0_11 = __inline_Array_i32__IndexValue__index_value_38: block -> i32 {
-        if 0 >= result.used {
+    __v0_9 = __inline_Array_i32__IndexValue__index_value_40: block -> i32 {
+        if 1 >= result.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_i32__IndexValue__index_value_38: builtin::array_get<i32>(result.repr, 0);
+        break __inline_Array_i32__IndexValue__index_value_40: builtin::array_get<i32>(result.repr, 1);
     };
-    __cond_12 = __v0_11 == 1;
-    if __cond_12 == 0 {
+    __cond_10 = __v0_9 == 3;
+    if __cond_10 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_19 = String { repr: builtin::array_new<u8>(128), used: 0 };
             String::push_str(__local_19, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_19, String { repr: array.new_data<u8>("__test_2_break_in_for_of_inside_c_style_for"), used: 43 });
+            String::push_str(__local_19, String { repr: array.new_data<u8>("__test_0_continue_in_for_of_inside_c_style_for"), used: 46 });
             String::push(__local_19, 32);
             String::push(__local_19, 97);
             String::push(__local_19, 116);
@@ -666,33 +371,33 @@ condition: result.len() == 2
             String::push_str(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
             String::push(__local_19, 58);
             __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
-            __local_81 = __local_20;
-            i32::fmt_decimal(78, __local_81);
-            String::push_str(__local_19, String { repr: array.new_data<u8>("
-condition: result[0] == 1
-"), used: 27 });
-            String::push_str(__local_19, String { repr: array.new_data<u8>("result[0]: "), used: 11 });
-            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
             __local_86 = __local_20;
-            i32::fmt_decimal(__v0_11, __local_86);
+            i32::fmt_decimal(37, __local_86);
+            String::push_str(__local_19, String { repr: array.new_data<u8>("
+condition: result[1] == 3
+"), used: 27 });
+            String::push_str(__local_19, String { repr: array.new_data<u8>("result[1]: "), used: 11 });
+            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
+            __local_91 = __local_20;
+            i32::fmt_decimal(__v0_9, __local_91);
             String::push(__local_19, 10);
             break __tmpl: __local_19;
         });
         unreachable;
     };
-    __v0_13 = __inline_Array_i32__IndexValue__index_value_46: block -> i32 {
-        if 1 >= result.used {
+    __v0_11 = __inline_Array_i32__IndexValue__index_value_48: block -> i32 {
+        if 2 >= result.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_i32__IndexValue__index_value_46: builtin::array_get<i32>(result.repr, 1);
+        break __inline_Array_i32__IndexValue__index_value_48: builtin::array_get<i32>(result.repr, 2);
     };
-    __cond_14 = __v0_13 == 4;
-    if __cond_14 == 0 {
+    __cond_12 = __v0_11 == 5;
+    if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_21 = String { repr: builtin::array_new<u8>(128), used: 0 };
             String::push_str(__local_21, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_21, String { repr: array.new_data<u8>("__test_2_break_in_for_of_inside_c_style_for"), used: 43 });
+            String::push_str(__local_21, String { repr: array.new_data<u8>("__test_0_continue_in_for_of_inside_c_style_for"), used: 46 });
             String::push(__local_21, 32);
             String::push(__local_21, 97);
             String::push(__local_21, 116);
@@ -700,15 +405,15 @@ condition: result[0] == 1
             String::push_str(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
             String::push(__local_21, 58);
             __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
-            __local_94 = __local_22;
-            i32::fmt_decimal(79, __local_94);
-            String::push_str(__local_21, String { repr: array.new_data<u8>("
-condition: result[1] == 4
-"), used: 27 });
-            String::push_str(__local_21, String { repr: array.new_data<u8>("result[1]: "), used: 11 });
-            __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
             __local_99 = __local_22;
-            i32::fmt_decimal(__v0_13, __local_99);
+            i32::fmt_decimal(38, __local_99);
+            String::push_str(__local_21, String { repr: array.new_data<u8>("
+condition: result[2] == 5
+"), used: 27 });
+            String::push_str(__local_21, String { repr: array.new_data<u8>("result[2]: "), used: 11 });
+            __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
+            __local_104 = __local_22;
+            i32::fmt_decimal(__v0_11, __local_104);
             String::push(__local_21, 10);
             break __tmpl: __local_21;
         });
@@ -716,26 +421,170 @@ condition: result[1] == 4
     };
 }
 
-fn __test_3_continue_in_for_of_inside_c_style_for() {
+fn __test_1_break_in_for_of_inside_c_style_for() {
+    let __local_0: ref Array<Array<i32>>;
+    let __local_1: ref Array<i32>;
+    let __local_2: ref Array<i32>;
+    let data: ref Array<Array<i32>>;
+    let result: ref Array<i32>;
+    let __v0_5: i32;
+    let __cond_6: bool;
+    let __v0_7: i32;
+    let __cond_8: bool;
+    let __v0_9: i32;
+    let __cond_10: bool;
+    let __local_11: ref String;
+    let __local_12: ref Formatter;
+    let __local_13: ref String;
+    let __local_14: ref Formatter;
+    let __local_15: ref String;
+    let __local_16: ref Formatter;
+    let __local_17: ref String;
+    let __local_18: ref Formatter;
+    let __local_49: ref Formatter;
+    let __local_61: ref Formatter;
+    let __local_69: ref Formatter;
+    let __local_74: ref Formatter;
+    let __local_82: ref Formatter;
+    let __local_87: ref Formatter;
+    data = __seq_lit: block -> ref Array<Array<i32>> {
+        __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref Array<i32>>(__seq_lit: block -> ref Array<i32> {
+            __local_1 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+            break __seq_lit: __local_1;
+        }, __seq_lit: block -> ref Array<i32> {
+            __local_2 = Array<i32> { repr: array.new_fixed<i32>(4, 5, 6), used: 3 };
+            break __seq_lit: __local_2;
+        }), used: 2 };
+        break __seq_lit: __local_0;
+    };
+    result = for_of_with_break(data);
+    __v0_5 = result.used;
+    __cond_6 = __v0_5 == 2;
+    if __cond_6 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_13 = String { repr: builtin::array_new<u8>(152), used: 0 };
+            String::push_str(__local_13, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_13, String { repr: array.new_data<u8>("__test_1_break_in_for_of_inside_c_style_for"), used: 43 });
+            String::push(__local_13, 32);
+            String::push(__local_13, 97);
+            String::push(__local_13, 116);
+            String::push(__local_13, 32);
+            String::push_str(__local_13, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
+            String::push(__local_13, 58);
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+            __local_49 = __local_14;
+            i32::fmt_decimal(45, __local_49);
+            String::push(__local_13, 58);
+            String::push(__local_13, 32);
+            String::push_str(__local_13, __tmpl: block -> ref String {
+                __local_11 = String { repr: builtin::array_new<u8>(32), used: 0 };
+                String::push_str(__local_11, String { repr: array.new_data<u8>("expected 2, got "), used: 16 });
+                __local_12 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_11 };
+                i32::fmt_decimal(result.used, __local_12);
+                break __tmpl: __local_11;
+            });
+            String::push_str(__local_13, String { repr: array.new_data<u8>("
+condition: result.len() == 2
+"), used: 30 });
+            String::push_str(__local_13, String { repr: array.new_data<u8>("result.len(): "), used: 14 });
+            __local_14 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_13 };
+            __local_61 = __local_14;
+            i32::fmt_decimal(__v0_5, __local_61);
+            String::push(__local_13, 10);
+            break __tmpl: __local_13;
+        });
+        unreachable;
+    };
+    __v0_7 = __inline_Array_i32__IndexValue__index_value_32: block -> i32 {
+        if 0 >= result.used {
+            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_i32__IndexValue__index_value_32: builtin::array_get<i32>(result.repr, 0);
+    };
+    __cond_8 = __v0_7 == 1;
+    if __cond_8 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_15 = String { repr: builtin::array_new<u8>(128), used: 0 };
+            String::push_str(__local_15, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_15, String { repr: array.new_data<u8>("__test_1_break_in_for_of_inside_c_style_for"), used: 43 });
+            String::push(__local_15, 32);
+            String::push(__local_15, 97);
+            String::push(__local_15, 116);
+            String::push(__local_15, 32);
+            String::push_str(__local_15, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
+            String::push(__local_15, 58);
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
+            __local_69 = __local_16;
+            i32::fmt_decimal(46, __local_69);
+            String::push_str(__local_15, String { repr: array.new_data<u8>("
+condition: result[0] == 1
+"), used: 27 });
+            String::push_str(__local_15, String { repr: array.new_data<u8>("result[0]: "), used: 11 });
+            __local_16 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_15 };
+            __local_74 = __local_16;
+            i32::fmt_decimal(__v0_7, __local_74);
+            String::push(__local_15, 10);
+            break __tmpl: __local_15;
+        });
+        unreachable;
+    };
+    __v0_9 = __inline_Array_i32__IndexValue__index_value_40: block -> i32 {
+        if 1 >= result.used {
+            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_i32__IndexValue__index_value_40: builtin::array_get<i32>(result.repr, 1);
+    };
+    __cond_10 = __v0_9 == 2;
+    if __cond_10 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_17 = String { repr: builtin::array_new<u8>(128), used: 0 };
+            String::push_str(__local_17, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_17, String { repr: array.new_data<u8>("__test_1_break_in_for_of_inside_c_style_for"), used: 43 });
+            String::push(__local_17, 32);
+            String::push(__local_17, 97);
+            String::push(__local_17, 116);
+            String::push(__local_17, 32);
+            String::push_str(__local_17, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
+            String::push(__local_17, 58);
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+            __local_82 = __local_18;
+            i32::fmt_decimal(47, __local_82);
+            String::push_str(__local_17, String { repr: array.new_data<u8>("
+condition: result[1] == 2
+"), used: 27 });
+            String::push_str(__local_17, String { repr: array.new_data<u8>("result[1]: "), used: 11 });
+            __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
+            __local_87 = __local_18;
+            i32::fmt_decimal(__v0_9, __local_87);
+            String::push(__local_17, 10);
+            break __tmpl: __local_17;
+        });
+        unreachable;
+    };
+}
+
+fn __test_2_continue_with_double_indexed_access() {
     let __local_0: ref Array<Array<i32>>;
     let __local_1: ref Array<i32>;
     let __local_2: ref Array<i32>;
     let data: ref Array<Array<i32>>;
     let __local_4: ref Array<i32>;
+    let indices: ref Array<i32>;
+    let __local_6: ref Array<i32>;
     let result: ref Array<i32>;
     let k: i32;
-    let __iter_7: ref ArrayIter<i32>;
+    let __iter_9: ref ArrayIter<i32>;
     let item: i32;
-    let __v0_9: i32;
-    let __cond_10: bool;
     let __v0_11: i32;
     let __cond_12: bool;
     let __v0_13: i32;
     let __cond_14: bool;
     let __v0_15: i32;
     let __cond_16: bool;
-    let __local_17: ref String;
-    let __local_18: ref Formatter;
+    let __v0_17: i32;
+    let __cond_18: bool;
     let __local_19: ref String;
     let __local_20: ref Formatter;
     let __local_21: ref String;
@@ -744,116 +593,91 @@ fn __test_3_continue_in_for_of_inside_c_style_for() {
     let __local_24: ref Formatter;
     let __local_25: ref String;
     let __local_26: ref Formatter;
-    let __local_58: ref Array<i32>;
-    let __local_65: ref Formatter;
-    let __local_77: ref Formatter;
-    let __local_85: ref Formatter;
-    let __local_90: ref Formatter;
-    let __local_98: ref Formatter;
-    let __local_103: ref Formatter;
-    let __local_111: ref Formatter;
-    let __local_116: ref Formatter;
-    let _licm_used_119: i32;
-    let _licm_repr_120: ref array<Array<i32>>;
+    let __local_27: ref String;
+    let __local_28: ref Formatter;
+    let __local_67: ref Array<i32>;
+    let __local_71: i32;
+    let __local_76: ref Formatter;
+    let __local_88: ref Formatter;
+    let __local_96: ref Formatter;
+    let __local_101: ref Formatter;
+    let __local_109: ref Formatter;
+    let __local_114: ref Formatter;
+    let __local_122: ref Formatter;
+    let __local_127: ref Formatter;
+    let _licm_used_130: i32;
+    let _licm_repr_131: ref array<i32>;
+    let _licm_used_132: i32;
+    let _licm_repr_133: ref array<Array<i32>>;
     data = __seq_lit: block -> ref Array<Array<i32>> {
         __local_0 = Array<Array<i32>> { repr: array.new_fixed<ref Array<i32>>(__seq_lit: block -> ref Array<i32> {
-            __local_1 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+            __local_1 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
             break __seq_lit: __local_1;
         }, __seq_lit: block -> ref Array<i32> {
-            __local_2 = Array<i32> { repr: array.new_fixed<i32>(4, 5, 6), used: 3 };
+            __local_2 = Array<i32> { repr: array.new_fixed<i32>(40, 50, 60), used: 3 };
             break __seq_lit: __local_2;
         }), used: 2 };
         break __seq_lit: __local_0;
     };
-    result = __seq_lit: block -> ref Array<i32> {
-        __local_4 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
+    indices = __seq_lit: block -> ref Array<i32> {
+        __local_4 = Array<i32> { repr: array.new_fixed<i32>(0, 1), used: 2 };
         break __seq_lit: __local_4;
     };
-    __for_4: block {
+    result = __seq_lit: block -> ref Array<i32> {
+        __local_6 = Array<i32> { repr: builtin::array_new<i32>(0), used: 0 };
+        break __seq_lit: __local_6;
+    };
+    __for_2: block {
         k = 0;
-        _licm_used_119 = 2;
-        _licm_repr_120 = data.repr;
+        _licm_used_130 = 2;
+        _licm_repr_131 = indices.repr;
+        _licm_used_132 = 2;
+        _licm_repr_133 = data.repr;
         block {
-            l32: loop {
-                if (k < _licm_used_119) == 0 {
-                    break __for_4;
+            l27: loop {
+                if (k < _licm_used_130) == 0 {
+                    break __for_2;
                 };
-                __iter_7 = __inline_Array_i32__IntoIterator__into_iter_23: block -> ref ArrayIter<i32> {
-                    __local_58 = builtin::array_get<ref Array<i32>>(_licm_repr_120, k);
-                    break __inline_Array_i32__IntoIterator__into_iter_23: ArrayIter<i32> { repr: __local_58.repr, used: __local_58.used, index: 0 };
+                __iter_9 = __inline_Array_i32__IntoIterator__into_iter_28: block -> ref ArrayIter<i32> {
+                    __local_67 = __inline_Array_Array_i32___IndexValue__index_value_30: block -> ref Array<i32> {
+                        __local_71 = builtin::array_get<i32>(_licm_repr_131, k);
+                        if __local_71 >= _licm_used_132 {
+                            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                            unreachable;
+                        };
+                        break __inline_Array_Array_i32___IndexValue__index_value_30: builtin::array_get<ref Array<i32>>(_licm_repr_133, __local_71);
+                    };
+                    break __inline_Array_i32__IntoIterator__into_iter_28: ArrayIter<i32> { repr: __local_67.repr, used: __local_67.used, index: 0 };
                 };
-                b34: block {
-                    l35: loop {
+                b30: block {
+                    l31: loop {
                         let __sroa___pattern_temp_0_discriminant: i32;
                         let __sroa___pattern_temp_0_payload_0: i32;
-                        multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_7);
+                        multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = ArrayIter<i32>^Iterator::next(__iter_9);
                         if __sroa___pattern_temp_0_discriminant == 0 {
                             item = __sroa___pattern_temp_0_payload_0;
-                            if (item % 2) == 0 {
-                                continue l35;
+                            if (item % 20) == 0 {
+                                continue l31;
                             };
                             Array<i32>::push(result, item);
                         } else {
-                            break b34;
+                            break b30;
                         };
-                        continue l35;
+                        continue l31;
                     };
                 };
                 k = k + 1;
-                continue l32;
+                continue l27;
             };
         };
     };
-    __v0_9 = result.used;
-    __cond_10 = __v0_9 == 3;
-    if __cond_10 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_19 = String { repr: builtin::array_new<u8>(152), used: 0 };
-            String::push_str(__local_19, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_19, String { repr: array.new_data<u8>("__test_3_continue_in_for_of_inside_c_style_for"), used: 46 });
-            String::push(__local_19, 32);
-            String::push(__local_19, 97);
-            String::push(__local_19, 116);
-            String::push(__local_19, 32);
-            String::push_str(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
-            String::push(__local_19, 58);
-            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
-            __local_65 = __local_20;
-            i32::fmt_decimal(94, __local_65);
-            String::push(__local_19, 58);
-            String::push(__local_19, 32);
-            String::push_str(__local_19, __tmpl: block -> ref String {
-                __local_17 = String { repr: builtin::array_new<u8>(42), used: 0 };
-                String::push_str(__local_17, String { repr: array.new_data<u8>("continue: expected 3, got "), used: 26 });
-                __local_18 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
-                i32::fmt_decimal(result.used, __local_18);
-                break __tmpl: __local_17;
-            });
-            String::push_str(__local_19, String { repr: array.new_data<u8>("
-condition: result.len() == 3
-"), used: 30 });
-            String::push_str(__local_19, String { repr: array.new_data<u8>("result.len(): "), used: 14 });
-            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
-            __local_77 = __local_20;
-            i32::fmt_decimal(__v0_9, __local_77);
-            String::push(__local_19, 10);
-            break __tmpl: __local_19;
-        });
-        unreachable;
-    };
-    __v0_11 = __inline_Array_i32__IndexValue__index_value_38: block -> i32 {
-        if 0 >= result.used {
-            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        };
-        break __inline_Array_i32__IndexValue__index_value_38: builtin::array_get<i32>(result.repr, 0);
-    };
-    __cond_12 = __v0_11 == 1;
+    __v0_11 = result.used;
+    __cond_12 = __v0_11 == 3;
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
-            __local_21 = String { repr: builtin::array_new<u8>(128), used: 0 };
+            __local_21 = String { repr: builtin::array_new<u8>(152), used: 0 };
             String::push_str(__local_21, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_21, String { repr: array.new_data<u8>("__test_3_continue_in_for_of_inside_c_style_for"), used: 46 });
+            String::push_str(__local_21, String { repr: array.new_data<u8>("__test_2_continue_with_double_indexed_access"), used: 44 });
             String::push(__local_21, 32);
             String::push(__local_21, 97);
             String::push(__local_21, 116);
@@ -861,33 +685,42 @@ condition: result.len() == 3
             String::push_str(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
             String::push(__local_21, 58);
             __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
-            __local_85 = __local_22;
-            i32::fmt_decimal(95, __local_85);
+            __local_76 = __local_22;
+            i32::fmt_decimal(63, __local_76);
+            String::push(__local_21, 58);
+            String::push(__local_21, 32);
+            String::push_str(__local_21, __tmpl: block -> ref String {
+                __local_19 = String { repr: builtin::array_new<u8>(32), used: 0 };
+                String::push_str(__local_19, String { repr: array.new_data<u8>("expected 3, got "), used: 16 });
+                __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
+                i32::fmt_decimal(result.used, __local_20);
+                break __tmpl: __local_19;
+            });
             String::push_str(__local_21, String { repr: array.new_data<u8>("
-condition: result[0] == 1
-"), used: 27 });
-            String::push_str(__local_21, String { repr: array.new_data<u8>("result[0]: "), used: 11 });
+condition: result.len() == 3
+"), used: 30 });
+            String::push_str(__local_21, String { repr: array.new_data<u8>("result.len(): "), used: 14 });
             __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
-            __local_90 = __local_22;
-            i32::fmt_decimal(__v0_11, __local_90);
+            __local_88 = __local_22;
+            i32::fmt_decimal(__v0_11, __local_88);
             String::push(__local_21, 10);
             break __tmpl: __local_21;
         });
         unreachable;
     };
-    __v0_13 = __inline_Array_i32__IndexValue__index_value_46: block -> i32 {
-        if 1 >= result.used {
+    __v0_13 = __inline_Array_i32__IndexValue__index_value_44: block -> i32 {
+        if 0 >= result.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_i32__IndexValue__index_value_46: builtin::array_get<i32>(result.repr, 1);
+        break __inline_Array_i32__IndexValue__index_value_44: builtin::array_get<i32>(result.repr, 0);
     };
-    __cond_14 = __v0_13 == 3;
+    __cond_14 = __v0_13 == 10;
     if __cond_14 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
-            __local_23 = String { repr: builtin::array_new<u8>(128), used: 0 };
+            __local_23 = String { repr: builtin::array_new<u8>(129), used: 0 };
             String::push_str(__local_23, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_23, String { repr: array.new_data<u8>("__test_3_continue_in_for_of_inside_c_style_for"), used: 46 });
+            String::push_str(__local_23, String { repr: array.new_data<u8>("__test_2_continue_with_double_indexed_access"), used: 44 });
             String::push(__local_23, 32);
             String::push(__local_23, 97);
             String::push(__local_23, 116);
@@ -895,33 +728,33 @@ condition: result[0] == 1
             String::push_str(__local_23, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
             String::push(__local_23, 58);
             __local_24 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_23 };
-            __local_98 = __local_24;
-            i32::fmt_decimal(96, __local_98);
+            __local_96 = __local_24;
+            i32::fmt_decimal(64, __local_96);
             String::push_str(__local_23, String { repr: array.new_data<u8>("
-condition: result[1] == 3
-"), used: 27 });
-            String::push_str(__local_23, String { repr: array.new_data<u8>("result[1]: "), used: 11 });
+condition: result[0] == 10
+"), used: 28 });
+            String::push_str(__local_23, String { repr: array.new_data<u8>("result[0]: "), used: 11 });
             __local_24 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_23 };
-            __local_103 = __local_24;
-            i32::fmt_decimal(__v0_13, __local_103);
+            __local_101 = __local_24;
+            i32::fmt_decimal(__v0_13, __local_101);
             String::push(__local_23, 10);
             break __tmpl: __local_23;
         });
         unreachable;
     };
-    __v0_15 = __inline_Array_i32__IndexValue__index_value_54: block -> i32 {
-        if 2 >= result.used {
+    __v0_15 = __inline_Array_i32__IndexValue__index_value_52: block -> i32 {
+        if 1 >= result.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         };
-        break __inline_Array_i32__IndexValue__index_value_54: builtin::array_get<i32>(result.repr, 2);
+        break __inline_Array_i32__IndexValue__index_value_52: builtin::array_get<i32>(result.repr, 1);
     };
-    __cond_16 = __v0_15 == 5;
+    __cond_16 = __v0_15 == 30;
     if __cond_16 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
-            __local_25 = String { repr: builtin::array_new<u8>(128), used: 0 };
+            __local_25 = String { repr: builtin::array_new<u8>(129), used: 0 };
             String::push_str(__local_25, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_25, String { repr: array.new_data<u8>("__test_3_continue_in_for_of_inside_c_style_for"), used: 46 });
+            String::push_str(__local_25, String { repr: array.new_data<u8>("__test_2_continue_with_double_indexed_access"), used: 44 });
             String::push(__local_25, 32);
             String::push(__local_25, 97);
             String::push(__local_25, 116);
@@ -929,39 +762,68 @@ condition: result[1] == 3
             String::push_str(__local_25, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
             String::push(__local_25, 58);
             __local_26 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_25 };
-            __local_111 = __local_26;
-            i32::fmt_decimal(97, __local_111);
+            __local_109 = __local_26;
+            i32::fmt_decimal(65, __local_109);
             String::push_str(__local_25, String { repr: array.new_data<u8>("
-condition: result[2] == 5
-"), used: 27 });
-            String::push_str(__local_25, String { repr: array.new_data<u8>("result[2]: "), used: 11 });
+condition: result[1] == 30
+"), used: 28 });
+            String::push_str(__local_25, String { repr: array.new_data<u8>("result[1]: "), used: 11 });
             __local_26 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_25 };
-            __local_116 = __local_26;
-            i32::fmt_decimal(__v0_15, __local_116);
+            __local_114 = __local_26;
+            i32::fmt_decimal(__v0_15, __local_114);
             String::push(__local_25, 10);
             break __tmpl: __local_25;
         });
         unreachable;
     };
+    __v0_17 = __inline_Array_i32__IndexValue__index_value_60: block -> i32 {
+        if 2 >= result.used {
+            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+            unreachable;
+        };
+        break __inline_Array_i32__IndexValue__index_value_60: builtin::array_get<i32>(result.repr, 2);
+    };
+    __cond_18 = __v0_17 == 50;
+    if __cond_18 == 0 {
+        "core:internal/panic"(__tmpl: block -> ref String {
+            __local_27 = String { repr: builtin::array_new<u8>(129), used: 0 };
+            String::push_str(__local_27, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            String::push_str(__local_27, String { repr: array.new_data<u8>("__test_2_continue_with_double_indexed_access"), used: 44 });
+            String::push(__local_27, 32);
+            String::push(__local_27, 97);
+            String::push(__local_27, 116);
+            String::push(__local_27, 32);
+            String::push_str(__local_27, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/for_of_indexed_array_test.wado"), used: 59 });
+            String::push(__local_27, 58);
+            __local_28 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_27 };
+            __local_122 = __local_28;
+            i32::fmt_decimal(66, __local_122);
+            String::push_str(__local_27, String { repr: array.new_data<u8>("
+condition: result[2] == 50
+"), used: 28 });
+            String::push_str(__local_27, String { repr: array.new_data<u8>("result[2]: "), used: 11 });
+            __local_28 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_27 };
+            __local_127 = __local_28;
+            i32::fmt_decimal(__v0_17, __local_127);
+            String::push(__local_27, 10);
+            break __tmpl: __local_27;
+        });
+        unreachable;
+    };
 }
 
-fn __cm_export____test_0_for_of_double_indexed_with_treeset_filter() {
-    __test_0_for_of_double_indexed_with_treeset_filter();
+fn __cm_export____test_0_continue_in_for_of_inside_c_style_for() {
+    __test_0_continue_in_for_of_inside_c_style_for();
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_1_index_loop_double_indexed_with_treeset_filter() {
-    __test_1_index_loop_double_indexed_with_treeset_filter();
+fn __cm_export____test_1_break_in_for_of_inside_c_style_for() {
+    __test_1_break_in_for_of_inside_c_style_for();
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_2_break_in_for_of_inside_c_style_for() {
-    __test_2_break_in_for_of_inside_c_style_for();
-    "wasi/task-return"(0);
-}
-
-fn __cm_export____test_3_continue_in_for_of_inside_c_style_for() {
-    __test_3_continue_in_for_of_inside_c_style_for();
+fn __cm_export____test_2_continue_with_double_indexed_access() {
+    __test_2_continue_with_double_indexed_access();
     "wasi/task-return"(0);
 }
 
@@ -970,13 +832,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l46: loop {
+            l42: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l46;
+                continue l42;
             };
         };
     };
@@ -1065,13 +927,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l52: loop {
+            l48: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
                 n = n + 1;
                 t = t / 10_i64;
-                continue l52;
+                continue l48;
             };
         };
     };
@@ -1088,14 +950,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l56: loop {
+                l52: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l56;
+                    continue l52;
                 };
             };
         };
@@ -1171,78 +1033,6 @@ fn String::push_str(self, other) {
     self.used = new_used;
 }
 
-fn String^Eq::eq(self, other) {
-    let len_a: i32;
-    len_a = self.used;
-    if len_a != other.used {
-        return 0;
-    };
-    return String^Eq::eq_bytes(self.repr, other.repr, len_a);
-}
-
-fn String^Eq::eq_bytes(a, b, len) {
-    let i: i32;
-    __for_1: block {
-        i = 0;
-        block {
-            l65: loop {
-                if (i < len) == 0 {
-                    break __for_1;
-                };
-                if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
-                    return 0;
-                };
-                i = i + 1;
-                continue l65;
-            };
-        };
-    };
-    return 1;
-}
-
-fn String^Ord::cmp(self, other) {
-    let len_a: i32;
-    let len_b: i32;
-    let min_len: i32;
-    let a_repr: ref array<u8>;
-    let b_repr: ref array<u8>;
-    let i: i32;
-    let a_byte: u8;
-    let b_byte: u8;
-    len_a = self.used;
-    len_b = other.used;
-    min_len = select i32(len_a < len_b, len_a, len_b);
-    a_repr = self.repr;
-    b_repr = other.repr;
-    __for_2: block {
-        i = 0;
-        block {
-            l69: loop {
-                if (i < min_len) == 0 {
-                    break __for_2;
-                };
-                a_byte = builtin::array_get_u8(a_repr, i);
-                b_byte = builtin::array_get_u8(b_repr, i);
-                if a_byte <u b_byte {
-                    return 0;
-                };
-                if a_byte >u b_byte {
-                    return 2;
-                };
-                i = i + 1;
-                continue l69;
-            };
-        };
-    };
-    if len_a < len_b {
-        return 0;
-    };
-    if len_a > len_b {
-        return 2;
-    };
-    return 1;
-}
-
 fn String::push(self, c) {
     let code: u32;
     code = c;
@@ -1268,58 +1058,6 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
-}
-
-fn Array<i32>::push(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<i32>::grow(self);
-    };
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<i32>::grow(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let old_repr: ref array<i32>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<i32>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l81: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                };
-                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                i = i + 1;
-                continue l81;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn ArrayIter<i32>^Iterator::next(self) {
-    let item: i32;
-    if self.index >= self.used {
-        return 1; 0;
-    };
-    item = builtin::array_get<i32>(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0; item;
 }
 
 fn Array<Array<i32>>::push(self, value) {
@@ -1351,146 +1089,34 @@ fn Array<Array<i32>>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l86: loop {
+            l65: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
                 builtin::array_set<ref Array<i32>>(new_repr, i, builtin::array_get<ref Array<i32>>(old_repr, i));
                 i = i + 1;
-                continue l86;
+                continue l65;
             };
         };
     };
     self.repr = new_repr;
 }
 
-fn TreeSet<String>::insert(self, value) {
-    let before: i32;
-    let __local_3: ref "core:collections/TreeMap<String,unit>";
-    let __local_4: ref "core:collections/TreeMap<String,unit>";
-    before = __inline_TreeMap_String_unit___len_0: block -> i32 {
-        __local_3 = self;
-        break __inline_TreeMap_String_unit___len_0: __local_3.size;
-    };
-    TreeMap<String,unit>::insert(self, value);
-    return __inline_TreeMap_String_unit___len_1: block -> i32 {
-        __local_4 = self;
-        break __inline_TreeMap_String_unit___len_1: __local_4.size;
-    } > before;
-}
-
-fn TreeMap<String,unit>::insert(self, key) {
-    let existing_index: i32;
-    let new_index: i32;
-    let entry: ref "core:collections/TreeMapEntry<String,unit>";
-    let __local_6: ref Array<TreeMapEntry<String,unit>>;
-    let __local_8: ref Array<TreeMapEntry<String,unit>>;
-    existing_index = TreeMap<String,unit>::find_index(self, key);
-    if existing_index >= 0 {
-        drop(__inline_Array_TreeMapEntry_String_unit___IndexValue__index_value_0: block -> ref "core:collections/TreeMapEntry<String,unit>" {
-            __local_6 = self.entries;
-            if existing_index >= __local_6.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                unreachable;
-            };
-            break __inline_Array_TreeMapEntry_String_unit___IndexValue__index_value_0: builtin::array_get<ref "core:collections/TreeMapEntry<String,unit>">(__local_6.repr, existing_index);
-        });
-        return;
-    };
-    new_index = __inline_Array_TreeMapEntry_String_unit____len_1: block -> i32 {
-        __local_8 = self.entries;
-        break __inline_Array_TreeMapEntry_String_unit____len_1: __local_8.used;
-    };
-    entry = "core:collections/TreeMapEntry<String,unit>" { key: key, deleted: 0 };
-    Array<TreeMapEntry<String,unit>>::push(self.entries, entry);
-    self.root = TreeMap<String,unit>::insert_node(self, self.root, key, new_index);
-    self.size = self.size + 1;
-}
-
-fn TreeMap<String,unit>::insert_node(self, node, key, index) {
-    let n: ref "core:collections/TreeMapNode<String>";
-    let after_skew: ref null "core:collections/TreeMapNode<String>";
-    let new_node: ref "core:collections/TreeMapNode<String>";
-    if ref.is_null(node) == 0 {
-        n = ref.as_non_null(node);
-        if String^Eq::eq(key, n.key) {
-            n.index = index;
-            return n;
-        };
-        if String^Ord::cmp(key, n.key) == 0 {
-            n.left = TreeMap<String,unit>::insert_node(self, n.left, key, index);
-        } else {
-            n.right = TreeMap<String,unit>::insert_node(self, n.right, key, index);
-        };
-        after_skew = TreeMap<String,unit>::skew(n);
-        return TreeMap<String,unit>::split(after_skew);
-    };
-    new_node = "core:collections/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
-    return new_node;
-}
-
-fn TreeMap<String,unit>::split(node) {
-    let n: ref "core:collections/TreeMapNode<String>";
-    let right: ref "core:collections/TreeMapNode<String>";
-    let rr: ref "core:collections/TreeMapNode<String>";
-    let __pattern_temp_1: ref null "core:collections/TreeMapNode<String>";
-    let __pattern_temp_2: ref null "core:collections/TreeMapNode<String>";
-    if ref.is_null(node) == 0 {
-        n = ref.as_non_null(node);
-        __pattern_temp_1 = n.right;
-        if ref.is_null(__pattern_temp_1) == 0 {
-            right = ref.as_non_null(__pattern_temp_1);
-            __pattern_temp_2 = right.right;
-            if ref.is_null(__pattern_temp_2) == 0 {
-                rr = ref.as_non_null(__pattern_temp_2);
-                if rr.level == n.level {
-                    n.right = right.left;
-                    right.left = n;
-                    right.level = right.level + 1;
-                    return right;
-                };
-            };
-        };
-        return n;
-    };
-    return ref.null none;
-}
-
-fn TreeMap<String,unit>::skew(node) {
-    let n: ref "core:collections/TreeMapNode<String>";
-    let left: ref "core:collections/TreeMapNode<String>";
-    let __pattern_temp_1: ref null "core:collections/TreeMapNode<String>";
-    if ref.is_null(node) == 0 {
-        n = ref.as_non_null(node);
-        __pattern_temp_1 = n.left;
-        if ref.is_null(__pattern_temp_1) == 0 {
-            left = ref.as_non_null(__pattern_temp_1);
-            if left.level == n.level {
-                n.left = left.right;
-                left.right = n;
-                return left;
-            };
-        };
-        return n;
-    };
-    return ref.null none;
-}
-
-fn Array<TreeMapEntry<String,unit>>::push(self, value) {
+fn Array<i32>::push(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<TreeMapEntry<String,unit>>::grow(self);
+        Array<i32>::grow(self);
     };
-    builtin::array_set<ref "core:collections/TreeMapEntry<String,unit>">(self.repr, used, value);
+    builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<TreeMapEntry<String,unit>>::grow(self) {
+fn Array<i32>::grow(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<TreeMapEntry<String,unit>>;
-    let old_repr: ref array<TreeMapEntry<String,unit>>;
+    let new_repr: ref array<i32>;
+    let old_repr: ref array<i32>;
     let used: i32;
     let i: i32;
     let __local_7: i32;
@@ -1499,163 +1125,33 @@ fn Array<TreeMapEntry<String,unit>>::grow(self) {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
     };
-    new_repr = builtin::array_new<ref "core:collections/TreeMapEntry<String,unit>">(new_capacity);
+    new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;
     used = self.used;
     __for_0: block {
         i = 0;
         block {
-            l102: loop {
+            l69: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 };
-                builtin::array_set<ref "core:collections/TreeMapEntry<String,unit>">(new_repr, i, builtin::array_get<ref "core:collections/TreeMapEntry<String,unit>">(old_repr, i));
+                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l102;
+                continue l69;
             };
         };
     };
     self.repr = new_repr;
 }
 
-fn TreeMap<String,unit>::find_index(self, key) {
-    let current: ref null "core:collections/TreeMapNode<String>";
-    let n: ref "core:collections/TreeMapNode<String>";
-    let entry: ref "core:collections/TreeMapEntry<String,unit>";
-    let __pattern_temp_0: ref null "core:collections/TreeMapNode<String>";
-    let __local_7: i32;
-    let _licm_entries_8: ref Array<TreeMapEntry<String,unit>>;
-    let _licm_used_9: i32;
-    let _licm_repr_10: ref array<TreeMapEntry<String,unit>>;
-    current = value_copy Option<TreeMapNode<String>>(self.root);
-    _licm_entries_8 = self.entries;
-    _licm_used_9 = _licm_entries_8.used;
-    _licm_repr_10 = _licm_entries_8.repr;
-    b104: block {
-        l105: loop {
-            __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
-            if ref.is_null(__pattern_temp_0) == 0 {
-                n = ref.as_non_null(__pattern_temp_0);
-                if String^Eq::eq(key, n.key) {
-                    entry = __inline_Array_TreeMapEntry_String_unit___IndexValue__index_value_0: block -> ref "core:collections/TreeMapEntry<String,unit>" {
-                        __local_7 = n.index;
-                        if __local_7 >= _licm_used_9 {
-                            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                            unreachable;
-                        };
-                        break __inline_Array_TreeMapEntry_String_unit___IndexValue__index_value_0: builtin::array_get<ref "core:collections/TreeMapEntry<String,unit>">(_licm_repr_10, __local_7);
-                    };
-                    if entry.deleted {
-                        return -1;
-                    };
-                    return n.index;
-                };
-                if String^Ord::cmp(key, n.key) == 0 {
-                    current = n.left;
-                } else {
-                    current = n.right;
-                };
-            } else {
-                break b104;
-            };
-            continue l105;
-        };
-    };
-    return -1;
-}
-
-fn Array<Array<String>>::push(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<Array<String>>::grow(self);
-    };
-    builtin::array_set<ref Array<String>>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<Array<String>>::grow(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<Array<String>>;
-    let old_repr: ref array<Array<String>>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref Array<String>>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l113: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                };
-                builtin::array_set<ref Array<String>>(new_repr, i, builtin::array_get<ref Array<String>>(old_repr, i));
-                i = i + 1;
-                continue l113;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn Array<String>::push(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<String>::grow(self);
-    };
-    builtin::array_set<ref String>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn Array<String>::grow(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref array<String>;
-    let old_repr: ref array<String>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref String>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l117: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                };
-                builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
-                i = i + 1;
-                continue l117;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn ArrayIter<String>^Iterator::next(self) {
-    let item: ref String;
+fn ArrayIter<i32>^Iterator::next(self) {
+    let item: i32;
     if self.index >= self.used {
-        return ref.null none;
+        return 1; 0;
     };
-    item = builtin::array_get<ref String>(self.repr, self.index);
+    item = builtin::array_get<i32>(self.repr, self.index);
     self.index = self.index + 1;
-    return item;
+    return 0; item;
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -1665,13 +1161,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l121: loop {
+            l73: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
                 String::push(_licm_buf_4, c);
                 i = i + 1;
-                continue l121;
+                continue l73;
             };
         };
     };
@@ -1759,7 +1255,6 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
     };
 }
 
-export fn __cm_export____test_0_for_of_double_indexed_with_treeset_filter as "__test_0_for_of_double_indexed_with_treeset_filter"
-export fn __cm_export____test_1_index_loop_double_indexed_with_treeset_filter as "__test_1_index_loop_double_indexed_with_treeset_filter"
-export fn __cm_export____test_2_break_in_for_of_inside_c_style_for as "__test_2_break_in_for_of_inside_c_style_for"
-export fn __cm_export____test_3_continue_in_for_of_inside_c_style_for as "__test_3_continue_in_for_of_inside_c_style_for"
+export fn __cm_export____test_0_continue_in_for_of_inside_c_style_for as "__test_0_continue_in_for_of_inside_c_style_for"
+export fn __cm_export____test_1_break_in_for_of_inside_c_style_for as "__test_1_break_in_for_of_inside_c_style_for"
+export fn __cm_export____test_2_continue_with_double_indexed_access as "__test_2_continue_with_double_indexed_access"
