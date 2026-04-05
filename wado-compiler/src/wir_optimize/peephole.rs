@@ -205,8 +205,7 @@ fn eliminate_const_if(instr: &mut WirInstr) {
                 else_body,
                 result,
             } = instr
-            {
-                if let Some(const_val) = try_fold_wir_to_bool(condition) {
+                && let Some(const_val) = try_fold_wir_to_bool(condition) {
                     if const_val {
                         let then_instrs = std::mem::take(then_body);
                         *instr = WirInstr::Block {
@@ -229,7 +228,6 @@ fn eliminate_const_if(instr: &mut WirInstr) {
                         };
                     }
                 }
-            }
         }
     }
     ElimConstIf.visit_instr(instr);

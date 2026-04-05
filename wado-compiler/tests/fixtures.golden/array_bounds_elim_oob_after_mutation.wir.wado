@@ -117,16 +117,12 @@ fn run() {
         __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
     };
-    if 0 {
-        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
+    block {
+    };
     builtin::array_set<i32>(arr.repr, 0, 999);
     __v0 = __inline_Array_i32__IndexValue__index_value_10: block -> i32 {
-        if 0 {
-            "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-            unreachable;
-        }
+        block {
+        };
         break __inline_Array_i32__IndexValue__index_value_10: builtin::array_get<i32>(arr.repr, 0);
     };
     __cond = __v0 == 999;
@@ -166,10 +162,10 @@ condition: arr[0] == 999
         unreachable;
     }
     drop(__inline_Array_i32__IndexValue__index_value_18: block -> i32 {
-        if 1 {
+        block {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        }
+        };
         break __inline_Array_i32__IndexValue__index_value_18: builtin::array_get<i32>(arr.repr, 3);
     });
 }

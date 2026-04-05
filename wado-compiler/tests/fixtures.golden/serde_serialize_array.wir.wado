@@ -519,31 +519,28 @@ fn Array<String>^Serialize::serialize<JsonSerializer>(self, s) {
     let __pattern_temp_1: ref null String;
     let __local_11: ref Array<String>;
     let __fused_payload_13: ref JsonSeqSerializer;
-    __fused___inline_JsonSerializer_Serializer__begin_seq_0: block {
-        String::push(s.buf, 91);
-        __fused_payload_13 = JsonSeqSerializer { ser: s, count: 0 };
-        seq = __fused_payload_13;
-        __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref ArrayIter<String> {
-            __local_11 = self;
-            break __inline_Array_String__IntoIterator__into_iter_2: ArrayIter<String> { repr: __local_11.repr, used: __local_11.used, index: 0 };
+    String::push(s.buf, 91);
+    __fused_payload_13 = JsonSeqSerializer { ser: s, count: 0 };
+    seq = __fused_payload_13;
+    __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref ArrayIter<String> {
+        __local_11 = self;
+        break __inline_Array_String__IntoIterator__into_iter_2: ArrayIter<String> { repr: __local_11.repr, used: __local_11.used, index: 0 };
+    };
+    b26: block {
+        l27: loop {
+            __pattern_temp_1 = ArrayIter<String>^Iterator::next(__iter_4);
+            if ref.is_null(__pattern_temp_1) == 0 {
+                item = value_copy String(ref.as_non_null(__pattern_temp_1));
+                drop(JsonSeqSerializer^SerializeSeq::element<String>(seq, item));
+            } else {
+                break b26;
+            }
+            continue l27;
         };
-        b26: block {
-            l27: loop {
-                __pattern_temp_1 = ArrayIter<String>^Iterator::next(__iter_4);
-                if ref.is_null(__pattern_temp_1) == 0 {
-                    item = value_copy String(ref.as_non_null(__pattern_temp_1));
-                    drop(JsonSeqSerializer^SerializeSeq::element<String>(seq, item));
-                } else {
-                    break b26;
-                }
-                continue l27;
-            };
-        };
-        return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null SerializeError {
-            String::push(seq.ser.buf, 93);
-            break __inline_JsonSeqSerializer_SerializeSeq__end_3: ref.null none;
-        };
-        break __fused___inline_JsonSerializer_Serializer__begin_seq_0;
+    };
+    return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null SerializeError {
+        String::push(seq.ser.buf, 93);
+        break __inline_JsonSeqSerializer_SerializeSeq__end_3: ref.null none;
     };
     return SerializeError { message: String { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
 }
@@ -576,32 +573,29 @@ fn Array<i32>^Serialize::serialize<JsonSerializer>(self, s) {
     let __iter_4: ref ArrayIter<i32>;
     let __local_11: ref Array<i32>;
     let __fused_payload_13: ref JsonSeqSerializer;
-    __fused___inline_JsonSerializer_Serializer__begin_seq_0: block {
-        String::push(s.buf, 91);
-        __fused_payload_13 = JsonSeqSerializer { ser: s, count: 0 };
-        seq = __fused_payload_13;
-        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref ArrayIter<i32> {
-            __local_11 = self;
-            break __inline_Array_i32__IntoIterator__into_iter_2: ArrayIter<i32> { repr: __local_11.repr, used: __local_11.used, index: 0 };
+    String::push(s.buf, 91);
+    __fused_payload_13 = JsonSeqSerializer { ser: s, count: 0 };
+    seq = __fused_payload_13;
+    __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref ArrayIter<i32> {
+        __local_11 = self;
+        break __inline_Array_i32__IntoIterator__into_iter_2: ArrayIter<i32> { repr: __local_11.repr, used: __local_11.used, index: 0 };
+    };
+    b31: block {
+        l32: loop {
+            let __sroa___pattern_temp_1_discriminant: i32;
+            let __sroa___pattern_temp_1_payload_0: i32;
+            multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
+            if __sroa___pattern_temp_1_discriminant == 0 {
+                drop(JsonSeqSerializer^SerializeSeq::element<i32>(seq, __sroa___pattern_temp_1_payload_0));
+            } else {
+                break b31;
+            }
+            continue l32;
         };
-        b31: block {
-            l32: loop {
-                let __sroa___pattern_temp_1_discriminant: i32;
-                let __sroa___pattern_temp_1_payload_0: i32;
-                multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<i32>^Iterator::next(__iter_4);
-                if __sroa___pattern_temp_1_discriminant == 0 {
-                    drop(JsonSeqSerializer^SerializeSeq::element<i32>(seq, __sroa___pattern_temp_1_payload_0));
-                } else {
-                    break b31;
-                }
-                continue l32;
-            };
-        };
-        return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null SerializeError {
-            String::push(seq.ser.buf, 93);
-            break __inline_JsonSeqSerializer_SerializeSeq__end_3: ref.null none;
-        };
-        break __fused___inline_JsonSerializer_Serializer__begin_seq_0;
+    };
+    return __inline_JsonSeqSerializer_SerializeSeq__end_3: block -> ref null SerializeError {
+        String::push(seq.ser.buf, 93);
+        break __inline_JsonSeqSerializer_SerializeSeq__end_3: ref.null none;
     };
     return SerializeError { message: String { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
 }
