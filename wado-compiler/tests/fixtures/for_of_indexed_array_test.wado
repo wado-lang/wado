@@ -1,0 +1,63 @@
+use { TreeSet } from "core:collections";
+
+/// Minimal reproduction: `for let tk of param[param2[k]]` with TreeSet.contains
+/// yields incorrect results when param is &Array<Array<String>> and
+/// param2 is &Array<i32>.
+
+fn for_of_version(data: &Array<Array<String>>, indices: &Array<i32>, skip: &TreeSet<String>) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let mut k = 0; k < indices.len(); k += 1 {
+        for let item of data[indices[k]] {
+            if skip.contains(item) {
+                continue;
+            }
+            result.push(item);
+        }
+    }
+    return result;
+}
+
+fn index_version(data: &Array<Array<String>>, indices: &Array<i32>, skip: &TreeSet<String>) -> Array<String> {
+    let mut result: Array<String> = [];
+    for let mut k = 0; k < indices.len(); k += 1 {
+        let inner = &data[indices[k]];
+        for let mut i = 0; i < inner.len(); i += 1 {
+            if skip.contains(inner[i]) {
+                continue;
+            }
+            result.push(inner[i]);
+        }
+    }
+    return result;
+}
+
+test "for-of double-indexed with TreeSet filter" {
+    let data: Array<Array<String>> = [
+        ["a", "b"],
+        ["c", "b", "d", "e"],
+    ];
+    let indices: Array<i32> = [0, 1];
+    let mut skip = TreeSet::<String>::new();
+    skip.insert("a");
+    skip.insert("c");
+    skip.insert("d");
+    skip.insert("e");
+    // Only "b" should survive: appears once in [0] and once in [1]
+    let result = for_of_version(&data, &indices, &skip);
+    assert result.len() == 2, `for-of: expected 2, got {result.len()}`;
+}
+
+test "index-loop double-indexed with TreeSet filter" {
+    let data: Array<Array<String>> = [
+        ["a", "b"],
+        ["c", "b", "d", "e"],
+    ];
+    let indices: Array<i32> = [0, 1];
+    let mut skip = TreeSet::<String>::new();
+    skip.insert("a");
+    skip.insert("c");
+    skip.insert("d");
+    skip.insert("e");
+    let result = index_version(&data, &indices, &skip);
+    assert result.len() == 2, `index-loop: expected 2, got {result.len()}`;
+}
