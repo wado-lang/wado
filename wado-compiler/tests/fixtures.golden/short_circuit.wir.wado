@@ -121,42 +121,25 @@ fn run() with Stdout {
     let __local_6: ref Formatter;
     let __local_7: ref String;
     let __local_8: ref Formatter;
-    let __local_10: ref String;
-    let __local_12: ref String;
     let __local_13: ref String;
     let __local_15: ref String;
-    let __local_16: ref String;
-    let __local_18: ref String;
     let __local_19: ref String;
     let __local_21: ref String;
     let __local_37: ref Formatter;
     let __local_42: ref Formatter;
     let __local_53: ref String;
     let __local_55: ref String;
-    let __local_56: ref String;
-    let __local_58: ref String;
     let _licm_used_59: i32;
     let _licm_repr_60: ref array<i32>;
     "core:cli/println"(String { repr: array.new_data<u8>("=== Testing && ==="), used: 18 });
-    if (if 0 -> i32 {
-        __inline_side_effect_2: block -> bool {
-            __local_10 = String { repr: array.new_data<u8>("should not print (&&)"), used: 21 };
-            "core:cli/println"(__tmpl: block -> ref String {
-                __local_12 = String { repr: builtin::array_new<u8>(36), used: 0 };
-                String::push_str(__local_12, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
-                String::push_str(__local_12, __local_10);
-                break __tmpl: __local_12;
-            });
-            break __inline_side_effect_2: 1;
-        };
-    } else {
+    if block -> i32 {
         0;
-    }) {
+    } {
         "core:cli/println"(String { repr: array.new_data<u8>("branch taken"), used: 12 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("branch not taken (correct)"), used: 26 });
     }
-    if (if 1 -> i32 {
+    if block -> i32 {
         __inline_side_effect_3: block -> bool {
             __local_13 = String { repr: array.new_data<u8>("should print (&&)"), used: 17 };
             "core:cli/println"(__tmpl: block -> ref String {
@@ -167,32 +150,17 @@ fn run() with Stdout {
             });
             break __inline_side_effect_3: 1;
         };
-    } else {
-        0;
-    }) {
+    } {
         "core:cli/println"(String { repr: array.new_data<u8>("branch taken (correct)"), used: 22 });
     }
     "core:cli/println"(String { repr: array.new_data<u8>("
 === Testing || ==="), used: 19 });
-    if (if 1 -> i32 {
+    if block -> i32 {
         1;
-    } else {
-        __inline_side_effect_4: block -> bool {
-            __local_16 = String { repr: array.new_data<u8>("should not print (||)"), used: 21 };
-            "core:cli/println"(__tmpl: block -> ref String {
-                __local_18 = String { repr: builtin::array_new<u8>(36), used: 0 };
-                String::push_str(__local_18, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
-                String::push_str(__local_18, __local_16);
-                break __tmpl: __local_18;
-            });
-            break __inline_side_effect_4: 0;
-        };
-    }) {
+    } {
         "core:cli/println"(String { repr: array.new_data<u8>("branch taken (correct)"), used: 22 });
     }
-    if (if 0 -> i32 {
-        1;
-    } else {
+    if block -> i32 {
         __inline_side_effect_5: block -> bool {
             __local_19 = String { repr: array.new_data<u8>("should print (||)"), used: 17 };
             "core:cli/println"(__tmpl: block -> ref String {
@@ -203,7 +171,7 @@ fn run() with Stdout {
             });
             break __inline_side_effect_5: 1;
         };
-    }) {
+    } {
         "core:cli/println"(String { repr: array.new_data<u8>("branch taken (correct)"), used: 22 });
     }
     "core:cli/println"(String { repr: array.new_data<u8>("
@@ -267,9 +235,7 @@ fn run() with Stdout {
     });
     "core:cli/println"(String { repr: array.new_data<u8>("
 === Testing nested ==="), used: 23 });
-    if (if 0 -> i32 {
-        1;
-    } else {
+    if block -> i32 {
         __inline_side_effect_26: block -> bool {
             __local_53 = String { repr: array.new_data<u8>("nested: should print"), used: 20 };
             "core:cli/println"(__tmpl: block -> ref String {
@@ -280,27 +246,12 @@ fn run() with Stdout {
             });
             break __inline_side_effect_26: 1;
         };
-    }) {
+    } {
         "core:cli/println"(String { repr: array.new_data<u8>("nested branch taken (correct)"), used: 29 });
     }
-    if (if 0 -> i32 {
-        if 1 -> i32 {
-            1;
-        } else {
-            __inline_side_effect_27: block -> bool {
-                __local_56 = String { repr: array.new_data<u8>("nested: should not print"), used: 24 };
-                "core:cli/println"(__tmpl: block -> ref String {
-                    __local_58 = String { repr: builtin::array_new<u8>(36), used: 0 };
-                    String::push_str(__local_58, String { repr: array.new_data<u8>("side_effect called: "), used: 20 });
-                    String::push_str(__local_58, __local_56);
-                    break __tmpl: __local_58;
-                });
-                break __inline_side_effect_27: 1;
-            };
-        }
-    } else {
+    if block -> i32 {
         0;
-    }) {
+    } {
         "core:cli/println"(String { repr: array.new_data<u8>("should not reach here"), used: 21 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("nested && short-circuited (correct)"), used: 35 });
@@ -351,13 +302,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l21: loop {
+            l20: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l21;
+                continue l20;
             };
         };
     };
@@ -446,13 +397,13 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l27: loop {
+            l26: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 }
                 n = n + 1;
                 t = t / 10_i64;
-                continue l27;
+                continue l26;
             };
         };
     };
@@ -469,14 +420,14 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l31: loop {
+                l30: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l31;
+                    continue l30;
                 };
             };
         };
@@ -608,13 +559,13 @@ fn Array<i32>::grow(self) {
     __for_0: block {
         i = 0;
         block {
-            l44: loop {
+            l43: loop {
                 if (i < used) == 0 {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
-                continue l44;
+                continue l43;
             };
         };
     };
@@ -628,13 +579,13 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l47: loop {
+            l46: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
-                continue l47;
+                continue l46;
             };
         };
     };

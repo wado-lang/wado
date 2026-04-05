@@ -947,6 +947,7 @@ fn scalarize_loop(
         type_table,
         cache,
         &inner_labels,
+        0,
     );
 
     ScalarizeResult {
@@ -1328,6 +1329,7 @@ struct ReplaceCtx<'a> {
     type_table: &'a TypeTable,
     cache: &'a FieldUsageCache,
     inner_labels: &'a IndexSet<String>,
+    loop_depth: usize,
 }
 
 /// Collect all labels defined within a block (at any nesting depth).
@@ -1465,12 +1467,14 @@ fn replace_in_block(
     type_table: &TypeTable,
     cache: &FieldUsageCache,
     inner_labels: &IndexSet<String>,
+    loop_depth: usize,
 ) {
     let ctx = ReplaceCtx {
         local_types,
         type_table,
         cache,
         inner_labels,
+        loop_depth,
     };
     let span = crate::token::Span::new(0, 0, 0, 0);
     let mut new_stmts = Vec::new();
@@ -1515,9 +1519,18 @@ fn replace_in_block(
                     type_table,
                     cache,
                     inner_labels,
+                    loop_depth,
                 );
                 if let Some(eb) = else_block {
-                    replace_in_block(eb, candidates, local_types, type_table, cache, inner_labels);
+                    replace_in_block(
+                        eb,
+                        candidates,
+                        local_types,
+                        type_table,
+                        cache,
+                        inner_labels,
+                        loop_depth,
+                    );
                 }
                 new_stmts.push(stmt);
                 for c in candidates {
@@ -1561,9 +1574,18 @@ fn replace_in_block(
                     type_table,
                     cache,
                     inner_labels,
+                    loop_depth,
                 );
                 if let Some(eb) = else_block {
-                    replace_in_block(eb, candidates, local_types, type_table, cache, inner_labels);
+                    replace_in_block(
+                        eb,
+                        candidates,
+                        local_types,
+                        type_table,
+                        cache,
+                        inner_labels,
+                        loop_depth,
+                    );
                 }
                 new_stmts.push(stmt);
                 for c in candidates {
@@ -1581,6 +1603,7 @@ fn replace_in_block(
                     type_table,
                     cache,
                     inner_labels,
+                    loop_depth + 1,
                 );
                 new_stmts.push(stmt);
                 continue;
@@ -1593,6 +1616,7 @@ fn replace_in_block(
                     type_table,
                     cache,
                     inner_labels,
+                    loop_depth,
                 );
                 new_stmts.push(stmt);
                 continue;
@@ -1618,6 +1642,7 @@ fn replace_in_block(
                             type_table,
                             cache,
                             inner_labels,
+                            loop_depth,
                         );
                     }
                     replace_in_block(
@@ -1627,6 +1652,7 @@ fn replace_in_block(
                         type_table,
                         cache,
                         inner_labels,
+                        loop_depth,
                     );
                 }
                 new_stmts.push(stmt);
@@ -1639,12 +1665,20 @@ fn replace_in_block(
         // block's scope. Breaks targeting labels defined *within* this block
         // stay in scope (the block's own exit handles write-back), so they
         // are excluded.
+        //
+        // Exception: unlabeled `break` at loop_depth 0 exits the HFS loop
+        // directly — the post-loop write-backs handle the sync, so we skip
+        // inserting redundant write-backs here.
         if matches!(stmt.kind, TirStmtKind::Return { .. })
             || matches!(&stmt.kind, TirStmtKind::Break { label, .. }
                 if !label.as_ref().is_some_and(|l| inner_labels.contains(l.as_str())))
         {
             replace_in_stmt(&mut stmt, candidates, &ctx);
-            new_stmts.extend(make_write_back_stmts(candidates, span));
+            let skip_wb =
+                loop_depth == 0 && matches!(&stmt.kind, TirStmtKind::Break { label: None, .. });
+            if !skip_wb {
+                new_stmts.extend(make_write_back_stmts(candidates, span));
+            }
             new_stmts.push(stmt);
             continue;
         }
@@ -2348,6 +2382,7 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate], ctx: &
                 ctx.type_table,
                 ctx.cache,
                 ctx.inner_labels,
+                ctx.loop_depth,
             );
         }
         TirExprKind::GlobalVarSet { value, .. } => {

@@ -1472,16 +1472,13 @@ fn ApiResponse^Deserialize::deserialize<JsonDeserializer>(d) {
 
 fn ApiResponse^Serialize::serialize<JsonSerializer>(self, s) {
     let __fused_payload_9: ref "core:json/JsonStructSerializer";
-    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
-        String::push(s, 123);
-        __fused_payload_9 = "core:json/JsonStructSerializer" { buf: s, count: 0 };
-        drop(JsonStructSerializer^SerializeStruct::field<i32>(__fused_payload_9, String { repr: array.new_data<u8>("status_code"), used: 11 }, self.status_code));
-        drop(JsonStructSerializer^SerializeStruct::field<String>(__fused_payload_9, String { repr: array.new_data<u8>("data"), used: 4 }, self.response_data));
-        return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null "core:serde/SerializeError" {
-            String::push(__fused_payload_9.buf, 125);
-            break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
-        };
-        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
+    String::push(s, 123);
+    __fused_payload_9 = "core:json/JsonStructSerializer" { buf: s, count: 0 };
+    drop(JsonStructSerializer^SerializeStruct::field<i32>(__fused_payload_9, String { repr: array.new_data<u8>("status_code"), used: 11 }, self.status_code));
+    drop(JsonStructSerializer^SerializeStruct::field<String>(__fused_payload_9, String { repr: array.new_data<u8>("data"), used: 4 }, self.response_data));
+    return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null "core:serde/SerializeError" {
+        String::push(__fused_payload_9.buf, 125);
+        break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
     };
 }
 
@@ -1548,7 +1545,6 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
     b154: block {
         l155: loop {
             if (_hfs_pos_8 < _licm_used_6) == 0 {
-                self.pos = _hfs_pos_8;
                 break b154;
             }
             b = __inline_String__get_byte_1: block -> u8 {
@@ -1656,9 +1652,7 @@ fn "core:json/JsonDeserializer::expect_literal"(self, lit) {  // from core:json
         l164: loop {
             __fused___inline_StrUtf8ByteIter_Iterator__next_2: block {
                 if __sroa___iter_3_index >= _licm_used_19 {
-                    self.pos = _hfs_pos_27;
                     break b163;
-                    break __fused___inline_StrUtf8ByteIter_Iterator__next_2;
                 }
                 byte = builtin::array_get_u8(_licm_repr_20, __sroa___iter_3_index);
                 __sroa___iter_3_index = __sroa___iter_3_index + 1;
@@ -1901,7 +1895,6 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {  // from core:json
                 self.pos = _hfs_pos_98;
                 break __inline_String__len_14: __local_63.used;
             }) == 0 {
-                self.pos = _hfs_pos_98;
                 break b183;
             }
             b = __inline_String__get_byte_15: block -> u8 {
@@ -2214,7 +2207,6 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
     b220: block {
         l221: loop {
             if (_hfs_pos_36 < _licm_used_28) == 0 {
-                self.pos = _hfs_pos_36;
                 break b220;
             }
             b_1 = __inline_String__get_byte_3: block -> u8 {
@@ -2228,7 +2220,6 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
             }) {
                 _hfs_pos_36 = _hfs_pos_36 + 1;
             } else {
-                self.pos = _hfs_pos_36;
                 break b220;
             }
             continue l221;
@@ -2255,7 +2246,6 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
         b227: block {
             l228: loop {
                 if (_hfs_pos_37 < _licm_used_31) == 0 {
-                    self.pos = _hfs_pos_37;
                     break b227;
                 }
                 b_2 = __inline_String__get_byte_7: block -> u8 {
@@ -2269,7 +2259,6 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
                 }) {
                     _hfs_pos_37 = _hfs_pos_37 + 1;
                 } else {
-                    self.pos = _hfs_pos_37;
                     break b227;
                 }
                 continue l228;
@@ -2316,7 +2305,6 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
             b238: block {
                 l239: loop {
                     if (_hfs_pos_38 < _licm_used_34) == 0 {
-                        self.pos = _hfs_pos_38;
                         break b238;
                     }
                     b2 = __inline_String__get_byte_13: block -> u8 {
@@ -2330,7 +2318,6 @@ fn "core:json/JsonDeserializer::skip_number"(self) {  // from core:json
                     }) {
                         _hfs_pos_38 = _hfs_pos_38 + 1;
                     } else {
-                        self.pos = _hfs_pos_38;
                         break b238;
                     }
                     continue l239;
@@ -2430,7 +2417,6 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     b248: block {
         l249: loop {
             if (_hfs_pos_51 < _licm_used_47) == 0 {
-                self.pos = _hfs_pos_51;
                 break b248;
             }
             b = __inline_String__get_byte_8: block -> u8 {
@@ -2461,7 +2447,6 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                     b257: block {
                         l258: loop {
                             if (_hfs_pos_49 < _licm_used_47) == 0 {
-                                _hfs_pos_51 = _hfs_pos_49;
                                 self.pos = _hfs_pos_51;
                                 break b257;
                             }
@@ -2478,7 +2463,6 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                 frac = frac + 1;
                                 _hfs_pos_49 = _hfs_pos_49 + 1;
                             } else {
-                                _hfs_pos_51 = _hfs_pos_49;
                                 self.pos = _hfs_pos_51;
                                 break b257;
                             }
@@ -2516,7 +2500,6 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                         b268: block {
                             l269: loop {
                                 if (_hfs_pos_50 < _licm_used_47) == 0 {
-                                    _hfs_pos_51 = _hfs_pos_50;
                                     self.pos = _hfs_pos_51;
                                     break b268;
                                 }
@@ -2532,7 +2515,6 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                     exp = (exp * 10) + (b3 - 48);
                                     _hfs_pos_50 = _hfs_pos_50 + 1;
                                 } else {
-                                    _hfs_pos_51 = _hfs_pos_50;
                                     self.pos = _hfs_pos_51;
                                     break b268;
                                 }
@@ -2574,7 +2556,6 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                 self.pos = _hfs_pos_51;
                 return Result<i32,DeserializeError>::Ok { discriminant: 0, payload_0: builtin::i32_trunc_f64_s(v_signed) };
             } else {
-                self.pos = _hfs_pos_51;
                 break b248;
             }
             continue l249;
@@ -2606,7 +2587,6 @@ fn "core:json/JsonDeserializer::skip_string"(self) {  // from core:json
     b279: block {
         l280: loop {
             if (_hfs_pos_14 < _licm_used_12) == 0 {
-                self.pos = _hfs_pos_14;
                 break b279;
             }
             b = __inline_String__get_byte_1: block -> u8 {

@@ -413,18 +413,15 @@ fn JsonSerializer^Serializer::serialize_bool(self, v) {
 fn User^Serialize::serialize<JsonSerializer>(self, s) {
     let st: ref JsonStructSerializer;
     let __fused_payload_9: ref JsonStructSerializer;
-    __fused___inline_JsonSerializer_Serializer__begin_struct_0: block {
-        String::push(s.buf, 123);
-        __fused_payload_9 = JsonStructSerializer { ser: s, count: 0 };
-        st = __fused_payload_9;
-        drop(JsonStructSerializer^SerializeStruct::field<String>(st, String { repr: array.new_data<u8>("userName"), used: 8 }, self.name));
-        drop(JsonStructSerializer^SerializeStruct::field<i32>(st, String { repr: array.new_data<u8>("age"), used: 3 }, self.age));
-        drop(JsonStructSerializer^SerializeStruct::field<bool>(st, String { repr: array.new_data<u8>("active"), used: 6 }, self.active));
-        return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null SerializeError {
-            String::push(st.ser.buf, 125);
-            break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
-        };
-        break __fused___inline_JsonSerializer_Serializer__begin_struct_0;
+    String::push(s.buf, 123);
+    __fused_payload_9 = JsonStructSerializer { ser: s, count: 0 };
+    st = __fused_payload_9;
+    drop(JsonStructSerializer^SerializeStruct::field<String>(st, String { repr: array.new_data<u8>("userName"), used: 8 }, self.name));
+    drop(JsonStructSerializer^SerializeStruct::field<i32>(st, String { repr: array.new_data<u8>("age"), used: 3 }, self.age));
+    drop(JsonStructSerializer^SerializeStruct::field<bool>(st, String { repr: array.new_data<u8>("active"), used: 6 }, self.active));
+    return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null SerializeError {
+        String::push(st.ser.buf, 125);
+        break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
     };
     return SerializeError { message: String { repr: array.new_data<u8>("begin_struct failed"), used: 19 } };
 }

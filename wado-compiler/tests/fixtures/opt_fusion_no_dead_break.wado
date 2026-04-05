@@ -1,0 +1,22 @@
+// Verify that labeled-block fusion does not leave dead break statements
+// after a break that already terminates control flow.
+use { println } from "core:cli";
+
+fn sum_bytes(s: String) -> i32 {
+    let mut sum = 0;
+    for let b of s.bytes() {
+        sum = sum + b as i32;
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    assert sum_bytes("ABC") == 65 + 66 + 67;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": ["break b0;\n                    break __fused_"]
+}

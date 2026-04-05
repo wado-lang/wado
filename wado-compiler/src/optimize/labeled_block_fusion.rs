@@ -1138,14 +1138,24 @@ fn transform_lb_stmt(
             }
         }
 
-        // In both cases, emit `break fused_label;` so control exits the wrapper.
-        out.push(TirStmt::new(
-            TirStmtKind::Break {
-                label: Some(fused_label.to_owned()),
-                value: None,
-            },
-            span,
-        ));
+        // Emit `break fused_label;` so control exits the wrapper — unless the last
+        // emitted statement already terminates control flow (break/return/continue),
+        // in which case the fused break would be dead code.
+        let last_terminates = out.last().is_some_and(|s| {
+            matches!(
+                s.kind,
+                TirStmtKind::Break { .. } | TirStmtKind::Return { .. } | TirStmtKind::Continue
+            )
+        });
+        if !last_terminates {
+            out.push(TirStmt::new(
+                TirStmtKind::Break {
+                    label: Some(fused_label.to_owned()),
+                    value: None,
+                },
+                span,
+            ));
+        }
         return;
     }
 
