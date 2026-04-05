@@ -386,7 +386,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .args
                 .get(i)
                 .map_or(method_call.span, super::ast::Expr::span);
-            self.check_type_mismatch(arg.type_id, expected_type, span);
+            self.typecheck(arg.type_id, expected_type, span);
         }
 
         // Substitute return type for inherited newtype methods
@@ -901,7 +901,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .args
                             .first()
                             .map_or(static_call.span, super::ast::Expr::span);
-                        self.check_type_mismatch(args[0].type_id, expected_type, span);
+                        self.typecheck(args[0].type_id, expected_type, span);
                     }
 
                     // Payload was already resolved with the correct expected type

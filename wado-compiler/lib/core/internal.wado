@@ -80,8 +80,7 @@ pub fn wait_for_subtask(packed: i32) {
 /// Drop a write_via_stream Future handle to signal completion.
 /// Uses CLI ErrorCode type for the Future parameterization.
 use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
-pub fn drop_cli_write_future(handle: i32) {
-    let future = handle as Future<Result<(), CliErrorCode>>;
+pub fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) {
     future.drop();
 }
 
@@ -93,7 +92,7 @@ pub fn log_stdout(message: String) {
 
     let future_handle = builtin::call_indirect_stdout_write_via_stream(rx as i32);
     write_string_to_stream(tx, message, true);
-    drop_cli_write_future(future_handle);
+    drop_cli_write_future(future_handle as Future<Result<(), CliErrorCode>>);
 }
 
 /// Logs a message with newline to stderr (ambient, no effect required).
@@ -104,7 +103,7 @@ pub fn log_stderr(message: String) {
 
     let future_handle = builtin::call_indirect_stderr_write_via_stream(rx as i32);
     write_string_to_stream(tx, message, true);
-    drop_cli_write_future(future_handle);
+    drop_cli_write_future(future_handle as Future<Result<(), CliErrorCode>>);
 }
 
 /// Logs a message to stderr and traps.
@@ -282,7 +281,7 @@ pub fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     let evt_handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    return WaitEvent { code, handle: evt_handle, payload };
+    return WaitEvent { code, handle: evt_handle as Waitable, payload: payload as u32 };
 }
 
 pub fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
@@ -300,5 +299,5 @@ pub fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
     let evt_handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    return Option::Some(WaitEvent { code, handle: evt_handle, payload });
+    return Option::Some(WaitEvent { code, handle: evt_handle as Waitable, payload: payload as u32 });
 }

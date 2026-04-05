@@ -252,25 +252,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some(&type_id) = self.newtypes.get(name) {
                     type_id
                 } else if let Some(struct_info) = self.struct_fields.get(name) {
-                    // It's a struct - use the module source where it was defined
+                    // Use canonical name (not import alias) so interning produces the same TypeId
                     self.type_table
                         .borrow_mut()
-                        .make_struct(name.to_string(), struct_info.module_source.clone())
+                        .make_struct(struct_info.name.clone(), struct_info.module_source.clone())
                 } else if let Some(variant_info) = self.variant_cases.get(name) {
-                    // It's a variant - use the module source where it was defined
                     self.type_table
                         .borrow_mut()
-                        .make_variant(name.to_string(), variant_info.module_source.clone())
+                        .make_variant(variant_info.name.clone(), variant_info.module_source.clone())
                 } else if let Some(enum_info) = self.enum_cases.get(name) {
-                    // It's an enum - use the module source where it was defined
                     self.type_table
                         .borrow_mut()
-                        .make_enum(name.to_string(), enum_info.module_source.clone())
+                        .make_enum(enum_info.name.clone(), enum_info.module_source.clone())
                 } else if let Some(resource_info) = self.resource_types.get(name) {
-                    // It's a resource - use the module source where it was defined
                     self.type_table
                         .borrow_mut()
-                        .make_resource(name.to_string(), resource_info.module_source.clone())
+                        .make_resource(resource_info.name.clone(), resource_info.module_source.clone())
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN

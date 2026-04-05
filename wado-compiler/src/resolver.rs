@@ -23,6 +23,7 @@ mod template;
 mod trait_env;
 mod trait_query;
 mod type_resolution;
+mod typecheck;
 pub(crate) mod types;
 mod util;
 

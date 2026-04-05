@@ -31,7 +31,7 @@ fn walk<H: Handler>(h: &mut H, c: &Choice) {
     match c {
         A(a) => {
             for let child of &a.children {
-                walk(h, &child);
+                walk(h, child);
             }
         },
         B(b) => h.on_value(b.value),

@@ -151,16 +151,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .map(|(i, elem)| {
                                 let expected = expected_elem_types.get(i).copied();
                                 let resolved = self.resolve_expr(elem, ctx, expected);
-                                // Check if element type matches expected
-                                if let Some(expected_type) = expected
-                                    && resolved.type_id != expected_type
-                                    && resolved.type_id != TypeTable::UNKNOWN
-                                {
-                                    let _ = self.logger.error(TypeError::TypeMismatch {
-                                        expected: self.type_table.borrow().type_name(expected_type),
-                                        found: self.type_table.borrow().type_name(resolved.type_id),
-                                        span: elem.span(),
-                                    });
+                                if let Some(expected_type) = expected {
+                                    self.typecheck(resolved.type_id, expected_type, elem.span());
                                 }
                                 resolved
                             })
@@ -306,8 +298,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Type check: if type annotation is present, verify value type matches.
-        // `never` (bottom type) is assignable to any type, so skip the check for it.
-        if let Some(_annotated_type) = &let_stmt.ty
+        // Uses direct comparison instead of typecheck() because we need to catch
+        // type-param-to-concrete mismatches (e.g., `let n: i32 = x` where x: T)
+        // at definition time, which check_assignable would defer.
+        if let_stmt.ty.is_some()
             && value.type_id != type_id
             && value.type_id != TypeTable::UNKNOWN
             && value.type_id != TypeTable::NEVER
@@ -764,8 +758,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check return value type matches function return type
         if let Some(value) = &value {
-            self.check_type_mismatch(value.type_id, return_type, ret_stmt.span);
-            self.check_return_type_mismatch(value.type_id, return_type, ret_stmt.span);
+            self.typecheck_return(value.type_id, return_type, ret_stmt.span);
         }
 
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)

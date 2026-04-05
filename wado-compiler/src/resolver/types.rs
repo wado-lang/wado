@@ -12,6 +12,8 @@ use crate::token::Span;
 /// Struct field info: module source and field definitions
 #[derive(Clone)]
 pub(super) struct StructFieldInfo {
+    /// Canonical type name (original declaration name, not import alias).
+    pub(super) name: String,
     pub(super) module_source: ModuleSource,
     /// Field definitions: (name, `type_id`, `is_pub`) triples
     pub(super) fields: Vec<(String, TypeId, bool)>,
@@ -35,6 +37,8 @@ pub(super) struct VariantCaseData {
 /// Variant info: module source, type parameters, and cases
 #[derive(Clone)]
 pub(super) struct VariantInfo {
+    /// Canonical type name (original declaration name, not import alias).
+    pub(super) name: String,
     pub(super) module_source: ModuleSource,
     pub(super) type_params: Vec<String>,
     pub(super) cases: Vec<VariantCaseData>,
@@ -54,6 +58,8 @@ pub(super) struct EnumCaseData {
 /// Enum info: module source and cases (enums have no type parameters or payloads)
 #[derive(Clone)]
 pub(super) struct EnumInfo {
+    /// Canonical type name (original declaration name, not import alias).
+    pub(super) name: String,
     pub(super) module_source: ModuleSource,
     pub(super) cases: Vec<EnumCaseData>,
     /// O(1) lookup from case name to discriminant index
@@ -61,9 +67,10 @@ pub(super) struct EnumInfo {
 }
 
 impl EnumInfo {
-    pub(super) fn new(module_source: ModuleSource, cases: Vec<EnumCaseData>) -> Self {
+    pub(super) fn new(name: String, module_source: ModuleSource, cases: Vec<EnumCaseData>) -> Self {
         let case_index = cases.iter().map(|c| (c.name.clone(), c.index)).collect();
         Self {
+            name,
             module_source,
             cases,
             case_index,
@@ -97,6 +104,8 @@ pub(super) struct FlagsInfo {
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(super) struct ResourceInfo {
+    /// Canonical type name (original declaration name, not import alias).
+    pub(super) name: String,
     pub(super) module_source: ModuleSource,
     /// Method names defined on this resource (both static and instance)
     pub(super) methods: Vec<String>,

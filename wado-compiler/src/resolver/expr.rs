@@ -383,7 +383,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let variant_type = if variant_info.type_params.is_empty() {
                         self.type_table
                             .borrow_mut()
-                            .make_variant(prefix.to_string(), variant_info.module_source.clone())
+                            .make_variant(variant_info.name.clone(), variant_info.module_source.clone())
                     } else {
                         self.infer_variant_type_args(
                             prefix,
@@ -411,11 +411,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let Some(enum_info) = self.enum_cases.get(prefix)
                 && let Some(case_data) = enum_info.find_case(suffix)
             {
-                // Create enum type
+                // Use canonical name (not import alias) for consistent TypeId interning
                 let enum_type = self
                     .type_table
                     .borrow_mut()
-                    .make_enum(prefix.to_string(), enum_info.module_source.clone());
+                    .make_enum(enum_info.name.clone(), enum_info.module_source.clone());
 
                 return TirExpr::new(
                     TirExprKind::EnumConstruct {
@@ -480,7 +480,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let variant_type = if variant_info.type_params.is_empty() {
                         self.type_table
                             .borrow_mut()
-                            .make_variant(type_name.to_string(), variant_info.module_source.clone())
+                            .make_variant(variant_info.name.clone(), variant_info.module_source.clone())
                     } else {
                         self.infer_variant_type_args(
                             type_name,
@@ -514,7 +514,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let enum_type = self
                         .type_table
                         .borrow_mut()
-                        .make_enum(type_name.to_string(), enum_info.module_source.clone());
+                        .make_enum(enum_info.name.clone(), enum_info.module_source.clone());
                     return TirExpr::new(
                         TirExprKind::EnumConstruct {
                             enum_type,
@@ -1041,7 +1041,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 _ => None,
             };
             if let Some(expected) = derefed_index_type {
-                self.check_type_mismatch(index_type, expected, index.index.span());
+                self.typecheck(index_type, expected, index.index.span());
             }
 
             // First, try Index trait (returns reference)
@@ -2007,6 +2007,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             (name.clone(), self.current_module_source.clone())
         };
 
+        // Use canonical name from struct_fields info (not import alias) for consistent TypeId
+        let struct_name = self
+            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .map(|info| info.name.clone())
+            .unwrap_or(struct_name);
+
         // Get expected field types using (name, module_source) lookup.
         let struct_field_types: Vec<(String, TypeId)> = self
             .lookup_struct_fields(&struct_name, &struct_module_source)
@@ -2112,7 +2118,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Some((_, expected_type_id)) =
                     struct_field_types.iter().find(|(n, _)| n == &field.name)
                 {
-                    self.check_type_mismatch(value.type_id, *expected_type_id, field.value.span());
+                    self.typecheck(value.type_id, *expected_type_id, field.value.span());
                 }
 
                 TirStructField {
@@ -2332,6 +2338,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Register field info so field access works
         let field_info = super::types::StructFieldInfo {
+            name: anon_name.clone(),
             module_source,
             fields: resolved_fields
                 .iter()
