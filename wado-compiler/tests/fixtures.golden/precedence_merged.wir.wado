@@ -144,7 +144,7 @@ fn __test_0_arithmetic_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -162,7 +162,7 @@ fn __test_1_assignment_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -197,14 +197,14 @@ condition: h == 42
             break __tmpl: __local_44;
         });
         unreachable;
-    };
+    }
 }
 
 fn __test_2_bitwise_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -214,7 +214,7 @@ fn __test_3_bitwise_vs_comparison_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -224,7 +224,7 @@ fn __test_4_comparison_chaining() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -234,7 +234,7 @@ fn __test_5_comparison_vs_logical_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -244,7 +244,7 @@ fn __test_6_parentheses() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -254,7 +254,7 @@ fn __test_7_shift_vs_arithmetic_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -264,7 +264,7 @@ fn __test_8_unary_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -274,7 +274,7 @@ fn __cm_export____test_0_arithmetic_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -290,7 +290,7 @@ fn __cm_export____test_2_bitwise_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -301,7 +301,7 @@ fn __cm_export____test_3_bitwise_vs_comparison_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -312,7 +312,7 @@ fn __cm_export____test_4_comparison_chaining() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -323,7 +323,7 @@ fn __cm_export____test_5_comparison_vs_logical_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -334,7 +334,7 @@ fn __cm_export____test_6_parentheses() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -345,7 +345,7 @@ fn __cm_export____test_7_shift_vs_arithmetic_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -356,7 +356,7 @@ fn __cm_export____test_8_unary_precedence() {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -371,7 +371,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l19: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l19;
@@ -393,7 +393,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -449,7 +449,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -461,7 +461,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -469,7 +469,7 @@ fn count_digits_i64(val) {
             l25: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l25;
@@ -492,7 +492,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l29: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -500,7 +500,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn Array<u64>::push(self, value) {
@@ -508,7 +508,7 @@ fn Array<u64>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u64>::grow(self);
-    };
+    }
     builtin::array_set<u64>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -535,7 +535,7 @@ fn Array<u64>::grow(self) {
             l33: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
                 i = i + 1;
                 continue l33;
@@ -552,11 +552,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -574,7 +574,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -593,7 +593,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -605,11 +605,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -619,7 +619,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -638,7 +638,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -651,7 +651,7 @@ fn Formatter::write_char_n(self, c, n) {
             l45: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l45;
@@ -676,44 +676,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -723,10 +723,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -734,12 +734,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 export fn __cm_export____test_0_arithmetic_precedence as "__test_0_arithmetic_precedence"

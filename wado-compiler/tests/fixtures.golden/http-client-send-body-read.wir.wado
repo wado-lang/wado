@@ -599,11 +599,11 @@ fn handle() {
         __fw_evt_2 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_2, __fw_evt_2));
         drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
-    };
+    }
     drop("mem/realloc"(__fw_write_ptr_2, 40, 8, 0));
     let __match_scrut_0: ref Result<Response,ErrorCode>;
     __match_scrut_0 = upstream_result;
-    upstream = if ref.test Result<Response,ErrorCode>::Ok(__match_scrut_0) -> i32 {
+    upstream = (if ref.test Result<Response,ErrorCode>::Ok(__match_scrut_0) -> i32 {
         let __cast_4: ref Result<Response,ErrorCode>::Ok;
         __cast_4 = ref.cast Result<Response,ErrorCode>::Ok(__match_scrut_0);
         __local_7 = __cast_4.payload_0;
@@ -615,7 +615,7 @@ fn handle() {
         unreachable;
     } else {
         unreachable;
-    };
+    });
     let __pair_temp_5: i64;
     __pair_temp_5 = "wasi/future-new:transmission-http"();
     res_future = builtin::i32_wrap_i64(__pair_temp_5);
@@ -629,8 +629,8 @@ fn handle() {
             chunk = "core:internal/cm_stream_read_u8"(body_stream, 4096);
             if chunk.used == 0 {
                 break b3;
-            };
-            text = value_copy String(let __match_scrut_1: ref Result<String,String>; __match_scrut_1 = String::from_utf8<Array<u8>>(chunk); if ref.test Result<String,String>::Ok(__match_scrut_1) -> ref String {
+            }
+            text = value_copy String(let __match_scrut_1: ref Result<String,String>; __match_scrut_1 = String::from_utf8<Array<u8>>(chunk); (if ref.test Result<String,String>::Ok(__match_scrut_1) -> ref String {
                 let __cast_7: ref Result<String,String>::Ok;
                 __cast_7 = ref.cast Result<String,String>::Ok(__match_scrut_1);
                 __local_15 = __cast_7.payload_0;
@@ -642,7 +642,7 @@ fn handle() {
                 unreachable;
             } else {
                 unreachable;
-            });
+            }));
             body = __inline_String_Add__add_1: block -> ref String {
                 __local_183 = body;
                 break __inline_String_Add__add_1: String::concat(__local_183, text);
@@ -691,20 +691,20 @@ fn handle() {
                 __len_44 = builtin::i32_wrap_i64(__packed_42 >> 32_i64);
                 __opt_inner_0_40 = __ptr_43;
                 __opt_inner_1_41 = __len_44;
-            };
+            }
             __opt_val_45 = __case_payload_36.info_code;
             __opt_disc_46 = ref.test Option<u16>::Some(__opt_val_45);
             __opt_inner_0_47 = 0;
             if __opt_disc_46 != 0 {
                 __flat_48 = ref.cast Option<u16>::Some(__opt_val_45).payload_0;
                 __opt_inner_0_47 = __flat_48;
-            };
+            }
             __tv_2 = __opt_disc_39;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_40);
             __tv_4 = __opt_inner_1_41;
             __tv_5 = __opt_disc_46;
             __tv_6 = __opt_inner_0_47;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val) {
             __case_payload_49 = ref.cast "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val).payload_0;
             __opt_val_51 = __case_payload_49.alert_id;
@@ -713,7 +713,7 @@ fn handle() {
             if __opt_disc_52 != 0 {
                 __flat_54 = ref.cast Option<u8>::Some(__opt_val_51).payload_0;
                 __opt_inner_0_53 = __flat_54;
-            };
+            }
             __opt_val_55 = __case_payload_49.alert_message;
             __opt_disc_56 = ref.is_null(__opt_val_55) == 0;
             __opt_inner_0_57 = 0;
@@ -724,13 +724,13 @@ fn handle() {
                 __len_61 = builtin::i32_wrap_i64(__packed_59 >> 32_i64);
                 __opt_inner_0_57 = __ptr_60;
                 __opt_inner_1_58 = __len_61;
-            };
+            }
             __tv_2 = __opt_disc_52;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_53);
             __tv_4 = __opt_disc_56;
             __tv_5 = __opt_inner_0_57;
             __tv_6 = __opt_inner_1_58;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val) {
             __case_payload_62 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val).payload_0;
             __opt_disc_64 = ref.test Option<u64>::Some(__case_payload_62);
@@ -738,10 +738,10 @@ fn handle() {
             if __opt_disc_64 != 0 {
                 __flat_66 = ref.cast Option<u64>::Some(__case_payload_62).payload_0;
                 __opt_inner_0_65 = __flat_66;
-            };
+            }
             __tv_2 = __opt_disc_64;
             __tv_3 = __opt_inner_0_65;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val) {
             __case_payload_67 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_69 = ref.test Option<u32>::Some(__case_payload_67);
@@ -749,10 +749,10 @@ fn handle() {
             if __opt_disc_69 != 0 {
                 __flat_71 = ref.cast Option<u32>::Some(__case_payload_67).payload_0;
                 __opt_inner_0_70 = __flat_71;
-            };
+            }
             __tv_2 = __opt_disc_69;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_70);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize"(__err_val) {
             __case_payload_72 = value_copy Option<FieldSizePayload>(ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize"(__err_val).payload_0);
             __opt_disc_74 = ref.is_null(__case_payload_72) == 0;
@@ -773,27 +773,27 @@ fn handle() {
                     __len_87 = builtin::i32_wrap_i64(__packed_85 >> 32_i64);
                     __opt_inner_0_83 = __ptr_86;
                     __opt_inner_1_84 = __len_87;
-                };
+                }
                 __opt_val_88 = __struct_val.field_size;
                 __opt_disc_89 = ref.test Option<u32>::Some(__opt_val_88);
                 __opt_inner_0_90 = 0;
                 if __opt_disc_89 != 0 {
                     __flat_91 = ref.cast Option<u32>::Some(__opt_val_88).payload_0;
                     __opt_inner_0_90 = __flat_91;
-                };
+                }
                 __opt_inner_0_75 = __opt_disc_82;
                 __opt_inner_1_76 = __opt_inner_0_83;
                 __opt_inner_2 = __opt_inner_1_84;
                 __opt_inner_3 = __opt_disc_89;
                 __opt_inner_4 = __opt_inner_0_90;
-            };
+            }
             __tv_2 = __opt_disc_74;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_75);
             __tv_4 = __opt_inner_1_76;
             __tv_5 = __opt_inner_2;
             __tv_6 = __opt_inner_3;
             __tv_7 = __opt_inner_4;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val) {
             __case_payload_92 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_94 = ref.test Option<u32>::Some(__case_payload_92);
@@ -801,10 +801,10 @@ fn handle() {
             if __opt_disc_94 != 0 {
                 __flat_96 = ref.cast Option<u32>::Some(__case_payload_92).payload_0;
                 __opt_inner_0_95 = __flat_96;
-            };
+            }
             __tv_2 = __opt_disc_94;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_95);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val) {
             __case_payload_97 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val).payload_0;
             __opt_val_99 = __case_payload_97.field_name;
@@ -817,20 +817,20 @@ fn handle() {
                 __len_105 = builtin::i32_wrap_i64(__packed_103 >> 32_i64);
                 __opt_inner_0_101 = __ptr_104;
                 __opt_inner_1_102 = __len_105;
-            };
+            }
             __opt_val_106 = __case_payload_97.field_size;
             __opt_disc_107 = ref.test Option<u32>::Some(__opt_val_106);
             __opt_inner_0_108 = 0;
             if __opt_disc_107 != 0 {
                 __flat_109 = ref.cast Option<u32>::Some(__opt_val_106).payload_0;
                 __opt_inner_0_108 = __flat_109;
-            };
+            }
             __tv_2 = __opt_disc_100;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_101);
             __tv_4 = __opt_inner_1_102;
             __tv_5 = __opt_disc_107;
             __tv_6 = __opt_inner_0_108;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val) {
             __case_payload_110 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_112 = ref.test Option<u32>::Some(__case_payload_110);
@@ -838,10 +838,10 @@ fn handle() {
             if __opt_disc_112 != 0 {
                 __flat_114 = ref.cast Option<u32>::Some(__case_payload_110).payload_0;
                 __opt_inner_0_113 = __flat_114;
-            };
+            }
             __tv_2 = __opt_disc_112;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_113);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val) {
             __case_payload_115 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val).payload_0;
             __opt_val_117 = __case_payload_115.field_name;
@@ -854,20 +854,20 @@ fn handle() {
                 __len_123 = builtin::i32_wrap_i64(__packed_121 >> 32_i64);
                 __opt_inner_0_119 = __ptr_122;
                 __opt_inner_1_120 = __len_123;
-            };
+            }
             __opt_val_124 = __case_payload_115.field_size;
             __opt_disc_125 = ref.test Option<u32>::Some(__opt_val_124);
             __opt_inner_0_126 = 0;
             if __opt_disc_125 != 0 {
                 __flat_127 = ref.cast Option<u32>::Some(__opt_val_124).payload_0;
                 __opt_inner_0_126 = __flat_127;
-            };
+            }
             __tv_2 = __opt_disc_118;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_119);
             __tv_4 = __opt_inner_1_120;
             __tv_5 = __opt_disc_125;
             __tv_6 = __opt_inner_0_126;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val) {
             __case_payload_128 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val).payload_0;
             __opt_disc_130 = ref.test Option<u64>::Some(__case_payload_128);
@@ -875,10 +875,10 @@ fn handle() {
             if __opt_disc_130 != 0 {
                 __flat_132 = ref.cast Option<u64>::Some(__case_payload_128).payload_0;
                 __opt_inner_0_131 = __flat_132;
-            };
+            }
             __tv_2 = __opt_disc_130;
             __tv_3 = __opt_inner_0_131;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val) {
             __case_payload_133 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_135 = ref.test Option<u32>::Some(__case_payload_133);
@@ -886,10 +886,10 @@ fn handle() {
             if __opt_disc_135 != 0 {
                 __flat_137 = ref.cast Option<u32>::Some(__case_payload_133).payload_0;
                 __opt_inner_0_136 = __flat_137;
-            };
+            }
             __tv_2 = __opt_disc_135;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_136);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val) {
             __case_payload_138 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val).payload_0;
             __opt_val_140 = __case_payload_138.field_name;
@@ -902,20 +902,20 @@ fn handle() {
                 __len_146 = builtin::i32_wrap_i64(__packed_144 >> 32_i64);
                 __opt_inner_0_142 = __ptr_145;
                 __opt_inner_1_143 = __len_146;
-            };
+            }
             __opt_val_147 = __case_payload_138.field_size;
             __opt_disc_148 = ref.test Option<u32>::Some(__opt_val_147);
             __opt_inner_0_149 = 0;
             if __opt_disc_148 != 0 {
                 __flat_150 = ref.cast Option<u32>::Some(__opt_val_147).payload_0;
                 __opt_inner_0_149 = __flat_150;
-            };
+            }
             __tv_2 = __opt_disc_141;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_142);
             __tv_4 = __opt_inner_1_143;
             __tv_5 = __opt_disc_148;
             __tv_6 = __opt_inner_0_149;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding"(__err_val) {
             __case_payload_151 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding"(__err_val).payload_0);
             __opt_disc_153 = ref.is_null(__case_payload_151) == 0;
@@ -927,11 +927,11 @@ fn handle() {
                 __len_158 = builtin::i32_wrap_i64(__packed_156 >> 32_i64);
                 __opt_inner_0_154 = __ptr_157;
                 __opt_inner_1_155 = __len_158;
-            };
+            }
             __tv_2 = __opt_disc_153;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_154);
             __tv_4 = __opt_inner_1_155;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding"(__err_val) {
             __case_payload_159 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding"(__err_val).payload_0);
             __opt_disc_161 = ref.is_null(__case_payload_159) == 0;
@@ -943,11 +943,11 @@ fn handle() {
                 __len_166 = builtin::i32_wrap_i64(__packed_164 >> 32_i64);
                 __opt_inner_0_162 = __ptr_165;
                 __opt_inner_1_163 = __len_166;
-            };
+            }
             __tv_2 = __opt_disc_161;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_162);
             __tv_4 = __opt_inner_1_163;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::InternalError"(__err_val) {
             __case_payload_167 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::InternalError"(__err_val).payload_0);
             __opt_disc_169 = ref.is_null(__case_payload_167) == 0;
@@ -959,13 +959,13 @@ fn handle() {
                 __len_174 = builtin::i32_wrap_i64(__packed_172 >> 32_i64);
                 __opt_inner_0_170 = __ptr_173;
                 __opt_inner_1_171 = __len_174;
-            };
+            }
             __tv_2 = __opt_disc_169;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_170);
             __tv_4 = __opt_inner_1_171;
-        };
+        }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
-    };
+    }
     "core:internal/cm_stream_write_u8"(resp_tx, StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: body.repr, used: body.used, index: 0 }));
     "wasi/stream-drop-writable"(resp_tx);
     let __fw_write_ptr_10: i32;
@@ -986,7 +986,7 @@ fn handle() {
         __fw_evt_10 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_10, __fw_evt_10));
         drop("mem/realloc"(__fw_evt_10, 8, 4, 0));
-    };
+    }
     drop("mem/realloc"(__fw_write_ptr_10, 40, 8, 0));
 }
 
@@ -1006,18 +1006,18 @@ fn __cm_binding__Request_new(headers, contents, trailers, options) {
     __contents_inner0 = 0;
     if ref.test Option<Stream<u8>>::Some(contents) {
         __contents_inner0 = ref.cast Option<Stream<u8>>::Some(contents).payload_0;
-    };
+    }
     __options_disc = ref.test Option<i32>::Some(options);
     __options_inner0 = 0;
     if ref.test Option<i32>::Some(options) {
         __options_inner0 = ref.cast Option<i32>::Some(options).payload_0;
-    };
+    }
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Request::new"(headers, __contents_disc, __contents_inner0, trailers, __options_disc, __options_inner0, __outptr);
     __lifted_result_11 = builtin::load_i32(__outptr + 0);
     __lifted_result_12 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_11; __lifted_result_12;
+    return __lifted_result_11, __lifted_result_12;
 }
 
 fn __cm_binding__Request_set_scheme(self, scheme) {
@@ -1043,18 +1043,18 @@ fn __cm_binding__Request_set_scheme(self, scheme) {
             __scheme_s_c2_packed = "core:internal/cm_lower_string"(ref.cast "wasi:http/types.wado/Scheme::Other"(__scheme_s_val).payload_0);
             __scheme_s_p0 = builtin::i32_wrap_i64(__scheme_s_c2_packed);
             __scheme_s_p1 = builtin::i32_wrap_i64(__scheme_s_c2_packed >> 32_i64);
-        };
+        }
         __scheme_inner0 = __scheme_s_val.discriminant;
         __scheme_inner1 = __scheme_s_p0;
         __scheme_inner2 = __scheme_s_p1;
-    };
+    }
     __disc = "wasi/wasi:http/Request::set_scheme"(self, __scheme_disc, __scheme_inner0, __scheme_inner1, __scheme_inner2);
     __result_val = ref.null none;
     if __disc == 0 {
         __result_val = Result<unit,unit> { 0 };
     } else {
         __result_val = Result<unit,unit> { 1 };
-    };
+    }
     return __result_val;
 }
 
@@ -1072,14 +1072,14 @@ fn __cm_binding__Request_set_authority(self, authority) {
         __authority_s_packed = "core:internal/cm_lower_string"(ref.as_non_null(authority));
         __authority_inner0 = builtin::i32_wrap_i64(__authority_s_packed);
         __authority_inner1 = builtin::i32_wrap_i64(__authority_s_packed >> 32_i64);
-    };
+    }
     __disc = "wasi/wasi:http/Request::set_authority"(self, __authority_disc, __authority_inner0, __authority_inner1);
     __result_val = ref.null none;
     if __disc == 0 {
         __result_val = Result<unit,unit> { 0 };
     } else {
         __result_val = Result<unit,unit> { 1 };
-    };
+    }
     return __result_val;
 }
 
@@ -1097,14 +1097,14 @@ fn __cm_binding__Request_set_path_with_query(self, path_with_query) {
         __path_with_query_s_packed = "core:internal/cm_lower_string"(ref.as_non_null(path_with_query));
         __path_with_query_inner0 = builtin::i32_wrap_i64(__path_with_query_s_packed);
         __path_with_query_inner1 = builtin::i32_wrap_i64(__path_with_query_s_packed >> 32_i64);
-    };
+    }
     __disc = "wasi/wasi:http/Request::set_path_with_query"(self, __path_with_query_disc, __path_with_query_inner0, __path_with_query_inner1);
     __result_val = ref.null none;
     if __disc == 0 {
         __result_val = Result<unit,unit> { 0 };
     } else {
         __result_val = Result<unit,unit> { 1 };
-    };
+    }
     return __result_val;
 }
 
@@ -1215,12 +1215,12 @@ fn __cm_binding__Client_send(request) {
                     break __inline_memory_to_gc_string_0: String { repr: __local_59, used: __local_58 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
-            };
+            }
             __disc_54 = builtin::load_u8(((__async_outptr + 8) + 8) + 12);
             __option_result_55 = Option<u16> { 1 };
             if __disc_54 != 0 {
                 __option_result_55 = Option<u16>::Some { discriminant: 0, payload_0: builtin::load_u16((((__async_outptr + 8) + 8) + 12) + 2) };
-            };
+            }
             __struct_result_56 = "wasi:http/types.wado/DnsErrorPayload" { rcode: __option_result_53, info_code: __option_result_55 };
             __vresult = "wasi:http/types.wado/ErrorCode::DnsError" { discriminant: 1, payload_0: __struct_result_56 };
         } else if __vdisc == 2 {
@@ -1252,7 +1252,7 @@ fn __cm_binding__Client_send(request) {
             __option_result_48 = Option<u8> { 1 };
             if __disc_47 != 0 {
                 __option_result_48 = Option<u8>::Some { discriminant: 0, payload_0: builtin::load_u8(((__async_outptr + 8) + 8) + 1) };
-            };
+            }
             __disc_49 = builtin::load_u8(((__async_outptr + 8) + 8) + 4);
             __option_result_50 = ref.null none;
             if __disc_49 != 0 {
@@ -1263,7 +1263,7 @@ fn __cm_binding__Client_send(request) {
                     break __inline_memory_to_gc_string_1: String { repr: __local_62, used: __local_61 };
                 });
                 drop("mem/realloc"(builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), builtin::load_i32(((((__async_outptr + 8) + 8) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __struct_result_51 = "wasi:http/types.wado/TlsAlertReceivedPayload" { alert_id: __option_result_48, alert_message: __option_result_50 };
             __vresult = "wasi:http/types.wado/ErrorCode::TlsAlertReceived" { discriminant: 14, payload_0: __struct_result_51 };
         } else if __vdisc == 15 {
@@ -1275,7 +1275,7 @@ fn __cm_binding__Client_send(request) {
             __option_result_46 = Option<u64> { 1 };
             if __disc_45 != 0 {
                 __option_result_46 = Option<u64>::Some { discriminant: 0, payload_0: builtin::load_i64(((__async_outptr + 8) + 8) + 8) };
-            };
+            }
             __vresult = "wasi:http/types.wado/ErrorCode::HttpRequestBodySize" { discriminant: 17, payload_0: __option_result_46 };
         } else if __vdisc == 18 {
             __vresult = "wasi:http/types.wado/ErrorCode" { 18 };
@@ -1288,7 +1288,7 @@ fn __cm_binding__Client_send(request) {
             __option_result_44 = Option<u32> { 1 };
             if __disc_43 != 0 {
                 __option_result_44 = Option<u32>::Some { discriminant: 0, payload_0: builtin::load_i32(((__async_outptr + 8) + 8) + 4) };
-            };
+            }
             __vresult = "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize" { discriminant: 21, payload_0: __option_result_44 };
         } else if __vdisc == 22 {
             __disc_36 = builtin::load_u8((__async_outptr + 8) + 8);
@@ -1304,22 +1304,22 @@ fn __cm_binding__Client_send(request) {
                         break __inline_memory_to_gc_string_2: String { repr: __local_65, used: __local_64 };
                     });
                     drop("mem/realloc"(builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), builtin::load_i32(((((__async_outptr + 8) + 8) + 4) + 4) + 4), 1, 0));
-                };
+                }
                 __disc_40 = builtin::load_u8((((__async_outptr + 8) + 8) + 4) + 12);
                 __option_result_41 = Option<u32> { 1 };
                 if __disc_40 != 0 {
                     __option_result_41 = Option<u32>::Some { discriminant: 0, payload_0: builtin::load_i32(((((__async_outptr + 8) + 8) + 4) + 12) + 4) };
-                };
+                }
                 __struct_result_42 = "wasi:http/types.wado/FieldSizePayload" { field_name: __option_result_39, field_size: __option_result_41 };
                 __option_result_37 = __struct_result_42;
-            };
+            }
             __vresult = "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize" { discriminant: 22, payload_0: __option_result_37 };
         } else if __vdisc == 23 {
             __disc_34 = builtin::load_u8((__async_outptr + 8) + 8);
             __option_result_35 = Option<u32> { 1 };
             if __disc_34 != 0 {
                 __option_result_35 = Option<u32>::Some { discriminant: 0, payload_0: builtin::load_i32(((__async_outptr + 8) + 8) + 4) };
-            };
+            }
             __vresult = "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize" { discriminant: 23, payload_0: __option_result_35 };
         } else if __vdisc == 24 {
             __disc_29 = builtin::load_u8((__async_outptr + 8) + 8);
@@ -1332,12 +1332,12 @@ fn __cm_binding__Client_send(request) {
                     break __inline_memory_to_gc_string_3: String { repr: __local_68, used: __local_67 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
-            };
+            }
             __disc_31 = builtin::load_u8(((__async_outptr + 8) + 8) + 12);
             __option_result_32 = Option<u32> { 1 };
             if __disc_31 != 0 {
                 __option_result_32 = Option<u32>::Some { discriminant: 0, payload_0: builtin::load_i32((((__async_outptr + 8) + 8) + 12) + 4) };
-            };
+            }
             __struct_result_33 = "wasi:http/types.wado/FieldSizePayload" { field_name: __option_result_30, field_size: __option_result_32 };
             __vresult = "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize" { discriminant: 24, payload_0: __struct_result_33 };
         } else if __vdisc == 25 {
@@ -1347,7 +1347,7 @@ fn __cm_binding__Client_send(request) {
             __option_result_28 = Option<u32> { 1 };
             if __disc_27 != 0 {
                 __option_result_28 = Option<u32>::Some { discriminant: 0, payload_0: builtin::load_i32(((__async_outptr + 8) + 8) + 4) };
-            };
+            }
             __vresult = "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize" { discriminant: 26, payload_0: __option_result_28 };
         } else if __vdisc == 27 {
             __disc_22 = builtin::load_u8((__async_outptr + 8) + 8);
@@ -1360,12 +1360,12 @@ fn __cm_binding__Client_send(request) {
                     break __inline_memory_to_gc_string_4: String { repr: __local_71, used: __local_70 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
-            };
+            }
             __disc_24 = builtin::load_u8(((__async_outptr + 8) + 8) + 12);
             __option_result_25 = Option<u32> { 1 };
             if __disc_24 != 0 {
                 __option_result_25 = Option<u32>::Some { discriminant: 0, payload_0: builtin::load_i32((((__async_outptr + 8) + 8) + 12) + 4) };
-            };
+            }
             __struct_result_26 = "wasi:http/types.wado/FieldSizePayload" { field_name: __option_result_23, field_size: __option_result_25 };
             __vresult = "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize" { discriminant: 27, payload_0: __struct_result_26 };
         } else if __vdisc == 28 {
@@ -1373,14 +1373,14 @@ fn __cm_binding__Client_send(request) {
             __option_result_21 = Option<u64> { 1 };
             if __disc_20 != 0 {
                 __option_result_21 = Option<u64>::Some { discriminant: 0, payload_0: builtin::load_i64(((__async_outptr + 8) + 8) + 8) };
-            };
+            }
             __vresult = "wasi:http/types.wado/ErrorCode::HttpResponseBodySize" { discriminant: 28, payload_0: __option_result_21 };
         } else if __vdisc == 29 {
             __disc_18 = builtin::load_u8((__async_outptr + 8) + 8);
             __option_result_19 = Option<u32> { 1 };
             if __disc_18 != 0 {
                 __option_result_19 = Option<u32>::Some { discriminant: 0, payload_0: builtin::load_i32(((__async_outptr + 8) + 8) + 4) };
-            };
+            }
             __vresult = "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize" { discriminant: 29, payload_0: __option_result_19 };
         } else if __vdisc == 30 {
             __disc_13 = builtin::load_u8((__async_outptr + 8) + 8);
@@ -1393,12 +1393,12 @@ fn __cm_binding__Client_send(request) {
                     break __inline_memory_to_gc_string_5: String { repr: __local_74, used: __local_73 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
-            };
+            }
             __disc_15 = builtin::load_u8(((__async_outptr + 8) + 8) + 12);
             __option_result_16 = Option<u32> { 1 };
             if __disc_15 != 0 {
                 __option_result_16 = Option<u32>::Some { discriminant: 0, payload_0: builtin::load_i32((((__async_outptr + 8) + 8) + 12) + 4) };
-            };
+            }
             __struct_result_17 = "wasi:http/types.wado/FieldSizePayload" { field_name: __option_result_14, field_size: __option_result_16 };
             __vresult = "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize" { discriminant: 30, payload_0: __struct_result_17 };
         } else if __vdisc == 31 {
@@ -1412,7 +1412,7 @@ fn __cm_binding__Client_send(request) {
                     break __inline_memory_to_gc_string_6: String { repr: __local_77, used: __local_76 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding" { discriminant: 31, payload_0: __option_result_12 };
         } else if __vdisc == 32 {
             __disc_9 = builtin::load_u8((__async_outptr + 8) + 8);
@@ -1425,7 +1425,7 @@ fn __cm_binding__Client_send(request) {
                     break __inline_memory_to_gc_string_7: String { repr: __local_80, used: __local_79 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding" { discriminant: 32, payload_0: __option_result_10 };
         } else if __vdisc == 33 {
             __vresult = "wasi:http/types.wado/ErrorCode" { 33 };
@@ -1448,11 +1448,11 @@ fn __cm_binding__Client_send(request) {
                     break __inline_memory_to_gc_string_8: String { repr: __local_83, used: __local_82 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:http/types.wado/ErrorCode::InternalError" { discriminant: 38, payload_0: __option_result_8 };
-        };
+        }
         __result_val = Result<Response,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__async_outptr, 40, 8, 0));
     return __result_val;
 }
@@ -1466,7 +1466,7 @@ fn __cm_binding__Response_consume_body(this, res) {
     __lifted_result_3 = builtin::load_i32(__outptr + 0);
     __lifted_result_4 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_3; __lifted_result_4;
+    return __lifted_result_3, __lifted_result_4;
 }
 
 fn __cm_binding__Response_new(headers, contents, trailers) {
@@ -1479,13 +1479,13 @@ fn __cm_binding__Response_new(headers, contents, trailers) {
     __contents_inner0 = 0;
     if ref.test Option<Stream<u8>>::Some(contents) {
         __contents_inner0 = ref.cast Option<Stream<u8>>::Some(contents).payload_0;
-    };
+    }
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Response::new"(headers, __contents_disc, __contents_inner0, trailers, __outptr);
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_7; __lifted_result_8;
+    return __lifted_result_7, __lifted_result_8;
 }
 
 fn __cm_export__handle(request) {
@@ -1502,7 +1502,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
             l119: loop {
                 if (i < len) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
                 continue l119;
@@ -1520,7 +1520,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l122: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l122;
@@ -1542,7 +1542,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -1568,13 +1568,13 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
                 if __sroa_event_payload == 2 {
                     break b126;
-                };
+                }
                 continue l127;
             };
         };
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
-    };
+    }
 }
 
 fn "core:internal/log_stderr"(message) {  // from core:internal
@@ -1638,7 +1638,7 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {  // from core:internal
     result = "wasi/stream-read"(handle, ptr, max);
     if result == -1 {
         result = "core:internal/wait_for_blocked"(handle);
-    };
+    }
     count = result >> 4;
     arr = "core:internal/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
@@ -1662,7 +1662,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
     result = "wasi/stream-write"(handle, ptr, len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, len, 1, 0));
 }
 
@@ -1677,7 +1677,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -1691,7 +1691,7 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     evt_handle = builtin::load_i32(out_ptr);
     payload = builtin::load_i32(out_ptr + 4);
     drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return code; evt_handle; payload;
+    return code, evt_handle, payload;
 }
 
 fn String::grow(self, min_capacity) {
@@ -1703,7 +1703,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -1751,7 +1751,7 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
                     self.index = _hfs_index_13;
                     break b133;
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
-                };
+                }
                 byte = builtin::array_get_u8(_licm_repr_12, _hfs_index_13);
                 _hfs_index_13 = _hfs_index_13 + 1;
                 Array<u8>::push(result, byte);
@@ -1769,7 +1769,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -1788,7 +1788,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Array<u8>::push(self, value) {
@@ -1796,7 +1796,7 @@ fn Array<u8>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u8>::grow(self);
-    };
+    }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1823,7 +1823,7 @@ fn Array<u8>::grow(self) {
             l142: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
                 continue l142;
@@ -1864,17 +1864,17 @@ fn String::from_utf8<Array<u8>>(bytes) {
                     multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<u8>^Iterator::next(iter);
                     if __sroa___pattern_temp_1_discriminant == 0 {
                         b1_5 = __sroa___pattern_temp_1_payload_0;
-                        if if b1_5 <u 128 -> i32 {
+                        if (if b1_5 <u 128 -> i32 {
                             1;
                         } else {
                             b1_5 >u 191;
-                        } {
+                        }) {
                             return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                        };
+                        }
                         code = ((b0 & 31) << 6) | (b1_5 & 63);
                     } else {
                         return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                    };
+                    }
                 } else if b0 <u 240 {
                     let __sroa___pattern_temp_2_discriminant: i32;
                     let __sroa___pattern_temp_2_payload_0: u8;
@@ -1886,41 +1886,41 @@ fn String::from_utf8<Array<u8>>(bytes) {
                         multivalue_bind [__sroa___pattern_temp_3_discriminant, __sroa___pattern_temp_3_payload_0] = ArrayIter<u8>^Iterator::next(iter);
                         if __sroa___pattern_temp_3_discriminant == 0 {
                             b2_7 = __sroa___pattern_temp_3_payload_0;
-                            if if b0 == 224 -> i32 {
+                            if (if b0 == 224 -> i32 {
                                 b1_6 <u 160;
                             } else {
                                 0;
-                            } {
+                            }) {
                                 return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 } };
-                            };
-                            if if b0 == 237 -> i32 {
+                            }
+                            if (if b0 == 237 -> i32 {
                                 b1_6 >=u 160;
                             } else {
                                 0;
-                            } {
+                            }) {
                                 return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: surrogate codepoint"), used: 34 } };
-                            };
-                            if if b1_6 <u 128 -> i32 {
+                            }
+                            if (if b1_6 <u 128 -> i32 {
                                 1;
                             } else {
                                 b1_6 >u 191;
-                            } {
+                            }) {
                                 return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                            };
-                            if if b2_7 <u 128 -> i32 {
+                            }
+                            if (if b2_7 <u 128 -> i32 {
                                 1;
                             } else {
                                 b2_7 >u 191;
-                            } {
+                            }) {
                                 return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                            };
+                            }
                             code = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
                         } else {
                             return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                        };
+                        }
                     } else {
                         return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                    };
+                    }
                 } else if b0 <u 245 {
                     let __sroa___pattern_temp_4_discriminant: i32;
                     let __sroa___pattern_temp_4_payload_0: u8;
@@ -1937,58 +1937,58 @@ fn String::from_utf8<Array<u8>>(bytes) {
                             multivalue_bind [__sroa___pattern_temp_6_discriminant, __sroa___pattern_temp_6_payload_0] = ArrayIter<u8>^Iterator::next(iter);
                             if __sroa___pattern_temp_6_discriminant == 0 {
                                 b3 = __sroa___pattern_temp_6_payload_0;
-                                if if b0 == 240 -> i32 {
+                                if (if b0 == 240 -> i32 {
                                     b1_8 <u 144;
                                 } else {
                                     0;
-                                } {
+                                }) {
                                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 } };
-                                };
-                                if if b0 == 244 -> i32 {
+                                }
+                                if (if b0 == 244 -> i32 {
                                     b1_8 >u 143;
                                 } else {
                                     0;
-                                } {
+                                }) {
                                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: out of Unicode range"), used: 35 } };
-                                };
-                                if if b1_8 <u 128 -> i32 {
+                                }
+                                if (if b1_8 <u 128 -> i32 {
                                     1;
                                 } else {
                                     b1_8 >u 191;
-                                } {
+                                }) {
                                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                                };
-                                if if b2_9 <u 128 -> i32 {
+                                }
+                                if (if b2_9 <u 128 -> i32 {
                                     1;
                                 } else {
                                     b2_9 >u 191;
-                                } {
+                                }) {
                                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                                };
-                                if if b3 <u 128 -> i32 {
+                                }
+                                if (if b3 <u 128 -> i32 {
                                     1;
                                 } else {
                                     b3 >u 191;
-                                } {
+                                }) {
                                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                                };
+                                }
                                 code = ((((b0 & 7) << 18) | ((b1_8 & 63) << 12)) | ((b2_9 & 63) << 6)) | (b3 & 63);
                             } else {
                                 return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                            };
+                            }
                         } else {
                             return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                        };
+                        }
                     } else {
                         return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                    };
+                    }
                 } else {
                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: byte out of range"), used: 32 } };
-                };
+                }
                 String::push(builder, code);
             } else {
                 break b144;
-            };
+            }
             continue l145;
         };
     };
@@ -1998,11 +1998,11 @@ fn String::from_utf8<Array<u8>>(bytes) {
 fn ArrayIter<u8>^Iterator::next(self) {
     let item: u8;
     if self.index >= self.used {
-        return 1; 0;
-    };
+        return 1, 0;
+    }
     item = builtin::array_get<u8>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; item;
+    return 0, item;
 }
 
 export fn __cm_export__handle as "handle"

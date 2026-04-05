@@ -616,13 +616,13 @@ fn handle(request) {
     });
     let __match_scrut_0: ref null "wasi:http/types.wado/HeaderError";
     __match_scrut_0 = append_result;
-    __cond_5 = if ref.is_null(__match_scrut_0) == 0 -> bool {
+    __cond_5 = (if ref.is_null(__match_scrut_0) == 0 -> bool {
         let __cast_1: ref null "wasi:http/types.wado/HeaderError";
         __cast_1 = ref.as_non_null(__match_scrut_0);
         1;
     } else {
         0;
-    };
+    });
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_25 = String { repr: builtin::array_new<u8>(118), used: 0 };
@@ -647,7 +647,7 @@ condition: append_result matches { Err(_) }
             break __tmpl: __local_25;
         });
         unreachable;
-    };
+    }
     values = __seq_lit: block -> ref Array<Array<u8>> {
         __local_6 = Array<Array<u8>> { repr: array.new_fixed<ref Array<u8>>(value_copy Array<u8>(__inline_String__as_bytes_8: block -> ref Array<u8> {
             break __inline_String__as_bytes_8: StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("val"), used: 3, index: 0 });
@@ -657,13 +657,13 @@ condition: append_result matches { Err(_) }
     set_result = __cm_binding__Fields_set(headers, String { repr: array.new_data<u8>("host"), used: 4 }, values);
     let __match_scrut_1: ref null "wasi:http/types.wado/HeaderError";
     __match_scrut_1 = set_result;
-    __cond_9 = if ref.is_null(__match_scrut_1) == 0 -> bool {
+    __cond_9 = (if ref.is_null(__match_scrut_1) == 0 -> bool {
         let __cast_2: ref null "wasi:http/types.wado/HeaderError";
         __cast_2 = ref.as_non_null(__match_scrut_1);
         1;
     } else {
         0;
-    };
+    });
     if __cond_9 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_27 = String { repr: builtin::array_new<u8>(115), used: 0 };
@@ -688,17 +688,17 @@ condition: set_result matches { Err(_) }
             break __tmpl: __local_27;
         });
         unreachable;
-    };
+    }
     delete_result = __cm_binding__Fields_delete(headers, String { repr: array.new_data<u8>("host"), used: 4 });
     let __match_scrut_2: ref null "wasi:http/types.wado/HeaderError";
     __match_scrut_2 = delete_result;
-    __cond_11 = if ref.is_null(__match_scrut_2) == 0 -> bool {
+    __cond_11 = (if ref.is_null(__match_scrut_2) == 0 -> bool {
         let __cast_3: ref null "wasi:http/types.wado/HeaderError";
         __cast_3 = ref.as_non_null(__match_scrut_2);
         1;
     } else {
         0;
-    };
+    });
     if __cond_11 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_29 = String { repr: builtin::array_new<u8>(118), used: 0 };
@@ -723,17 +723,17 @@ condition: delete_result matches { Err(_) }
             break __tmpl: __local_29;
         });
         unreachable;
-    };
+    }
     gad_result = __cm_binding__Fields_get_and_delete(headers, String { repr: array.new_data<u8>("host"), used: 4 });
     let __match_scrut_3: ref Result<Array<Array<u8>>,HeaderError>;
     __match_scrut_3 = gad_result;
-    __cond_13 = if ref.test Result<Array<Array<u8>>,HeaderError>::Err(__match_scrut_3) -> bool {
+    __cond_13 = (if ref.test Result<Array<Array<u8>>,HeaderError>::Err(__match_scrut_3) -> bool {
         let __cast_4: ref Result<Array<Array<u8>>,HeaderError>::Err;
         __cast_4 = ref.cast Result<Array<Array<u8>>,HeaderError>::Err(__match_scrut_3);
         1;
     } else {
         0;
-    };
+    });
     if __cond_13 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_31 = String { repr: builtin::array_new<u8>(115), used: 0 };
@@ -758,7 +758,7 @@ condition: gad_result matches { Err(_) }
             break __tmpl: __local_31;
         });
         unreachable;
-    };
+    }
     drop(__cm_binding__Fields_copy_all(headers));
     cloned = __cm_binding__Fields_clone(headers);
     clone_append = __cm_binding__Fields_append(cloned, String { repr: array.new_data<u8>("x-clone"), used: 7 }, __inline_String__as_bytes_22: block -> ref Array<u8> {
@@ -766,11 +766,11 @@ condition: gad_result matches { Err(_) }
     });
     let __match_scrut_4: ref null "wasi:http/types.wado/HeaderError";
     __match_scrut_4 = clone_append;
-    __cond_17 = if ref.is_null(__match_scrut_4) -> bool {
+    __cond_17 = (if ref.is_null(__match_scrut_4) -> bool {
         1;
     } else {
         0;
-    };
+    });
     if __cond_17 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_33 = String { repr: builtin::array_new<u8>(116), used: 0 };
@@ -795,7 +795,7 @@ condition: clone_append matches { Ok(_) }
             break __tmpl: __local_33;
         });
         unreachable;
-    };
+    }
     let __pair_temp_5: i64;
     __pair_temp_5 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_5);
@@ -836,20 +836,20 @@ condition: clone_append matches { Ok(_) }
                 __len_55 = builtin::i32_wrap_i64(__packed_53 >> 32_i64);
                 __opt_inner_0_51 = __ptr_54;
                 __opt_inner_1_52 = __len_55;
-            };
+            }
             __opt_val_56 = __case_payload_47.info_code;
             __opt_disc_57 = ref.test Option<u16>::Some(__opt_val_56);
             __opt_inner_0_58 = 0;
             if __opt_disc_57 != 0 {
                 __flat_59 = ref.cast Option<u16>::Some(__opt_val_56).payload_0;
                 __opt_inner_0_58 = __flat_59;
-            };
+            }
             __tv_2 = __opt_disc_50;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_51);
             __tv_4 = __opt_inner_1_52;
             __tv_5 = __opt_disc_57;
             __tv_6 = __opt_inner_0_58;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val) {
             __case_payload_60 = ref.cast "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val).payload_0;
             __opt_val_62 = __case_payload_60.alert_id;
@@ -858,7 +858,7 @@ condition: clone_append matches { Ok(_) }
             if __opt_disc_63 != 0 {
                 __flat_65 = ref.cast Option<u8>::Some(__opt_val_62).payload_0;
                 __opt_inner_0_64 = __flat_65;
-            };
+            }
             __opt_val_66 = __case_payload_60.alert_message;
             __opt_disc_67 = ref.is_null(__opt_val_66) == 0;
             __opt_inner_0_68 = 0;
@@ -869,13 +869,13 @@ condition: clone_append matches { Ok(_) }
                 __len_72 = builtin::i32_wrap_i64(__packed_70 >> 32_i64);
                 __opt_inner_0_68 = __ptr_71;
                 __opt_inner_1_69 = __len_72;
-            };
+            }
             __tv_2 = __opt_disc_63;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_64);
             __tv_4 = __opt_disc_67;
             __tv_5 = __opt_inner_0_68;
             __tv_6 = __opt_inner_1_69;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val) {
             __case_payload_73 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val).payload_0;
             __opt_disc_75 = ref.test Option<u64>::Some(__case_payload_73);
@@ -883,10 +883,10 @@ condition: clone_append matches { Ok(_) }
             if __opt_disc_75 != 0 {
                 __flat_77 = ref.cast Option<u64>::Some(__case_payload_73).payload_0;
                 __opt_inner_0_76 = __flat_77;
-            };
+            }
             __tv_2 = __opt_disc_75;
             __tv_3 = __opt_inner_0_76;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val) {
             __case_payload_78 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_80 = ref.test Option<u32>::Some(__case_payload_78);
@@ -894,10 +894,10 @@ condition: clone_append matches { Ok(_) }
             if __opt_disc_80 != 0 {
                 __flat_82 = ref.cast Option<u32>::Some(__case_payload_78).payload_0;
                 __opt_inner_0_81 = __flat_82;
-            };
+            }
             __tv_2 = __opt_disc_80;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_81);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize"(__err_val) {
             __case_payload_83 = value_copy Option<FieldSizePayload>(ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize"(__err_val).payload_0);
             __opt_disc_85 = ref.is_null(__case_payload_83) == 0;
@@ -918,27 +918,27 @@ condition: clone_append matches { Ok(_) }
                     __len_98 = builtin::i32_wrap_i64(__packed_96 >> 32_i64);
                     __opt_inner_0_94 = __ptr_97;
                     __opt_inner_1_95 = __len_98;
-                };
+                }
                 __opt_val_99 = __struct_val.field_size;
                 __opt_disc_100 = ref.test Option<u32>::Some(__opt_val_99);
                 __opt_inner_0_101 = 0;
                 if __opt_disc_100 != 0 {
                     __flat_102 = ref.cast Option<u32>::Some(__opt_val_99).payload_0;
                     __opt_inner_0_101 = __flat_102;
-                };
+                }
                 __opt_inner_0_86 = __opt_disc_93;
                 __opt_inner_1_87 = __opt_inner_0_94;
                 __opt_inner_2 = __opt_inner_1_95;
                 __opt_inner_3 = __opt_disc_100;
                 __opt_inner_4 = __opt_inner_0_101;
-            };
+            }
             __tv_2 = __opt_disc_85;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_86);
             __tv_4 = __opt_inner_1_87;
             __tv_5 = __opt_inner_2;
             __tv_6 = __opt_inner_3;
             __tv_7 = __opt_inner_4;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val) {
             __case_payload_103 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_105 = ref.test Option<u32>::Some(__case_payload_103);
@@ -946,10 +946,10 @@ condition: clone_append matches { Ok(_) }
             if __opt_disc_105 != 0 {
                 __flat_107 = ref.cast Option<u32>::Some(__case_payload_103).payload_0;
                 __opt_inner_0_106 = __flat_107;
-            };
+            }
             __tv_2 = __opt_disc_105;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_106);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val) {
             __case_payload_108 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val).payload_0;
             __opt_val_110 = __case_payload_108.field_name;
@@ -962,20 +962,20 @@ condition: clone_append matches { Ok(_) }
                 __len_116 = builtin::i32_wrap_i64(__packed_114 >> 32_i64);
                 __opt_inner_0_112 = __ptr_115;
                 __opt_inner_1_113 = __len_116;
-            };
+            }
             __opt_val_117 = __case_payload_108.field_size;
             __opt_disc_118 = ref.test Option<u32>::Some(__opt_val_117);
             __opt_inner_0_119 = 0;
             if __opt_disc_118 != 0 {
                 __flat_120 = ref.cast Option<u32>::Some(__opt_val_117).payload_0;
                 __opt_inner_0_119 = __flat_120;
-            };
+            }
             __tv_2 = __opt_disc_111;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_112);
             __tv_4 = __opt_inner_1_113;
             __tv_5 = __opt_disc_118;
             __tv_6 = __opt_inner_0_119;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val) {
             __case_payload_121 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_123 = ref.test Option<u32>::Some(__case_payload_121);
@@ -983,10 +983,10 @@ condition: clone_append matches { Ok(_) }
             if __opt_disc_123 != 0 {
                 __flat_125 = ref.cast Option<u32>::Some(__case_payload_121).payload_0;
                 __opt_inner_0_124 = __flat_125;
-            };
+            }
             __tv_2 = __opt_disc_123;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_124);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val) {
             __case_payload_126 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val).payload_0;
             __opt_val_128 = __case_payload_126.field_name;
@@ -999,20 +999,20 @@ condition: clone_append matches { Ok(_) }
                 __len_134 = builtin::i32_wrap_i64(__packed_132 >> 32_i64);
                 __opt_inner_0_130 = __ptr_133;
                 __opt_inner_1_131 = __len_134;
-            };
+            }
             __opt_val_135 = __case_payload_126.field_size;
             __opt_disc_136 = ref.test Option<u32>::Some(__opt_val_135);
             __opt_inner_0_137 = 0;
             if __opt_disc_136 != 0 {
                 __flat_138 = ref.cast Option<u32>::Some(__opt_val_135).payload_0;
                 __opt_inner_0_137 = __flat_138;
-            };
+            }
             __tv_2 = __opt_disc_129;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_130);
             __tv_4 = __opt_inner_1_131;
             __tv_5 = __opt_disc_136;
             __tv_6 = __opt_inner_0_137;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val) {
             __case_payload_139 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val).payload_0;
             __opt_disc_141 = ref.test Option<u64>::Some(__case_payload_139);
@@ -1020,10 +1020,10 @@ condition: clone_append matches { Ok(_) }
             if __opt_disc_141 != 0 {
                 __flat_143 = ref.cast Option<u64>::Some(__case_payload_139).payload_0;
                 __opt_inner_0_142 = __flat_143;
-            };
+            }
             __tv_2 = __opt_disc_141;
             __tv_3 = __opt_inner_0_142;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val) {
             __case_payload_144 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_146 = ref.test Option<u32>::Some(__case_payload_144);
@@ -1031,10 +1031,10 @@ condition: clone_append matches { Ok(_) }
             if __opt_disc_146 != 0 {
                 __flat_148 = ref.cast Option<u32>::Some(__case_payload_144).payload_0;
                 __opt_inner_0_147 = __flat_148;
-            };
+            }
             __tv_2 = __opt_disc_146;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_147);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val) {
             __case_payload_149 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val).payload_0;
             __opt_val_151 = __case_payload_149.field_name;
@@ -1047,20 +1047,20 @@ condition: clone_append matches { Ok(_) }
                 __len_157 = builtin::i32_wrap_i64(__packed_155 >> 32_i64);
                 __opt_inner_0_153 = __ptr_156;
                 __opt_inner_1_154 = __len_157;
-            };
+            }
             __opt_val_158 = __case_payload_149.field_size;
             __opt_disc_159 = ref.test Option<u32>::Some(__opt_val_158);
             __opt_inner_0_160 = 0;
             if __opt_disc_159 != 0 {
                 __flat_161 = ref.cast Option<u32>::Some(__opt_val_158).payload_0;
                 __opt_inner_0_160 = __flat_161;
-            };
+            }
             __tv_2 = __opt_disc_152;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_153);
             __tv_4 = __opt_inner_1_154;
             __tv_5 = __opt_disc_159;
             __tv_6 = __opt_inner_0_160;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding"(__err_val) {
             __case_payload_162 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding"(__err_val).payload_0);
             __opt_disc_164 = ref.is_null(__case_payload_162) == 0;
@@ -1072,11 +1072,11 @@ condition: clone_append matches { Ok(_) }
                 __len_169 = builtin::i32_wrap_i64(__packed_167 >> 32_i64);
                 __opt_inner_0_165 = __ptr_168;
                 __opt_inner_1_166 = __len_169;
-            };
+            }
             __tv_2 = __opt_disc_164;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_165);
             __tv_4 = __opt_inner_1_166;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding"(__err_val) {
             __case_payload_170 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding"(__err_val).payload_0);
             __opt_disc_172 = ref.is_null(__case_payload_170) == 0;
@@ -1088,11 +1088,11 @@ condition: clone_append matches { Ok(_) }
                 __len_177 = builtin::i32_wrap_i64(__packed_175 >> 32_i64);
                 __opt_inner_0_173 = __ptr_176;
                 __opt_inner_1_174 = __len_177;
-            };
+            }
             __tv_2 = __opt_disc_172;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_173);
             __tv_4 = __opt_inner_1_174;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::InternalError"(__err_val) {
             __case_payload_178 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::InternalError"(__err_val).payload_0);
             __opt_disc_180 = ref.is_null(__case_payload_178) == 0;
@@ -1104,13 +1104,13 @@ condition: clone_append matches { Ok(_) }
                 __len_185 = builtin::i32_wrap_i64(__packed_183 >> 32_i64);
                 __opt_inner_0_181 = __ptr_184;
                 __opt_inner_1_182 = __len_185;
-            };
+            }
             __tv_2 = __opt_disc_180;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_181);
             __tv_4 = __opt_inner_1_182;
-        };
+        }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
-    };
+    }
     "core:internal/cm_stream_write_u8"(resp_tx, __inline_String__as_bytes_27: block -> ref Array<u8> {
         break __inline_String__as_bytes_27: StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("ok"), used: 2, index: 0 });
     });
@@ -1133,7 +1133,7 @@ condition: clone_append matches { Ok(_) }
         __fw_evt_7 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_7, __fw_evt_7));
         drop("mem/realloc"(__fw_evt_7, 8, 4, 0));
-    };
+    }
     drop("mem/realloc"(__fw_write_ptr_7, 40, 8, 0));
 }
 
@@ -1171,7 +1171,7 @@ fn __cm_binding__Fields_get(self, name) {
         l50: loop {
             if __i_7 >= __count_5 {
                 break b49;
-            };
+            }
             __elem_addr_8 = __base_4 + (__i_7 * 8);
             __base_9 = builtin::load_i32(__elem_addr_8);
             __count_10 = builtin::load_i32(__elem_addr_8 + 4);
@@ -1181,7 +1181,7 @@ fn __cm_binding__Fields_get(self, name) {
                 l53: loop {
                     if __i_12 >= __count_10 {
                         break b52;
-                    };
+                    }
                     __elem_addr_13 = __base_9 + (__i_12 * 1);
                     Array<u8>::push(__result_11, builtin::load_u8(__elem_addr_13));
                     __i_12 = __i_12 + 1;
@@ -1190,7 +1190,7 @@ fn __cm_binding__Fields_get(self, name) {
             };
             if __count_10 > 0 {
                 drop("mem/realloc"(__base_9, __count_10 * 1, 4, 0));
-            };
+            }
             Array<Array<u8>>::push(__result_6, __result_11);
             __i_7 = __i_7 + 1;
             continue l50;
@@ -1198,7 +1198,7 @@ fn __cm_binding__Fields_get(self, name) {
     };
     if __count_5 > 0 {
         drop("mem/realloc"(__base_4, __count_5 * 8, 4, 0));
-    };
+    }
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __result_6;
 }
@@ -1252,11 +1252,11 @@ fn __cm_binding__Fields_append(self, name, value) {
                     break __inline_memory_to_gc_string_3: String { repr: __local_19, used: __local_18 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:http/types.wado/HeaderError::Other" { discriminant: 4, payload_0: __option_result };
-        };
+        }
         __result_val = __vresult;
-    };
+    }
     drop("mem/realloc"(__outptr, 20, 4, 0));
     return __result_val;
 }
@@ -1293,13 +1293,13 @@ fn __cm_binding__Fields_set(self, name, value) {
         l64: loop {
             if __value_i >= __value_len {
                 break b63;
-            };
+            }
             __value_addr = __value_base + (__value_i * 8);
             __value_elem = __inline_Array_Array_u8___IndexValue__index_value_1: block -> ref Array<u8> {
                 if __value_i >= _licm_used_28 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                };
+                }
                 break __inline_Array_Array_u8___IndexValue__index_value_1: builtin::array_get<ref Array<u8>>(_licm_repr_29, __value_i);
             };
             __elem_packed = __inline_cm_lower_array_u8_2: block -> i64 {
@@ -1341,11 +1341,11 @@ fn __cm_binding__Fields_set(self, name, value) {
                     break __inline_memory_to_gc_string_5: String { repr: __local_27, used: __local_26 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:http/types.wado/HeaderError::Other" { discriminant: 4, payload_0: __option_result };
-        };
+        }
         __result_val = __vresult;
-    };
+    }
     drop("mem/realloc"(__outptr, 20, 4, 0));
     return __result_val;
 }
@@ -1391,11 +1391,11 @@ fn __cm_binding__Fields_delete(self, name) {
                     break __inline_memory_to_gc_string_0: String { repr: __local_12, used: __local_11 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:http/types.wado/HeaderError::Other" { discriminant: 4, payload_0: __option_result };
-        };
+        }
         __result_val = __vresult;
-    };
+    }
     drop("mem/realloc"(__outptr, 20, 4, 0));
     return __result_val;
 }
@@ -1436,7 +1436,7 @@ fn __cm_binding__Fields_get_and_delete(self, name) {
             l81: loop {
                 if __i_9 >= __count_7 {
                     break b80;
-                };
+                }
                 __elem_addr_10 = __base_6 + (__i_9 * 8);
                 __base_11 = builtin::load_i32(__elem_addr_10);
                 __count_12 = builtin::load_i32(__elem_addr_10 + 4);
@@ -1446,7 +1446,7 @@ fn __cm_binding__Fields_get_and_delete(self, name) {
                     l84: loop {
                         if __i_14 >= __count_12 {
                             break b83;
-                        };
+                        }
                         __elem_addr_15 = __base_11 + (__i_14 * 1);
                         Array<u8>::push(__result_13, builtin::load_u8(__elem_addr_15));
                         __i_14 = __i_14 + 1;
@@ -1455,7 +1455,7 @@ fn __cm_binding__Fields_get_and_delete(self, name) {
                 };
                 if __count_12 > 0 {
                     drop("mem/realloc"(__base_11, __count_12 * 1, 4, 0));
-                };
+                }
                 Array<Array<u8>>::push(__result_8, __result_13);
                 __i_9 = __i_9 + 1;
                 continue l81;
@@ -1463,7 +1463,7 @@ fn __cm_binding__Fields_get_and_delete(self, name) {
         };
         if __count_7 > 0 {
             drop("mem/realloc"(__base_6, __count_7 * 8, 4, 0));
-        };
+        }
         __result_val = Result<Array<Array<u8>>,HeaderError>::Ok { discriminant: 0, payload_0: __result_8 };
     } else {
         __vdisc = builtin::load_u8(__outptr + 4);
@@ -1487,11 +1487,11 @@ fn __cm_binding__Fields_get_and_delete(self, name) {
                     break __inline_memory_to_gc_string_2: String { repr: __local_24, used: __local_23 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:http/types.wado/HeaderError::Other" { discriminant: 4, payload_0: __option_result };
-        };
+        }
         __result_val = Result<Array<Array<u8>>,HeaderError>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__outptr, 20, 4, 0));
     return __result_val;
 }
@@ -1522,7 +1522,7 @@ fn __cm_binding__Fields_copy_all(self) {
         l94: loop {
             if __i_5 >= __count_3 {
                 break b93;
-            };
+            }
             __elem_addr_6 = __base_2 + (__i_5 * 16);
             __lifted_result_7 = __inline_memory_to_gc_string_1: block -> ref String {
                 __local_14 = builtin::load_i32(__elem_addr_6 + 0);
@@ -1538,7 +1538,7 @@ fn __cm_binding__Fields_copy_all(self) {
                 l97: loop {
                     if __i_11 >= __count_9 {
                         break b96;
-                    };
+                    }
                     __elem_addr_12 = __base_8 + (__i_11 * 1);
                     Array<u8>::push(__result_10, builtin::load_u8(__elem_addr_12));
                     __i_11 = __i_11 + 1;
@@ -1547,7 +1547,7 @@ fn __cm_binding__Fields_copy_all(self) {
             };
             if __count_9 > 0 {
                 drop("mem/realloc"(__base_8, __count_9 * 1, 4, 0));
-            };
+            }
             Array<Tuple<String,Array<u8>>>::push(__result_4, "tuple/[String, Array<u8>]" { 0: __lifted_result_7, 1: __result_10 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr_6 + 0), builtin::load_i32((__elem_addr_6 + 0) + 4), 1, 0));
             __i_5 = __i_5 + 1;
@@ -1556,7 +1556,7 @@ fn __cm_binding__Fields_copy_all(self) {
     };
     if __count_3 > 0 {
         drop("mem/realloc"(__base_2, __count_3 * 16, 4, 0));
-    };
+    }
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __result_4;
 }
@@ -1579,13 +1579,13 @@ fn __cm_binding__Response_new(headers, contents, trailers) {
     __contents_inner0 = 0;
     if ref.test Option<Stream<u8>>::Some(contents) {
         __contents_inner0 = ref.cast Option<Stream<u8>>::Some(contents).payload_0;
-    };
+    }
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Response::new"(headers, __contents_disc, __contents_inner0, trailers, __outptr);
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_7; __lifted_result_8;
+    return __lifted_result_7, __lifted_result_8;
 }
 
 fn __cm_export__handle(request) {
@@ -1602,7 +1602,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
             l103: loop {
                 if (i < len) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
                 continue l103;
@@ -1620,7 +1620,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l106: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l106;
@@ -1642,7 +1642,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -1715,7 +1715,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
     result = "wasi/stream-write"(handle, ptr, len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, len, 1, 0));
 }
 
@@ -1730,7 +1730,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -1739,7 +1739,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -1747,7 +1747,7 @@ fn count_digits_i64(val) {
             l113: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l113;
@@ -1770,7 +1770,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l117: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -1778,7 +1778,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1788,11 +1788,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -1810,7 +1810,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -1829,7 +1829,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -1841,11 +1841,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -1871,7 +1871,7 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
                     self.index = _hfs_index_13;
                     break b124;
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
-                };
+                }
                 byte = builtin::array_get_u8(_licm_repr_12, _hfs_index_13);
                 _hfs_index_13 = _hfs_index_13 + 1;
                 Array<u8>::push(result, byte);
@@ -1889,7 +1889,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -1908,7 +1908,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Array<u8>::push(self, value) {
@@ -1916,7 +1916,7 @@ fn Array<u8>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u8>::grow(self);
-    };
+    }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1943,7 +1943,7 @@ fn Array<u8>::grow(self) {
             l133: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
                 continue l133;
@@ -1958,7 +1958,7 @@ fn Array<Tuple<String,Array<u8>>>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<Tuple<String,Array<u8>>>::grow(self);
-    };
+    }
     builtin::array_set<ref "tuple/[String, Array<u8>]">(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1985,7 +1985,7 @@ fn Array<Tuple<String,Array<u8>>>::grow(self) {
             l137: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref "tuple/[String, Array<u8>]">(new_repr, i, builtin::array_get<ref "tuple/[String, Array<u8>]">(old_repr, i));
                 i = i + 1;
                 continue l137;
@@ -2000,7 +2000,7 @@ fn Array<Array<u8>>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<Array<u8>>::grow(self);
-    };
+    }
     builtin::array_set<ref Array<u8>>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -2027,7 +2027,7 @@ fn Array<Array<u8>>::grow(self) {
             l141: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref Array<u8>>(new_repr, i, builtin::array_get<ref Array<u8>>(old_repr, i));
                 i = i + 1;
                 continue l141;
@@ -2042,7 +2042,7 @@ fn Array<u8>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u8>::grow(self);
-    };
+    }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
@@ -2069,7 +2069,7 @@ fn Array<u8>::grow(self) {
             l145: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
                 continue l145;
@@ -2089,7 +2089,7 @@ fn Formatter::write_char_n(self, c, n) {
             l148: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l148;
@@ -2114,44 +2114,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -2161,10 +2161,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -2172,12 +2172,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 export fn __cm_export__handle as "handle"

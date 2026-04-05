@@ -127,32 +127,32 @@ fn run() with Stdout {
     p7 = Pixel { x: 3, y: 2, color: Color { 0 } };
     if Pixel^Eq::eq(p1, p2) {
         "core:cli/println"(String { repr: array.new_data<u8>("same pixel"), used: 10 });
-    };
+    }
     if Pixel^Eq::eq(p1, p3) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("different color case"), used: 20 });
-    };
+    }
     if Pixel^Eq::eq(p4, p5) {
         "core:cli/println"(String { repr: array.new_data<u8>("same blue payload"), used: 17 });
-    };
+    }
     if Pixel^Eq::eq(p4, p6) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("different blue payload"), used: 22 });
-    };
+    }
     if Pixel^Eq::eq(p1, p7) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("different coords"), used: 16 });
-    };
+    }
     c1 = Container { label: String { repr: array.new_data<u8>("a"), used: 1 }, value: Option<i32>::Some { discriminant: 0, payload_0: 10 } };
     c2 = Container { label: String { repr: array.new_data<u8>("a"), used: 1 }, value: Option<i32>::Some { discriminant: 0, payload_0: 10 } };
     c3 = Container { label: String { repr: array.new_data<u8>("a"), used: 1 }, value: Option<i32> { 1 } };
     c4 = Container { label: String { repr: array.new_data<u8>("b"), used: 1 }, value: Option<i32>::Some { discriminant: 0, payload_0: 10 } };
     if Container^Eq::eq(c1, c2) {
         "core:cli/println"(String { repr: array.new_data<u8>("same container"), used: 14 });
-    };
+    }
     if Container^Eq::eq(c1, c3) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("some != none"), used: 12 });
-    };
+    }
     if Container^Eq::eq(c1, c4) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("different label"), used: 15 });
-    };
+    }
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -177,7 +177,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -204,7 +204,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l10: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l10;
@@ -245,7 +245,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -254,7 +254,7 @@ fn String^Eq::eq(self, other) {
     len_a = self.used;
     if len_a != other.used {
         return 0;
-    };
+    }
     return String^Eq::eq_bytes(self.repr, other.repr, len_a);
 }
 
@@ -266,10 +266,10 @@ fn String^Eq::eq_bytes(a, b, len) {
             l15: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
-                };
+                }
                 i = i + 1;
                 continue l15;
             };
@@ -279,7 +279,7 @@ fn String^Eq::eq_bytes(a, b, len) {
 }
 
 fn Pixel^Eq::eq(self, other) {
-    return if if __inline_i32_Eq__eq_0: block -> bool {
+    return (if (if __inline_i32_Eq__eq_0: block -> bool {
         break __inline_i32_Eq__eq_0: self.x == other.x;
     } -> i32 {
         __inline_i32_Eq__eq_1: block -> bool {
@@ -287,19 +287,19 @@ fn Pixel^Eq::eq(self, other) {
         };
     } else {
         0;
-    } -> i32 {
+    }) -> i32 {
         Color^Eq::eq(self.color, other.color);
     } else {
         0;
-    };
+    });
 }
 
 fn Container^Eq::eq(self, other) {
-    return if String^Eq::eq(self.label, other.label) -> i32 {
+    return (if String^Eq::eq(self.label, other.label) -> i32 {
         Option<i32>^Eq::eq(self.value, other.value);
     } else {
         0;
-    };
+    });
 }
 
 fn Color^Eq::eq(self, other) {
@@ -307,10 +307,10 @@ fn Color^Eq::eq(self, other) {
     let __local_5: i32;
     if self.discriminant == 0 {
         return other.discriminant == 0;
-    };
+    }
     if self.discriminant == 1 {
         return other.discriminant == 1;
-    };
+    }
     if ref.test Color::Blue(self) {
         if ref.test Color::Blue(other) {
             return __inline_i32_Eq__eq_0: block -> bool {
@@ -320,15 +320,15 @@ fn Color^Eq::eq(self, other) {
             };
         } else {
             return 0;
-        };
-    };
+        }
+    }
     return 0;
 }
 
 fn Option<i32>^Eq::eq(self, other) {
     let __local_2: i32;
     let __local_3: i32;
-    return let __match_scrut_0: ref Option<i32>; __match_scrut_0 = self; if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
+    return let __match_scrut_0: ref Option<i32>, __match_scrut_0 = self, (if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
         let __cast_2: ref Option<i32>::Some;
         __cast_2 = ref.cast Option<i32>::Some(__match_scrut_0);
         __local_2 = __cast_2.payload_0;
@@ -343,7 +343,7 @@ fn Option<i32>^Eq::eq(self, other) {
             0;
         } else {
             unreachable;
-        };
+        }
     } else if __match_scrut_0.discriminant == 1 -> bool {
         let __match_scrut_1: ref Option<i32>;
         __match_scrut_1 = other;
@@ -355,10 +355,10 @@ fn Option<i32>^Eq::eq(self, other) {
             1;
         } else {
             unreachable;
-        };
+        }
     } else {
         unreachable;
-    };
+    });
 }
 
 export fn __cm_export__run as "run"

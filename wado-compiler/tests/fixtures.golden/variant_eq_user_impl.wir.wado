@@ -90,16 +90,16 @@ fn run() with Stdout {
     c5 = Color::Blue { discriminant: 2, payload_0: 7 };
     if Color^Eq::eq(c1, c2) {
         "core:cli/println"(String { repr: array.new_data<u8>("red == red"), used: 10 });
-    };
+    }
     if Color^Eq::eq(c1, c3) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("red != blue"), used: 11 });
-    };
+    }
     if Color^Eq::eq(c3, c4) {
         "core:cli/println"(String { repr: array.new_data<u8>("blue(42) == blue(42)"), used: 20 });
-    };
+    }
     if Color^Eq::eq(c3, c5) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("blue(42) != blue(7)"), used: 19 });
-    };
+    }
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -124,7 +124,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -151,7 +151,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l6: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l6;
@@ -196,7 +196,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -214,17 +214,17 @@ fn Color^Eq::eq(self, other) {
         __pattern_temp_1 = value_copy Color(other);
         if __pattern_temp_1.discriminant == 0 {
             return 1;
-        };
+        }
         return 0;
-    };
+    }
     __pattern_temp_2 = value_copy Color(self);
     if __pattern_temp_2.discriminant == 1 {
         __pattern_temp_3 = value_copy Color(other);
         if __pattern_temp_3.discriminant == 1 {
             return 1;
-        };
+        }
         return 0;
-    };
+    }
     __pattern_temp_4 = self;
     if ref.test Color::Blue(__pattern_temp_4) {
         __sroa_b1_value = ref.cast Color::Blue(__pattern_temp_4).payload_0;
@@ -232,9 +232,9 @@ fn Color^Eq::eq(self, other) {
         if ref.test Color::Blue(__pattern_temp_5) {
             __sroa_b2_value = ref.cast Color::Blue(__pattern_temp_5).payload_0;
             return __sroa_b1_value == __sroa_b2_value;
-        };
+        }
         return 0;
-    };
+    }
     "core:internal/unreachable"();
     unreachable;
 }

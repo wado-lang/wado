@@ -94,21 +94,21 @@ fn newtype_wasi_chained() with Stdout {
     t1_u64 = t1;
     ts_u64 = ts;
     evt_u64 = evt;
-    if if t1_u64 == ts_u64 -> i32 {
+    if (if t1_u64 == ts_u64 -> i32 {
         ts_u64 == evt_u64;
     } else {
         0;
-    } {
+    }) {
         "core:cli/println"(String { repr: array.new_data<u8>("all casts produce same u64 value"), used: 32 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("FAILED: values differ"), used: 21 });
-    };
+    }
     t2 = __cm_binding__MonotonicClock_now();
     ts2 = t2;
     diff = ts2 - ts;
     if diff >=u 0_i64 {
         "core:cli/println"(String { repr: array.new_data<u8>("timestamp arithmetic works"), used: 26 });
-    };
+    }
     "core:cli/println"(String { repr: array.new_data<u8>("chained newtype tests passed"), used: 28 });
 }
 
@@ -121,15 +121,15 @@ fn newtype_wasi_duration() with Stdout {
         "core:cli/println"(String { repr: array.new_data<u8>("resolution is positive"), used: 22 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("resolution is zero or negative"), used: 30 });
-    };
+    }
     double_res = res * 2_i64;
     if double_res >=u res {
         "core:cli/println"(String { repr: array.new_data<u8>("double is >= original"), used: 21 });
-    };
+    }
     as_u64 = res;
     if as_u64 >u 0_i64 {
         "core:cli/println"(String { repr: array.new_data<u8>("cast to u64 works"), used: 17 });
-    };
+    }
     "core:cli/println"(String { repr: array.new_data<u8>("duration tests passed"), used: 21 });
 }
 
@@ -140,18 +140,18 @@ fn newtype_wasi_multiple() with Stdout {
     let elapsed: u64;
     start = __cm_binding__MonotonicClock_now();
     res = __cm_binding__MonotonicClock_get_resolution();
-    if if start >u 0_i64 -> i32 {
+    if (if start >u 0_i64 -> i32 {
         res >u 0_i64;
     } else {
         0;
-    } {
+    }) {
         "core:cli/println"(String { repr: array.new_data<u8>("both newtypes have positive values"), used: 34 });
-    };
+    }
     end = __cm_binding__MonotonicClock_now();
     elapsed = end - start;
     if elapsed >=u 0_i64 {
         "core:cli/println"(String { repr: array.new_data<u8>("elapsed time is non-negative"), used: 28 });
-    };
+    }
     "core:cli/println"(String { repr: array.new_data<u8>("multiple wasi newtype tests passed"), used: 34 });
 }
 
@@ -193,7 +193,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -220,7 +220,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l11: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l11;
@@ -261,7 +261,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 

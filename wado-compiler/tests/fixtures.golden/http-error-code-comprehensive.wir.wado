@@ -382,7 +382,7 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn error_tag(e) {
-    return let __match_scrut_0: ref "wasi:http/types.wado/ErrorCode"; __match_scrut_0 = e; if __match_scrut_0.discriminant == 0 -> ref String {
+    return let __match_scrut_0: ref "wasi:http/types.wado/ErrorCode", __match_scrut_0 = e, (if __match_scrut_0.discriminant == 0 -> ref String {
         String { repr: array.new_data<u8>("dns-timeout"), used: 11 };
     } else if ref.test "wasi:http/types.wado/ErrorCode::DnsError"(__match_scrut_0) -> ref String {
         let __cast_15: ref "wasi:http/types.wado/ErrorCode::DnsError";
@@ -492,7 +492,7 @@ fn error_tag(e) {
         String { repr: array.new_data<u8>("internal-error"), used: 14 };
     } else {
         unreachable;
-    };
+    });
 }
 
 fn handle() {
@@ -927,7 +927,7 @@ condition: error_tag(&ErrorCode::DnsTimeout) == \"dns-timeout\"
             break __tmpl: __local_130;
         });
         unreachable;
-    };
+    }
     __v0_3 = error_tag("wasi:http/types.wado/ErrorCode" { 2 });
     __cond_4 = String^Eq::eq(__v0_3, String { repr: array.new_data<u8>("destination-not-found"), used: 21 });
     if __cond_4 == 0 {
@@ -959,7 +959,7 @@ condition: error_tag(&ErrorCode::DestinationNotFound) == \"destination-not-found
             break __tmpl: __local_132;
         });
         unreachable;
-    };
+    }
     __v0_5 = error_tag("wasi:http/types.wado/ErrorCode" { 3 });
     __cond_6 = String^Eq::eq(__v0_5, String { repr: array.new_data<u8>("destination-unavailable"), used: 23 });
     if __cond_6 == 0 {
@@ -991,7 +991,7 @@ condition: error_tag(&ErrorCode::DestinationUnavailable) == \"destination-unavai
             break __tmpl: __local_134;
         });
         unreachable;
-    };
+    }
     __v0_7 = error_tag("wasi:http/types.wado/ErrorCode" { 4 });
     __cond_8 = String^Eq::eq(__v0_7, String { repr: array.new_data<u8>("destination-ip-prohibited"), used: 25 });
     if __cond_8 == 0 {
@@ -1023,7 +1023,7 @@ condition: error_tag(&ErrorCode::DestinationIpProhibited) == \"destination-ip-pr
             break __tmpl: __local_136;
         });
         unreachable;
-    };
+    }
     __v0_9 = error_tag("wasi:http/types.wado/ErrorCode" { 5 });
     __cond_10 = String^Eq::eq(__v0_9, String { repr: array.new_data<u8>("destination-ip-unroutable"), used: 25 });
     if __cond_10 == 0 {
@@ -1055,7 +1055,7 @@ condition: error_tag(&ErrorCode::DestinationIpUnroutable) == \"destination-ip-un
             break __tmpl: __local_138;
         });
         unreachable;
-    };
+    }
     __v0_11 = error_tag("wasi:http/types.wado/ErrorCode" { 6 });
     __cond_12 = String^Eq::eq(__v0_11, String { repr: array.new_data<u8>("connection-refused"), used: 18 });
     if __cond_12 == 0 {
@@ -1087,7 +1087,7 @@ condition: error_tag(&ErrorCode::ConnectionRefused) == \"connection-refused\"
             break __tmpl: __local_140;
         });
         unreachable;
-    };
+    }
     __v0_13 = error_tag("wasi:http/types.wado/ErrorCode" { 7 });
     __cond_14 = String^Eq::eq(__v0_13, String { repr: array.new_data<u8>("connection-terminated"), used: 21 });
     if __cond_14 == 0 {
@@ -1119,7 +1119,7 @@ condition: error_tag(&ErrorCode::ConnectionTerminated) == \"connection-terminate
             break __tmpl: __local_142;
         });
         unreachable;
-    };
+    }
     __v0_15 = error_tag("wasi:http/types.wado/ErrorCode" { 8 });
     __cond_16 = String^Eq::eq(__v0_15, String { repr: array.new_data<u8>("connection-timeout"), used: 18 });
     if __cond_16 == 0 {
@@ -1151,7 +1151,7 @@ condition: error_tag(&ErrorCode::ConnectionTimeout) == \"connection-timeout\"
             break __tmpl: __local_144;
         });
         unreachable;
-    };
+    }
     __v0_17 = error_tag("wasi:http/types.wado/ErrorCode" { 9 });
     __cond_18 = String^Eq::eq(__v0_17, String { repr: array.new_data<u8>("connection-read-timeout"), used: 23 });
     if __cond_18 == 0 {
@@ -1183,7 +1183,7 @@ condition: error_tag(&ErrorCode::ConnectionReadTimeout) == \"connection-read-tim
             break __tmpl: __local_146;
         });
         unreachable;
-    };
+    }
     __v0_19 = error_tag("wasi:http/types.wado/ErrorCode" { 10 });
     __cond_20 = String^Eq::eq(__v0_19, String { repr: array.new_data<u8>("connection-write-timeout"), used: 24 });
     if __cond_20 == 0 {
@@ -1215,7 +1215,7 @@ condition: error_tag(&ErrorCode::ConnectionWriteTimeout) == \"connection-write-t
             break __tmpl: __local_148;
         });
         unreachable;
-    };
+    }
     __v0_21 = error_tag("wasi:http/types.wado/ErrorCode" { 11 });
     __cond_22 = String^Eq::eq(__v0_21, String { repr: array.new_data<u8>("connection-limit-reached"), used: 24 });
     if __cond_22 == 0 {
@@ -1247,7 +1247,7 @@ condition: error_tag(&ErrorCode::ConnectionLimitReached) == \"connection-limit-r
             break __tmpl: __local_150;
         });
         unreachable;
-    };
+    }
     __v0_23 = error_tag("wasi:http/types.wado/ErrorCode" { 12 });
     __cond_24 = String^Eq::eq(__v0_23, String { repr: array.new_data<u8>("tls-protocol-error"), used: 18 });
     if __cond_24 == 0 {
@@ -1279,7 +1279,7 @@ condition: error_tag(&ErrorCode::TlsProtocolError) == \"tls-protocol-error\"
             break __tmpl: __local_152;
         });
         unreachable;
-    };
+    }
     __v0_25 = error_tag("wasi:http/types.wado/ErrorCode" { 13 });
     __cond_26 = String^Eq::eq(__v0_25, String { repr: array.new_data<u8>("tls-certificate-error"), used: 21 });
     if __cond_26 == 0 {
@@ -1311,7 +1311,7 @@ condition: error_tag(&ErrorCode::TlsCertificateError) == \"tls-certificate-error
             break __tmpl: __local_154;
         });
         unreachable;
-    };
+    }
     __v0_27 = error_tag("wasi:http/types.wado/ErrorCode" { 15 });
     __cond_28 = String^Eq::eq(__v0_27, String { repr: array.new_data<u8>("http-request-denied"), used: 19 });
     if __cond_28 == 0 {
@@ -1343,7 +1343,7 @@ condition: error_tag(&ErrorCode::HttpRequestDenied) == \"http-request-denied\"
             break __tmpl: __local_156;
         });
         unreachable;
-    };
+    }
     __v0_29 = error_tag("wasi:http/types.wado/ErrorCode" { 16 });
     __cond_30 = String^Eq::eq(__v0_29, String { repr: array.new_data<u8>("http-request-length-required"), used: 28 });
     if __cond_30 == 0 {
@@ -1375,7 +1375,7 @@ condition: error_tag(&ErrorCode::HttpRequestLengthRequired) == \"http-request-le
             break __tmpl: __local_158;
         });
         unreachable;
-    };
+    }
     __v0_31 = error_tag("wasi:http/types.wado/ErrorCode" { 18 });
     __cond_32 = String^Eq::eq(__v0_31, String { repr: array.new_data<u8>("http-request-method-invalid"), used: 27 });
     if __cond_32 == 0 {
@@ -1407,7 +1407,7 @@ condition: error_tag(&ErrorCode::HttpRequestMethodInvalid) == \"http-request-met
             break __tmpl: __local_160;
         });
         unreachable;
-    };
+    }
     __v0_33 = error_tag("wasi:http/types.wado/ErrorCode" { 19 });
     __cond_34 = String^Eq::eq(__v0_33, String { repr: array.new_data<u8>("http-request-uri-invalid"), used: 24 });
     if __cond_34 == 0 {
@@ -1439,7 +1439,7 @@ condition: error_tag(&ErrorCode::HttpRequestUriInvalid) == \"http-request-uri-in
             break __tmpl: __local_162;
         });
         unreachable;
-    };
+    }
     __v0_35 = error_tag("wasi:http/types.wado/ErrorCode" { 20 });
     __cond_36 = String^Eq::eq(__v0_35, String { repr: array.new_data<u8>("http-request-uri-too-long"), used: 25 });
     if __cond_36 == 0 {
@@ -1471,7 +1471,7 @@ condition: error_tag(&ErrorCode::HttpRequestUriTooLong) == \"http-request-uri-to
             break __tmpl: __local_164;
         });
         unreachable;
-    };
+    }
     __v0_37 = error_tag("wasi:http/types.wado/ErrorCode" { 25 });
     __cond_38 = String^Eq::eq(__v0_37, String { repr: array.new_data<u8>("http-response-incomplete"), used: 24 });
     if __cond_38 == 0 {
@@ -1503,7 +1503,7 @@ condition: error_tag(&ErrorCode::HttpResponseIncomplete) == \"http-response-inco
             break __tmpl: __local_166;
         });
         unreachable;
-    };
+    }
     __v0_39 = error_tag("wasi:http/types.wado/ErrorCode" { 33 });
     __cond_40 = String^Eq::eq(__v0_39, String { repr: array.new_data<u8>("http-response-timeout"), used: 21 });
     if __cond_40 == 0 {
@@ -1535,7 +1535,7 @@ condition: error_tag(&ErrorCode::HttpResponseTimeout) == \"http-response-timeout
             break __tmpl: __local_168;
         });
         unreachable;
-    };
+    }
     __v0_41 = error_tag("wasi:http/types.wado/ErrorCode" { 34 });
     __cond_42 = String^Eq::eq(__v0_41, String { repr: array.new_data<u8>("http-upgrade-failed"), used: 19 });
     if __cond_42 == 0 {
@@ -1567,7 +1567,7 @@ condition: error_tag(&ErrorCode::HttpUpgradeFailed) == \"http-upgrade-failed\"
             break __tmpl: __local_170;
         });
         unreachable;
-    };
+    }
     __v0_43 = error_tag("wasi:http/types.wado/ErrorCode" { 35 });
     __cond_44 = String^Eq::eq(__v0_43, String { repr: array.new_data<u8>("http-protocol-error"), used: 19 });
     if __cond_44 == 0 {
@@ -1599,7 +1599,7 @@ condition: error_tag(&ErrorCode::HttpProtocolError) == \"http-protocol-error\"
             break __tmpl: __local_172;
         });
         unreachable;
-    };
+    }
     __v0_45 = error_tag("wasi:http/types.wado/ErrorCode" { 36 });
     __cond_46 = String^Eq::eq(__v0_45, String { repr: array.new_data<u8>("loop-detected"), used: 13 });
     if __cond_46 == 0 {
@@ -1631,7 +1631,7 @@ condition: error_tag(&ErrorCode::LoopDetected) == \"loop-detected\"
             break __tmpl: __local_174;
         });
         unreachable;
-    };
+    }
     __v0_47 = error_tag("wasi:http/types.wado/ErrorCode" { 37 });
     __cond_48 = String^Eq::eq(__v0_47, String { repr: array.new_data<u8>("configuration-error"), used: 19 });
     if __cond_48 == 0 {
@@ -1663,17 +1663,17 @@ condition: error_tag(&ErrorCode::ConfigurationError) == \"configuration-error\"
             break __tmpl: __local_176;
         });
         unreachable;
-    };
+    }
     dns_payload = "wasi:http/types.wado/DnsErrorPayload" { rcode: String { repr: array.new_data<u8>("NXDOMAIN"), used: 8 }, info_code: Option<u16>::Some { discriminant: 0, payload_0: 3 } };
     let __match_scrut_0: ref null String;
     __match_scrut_0 = dns_payload.rcode;
-    __cond_50 = if ref.is_null(__match_scrut_0) == 0 -> bool {
+    __cond_50 = (if ref.is_null(__match_scrut_0) == 0 -> bool {
         let __cast_1: ref null String;
         __cast_1 = ref.as_non_null(__match_scrut_0);
         1;
     } else {
         0;
-    };
+    });
     if __cond_50 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_178 = String { repr: builtin::array_new<u8>(123), used: 0 };
@@ -1698,16 +1698,16 @@ condition: dns_payload.rcode matches { Some(_) }
             break __tmpl: __local_178;
         });
         unreachable;
-    };
+    }
     let __match_scrut_1: ref Option<u16>;
     __match_scrut_1 = dns_payload.info_code;
-    __cond_51 = if ref.test Option<u16>::Some(__match_scrut_1) -> bool {
+    __cond_51 = (if ref.test Option<u16>::Some(__match_scrut_1) -> bool {
         let __cast_2: ref Option<u16>::Some;
         __cast_2 = ref.cast Option<u16>::Some(__match_scrut_1);
         1;
     } else {
         0;
-    };
+    });
     if __cond_51 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_180 = String { repr: builtin::array_new<u8>(127), used: 0 };
@@ -1732,7 +1732,7 @@ condition: dns_payload.info_code matches { Some(_) }
             break __tmpl: __local_180;
         });
         unreachable;
-    };
+    }
     dns_err = "core:internal/Box<ErrorCode>" { value: "wasi:http/types.wado/ErrorCode::DnsError" { discriminant: 1, payload_0: dns_payload } };
     __v0_53 = error_tag(dns_err.value);
     __cond_54 = String^Eq::eq(__v0_53, String { repr: array.new_data<u8>("dns-error"), used: 9 });
@@ -1765,7 +1765,7 @@ condition: error_tag(&dns_err) == \"dns-error\"
             break __tmpl: __local_182;
         });
         unreachable;
-    };
+    }
     __pattern_temp_0 = dns_err.value;
     if ref.test "wasi:http/types.wado/ErrorCode::DnsError"(__pattern_temp_0) {
         p_55 = ref.cast "wasi:http/types.wado/ErrorCode::DnsError"(__pattern_temp_0).payload_0;
@@ -1809,8 +1809,8 @@ condition: rcode == \"NXDOMAIN\"
                     break __tmpl: __local_184;
                 });
                 unreachable;
-            };
-        };
+            }
+        }
         __pattern_temp_2 = p_55.info_code;
         if ref.test Option<u16>::Some(__pattern_temp_2) {
             code = ref.cast Option<u16>::Some(__pattern_temp_2).payload_0;
@@ -1850,9 +1850,9 @@ condition: code == 3
                     break __tmpl: __local_186;
                 });
                 unreachable;
-            };
-        };
-    };
+            }
+        }
+    }
     dns_empty = "wasi:http/types.wado/DnsErrorPayload" { rcode: ref.null none, info_code: Option<u16> { 1 } };
     __v0_64 = error_tag("wasi:http/types.wado/ErrorCode::DnsError" { discriminant: 1, payload_0: dns_empty });
     __cond_65 = String^Eq::eq(__v0_64, String { repr: array.new_data<u8>("dns-error"), used: 9 });
@@ -1885,7 +1885,7 @@ condition: error_tag(&dns_err2) == \"dns-error\"
             break __tmpl: __local_188;
         });
         unreachable;
-    };
+    }
     tls_payload = "wasi:http/types.wado/TlsAlertReceivedPayload" { alert_id: Option<u8>::Some { discriminant: 0, payload_0: 48 }, alert_message: String { repr: array.new_data<u8>("handshake failure"), used: 17 } };
     tls_err = "core:internal/Box<ErrorCode>" { value: "wasi:http/types.wado/ErrorCode::TlsAlertReceived" { discriminant: 14, payload_0: tls_payload } };
     __v0_68 = error_tag(tls_err.value);
@@ -1919,7 +1919,7 @@ condition: error_tag(&tls_err) == \"tls-alert-received\"
             break __tmpl: __local_190;
         });
         unreachable;
-    };
+    }
     __pattern_temp_3 = tls_err.value;
     if ref.test "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__pattern_temp_3) {
         p_70 = ref.cast "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__pattern_temp_3).payload_0;
@@ -1960,8 +1960,8 @@ condition: id == 48
                     break __tmpl: __local_192;
                 });
                 unreachable;
-            };
-        };
+            }
+        }
         __pattern_temp_5 = p_70.alert_message;
         if ref.is_null(__pattern_temp_5) == 0 {
             msg = ref.as_non_null(__pattern_temp_5);
@@ -2000,9 +2000,9 @@ condition: msg == \"handshake failure\"
                     break __tmpl: __local_194;
                 });
                 unreachable;
-            };
-        };
-    };
+            }
+        }
+    }
     field_payload = "wasi:http/types.wado/FieldSizePayload" { field_name: String { repr: array.new_data<u8>("content-length"), used: 14 }, field_size: Option<u32>::Some { discriminant: 0, payload_0: 1048576 } };
     __v0_79 = error_tag("wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize" { discriminant: 22, payload_0: field_payload });
     __cond_80 = String^Eq::eq(__v0_79, String { repr: array.new_data<u8>("http-request-header-size"), used: 24 });
@@ -2035,7 +2035,7 @@ condition: error_tag(&header_err) == \"http-request-header-size\"
             break __tmpl: __local_196;
         });
         unreachable;
-    };
+    }
     __v0_82 = error_tag("wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize" { discriminant: 24, payload_0: "wasi:http/types.wado/FieldSizePayload" { field_name: String { repr: array.new_data<u8>("x-large"), used: 7 }, field_size: Option<u32>::Some { discriminant: 0, payload_0: 999 } } });
     __cond_83 = String^Eq::eq(__v0_82, String { repr: array.new_data<u8>("http-request-trailer-size"), used: 25 });
     if __cond_83 == 0 {
@@ -2067,7 +2067,7 @@ condition: error_tag(&trailer_err) == \"http-request-trailer-size\"
             break __tmpl: __local_198;
         });
         unreachable;
-    };
+    }
     __v0_85 = error_tag("wasi:http/types.wado/ErrorCode::HttpRequestBodySize" { discriminant: 17, payload_0: Option<u64>::Some { discriminant: 0, payload_0: 1024_i64 } });
     __cond_86 = String^Eq::eq(__v0_85, String { repr: array.new_data<u8>("http-request-body-size"), used: 22 });
     if __cond_86 == 0 {
@@ -2099,7 +2099,7 @@ condition: error_tag(&body_err) == \"http-request-body-size\"
             break __tmpl: __local_200;
         });
         unreachable;
-    };
+    }
     __v0_88 = error_tag("wasi:http/types.wado/ErrorCode::HttpRequestBodySize" { discriminant: 17, payload_0: Option<u64> { 1 } });
     __cond_89 = String^Eq::eq(__v0_88, String { repr: array.new_data<u8>("http-request-body-size"), used: 22 });
     if __cond_89 == 0 {
@@ -2131,7 +2131,7 @@ condition: error_tag(&body_err_none) == \"http-request-body-size\"
             break __tmpl: __local_202;
         });
         unreachable;
-    };
+    }
     __v0_91 = error_tag("wasi:http/types.wado/ErrorCode::HttpResponseBodySize" { discriminant: 28, payload_0: Option<u64>::Some { discriminant: 0, payload_0: 2048_i64 } });
     __cond_92 = String^Eq::eq(__v0_91, String { repr: array.new_data<u8>("http-response-body-size"), used: 23 });
     if __cond_92 == 0 {
@@ -2163,7 +2163,7 @@ condition: error_tag(&resp_body_err) == \"http-response-body-size\"
             break __tmpl: __local_204;
         });
         unreachable;
-    };
+    }
     __v0_94 = error_tag("wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding" { discriminant: 31, payload_0: String { repr: array.new_data<u8>("chunked"), used: 7 } });
     __cond_95 = String^Eq::eq(__v0_94, String { repr: array.new_data<u8>("http-response-transfer-coding"), used: 29 });
     if __cond_95 == 0 {
@@ -2195,7 +2195,7 @@ condition: error_tag(&transfer_err) == \"http-response-transfer-coding\"
             break __tmpl: __local_206;
         });
         unreachable;
-    };
+    }
     __v0_97 = error_tag("wasi:http/types.wado/ErrorCode::HttpResponseContentCoding" { discriminant: 32, payload_0: String { repr: array.new_data<u8>("gzip"), used: 4 } });
     __cond_98 = String^Eq::eq(__v0_97, String { repr: array.new_data<u8>("http-response-content-coding"), used: 28 });
     if __cond_98 == 0 {
@@ -2227,7 +2227,7 @@ condition: error_tag(&content_err) == \"http-response-content-coding\"
             break __tmpl: __local_208;
         });
         unreachable;
-    };
+    }
     __v0_100 = error_tag("wasi:http/types.wado/ErrorCode::InternalError" { discriminant: 38, payload_0: String { repr: array.new_data<u8>("test"), used: 4 } });
     __cond_101 = String^Eq::eq(__v0_100, String { repr: array.new_data<u8>("internal-error"), used: 14 });
     if __cond_101 == 0 {
@@ -2259,7 +2259,7 @@ condition: error_tag(&internal) == \"internal-error\"
             break __tmpl: __local_210;
         });
         unreachable;
-    };
+    }
     __v0_103 = error_tag("wasi:http/types.wado/ErrorCode::InternalError" { discriminant: 38, payload_0: ref.null none });
     __cond_104 = String^Eq::eq(__v0_103, String { repr: array.new_data<u8>("internal-error"), used: 14 });
     if __cond_104 == 0 {
@@ -2291,7 +2291,7 @@ condition: error_tag(&internal_none) == \"internal-error\"
             break __tmpl: __local_212;
         });
         unreachable;
-    };
+    }
     he1 = "wasi:http/types.wado/HeaderError" { 0 };
     he2 = "wasi:http/types.wado/HeaderError" { 1 };
     he3 = "wasi:http/types.wado/HeaderError" { 2 };
@@ -2300,11 +2300,11 @@ condition: error_tag(&internal_none) == \"internal-error\"
     he6 = "wasi:http/types.wado/HeaderError::Other" { discriminant: 4, payload_0: ref.null none };
     let __match_scrut_2: ref "wasi:http/types.wado/HeaderError";
     __match_scrut_2 = he1;
-    __cond_111 = if __match_scrut_2.discriminant == 0 -> bool {
+    __cond_111 = (if __match_scrut_2.discriminant == 0 -> bool {
         1;
     } else {
         0;
-    };
+    });
     if __cond_111 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_214 = String { repr: builtin::array_new<u8>(115), used: 0 };
@@ -2329,14 +2329,14 @@ condition: he1 matches { InvalidSyntax }
             break __tmpl: __local_214;
         });
         unreachable;
-    };
+    }
     let __match_scrut_3: ref "wasi:http/types.wado/HeaderError";
     __match_scrut_3 = he2;
-    __cond_112 = if __match_scrut_3.discriminant == 1 -> bool {
+    __cond_112 = (if __match_scrut_3.discriminant == 1 -> bool {
         1;
     } else {
         0;
-    };
+    });
     if __cond_112 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_216 = String { repr: builtin::array_new<u8>(111), used: 0 };
@@ -2361,14 +2361,14 @@ condition: he2 matches { Forbidden }
             break __tmpl: __local_216;
         });
         unreachable;
-    };
+    }
     let __match_scrut_4: ref "wasi:http/types.wado/HeaderError";
     __match_scrut_4 = he3;
-    __cond_113 = if __match_scrut_4.discriminant == 2 -> bool {
+    __cond_113 = (if __match_scrut_4.discriminant == 2 -> bool {
         1;
     } else {
         0;
-    };
+    });
     if __cond_113 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_218 = String { repr: builtin::array_new<u8>(111), used: 0 };
@@ -2393,14 +2393,14 @@ condition: he3 matches { Immutable }
             break __tmpl: __local_218;
         });
         unreachable;
-    };
+    }
     let __match_scrut_5: ref "wasi:http/types.wado/HeaderError";
     __match_scrut_5 = he4;
-    __cond_114 = if __match_scrut_5.discriminant == 3 -> bool {
+    __cond_114 = (if __match_scrut_5.discriminant == 3 -> bool {
         1;
     } else {
         0;
-    };
+    });
     if __cond_114 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_220 = String { repr: builtin::array_new<u8>(114), used: 0 };
@@ -2425,16 +2425,16 @@ condition: he4 matches { SizeExceeded }
             break __tmpl: __local_220;
         });
         unreachable;
-    };
+    }
     let __match_scrut_6: ref "wasi:http/types.wado/HeaderError";
     __match_scrut_6 = he5;
-    __cond_115 = if ref.test "wasi:http/types.wado/HeaderError::Other"(__match_scrut_6) -> bool {
+    __cond_115 = (if ref.test "wasi:http/types.wado/HeaderError::Other"(__match_scrut_6) -> bool {
         let __cast_3: ref "wasi:http/types.wado/HeaderError::Other";
         __cast_3 = ref.cast "wasi:http/types.wado/HeaderError::Other"(__match_scrut_6);
         1;
     } else {
         0;
-    };
+    });
     if __cond_115 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_222 = String { repr: builtin::array_new<u8>(110), used: 0 };
@@ -2459,16 +2459,16 @@ condition: he5 matches { Other(_) }
             break __tmpl: __local_222;
         });
         unreachable;
-    };
+    }
     let __match_scrut_7: ref "wasi:http/types.wado/HeaderError";
     __match_scrut_7 = he6;
-    __cond_116 = if ref.test "wasi:http/types.wado/HeaderError::Other"(__match_scrut_7) -> bool {
+    __cond_116 = (if ref.test "wasi:http/types.wado/HeaderError::Other"(__match_scrut_7) -> bool {
         let __cast_4: ref "wasi:http/types.wado/HeaderError::Other";
         __cast_4 = ref.cast "wasi:http/types.wado/HeaderError::Other"(__match_scrut_7);
         1;
     } else {
         0;
-    };
+    });
     if __cond_116 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_224 = String { repr: builtin::array_new<u8>(110), used: 0 };
@@ -2493,17 +2493,17 @@ condition: he6 matches { Other(_) }
             break __tmpl: __local_224;
         });
         unreachable;
-    };
+    }
     roe1 = "wasi:http/types.wado/RequestOptionsError" { 0 };
     roe2 = "wasi:http/types.wado/RequestOptionsError" { 1 };
     roe3 = "wasi:http/types.wado/RequestOptionsError::Other" { discriminant: 2, payload_0: String { repr: array.new_data<u8>("custom"), used: 6 } };
     let __match_scrut_8: ref "wasi:http/types.wado/RequestOptionsError";
     __match_scrut_8 = roe1;
-    __cond_120 = if __match_scrut_8.discriminant == 0 -> bool {
+    __cond_120 = (if __match_scrut_8.discriminant == 0 -> bool {
         1;
     } else {
         0;
-    };
+    });
     if __cond_120 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_226 = String { repr: builtin::array_new<u8>(115), used: 0 };
@@ -2528,14 +2528,14 @@ condition: roe1 matches { NotSupported }
             break __tmpl: __local_226;
         });
         unreachable;
-    };
+    }
     let __match_scrut_9: ref "wasi:http/types.wado/RequestOptionsError";
     __match_scrut_9 = roe2;
-    __cond_121 = if __match_scrut_9.discriminant == 1 -> bool {
+    __cond_121 = (if __match_scrut_9.discriminant == 1 -> bool {
         1;
     } else {
         0;
-    };
+    });
     if __cond_121 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_228 = String { repr: builtin::array_new<u8>(112), used: 0 };
@@ -2560,16 +2560,16 @@ condition: roe2 matches { Immutable }
             break __tmpl: __local_228;
         });
         unreachable;
-    };
+    }
     let __match_scrut_10: ref "wasi:http/types.wado/RequestOptionsError";
     __match_scrut_10 = roe3;
-    __cond_122 = if ref.test "wasi:http/types.wado/RequestOptionsError::Other"(__match_scrut_10) -> bool {
+    __cond_122 = (if ref.test "wasi:http/types.wado/RequestOptionsError::Other"(__match_scrut_10) -> bool {
         let __cast_5: ref "wasi:http/types.wado/RequestOptionsError::Other";
         __cast_5 = ref.cast "wasi:http/types.wado/RequestOptionsError::Other"(__match_scrut_10);
         1;
     } else {
         0;
-    };
+    });
     if __cond_122 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_230 = String { repr: builtin::array_new<u8>(111), used: 0 };
@@ -2594,7 +2594,7 @@ condition: roe3 matches { Other(_) }
             break __tmpl: __local_230;
         });
         unreachable;
-    };
+    }
     let __pair_temp_6: i64;
     __pair_temp_6 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_6);
@@ -2635,20 +2635,20 @@ condition: roe3 matches { Other(_) }
                 __len_252 = builtin::i32_wrap_i64(__packed_250 >> 32_i64);
                 __opt_inner_0_248 = __ptr_251;
                 __opt_inner_1_249 = __len_252;
-            };
+            }
             __opt_val_253 = __case_payload_244.info_code;
             __opt_disc_254 = ref.test Option<u16>::Some(__opt_val_253);
             __opt_inner_0_255 = 0;
             if __opt_disc_254 != 0 {
                 __flat_256 = ref.cast Option<u16>::Some(__opt_val_253).payload_0;
                 __opt_inner_0_255 = __flat_256;
-            };
+            }
             __tv_2 = __opt_disc_247;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_248);
             __tv_4 = __opt_inner_1_249;
             __tv_5 = __opt_disc_254;
             __tv_6 = __opt_inner_0_255;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val) {
             __case_payload_257 = ref.cast "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val).payload_0;
             __opt_val_259 = __case_payload_257.alert_id;
@@ -2657,7 +2657,7 @@ condition: roe3 matches { Other(_) }
             if __opt_disc_260 != 0 {
                 __flat_262 = ref.cast Option<u8>::Some(__opt_val_259).payload_0;
                 __opt_inner_0_261 = __flat_262;
-            };
+            }
             __opt_val_263 = __case_payload_257.alert_message;
             __opt_disc_264 = ref.is_null(__opt_val_263) == 0;
             __opt_inner_0_265 = 0;
@@ -2668,13 +2668,13 @@ condition: roe3 matches { Other(_) }
                 __len_269 = builtin::i32_wrap_i64(__packed_267 >> 32_i64);
                 __opt_inner_0_265 = __ptr_268;
                 __opt_inner_1_266 = __len_269;
-            };
+            }
             __tv_2 = __opt_disc_260;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_261);
             __tv_4 = __opt_disc_264;
             __tv_5 = __opt_inner_0_265;
             __tv_6 = __opt_inner_1_266;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val) {
             __case_payload_270 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val).payload_0;
             __opt_disc_272 = ref.test Option<u64>::Some(__case_payload_270);
@@ -2682,10 +2682,10 @@ condition: roe3 matches { Other(_) }
             if __opt_disc_272 != 0 {
                 __flat_274 = ref.cast Option<u64>::Some(__case_payload_270).payload_0;
                 __opt_inner_0_273 = __flat_274;
-            };
+            }
             __tv_2 = __opt_disc_272;
             __tv_3 = __opt_inner_0_273;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val) {
             __case_payload_275 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_277 = ref.test Option<u32>::Some(__case_payload_275);
@@ -2693,10 +2693,10 @@ condition: roe3 matches { Other(_) }
             if __opt_disc_277 != 0 {
                 __flat_279 = ref.cast Option<u32>::Some(__case_payload_275).payload_0;
                 __opt_inner_0_278 = __flat_279;
-            };
+            }
             __tv_2 = __opt_disc_277;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_278);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize"(__err_val) {
             __case_payload_280 = value_copy Option<FieldSizePayload>(ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize"(__err_val).payload_0);
             __opt_disc_282 = ref.is_null(__case_payload_280) == 0;
@@ -2717,27 +2717,27 @@ condition: roe3 matches { Other(_) }
                     __len_295 = builtin::i32_wrap_i64(__packed_293 >> 32_i64);
                     __opt_inner_0_291 = __ptr_294;
                     __opt_inner_1_292 = __len_295;
-                };
+                }
                 __opt_val_296 = __struct_val.field_size;
                 __opt_disc_297 = ref.test Option<u32>::Some(__opt_val_296);
                 __opt_inner_0_298 = 0;
                 if __opt_disc_297 != 0 {
                     __flat_299 = ref.cast Option<u32>::Some(__opt_val_296).payload_0;
                     __opt_inner_0_298 = __flat_299;
-                };
+                }
                 __opt_inner_0_283 = __opt_disc_290;
                 __opt_inner_1_284 = __opt_inner_0_291;
                 __opt_inner_2 = __opt_inner_1_292;
                 __opt_inner_3 = __opt_disc_297;
                 __opt_inner_4 = __opt_inner_0_298;
-            };
+            }
             __tv_2 = __opt_disc_282;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_283);
             __tv_4 = __opt_inner_1_284;
             __tv_5 = __opt_inner_2;
             __tv_6 = __opt_inner_3;
             __tv_7 = __opt_inner_4;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val) {
             __case_payload_300 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_302 = ref.test Option<u32>::Some(__case_payload_300);
@@ -2745,10 +2745,10 @@ condition: roe3 matches { Other(_) }
             if __opt_disc_302 != 0 {
                 __flat_304 = ref.cast Option<u32>::Some(__case_payload_300).payload_0;
                 __opt_inner_0_303 = __flat_304;
-            };
+            }
             __tv_2 = __opt_disc_302;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_303);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val) {
             __case_payload_305 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val).payload_0;
             __opt_val_307 = __case_payload_305.field_name;
@@ -2761,20 +2761,20 @@ condition: roe3 matches { Other(_) }
                 __len_313 = builtin::i32_wrap_i64(__packed_311 >> 32_i64);
                 __opt_inner_0_309 = __ptr_312;
                 __opt_inner_1_310 = __len_313;
-            };
+            }
             __opt_val_314 = __case_payload_305.field_size;
             __opt_disc_315 = ref.test Option<u32>::Some(__opt_val_314);
             __opt_inner_0_316 = 0;
             if __opt_disc_315 != 0 {
                 __flat_317 = ref.cast Option<u32>::Some(__opt_val_314).payload_0;
                 __opt_inner_0_316 = __flat_317;
-            };
+            }
             __tv_2 = __opt_disc_308;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_309);
             __tv_4 = __opt_inner_1_310;
             __tv_5 = __opt_disc_315;
             __tv_6 = __opt_inner_0_316;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val) {
             __case_payload_318 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_320 = ref.test Option<u32>::Some(__case_payload_318);
@@ -2782,10 +2782,10 @@ condition: roe3 matches { Other(_) }
             if __opt_disc_320 != 0 {
                 __flat_322 = ref.cast Option<u32>::Some(__case_payload_318).payload_0;
                 __opt_inner_0_321 = __flat_322;
-            };
+            }
             __tv_2 = __opt_disc_320;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_321);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val) {
             __case_payload_323 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val).payload_0;
             __opt_val_325 = __case_payload_323.field_name;
@@ -2798,20 +2798,20 @@ condition: roe3 matches { Other(_) }
                 __len_331 = builtin::i32_wrap_i64(__packed_329 >> 32_i64);
                 __opt_inner_0_327 = __ptr_330;
                 __opt_inner_1_328 = __len_331;
-            };
+            }
             __opt_val_332 = __case_payload_323.field_size;
             __opt_disc_333 = ref.test Option<u32>::Some(__opt_val_332);
             __opt_inner_0_334 = 0;
             if __opt_disc_333 != 0 {
                 __flat_335 = ref.cast Option<u32>::Some(__opt_val_332).payload_0;
                 __opt_inner_0_334 = __flat_335;
-            };
+            }
             __tv_2 = __opt_disc_326;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_327);
             __tv_4 = __opt_inner_1_328;
             __tv_5 = __opt_disc_333;
             __tv_6 = __opt_inner_0_334;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val) {
             __case_payload_336 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val).payload_0;
             __opt_disc_338 = ref.test Option<u64>::Some(__case_payload_336);
@@ -2819,10 +2819,10 @@ condition: roe3 matches { Other(_) }
             if __opt_disc_338 != 0 {
                 __flat_340 = ref.cast Option<u64>::Some(__case_payload_336).payload_0;
                 __opt_inner_0_339 = __flat_340;
-            };
+            }
             __tv_2 = __opt_disc_338;
             __tv_3 = __opt_inner_0_339;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val) {
             __case_payload_341 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_343 = ref.test Option<u32>::Some(__case_payload_341);
@@ -2830,10 +2830,10 @@ condition: roe3 matches { Other(_) }
             if __opt_disc_343 != 0 {
                 __flat_345 = ref.cast Option<u32>::Some(__case_payload_341).payload_0;
                 __opt_inner_0_344 = __flat_345;
-            };
+            }
             __tv_2 = __opt_disc_343;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_344);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val) {
             __case_payload_346 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val).payload_0;
             __opt_val_348 = __case_payload_346.field_name;
@@ -2846,20 +2846,20 @@ condition: roe3 matches { Other(_) }
                 __len_354 = builtin::i32_wrap_i64(__packed_352 >> 32_i64);
                 __opt_inner_0_350 = __ptr_353;
                 __opt_inner_1_351 = __len_354;
-            };
+            }
             __opt_val_355 = __case_payload_346.field_size;
             __opt_disc_356 = ref.test Option<u32>::Some(__opt_val_355);
             __opt_inner_0_357 = 0;
             if __opt_disc_356 != 0 {
                 __flat_358 = ref.cast Option<u32>::Some(__opt_val_355).payload_0;
                 __opt_inner_0_357 = __flat_358;
-            };
+            }
             __tv_2 = __opt_disc_349;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_350);
             __tv_4 = __opt_inner_1_351;
             __tv_5 = __opt_disc_356;
             __tv_6 = __opt_inner_0_357;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding"(__err_val) {
             __case_payload_359 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding"(__err_val).payload_0);
             __opt_disc_361 = ref.is_null(__case_payload_359) == 0;
@@ -2871,11 +2871,11 @@ condition: roe3 matches { Other(_) }
                 __len_366 = builtin::i32_wrap_i64(__packed_364 >> 32_i64);
                 __opt_inner_0_362 = __ptr_365;
                 __opt_inner_1_363 = __len_366;
-            };
+            }
             __tv_2 = __opt_disc_361;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_362);
             __tv_4 = __opt_inner_1_363;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding"(__err_val) {
             __case_payload_367 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding"(__err_val).payload_0);
             __opt_disc_369 = ref.is_null(__case_payload_367) == 0;
@@ -2887,11 +2887,11 @@ condition: roe3 matches { Other(_) }
                 __len_374 = builtin::i32_wrap_i64(__packed_372 >> 32_i64);
                 __opt_inner_0_370 = __ptr_373;
                 __opt_inner_1_371 = __len_374;
-            };
+            }
             __tv_2 = __opt_disc_369;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_370);
             __tv_4 = __opt_inner_1_371;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::InternalError"(__err_val) {
             __case_payload_375 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::InternalError"(__err_val).payload_0);
             __opt_disc_377 = ref.is_null(__case_payload_375) == 0;
@@ -2903,13 +2903,13 @@ condition: roe3 matches { Other(_) }
                 __len_382 = builtin::i32_wrap_i64(__packed_380 >> 32_i64);
                 __opt_inner_0_378 = __ptr_381;
                 __opt_inner_1_379 = __len_382;
-            };
+            }
             __tv_2 = __opt_disc_377;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_378);
             __tv_4 = __opt_inner_1_379;
-        };
+        }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
-    };
+    }
     "core:internal/cm_stream_write_u8"(resp_tx, __inline_String__as_bytes_248: block -> ref Array<u8> {
         break __inline_String__as_bytes_248: StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("ok"), used: 2, index: 0 });
     });
@@ -2932,7 +2932,7 @@ condition: roe3 matches { Other(_) }
         __fw_evt_8 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_8, __fw_evt_8));
         drop("mem/realloc"(__fw_evt_8, 8, 4, 0));
-    };
+    }
     drop("mem/realloc"(__fw_write_ptr_8, 40, 8, 0));
 }
 
@@ -2950,13 +2950,13 @@ fn __cm_binding__Response_new(headers, contents, trailers) {
     __contents_inner0 = 0;
     if ref.test Option<Stream<u8>>::Some(contents) {
         __contents_inner0 = ref.cast Option<Stream<u8>>::Some(contents).payload_0;
-    };
+    }
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Response::new"(headers, __contents_disc, __contents_inner0, trailers, __outptr);
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_7; __lifted_result_8;
+    return __lifted_result_7, __lifted_result_8;
 }
 
 fn __cm_export__handle(request) {
@@ -2971,7 +2971,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l148: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l148;
@@ -2993,7 +2993,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -3066,7 +3066,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
     result = "wasi/stream-write"(handle, ptr, len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, len, 1, 0));
 }
 
@@ -3081,7 +3081,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -3090,7 +3090,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -3098,7 +3098,7 @@ fn count_digits_i64(val) {
             l155: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l155;
@@ -3121,7 +3121,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l159: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -3129,7 +3129,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -3139,11 +3139,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -3161,7 +3161,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -3180,7 +3180,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -3192,11 +3192,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -3206,7 +3206,7 @@ fn String^Eq::eq(self, other) {
     len_a = self.used;
     if len_a != other.used {
         return 0;
-    };
+    }
     return String^Eq::eq_bytes(self.repr, other.repr, len_a);
 }
 
@@ -3218,10 +3218,10 @@ fn String^Eq::eq_bytes(a, b, len) {
             l168: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
-                };
+                }
                 i = i + 1;
                 continue l168;
             };
@@ -3251,7 +3251,7 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
                     self.index = _hfs_index_13;
                     break b171;
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
-                };
+                }
                 byte = builtin::array_get_u8(_licm_repr_12, _hfs_index_13);
                 _hfs_index_13 = _hfs_index_13 + 1;
                 Array<u8>::push(result, byte);
@@ -3277,35 +3277,35 @@ fn StrCharIter^Iterator::next(self) {
     let code_10: u32;
     let __local_11: u32;
     if self.byte_index >= self.used {
-        return 1; 0;
-    };
+        return 1, 0;
+    }
     b0 = builtin::array_get_u8(self.repr, self.byte_index);
     self.byte_index = self.byte_index + 1;
     if b0 <u 128 {
-        return 0; __inline_char__from_u32_unchecked_0: block -> char {
+        return 0, __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
         };
-    };
+    }
     if b0 <u 224 {
         b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
         self.byte_index = self.byte_index + 1;
         code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
-        return 0; code_3;
-    };
+        return 0, code_3;
+    }
     if b0 <u 240 {
         b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
         b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
         self.byte_index = self.byte_index + 2;
         code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
-        return 0; code_6;
-    };
+        return 0, code_6;
+    }
     b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
     b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
     b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
     self.byte_index = self.byte_index + 3;
     code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
-    return 0; code_10;
+    return 0, code_10;
 }
 
 fn String::push(self, c) {
@@ -3313,7 +3313,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -3332,7 +3332,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Array<u8>::push(self, value) {
@@ -3340,7 +3340,7 @@ fn Array<u8>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u8>::grow(self);
-    };
+    }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
@@ -3367,7 +3367,7 @@ fn Array<u8>::grow(self) {
             l184: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
                 continue l184;
@@ -3387,7 +3387,7 @@ fn Formatter::write_char_n(self, c, n) {
             l187: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l187;
@@ -3412,44 +3412,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -3459,10 +3459,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -3470,12 +3470,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 fn String^Inspect::inspect(self, f) {
@@ -3517,10 +3517,10 @@ fn String^Inspect::inspect(self, f) {
                     String::push(_licm_buf_33, 116);
                 } else {
                     String::push(_licm_buf_33, c);
-                };
+                }
             } else {
                 break b206;
-            };
+            }
             continue l207;
         };
     };

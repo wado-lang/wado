@@ -72,20 +72,20 @@ fn run() with Stdout {
         "core:cli/println"(String { repr: array.new_data<u8>("matched none"), used: 12 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("not none"), used: 8 });
-    };
+    }
     opt_3 = ref.null none;
     if ref.is_null(opt_3) {
         "core:cli/println"(String { repr: array.new_data<u8>("matched none"), used: 12 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("has value"), used: 9 });
-    };
+    }
     opt_5 = String { repr: array.new_data<u8>("hello"), used: 5 };
     if ref.is_null(opt_5) == 0 {
         x = value_copy String(ref.as_non_null(opt_5));
         "core:cli/println"(x);
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("none"), used: 4 });
-    };
+    }
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -102,20 +102,20 @@ fn __cm_export__run() {
         "core:cli/println"(String { repr: array.new_data<u8>("matched none"), used: 12 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("not none"), used: 8 });
-    };
+    }
     opt_3 = ref.null none;
     if ref.is_null(opt_3) {
         "core:cli/println"(String { repr: array.new_data<u8>("matched none"), used: 12 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("has value"), used: 9 });
-    };
+    }
     opt_5 = String { repr: array.new_data<u8>("hello"), used: 5 };
     if ref.is_null(opt_5) == 0 {
         x = value_copy String(ref.as_non_null(opt_5));
         "core:cli/println"(x);
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("none"), used: 4 });
-    };
+    }
     "wasi/task-return"(0);
 }
 
@@ -132,7 +132,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -159,7 +159,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l8: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l8;
@@ -200,7 +200,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 

@@ -74,36 +74,36 @@ fn run() with Stdout {
         "core:cli/println"(String { repr: array.new_data<u8>("is up"), used: 5 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("not up"), used: 6 });
-    };
+    }
     if d == 1 {
         "core:cli/println"(String { repr: array.new_data<u8>("is down"), used: 7 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("not down"), used: 8 });
-    };
+    }
     let __match_scrut_0: enum:Direction;
     __match_scrut_0 = d;
     if __match_scrut_0 == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("matches up"), used: 10 });
-    };
+    }
     if d == 2 {
         "core:cli/println"(String { repr: array.new_data<u8>("matches left"), used: 12 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("not left"), used: 8 });
-    };
+    }
     let __match_scrut_2: enum:Direction;
     __match_scrut_2 = d;
-    label = if __match_scrut_2 == 0 -> ref String {
+    label = (if __match_scrut_2 == 0 -> ref String {
         String { repr: array.new_data<u8>("up!"), used: 3 };
     } else if __match_scrut_2 == 1 -> ref String {
         String { repr: array.new_data<u8>("down!"), used: 5 };
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
-    };
+    });
     "core:cli/println"(label);
     x = 3;
     let __match_scrut_3: enum:Direction;
     __match_scrut_3 = x;
-    msg = if __match_scrut_3 == 3 -> ref String {
+    msg = (if __match_scrut_3 == 3 -> ref String {
         block -> ref String {
             String { repr: array.new_data<u8>("right and big"), used: 13 };
         };
@@ -111,7 +111,7 @@ fn run() with Stdout {
         String { repr: array.new_data<u8>("right and small"), used: 15 };
     } else {
         String { repr: array.new_data<u8>("other"), used: 5 };
-    };
+    });
     "core:cli/println"(msg);
 }
 
@@ -137,7 +137,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -164,7 +164,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l11: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l11;
@@ -205,7 +205,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 

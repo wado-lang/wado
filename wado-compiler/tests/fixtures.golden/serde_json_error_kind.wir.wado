@@ -156,14 +156,14 @@ fn __test_0_enum_field_access_on_cross_module_struct() {
     r = "core/json/from_string<i32>"(String { repr: array.new_data<u8>("42 extra"), used: 8 });
     let __match_scrut_0: ref Result<i32,DeserializeError>;
     __match_scrut_0 = r;
-    __cond = if ref.test Result<i32,DeserializeError>::Err(__match_scrut_0) -> bool {
+    __cond = (if ref.test Result<i32,DeserializeError>::Err(__match_scrut_0) -> bool {
         let __cast_1: ref Result<i32,DeserializeError>::Err;
         __cast_1 = ref.cast Result<i32,DeserializeError>::Err(__match_scrut_0);
         __local_1 = __cast_1.payload_0;
         __local_1.kind == 7;
     } else {
         0;
-    };
+    });
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_3 = String { repr: builtin::array_new<u8>(154), used: 0 };
@@ -183,7 +183,7 @@ condition: r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData }
             break __tmpl: __local_3;
         });
         unreachable;
-    };
+    }
 }
 
 fn __test_1_enum_field_compared_directly() {
@@ -236,8 +236,8 @@ condition: e.kind == DeserializeErrorKind::UnexpectedType
                 break __tmpl: __local_5;
             });
             unreachable;
-        };
-    };
+        }
+    }
 }
 
 fn __cm_export____test_0_enum_field_access_on_cross_module_struct() {
@@ -272,13 +272,13 @@ fn "core/json/from_string<i32>"(input) {
                 __local_10 = builtin::i64_extend_i32_s(de.pos);
                 break __inline_DeserializeError__trailing_3: "core:serde/DeserializeError" { kind: 7, message: String { repr: array.new_data<u8>("trailing data after value"), used: 25 }, offset: __local_10 };
             }) };
-        };
+        }
         return Result<i32,DeserializeError>::Ok { discriminant: 0, payload_0: v };
-    };
+    }
     if __sroa_r_discriminant == 1 {
         e = __sroa_r_case1_payload_0;
         return Result<i32,DeserializeError>::Err { discriminant: 1, payload_0: e };
-    };
+    }
     "core:internal/unreachable"();
     unreachable;
 }
@@ -291,7 +291,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l8: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l8;
@@ -313,7 +313,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -373,7 +373,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -412,57 +412,57 @@ fn pow10_coarse(i) {
                                                                                                                 unreachable;
                                                                                                                 break b12;
                                                                                                             };
-                                                                                                            return -9202643304706469457_i64; -2331608335343510137_i64;
+                                                                                                            return -9202643304706469457_i64, -2331608335343510137_i64;
                                                                                                         };
-                                                                                                        return -3512093806901185045_i64; -5910495864778290618_i64;
+                                                                                                        return -3512093806901185045_i64, -5910495864778290618_i64;
                                                                                                     };
-                                                                                                    return -6382629663588669918_i64; 5824576295778454961_i64;
+                                                                                                    return -6382629663588669918_i64, 5824576295778454961_i64;
                                                                                                 };
-                                                                                                return -8701430062309552535_i64; -6518754469289960082_i64;
+                                                                                                return -8701430062309552535_i64, -6518754469289960082_i64;
                                                                                             };
-                                                                                            return -2702340141148116919_i64; 5820440219632367201_i64;
+                                                                                            return -2702340141148116919_i64, 5820440219632367201_i64;
                                                                                         };
-                                                                                        return -5728515861582144019_i64; 4788037454677749836_i64;
+                                                                                        return -5728515861582144019_i64, 4788037454677749836_i64;
                                                                                     };
-                                                                                    return -8173041140997884609_i64; -6088502188546649757_i64;
+                                                                                    return -8173041140997884609_i64, -6088502188546649757_i64;
                                                                                 };
-                                                                                return -1848681798185579781_i64; -915538744049291539_i64;
+                                                                                return -1848681798185579781_i64, -915538744049291539_i64;
                                                                             };
-                                                                            return -5038936143766954516_i64; 7857851839894723564_i64;
+                                                                            return -5038936143766954516_i64, 7857851839894723564_i64;
                                                                         };
-                                                                        return -7616003081050118570_i64; -4209185567039092848_i64;
+                                                                        return -7616003081050118570_i64, -4209185567039092848_i64;
                                                                     };
-                                                                    return -948738275445456221_i64; 368606216923924028_i64;
+                                                                    return -948738275445456221_i64, 368606216923924028_i64;
                                                                 };
-                                                                return -4311967555482476979_i64; 6154202648235558777_i64;
+                                                                return -4311967555482476979_i64, 6154202648235558777_i64;
                                                             };
-                                                            return -7028762532061872567_i64; -8601490892183123070_i64;
+                                                            return -7028762532061872567_i64, -8601490892183123070_i64;
                                                         };
-                                                        return -9223372036854775808_i64; 0_i64;
+                                                        return -9223372036854775808_i64, 0_i64;
                                                     };
-                                                    return -3545582879861895366_i64; 0_i64;
+                                                    return -3545582879861895366_i64, 0_i64;
                                                 };
-                                                return -6409681921289327534_i64; 7381240676301154012_i64;
+                                                return -6409681921289327534_i64, 7381240676301154012_i64;
                                             };
-                                            return -8723282702051517698_i64; -7611128154919104932_i64;
+                                            return -8723282702051517698_i64, -7611128154919104932_i64;
                                         };
-                                        return -2737644984756826646_i64; 1725319251657714538_i64;
+                                        return -2737644984756826646_i64, 1725319251657714538_i64;
                                     };
-                                    return -5757034887131305499_i64; -6827560182880305040_i64;
+                                    return -5757034887131305499_i64, -6827560182880305040_i64;
                                 };
-                                return -8196078626372074882_i64; -1466078993672598280_i64;
+                                return -8196078626372074882_i64, -1466078993672598280_i64;
                             };
-                            return -1885900863153361278_i64; 8136200465769716229_i64;
+                            return -1885900863153361278_i64, 8136200465769716229_i64;
                         };
-                        return -5069001465015685406_i64; -7896285879677171347_i64;
+                        return -5069001465015685406_i64, -7896285879677171347_i64;
                     };
-                    return -7640289654143017766_i64; -5385653213018257807_i64;
+                    return -7640289654143017766_i64, -5385653213018257807_i64;
                 };
-                return -987975350460687152_i64; 4871985254153548563_i64;
+                return -987975350460687152_i64, 4871985254153548563_i64;
             };
-            return -4343663012265570552_i64; -758345818024902857_i64;
+            return -4343663012265570552_i64, -758345818024902857_i64;
         };
-        return -7054365918152680534_i64; -7784369436827535058_i64;
+        return -7054365918152680534_i64, -7784369436827535058_i64;
     };
 }
 
@@ -608,7 +608,7 @@ fn mul_pow10(p) {
     if r < 0 {
         q = q - 1;
         r = r + 27;
-    };
+    }
     let __sroa_c_hi: u64;
     let __sroa_c_lo: u64;
     multivalue_bind [__sroa_c_hi, __sroa_c_lo] = pow10_coarse(q - -13);
@@ -630,16 +630,16 @@ fn mul_pow10(p) {
         top_lo = top_lo + 1_i64;
         if top_lo == 0_i64 {
             top_hi = top_hi + 1_i64;
-        };
-    };
+        }
+    }
     if (top_hi >>u 63_i64) == 0_i64 {
         top_hi = (top_hi << 1_i64) | (top_lo >>u 63_i64);
         top_lo = top_lo << 1_i64;
-    };
+    }
     if top_lo != 0_i64 {
-        return top_hi + 1_i64; 0_i64 - top_lo;
-    };
-    return top_hi; 0_i64;
+        return top_hi + 1_i64, 0_i64 - top_lo;
+    }
+    return top_hi, 0_i64;
 }
 
 fn uscale(x, pm_hi, pm_lo, s) {
@@ -663,7 +663,7 @@ fn uscale(x, pm_hi, pm_lo, s) {
         mid2 = __local_11;
         sticky = builtin::i64_extend_i32_u((mid - mid2) >u 1_i64);
         hi = hi - builtin::i64_extend_i32_u(mid <u mid2);
-    };
+    }
     return (hi >>u builtin::i64_extend_i32_s(s)) | sticky;
 }
 
@@ -677,7 +677,7 @@ fn pack64(m, e) {
             __local_5 = m;
             break __inline_f64__from_bits_0: builtin::f64_reinterpret_i64(__local_5);
         };
-    };
+    }
     mantissa_bits = m & -4503599627370497_i64;
     exp_bits = builtin::i64_extend_i32_s(1075 + e) << 52_i64;
     return __inline_f64__from_bits_1: block -> f64 {
@@ -718,7 +718,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -726,7 +726,7 @@ fn count_digits_i64(val) {
             l78: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l78;
@@ -749,7 +749,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l82: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -757,7 +757,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -767,11 +767,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -789,7 +789,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -808,7 +808,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -820,11 +820,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -834,7 +834,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -853,7 +853,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn "core:serde/DeserializeErrorKind^Inspect::inspect"(self, f) {  // from core:serde
@@ -897,7 +897,7 @@ fn "core:serde/DeserializeErrorKind^Inspect::inspect"(self, f) {  // from core:s
     } else if self == 9 {
         __local_21 = String { repr: array.new_data<u8>("DeserializeErrorKind::Custom"), used: 28 };
         String::push_str(f.buf, __local_21);
-    };
+    }
 }
 
 fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
@@ -916,29 +916,29 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {  // from core:json
             if (_hfs_pos_8 < _licm_used_6) == 0 {
                 self.pos = _hfs_pos_8;
                 break b103;
-            };
+            }
             b = __inline_String__get_byte_1: block -> u8 {
                 __local_4 = _hfs_pos_8;
                 break __inline_String__get_byte_1: builtin::array_get_u8(_licm_repr_7, __local_4);
             };
-            if if if if b == 32 -> i32 {
+            if (if (if (if b == 32 -> i32 {
                 1;
             } else {
                 b == 9;
-            } -> i32 {
+            }) -> i32 {
                 1;
             } else {
                 b == 10;
-            } -> i32 {
+            }) -> i32 {
                 1;
             } else {
                 b == 13;
-            } {
+            }) {
                 _hfs_pos_8 = _hfs_pos_8 + 1;
             } else {
                 self.pos = _hfs_pos_8;
                 return;
-            };
+            }
             continue l104;
         };
     };
@@ -989,8 +989,8 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
         __local_16 = self.input;
         break __inline_String__len_0: __local_16.used;
     } {
-        return 1; 0; "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start };
-    };
+        return 1, 0, "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start };
+    }
     neg = 0;
     if __inline_String__get_byte_2: block -> u8 {
         __local_18 = self.input;
@@ -999,32 +999,32 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
     } == 45 {
         neg = 1;
         self.pos = self.pos + 1;
-    };
+    }
     if self.pos >= __inline_String__len_3: block -> i32 {
         __local_20 = self.input;
         break __inline_String__len_3: __local_20.used;
     } {
-        return 1; 0; ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde/DeserializeError" {
+        return 1, 0, ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde/DeserializeError" {
             __local_21 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_4: "core:serde/DeserializeError" { kind: 8, message: String { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_21 };
         });
-    };
+    }
     first = __inline_String__get_byte_5: block -> u8 {
         __local_22 = self.input;
         __local_23 = self.pos;
         break __inline_String__get_byte_5: builtin::array_get_u8(__local_22.repr, __local_23);
     };
-    if if first < 48 -> i32 {
+    if (if first < 48 -> i32 {
         1;
     } else {
         first > 57;
-    } {
-        return 1; 0; ref.as_non_null(__inline_DeserializeError__unexpected_type_6: block -> ref "core:serde/DeserializeError" {
+    }) {
+        return 1, 0, ref.as_non_null(__inline_DeserializeError__unexpected_type_6: block -> ref "core:serde/DeserializeError" {
             __local_24 = String { repr: array.new_data<u8>("expected number"), used: 15 };
             __local_25 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__unexpected_type_6: "core:serde/DeserializeError" { kind: 0, message: __local_24, offset: __local_25 };
         });
-    };
+    }
     result = first - 48;
     self.pos = self.pos + 1;
     _licm_input_46 = self.input;
@@ -1036,27 +1036,27 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
             if (_hfs_pos_51 < _licm_used_47) == 0 {
                 self.pos = _hfs_pos_51;
                 break b115;
-            };
+            }
             b = __inline_String__get_byte_8: block -> u8 {
                 __local_28 = _hfs_pos_51;
                 break __inline_String__get_byte_8: builtin::array_get_u8(_licm_repr_48, __local_28);
             };
-            if if b >= 48 -> i32 {
+            if (if b >= 48 -> i32 {
                 b <= 57;
             } else {
                 0;
-            } {
+            }) {
                 result = (result * 10) + (b - 48);
                 _hfs_pos_51 = _hfs_pos_51 + 1;
-            } else if if if b == 46 -> i32 {
+            } else if (if (if b == 46 -> i32 {
                 1;
             } else {
                 b == 101;
-            } -> i32 {
+            }) -> i32 {
                 1;
             } else {
                 b == 69;
-            } {
+            }) {
                 d = builtin::i64_extend_i32_s(result);
                 frac = 0;
                 if b == 46 {
@@ -1068,16 +1068,16 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                 _hfs_pos_51 = _hfs_pos_49;
                                 self.pos = _hfs_pos_51;
                                 break b124;
-                            };
+                            }
                             b2 = __inline_String__get_byte_10: block -> u8 {
                                 __local_31 = _hfs_pos_49;
                                 break __inline_String__get_byte_10: builtin::array_get_u8(_licm_repr_48, __local_31);
                             };
-                            if if b2 >= 48 -> i32 {
+                            if (if b2 >= 48 -> i32 {
                                 b2 <= 57;
                             } else {
                                 0;
-                            } {
+                            }) {
                                 d = (d * 10_i64) + builtin::i64_extend_i32_s(b2 - 48);
                                 frac = frac + 1;
                                 _hfs_pos_49 = _hfs_pos_49 + 1;
@@ -1085,23 +1085,23 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                 _hfs_pos_51 = _hfs_pos_49;
                                 self.pos = _hfs_pos_51;
                                 break b124;
-                            };
+                            }
                             continue l125;
                         };
                     };
                     _hfs_pos_51 = _hfs_pos_49;
-                };
+                }
                 exp = 0;
                 if _hfs_pos_51 < _licm_used_47 {
                     eb = __inline_String__get_byte_12: block -> u8 {
                         __local_34 = _hfs_pos_51;
                         break __inline_String__get_byte_12: builtin::array_get_u8(_licm_repr_48, __local_34);
                     };
-                    if if eb == 101 -> i32 {
+                    if (if eb == 101 -> i32 {
                         1;
                     } else {
                         eb == 69;
-                    } {
+                    }) {
                         _hfs_pos_51 = _hfs_pos_51 + 1;
                         exp_neg = 0;
                         if _hfs_pos_51 < _licm_used_47 {
@@ -1114,8 +1114,8 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                 _hfs_pos_51 = _hfs_pos_51 + 1;
                             } else if sb == 43 {
                                 _hfs_pos_51 = _hfs_pos_51 + 1;
-                            };
-                        };
+                            }
+                        }
                         _hfs_pos_50 = _hfs_pos_51;
                         b135: block {
                             l136: loop {
@@ -1123,72 +1123,72 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {  // from core:json
                                     _hfs_pos_51 = _hfs_pos_50;
                                     self.pos = _hfs_pos_51;
                                     break b135;
-                                };
+                                }
                                 b3 = __inline_String__get_byte_16: block -> u8 {
                                     __local_40 = _hfs_pos_50;
                                     break __inline_String__get_byte_16: builtin::array_get_u8(_licm_repr_48, __local_40);
                                 };
-                                if if b3 >= 48 -> i32 {
+                                if (if b3 >= 48 -> i32 {
                                     b3 <= 57;
                                 } else {
                                     0;
-                                } {
+                                }) {
                                     exp = (exp * 10) + (b3 - 48);
                                     _hfs_pos_50 = _hfs_pos_50 + 1;
                                 } else {
                                     _hfs_pos_51 = _hfs_pos_50;
                                     self.pos = _hfs_pos_51;
                                     break b135;
-                                };
+                                }
                                 continue l136;
                             };
                         };
                         _hfs_pos_51 = _hfs_pos_50;
                         if exp_neg {
                             exp = 0 - exp;
-                        };
-                    };
-                };
+                        }
+                    }
+                }
                 v = parse(d, exp - frac);
-                v_signed = if neg -> f64 {
+                v_signed = (if neg -> f64 {
                     builtin::f64_neg(v);
                 } else {
                     v;
-                };
+                });
                 if v_signed != builtin::f64_floor(v_signed) {
                     self.pos = _hfs_pos_51;
-                    return 1; 0; ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde/DeserializeError" {
+                    return 1, 0, ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde/DeserializeError" {
                         __local_42 = String { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
                         self.pos = _hfs_pos_51;
                         break __inline_DeserializeError__unexpected_type_18: "core:serde/DeserializeError" { kind: 0, message: __local_42, offset: start };
                     });
-                };
-                if if v_signed < -2147483648 -> i32 {
+                }
+                if (if v_signed < -2147483648 -> i32 {
                     1;
                 } else {
                     v_signed > 2147483647;
-                } {
+                }) {
                     self.pos = _hfs_pos_51;
-                    return 1; 0; ref.as_non_null(__inline_DeserializeError__overflow_19: block -> ref "core:serde/DeserializeError" {
+                    return 1, 0, ref.as_non_null(__inline_DeserializeError__overflow_19: block -> ref "core:serde/DeserializeError" {
                         __local_44 = String { repr: array.new_data<u8>("value out of range for i32"), used: 26 };
                         self.pos = _hfs_pos_51;
                         break __inline_DeserializeError__overflow_19: "core:serde/DeserializeError" { kind: 5, message: __local_44, offset: start };
                     });
-                };
+                }
                 self.pos = _hfs_pos_51;
-                return 0; builtin::i32_trunc_f64_s(v_signed); ref.null none;
+                return 0, builtin::i32_trunc_f64_s(v_signed), ref.null none;
             } else {
                 self.pos = _hfs_pos_51;
                 break b115;
-            };
+            }
             continue l116;
         };
     };
     self.pos = _hfs_pos_51;
     if neg {
         result = 0 - result;
-    };
-    return 0; result; ref.null none;
+    }
+    return 0, result, ref.null none;
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -1201,7 +1201,7 @@ fn Formatter::write_char_n(self, c, n) {
             l147: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l147;
@@ -1226,44 +1226,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -1273,10 +1273,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -1284,12 +1284,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 export fn __cm_export____test_0_enum_field_access_on_cross_module_struct as "__test_0_enum_field_access_on_cross_module_struct"
