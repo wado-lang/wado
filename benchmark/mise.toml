@@ -128,7 +128,7 @@ if [ "$HAVE_C_WASM" -eq 1 ]; then
 fi
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. zlib/zlib_bench.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 zlib/zlib_bench.wado
 """
 
 [tasks.fts]
@@ -174,7 +174,7 @@ echo "=== Rust serde_json ==="
 ./json_twitter/target/release/json_twitter_bench
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. json_twitter/json_twitter.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 json_twitter/json_twitter.wado
 """
 
 [tasks.json-canada]
@@ -190,7 +190,7 @@ echo "=== Rust serde_json ==="
 ./json_canada/target/release/json_canada_bench
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. json_canada/json_canada.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 json_canada/json_canada.wado
 """
 
 [tasks.json-catalog]
@@ -206,7 +206,7 @@ echo "=== Rust serde_json ==="
 ./json_catalog/target/release/json_catalog_bench
 
 echo "=== Wado ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. json_catalog/json_catalog.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 json_catalog/json_catalog.wado
 """
 
 [tasks.sqlite-parse]
@@ -222,7 +222,7 @@ echo "=== Rust sqlparser-rs ==="
 ./sqlite_parse/target/release/sqlite_parse_bench
 
 echo "=== Wado (Gale) ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. sqlite_parse/sqlite_parse.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sqlite_parse/sqlite_parse.wado
 """
 
 [tasks.syntax-highlight]
@@ -252,11 +252,11 @@ echo "=== tree-sitter (native) ==="
 
 if [ "$HAVE_TS_WASM" -eq 1 ]; then
     echo "=== tree-sitter (Wasm/wasmtime) ==="
-    wasmtime --dir ..::. syntax_highlight/target/wasm32-wasip1/release/syntax_highlight_bench.wasm
+    wasmtime --dir . syntax_highlight/target/wasm32-wasip1/release/syntax_highlight_bench.wasm
 fi
 
 echo "=== Wado (Gale) ==="
-cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. syntax_highlight/syntax_highlight.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 syntax_highlight/syntax_highlight.wado
 """
 
 [tasks.all]
