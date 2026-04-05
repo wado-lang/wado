@@ -153,13 +153,13 @@ fn __test_0_basic() {
     none = Option<i32> { 1 };
     let __match_scrut_0: ref Option<i32>;
     __match_scrut_0 = opt;
-    __cond_2 = if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
+    __cond_2 = (if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
         let __cast_1: ref Option<i32>::Some;
         __cast_1 = ref.cast Option<i32>::Some(__match_scrut_0);
         1;
     } else {
         0;
-    };
+    });
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_5 = String { repr: builtin::array_new<u8>(109), used: 0 };
@@ -179,14 +179,14 @@ condition: opt matches { Some(_) }
             break __tmpl: __local_5;
         });
         unreachable;
-    };
+    }
     let __match_scrut_1: ref Option<i32>;
     __match_scrut_1 = none;
-    __cond_3 = if __match_scrut_1.discriminant == 1 -> bool {
+    __cond_3 = (if __match_scrut_1.discriminant == 1 -> bool {
         1;
     } else {
         0;
-    };
+    });
     if __cond_3 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_7 = String { repr: builtin::array_new<u8>(107), used: 0 };
@@ -206,12 +206,12 @@ condition: none matches { None }
             break __tmpl: __local_7;
         });
         unreachable;
-    };
-    __cond_4 = let __match_scrut_2: ref Option<i32>; __match_scrut_2 = opt; if __match_scrut_2.discriminant == 1 -> bool {
+    }
+    __cond_4 = let __match_scrut_2: ref Option<i32>; __match_scrut_2 = opt; (if __match_scrut_2.discriminant == 1 -> bool {
         1;
     } else {
         0;
-    } == 0;
+    }) == 0;
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_9 = String { repr: builtin::array_new<u8>(107), used: 0 };
@@ -231,7 +231,7 @@ condition: !opt matches { None }
             break __tmpl: __local_9;
         });
         unreachable;
-    };
+    }
 }
 
 fn __test_1_guard() {
@@ -255,14 +255,14 @@ fn __test_1_guard() {
     none = Option<i32> { 1 };
     let __match_scrut_0: ref Option<i32>;
     __match_scrut_0 = opt1;
-    __cond_4 = if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
+    __cond_4 = (if ref.test Option<i32>::Some(__match_scrut_0) -> bool {
         let __cast_1: ref Option<i32>::Some;
         __cast_1 = ref.cast Option<i32>::Some(__match_scrut_0);
         __local_3 = __cast_1.payload_0;
         __local_3 > 5;
     } else {
         0;
-    };
+    });
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_9 = String { repr: builtin::array_new<u8>(119), used: 0 };
@@ -282,15 +282,15 @@ condition: opt1 matches { Some(x) && x > 5 }
             break __tmpl: __local_9;
         });
         unreachable;
-    };
-    __cond_6 = let __match_scrut_1: ref Option<i32>; __match_scrut_1 = opt2; if ref.test Option<i32>::Some(__match_scrut_1) -> bool {
+    }
+    __cond_6 = let __match_scrut_1: ref Option<i32>; __match_scrut_1 = opt2; (if ref.test Option<i32>::Some(__match_scrut_1) -> bool {
         let __cast_2: ref Option<i32>::Some;
         __cast_2 = ref.cast Option<i32>::Some(__match_scrut_1);
         __local_5 = __cast_2.payload_0;
         __local_5 > 5;
     } else {
         0;
-    } == 0;
+    }) == 0;
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_11 = String { repr: builtin::array_new<u8>(120), used: 0 };
@@ -310,15 +310,15 @@ condition: !opt2 matches { Some(x) && x > 5 }
             break __tmpl: __local_11;
         });
         unreachable;
-    };
-    __cond_8 = let __match_scrut_2: ref Option<i32>; __match_scrut_2 = none; if ref.test Option<i32>::Some(__match_scrut_2) -> bool {
+    }
+    __cond_8 = let __match_scrut_2: ref Option<i32>; __match_scrut_2 = none; (if ref.test Option<i32>::Some(__match_scrut_2) -> bool {
         let __cast_3: ref Option<i32>::Some;
         __cast_3 = ref.cast Option<i32>::Some(__match_scrut_2);
         __local_7 = __cast_3.payload_0;
         __local_7 > 5;
     } else {
         0;
-    } == 0;
+    }) == 0;
     if __cond_8 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_13 = String { repr: builtin::array_new<u8>(120), used: 0 };
@@ -338,7 +338,7 @@ condition: !none matches { Some(x) && x > 5 }
             break __tmpl: __local_13;
         });
         unreachable;
-    };
+    }
 }
 
 fn __test_2_option_guard_char() {
@@ -355,14 +355,14 @@ fn __test_2_option_guard_char() {
     c = char::from_u32(46);
     let __match_scrut_0: ref Option<char>;
     __match_scrut_0 = c;
-    __cond_2 = if ref.test Option<char>::Some(__match_scrut_0) -> bool {
+    __cond_2 = (if ref.test Option<char>::Some(__match_scrut_0) -> bool {
         let __cast_1: ref Option<char>::Some;
         __cast_1 = ref.cast Option<char>::Some(__match_scrut_0);
         __local_1 = __cast_1.payload_0;
         __local_1 == 46;
     } else {
         0;
-    };
+    });
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_6 = String { repr: builtin::array_new<u8>(121), used: 0 };
@@ -382,16 +382,16 @@ condition: c matches { Some(ch) && ch == '.' }
             break __tmpl: __local_6;
         });
         unreachable;
-    };
+    }
     d = char::from_u32(65);
-    __cond_5 = let __match_scrut_1: ref Option<char>; __match_scrut_1 = d; if ref.test Option<char>::Some(__match_scrut_1) -> bool {
+    __cond_5 = let __match_scrut_1: ref Option<char>; __match_scrut_1 = d; (if ref.test Option<char>::Some(__match_scrut_1) -> bool {
         let __cast_2: ref Option<char>::Some;
         __cast_2 = ref.cast Option<char>::Some(__match_scrut_1);
         __local_4 = __cast_2.payload_0;
         __local_4 == 46;
     } else {
         0;
-    } == 0;
+    }) == 0;
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_8 = String { repr: builtin::array_new<u8>(122), used: 0 };
@@ -411,7 +411,7 @@ condition: !d matches { Some(ch) && ch == '.' }
             break __tmpl: __local_8;
         });
         unreachable;
-    };
+    }
 }
 
 fn __test_3_variant() {
@@ -434,13 +434,13 @@ fn __test_3_variant() {
     point = MatchShape { 1 };
     let __match_scrut_0: ref MatchShape;
     __match_scrut_0 = circle;
-    __cond_2 = if ref.test MatchShape::Circle(__match_scrut_0) -> bool {
+    __cond_2 = (if ref.test MatchShape::Circle(__match_scrut_0) -> bool {
         let __cast_1: ref MatchShape::Circle;
         __cast_1 = ref.cast MatchShape::Circle(__match_scrut_0);
         1;
     } else {
         0;
-    };
+    });
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_7 = String { repr: builtin::array_new<u8>(114), used: 0 };
@@ -460,17 +460,17 @@ condition: circle matches { Circle(_) }
             break __tmpl: __local_7;
         });
         unreachable;
-    };
+    }
     let __match_scrut_1: ref MatchShape;
     __match_scrut_1 = circle;
-    __cond_4 = if ref.test MatchShape::Circle(__match_scrut_1) -> bool {
+    __cond_4 = (if ref.test MatchShape::Circle(__match_scrut_1) -> bool {
         let __cast_2: ref MatchShape::Circle;
         __cast_2 = ref.cast MatchShape::Circle(__match_scrut_1);
         __local_3 = __cast_2.payload_0;
         __local_3 > 3;
     } else {
         0;
-    };
+    });
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_9 = String { repr: builtin::array_new<u8>(125), used: 0 };
@@ -490,14 +490,14 @@ condition: circle matches { Circle(r) && r > 3.0 }
             break __tmpl: __local_9;
         });
         unreachable;
-    };
-    __cond_5 = let __match_scrut_2: ref MatchShape; __match_scrut_2 = point; if ref.test MatchShape::Circle(__match_scrut_2) -> bool {
+    }
+    __cond_5 = let __match_scrut_2: ref MatchShape; __match_scrut_2 = point; (if ref.test MatchShape::Circle(__match_scrut_2) -> bool {
         let __cast_3: ref MatchShape::Circle;
         __cast_3 = ref.cast MatchShape::Circle(__match_scrut_2);
         1;
     } else {
         0;
-    } == 0;
+    }) == 0;
     if __cond_5 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_11 = String { repr: builtin::array_new<u8>(114), used: 0 };
@@ -517,14 +517,14 @@ condition: !point matches { Circle(_) }
             break __tmpl: __local_11;
         });
         unreachable;
-    };
+    }
     let __match_scrut_3: ref MatchShape;
     __match_scrut_3 = point;
-    __cond_6 = if __match_scrut_3.discriminant == 1 -> bool {
+    __cond_6 = (if __match_scrut_3.discriminant == 1 -> bool {
         1;
     } else {
         0;
-    };
+    });
     if __cond_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_13 = String { repr: builtin::array_new<u8>(114), used: 0 };
@@ -544,7 +544,7 @@ condition: point matches { MatchPoint }
             break __tmpl: __local_13;
         });
         unreachable;
-    };
+    }
 }
 
 fn __cm_export____test_0_basic() {
@@ -575,7 +575,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l25: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l25;
@@ -597,7 +597,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -653,7 +653,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -662,7 +662,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -670,7 +670,7 @@ fn count_digits_i64(val) {
             l31: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l31;
@@ -693,7 +693,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l35: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -701,20 +701,20 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn char::from_u32(value) {
     if value >u 1114111 {
         return Option<char> { 1 };
-    };
-    if if value >=u 55296 -> i32 {
+    }
+    if (if value >=u 55296 -> i32 {
         value <=u 57343;
     } else {
         0;
-    } {
+    }) {
         return Option<char> { 1 };
-    };
+    }
     return Option<char>::Some { discriminant: 0, payload_0: value };
 }
 
@@ -725,11 +725,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -747,7 +747,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -766,7 +766,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -778,11 +778,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -792,7 +792,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -811,7 +811,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -824,7 +824,7 @@ fn Formatter::write_char_n(self, c, n) {
             l50: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l50;
@@ -849,44 +849,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -896,10 +896,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -907,12 +907,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 export fn __cm_export____test_0_basic as "__test_0_basic"

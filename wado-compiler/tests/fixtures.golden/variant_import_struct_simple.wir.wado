@@ -114,10 +114,10 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {  // from ./
     let __local_10: i32;
     if opts.width <= 0 {
         return s;
-    };
+    }
     if s.used >= opts.width {
         return s;
-    };
+    }
     pad_len = opts.width - s.used;
     pad = String { repr: builtin::array_new<u8>(pad_len), used: 0 };
     __for_0: block {
@@ -126,14 +126,14 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {  // from ./
             l3: loop {
                 if (i < pad_len) == 0 {
                     break __for_0;
-                };
+                }
                 String::push_str(pad, String { repr: array.new_data<u8>(" "), used: 1 });
                 i = i + 1;
                 continue l3;
             };
         };
     };
-    return let __match_scrut_0: ref "./variant_import_struct_module.wado/Align"; __match_scrut_0 = opts.align; if __match_scrut_0.discriminant == 0 -> ref String {
+    return let __match_scrut_0: ref "./variant_import_struct_module.wado/Align", __match_scrut_0 = opts.align, (if __match_scrut_0.discriminant == 0 -> ref String {
         String::concat(s, pad);
     } else if __match_scrut_0.discriminant == 1 -> ref String {
         String::concat(pad, s);
@@ -148,7 +148,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {  // from ./
                 l9: loop {
                     if (__local_9 < __local_5) == 0 {
                         break __for_0;
-                    };
+                    }
                     String::push_str(__local_7, String { repr: array.new_data<u8>(" "), used: 1 });
                     __local_9 = __local_9 + 1;
                     continue l9;
@@ -161,7 +161,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {  // from ./
                 l12: loop {
                     if (__local_10 < __local_6) == 0 {
                         break __for_1;
-                    };
+                    }
                     String::push_str(__local_8, String { repr: array.new_data<u8>(" "), used: 1 });
                     __local_10 = __local_10 + 1;
                     continue l12;
@@ -171,7 +171,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {  // from ./
         String::concat(String::concat(__local_7, s), __local_8);
     } else {
         unreachable;
-    };
+    });
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
@@ -187,7 +187,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -212,7 +212,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l16: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l16;
@@ -253,7 +253,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -266,7 +266,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -285,11 +285,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }

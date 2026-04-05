@@ -209,7 +209,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
     let __local_10: ref String;
     let __local_11: ref String;
     let __local_12: ref "tuple/[String, Value]";
-    return let __match_scrut_0: ref "./sub/cross_module_treemap_variant_helper.wado/Value"; __match_scrut_0 = v; if ref.test "./sub/cross_module_treemap_variant_helper.wado/Value::Str"(__match_scrut_0) -> ref String {
+    return let __match_scrut_0: ref "./sub/cross_module_treemap_variant_helper.wado/Value", __match_scrut_0 = v, (if ref.test "./sub/cross_module_treemap_variant_helper.wado/Value::Str"(__match_scrut_0) -> ref String {
         let __cast_2: ref "./sub/cross_module_treemap_variant_helper.wado/Value::Str";
         __cast_2 = ref.cast "./sub/cross_module_treemap_variant_helper.wado/Value::Str"(__match_scrut_0);
         __local_1 = __cast_2.payload_0;
@@ -232,7 +232,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
                 l3: loop {
                     if (__local_5 < __local_4.used) == 0 {
                         break __for_0;
-                    };
+                    }
                     if __local_5 > 0 {
                         __local_3 = __tmpl: block -> ref String {
                             __local_9 = String { repr: builtin::array_new<u8>(17), used: 0 };
@@ -240,12 +240,12 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
                             String::push_str(__local_9, String { repr: array.new_data<u8>(","), used: 1 });
                             break __tmpl: __local_9;
                         };
-                    };
+                    }
                     __local_12 = __inline_Array_Tuple_String_Value___IndexValue__index_value_3: block -> ref "tuple/[String, Value]" {
                         if __local_5 >= __local_4.used {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
-                        };
+                        }
                         break __inline_Array_Tuple_String_Value___IndexValue__index_value_3: builtin::array_get<ref "tuple/[String, Value]">(__local_4.repr, __local_5);
                     };
                     __local_6 = __local_12.0;
@@ -271,7 +271,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {  // from ./su
         };
     } else {
         unreachable;
-    };
+    });
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
@@ -287,7 +287,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -312,7 +312,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l9: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l9;
@@ -334,7 +334,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -390,7 +390,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -398,7 +398,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/ArrayIter<TreeMapEntry<String
     let item: ref "core:collections/TreeMapEntry<String,Value>";
     if self.index >= self.used {
         return ref.null none;
-    };
+    }
     item = builtin::array_get<ref "core:collections/TreeMapEntry<String,Value>">(self.repr, self.index);
     self.index = self.index + 1;
     return item;
@@ -426,10 +426,10 @@ fn "./sub/cross_module_treemap_variant_helper.wado/TreeMap<String,Value>::entrie
                 entry = value_copy "core:collections/TreeMapEntry<String,Value>"(ref.as_non_null(__pattern_temp_0));
                 if entry.deleted == 0 {
                     "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::push"(result, "tuple/[String, Value]" { 0: entry.key, 1: entry.value });
-                };
+                }
             } else {
                 break b14;
-            };
+            }
             continue l15;
         };
     };
@@ -441,7 +441,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::p
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::grow"(self);
-    };
+    }
     builtin::array_set<ref "tuple/[String, Value]">(self.repr, used, value);
     self.used = used + 1;
 }
@@ -468,7 +468,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/Array<Tuple<String,Value>>::g
             l20: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref "tuple/[String, Value]">(new_repr, i, builtin::array_get<ref "tuple/[String, Value]">(old_repr, i));
                 i = i + 1;
                 continue l20;
@@ -487,7 +487,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -506,11 +506,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -520,7 +520,7 @@ fn String^Eq::eq(self, other) {
     len_a = self.used;
     if len_a != other.used {
         return 0;
-    };
+    }
     return String^Eq::eq_bytes(self.repr, other.repr, len_a);
 }
 
@@ -532,10 +532,10 @@ fn String^Eq::eq_bytes(a, b, len) {
             l27: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
-                };
+                }
                 i = i + 1;
                 continue l27;
             };
@@ -564,15 +564,15 @@ fn String^Ord::cmp(self, other) {
             l31: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
-                };
+                }
                 a_byte = builtin::array_get_u8(a_repr, i);
                 b_byte = builtin::array_get_u8(b_repr, i);
                 if a_byte <u b_byte {
                     return 0;
-                };
+                }
                 if a_byte >u b_byte {
                     return 2;
-                };
+                }
                 i = i + 1;
                 continue l31;
             };
@@ -580,10 +580,10 @@ fn String^Ord::cmp(self, other) {
     };
     if len_a < len_b {
         return 0;
-    };
+    }
     if len_a > len_b {
         return 2;
-    };
+    }
     return 1;
 }
 
@@ -600,11 +600,11 @@ fn TreeMap<String,Value>::insert(self, key, value) {
             if existing_index >= __local_6.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_TreeMapEntry_String_Value___IndexValue__index_value_0: builtin::array_get<ref "core:collections/TreeMapEntry<String,Value>">(__local_6.repr, existing_index);
         }.value = value;
         return;
-    };
+    }
     new_index = __inline_Array_TreeMapEntry_String_Value____len_1: block -> i32 {
         __local_8 = self.entries;
         break __inline_Array_TreeMapEntry_String_Value____len_1: __local_8.used;
@@ -624,15 +624,15 @@ fn TreeMap<String,Value>::insert_node(self, node, key, index) {
         if String^Eq::eq(key, n.key) {
             n.index = index;
             return n;
-        };
+        }
         if String^Ord::cmp(key, n.key) == 0 {
             n.left = TreeMap<String,Value>::insert_node(self, n.left, key, index);
         } else {
             n.right = TreeMap<String,Value>::insert_node(self, n.right, key, index);
-        };
+        }
         after_skew = TreeMap<String,Value>::skew(n);
         return TreeMap<String,Value>::split(after_skew);
-    };
+    }
     new_node = "core:collections/TreeMapNode<String>" { key: key, index: index, level: 1, left: ref.null none, right: ref.null none };
     return new_node;
 }
@@ -656,11 +656,11 @@ fn TreeMap<String,Value>::split(node) {
                     right.left = n;
                     right.level = right.level + 1;
                     return right;
-                };
-            };
-        };
+                }
+            }
+        }
         return n;
-    };
+    }
     return ref.null none;
 }
 
@@ -677,10 +677,10 @@ fn TreeMap<String,Value>::skew(node) {
                 n.left = left.right;
                 left.right = n;
                 return left;
-            };
-        };
+            }
+        }
         return n;
-    };
+    }
     return ref.null none;
 }
 
@@ -689,7 +689,7 @@ fn Array<TreeMapEntry<String,Value>>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<TreeMapEntry<String,Value>>::grow(self);
-    };
+    }
     builtin::array_set<ref "core:collections/TreeMapEntry<String,Value>">(self.repr, used, value);
     self.used = used + 1;
 }
@@ -716,7 +716,7 @@ fn Array<TreeMapEntry<String,Value>>::grow(self) {
             l51: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref "core:collections/TreeMapEntry<String,Value>">(new_repr, i, builtin::array_get<ref "core:collections/TreeMapEntry<String,Value>">(old_repr, i));
                 i = i + 1;
                 continue l51;
@@ -750,22 +750,22 @@ fn TreeMap<String,Value>::find_index(self, key) {
                         if __local_7 >= _licm_used_9 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
-                        };
+                        }
                         break __inline_Array_TreeMapEntry_String_Value___IndexValue__index_value_0: builtin::array_get<ref "core:collections/TreeMapEntry<String,Value>">(_licm_repr_10, __local_7);
                     };
                     if entry.deleted {
                         return -1;
-                    };
+                    }
                     return n.index;
-                };
+                }
                 if String^Ord::cmp(key, n.key) == 0 {
                     current = n.left;
                 } else {
                     current = n.right;
-                };
+                }
             } else {
                 break b53;
-            };
+            }
             continue l54;
         };
     };

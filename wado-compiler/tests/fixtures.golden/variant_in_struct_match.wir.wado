@@ -70,13 +70,13 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn run() with Stdout {
     let __sroa_opts_align: ref "./variant_in_struct_match_module.wado/Align";
     __sroa_opts_align = "./variant_in_struct_match_module.wado/Align" { 1 };
-    "core:cli/println"(let __match_scrut_0: ref "./variant_in_struct_match_module.wado/Align"; __match_scrut_0 = __sroa_opts_align; if __match_scrut_0.discriminant == 0 -> ref String {
+    "core:cli/println"(let __match_scrut_0: ref "./variant_in_struct_match_module.wado/Align"; __match_scrut_0 = __sroa_opts_align; (if __match_scrut_0.discriminant == 0 -> ref String {
         String { repr: array.new_data<u8>("left"), used: 4 };
     } else if __match_scrut_0.discriminant == 1 -> ref String {
         String { repr: array.new_data<u8>("right"), used: 5 };
     } else {
         unreachable;
-    });
+    }));
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -86,13 +86,13 @@ fn __cm_binding__Stdout_write_via_stream(data) {
 fn __cm_export__run() {
     let __sroa_opts_align: ref "./variant_in_struct_match_module.wado/Align";
     __sroa_opts_align = "./variant_in_struct_match_module.wado/Align" { 1 };
-    "core:cli/println"(let __match_scrut_0: ref "./variant_in_struct_match_module.wado/Align"; __match_scrut_0 = __sroa_opts_align; if __match_scrut_0.discriminant == 0 -> ref String {
+    "core:cli/println"(let __match_scrut_0: ref "./variant_in_struct_match_module.wado/Align"; __match_scrut_0 = __sroa_opts_align; (if __match_scrut_0.discriminant == 0 -> ref String {
         String { repr: array.new_data<u8>("left"), used: 4 };
     } else if __match_scrut_0.discriminant == 1 -> ref String {
         String { repr: array.new_data<u8>("right"), used: 5 };
     } else {
         unreachable;
-    });
+    }));
     "wasi/task-return"(0);
 }
 
@@ -109,7 +109,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -134,7 +134,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l6: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l6;
@@ -175,7 +175,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 

@@ -87,20 +87,20 @@ fn run() with Stdout, Random, Insecure, InsecureSeed {
     r1 = __cm_binding__Random_get_random_u64();
     r2 = __cm_binding__Random_get_random_u64();
     "core:cli/println"(String { repr: array.new_data<u8>("test: random u64 works"), used: 22 });
-    if if r1 != 0_i64 -> i32 {
+    if (if r1 != 0_i64 -> i32 {
         1;
     } else {
         r2 != 0_i64;
-    } {
+    }) {
         "core:cli/println"(String { repr: array.new_data<u8>("test: random u64 produces non-zero values"), used: 41 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("test: random u64 produced two zeros (unlikely but valid)"), used: 56 });
-    };
+    }
     if r1 != r2 {
         "core:cli/println"(String { repr: array.new_data<u8>("test: random u64 values differ"), used: 30 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("test: random u64 values same (unlikely but valid)"), used: 49 });
-    };
+    }
     ir1 = __cm_binding__Insecure_get_insecure_random_u64();
     ir2 = __cm_binding__Insecure_get_insecure_random_u64();
     "core:cli/println"(String { repr: array.new_data<u8>("test: insecure random u64 works"), used: 31 });
@@ -108,22 +108,22 @@ fn run() with Stdout, Random, Insecure, InsecureSeed {
         "core:cli/println"(String { repr: array.new_data<u8>("test: insecure random u64 values differ"), used: 39 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("test: insecure random u64 values same (unlikely but valid)"), used: 58 });
-    };
+    }
     let __sroa_seed_0: u64;
     let __sroa_seed_1: u64;
     multivalue_bind [__sroa_seed_0, __sroa_seed_1] = __cm_binding__InsecureSeed_get_insecure_seed();
     seed_low = __sroa_seed_0;
     seed_high = __sroa_seed_1;
     "core:cli/println"(String { repr: array.new_data<u8>("test: insecure seed works"), used: 25 });
-    if if seed_low != 0_i64 -> i32 {
+    if (if seed_low != 0_i64 -> i32 {
         1;
     } else {
         seed_high != 0_i64;
-    } {
+    }) {
         "core:cli/println"(String { repr: array.new_data<u8>("test: insecure seed produces non-zero value"), used: 43 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("test: insecure seed produced zeros (unlikely but valid)"), used: 55 });
-    };
+    }
     "core:cli/println"(String { repr: array.new_data<u8>("all random tests passed"), used: 23 });
 }
 
@@ -148,7 +148,7 @@ fn __cm_binding__InsecureSeed_get_insecure_seed() {
     __lifted_result_1 = builtin::load_i64(__outptr + 0);
     __lifted_result_2 = builtin::load_i64(__outptr + 8);
     drop("mem/realloc"(__outptr, 16, 8, 0));
-    return __lifted_result_1; __lifted_result_2;
+    return __lifted_result_1, __lifted_result_2;
 }
 
 fn __cm_export__run() {
@@ -169,7 +169,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -194,7 +194,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l8: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l8;
@@ -235,7 +235,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 

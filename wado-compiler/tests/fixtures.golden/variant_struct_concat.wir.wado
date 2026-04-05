@@ -108,7 +108,7 @@ fn __cm_export__run() {
 fn "./variant_struct_concat_module.wado/format_str"(s, opts) {  // from ./variant_struct_concat_module.wado
     let pad: ref String;
     pad = String { repr: array.new_data<u8>("  "), used: 2 };
-    return let __match_scrut_0: ref "./variant_struct_concat_module.wado/Align"; __match_scrut_0 = opts.align; if __match_scrut_0.discriminant == 0 -> ref String {
+    return let __match_scrut_0: ref "./variant_struct_concat_module.wado/Align", __match_scrut_0 = opts.align, (if __match_scrut_0.discriminant == 0 -> ref String {
         String::concat(s, pad);
     } else if __match_scrut_0.discriminant == 1 -> ref String {
         String::concat(pad, s);
@@ -116,7 +116,7 @@ fn "./variant_struct_concat_module.wado/format_str"(s, opts) {  // from ./varian
         String::concat(String::concat(pad, s), pad);
     } else {
         unreachable;
-    };
+    });
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
@@ -132,7 +132,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -157,7 +157,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l5: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l5;
@@ -198,7 +198,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -211,7 +211,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -230,11 +230,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }

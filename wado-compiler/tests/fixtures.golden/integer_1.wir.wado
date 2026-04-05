@@ -1222,7 +1222,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -1247,7 +1247,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l2: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l2;
@@ -1288,7 +1288,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -1297,7 +1297,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -1305,7 +1305,7 @@ fn count_digits_i64(val) {
             l7: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l7;
@@ -1328,7 +1328,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l11: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -1336,7 +1336,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1346,11 +1346,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -1366,11 +1366,11 @@ fn u32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     val_i32 = self;
-    abs_val = if val_i32 < 0 -> i64 {
+    abs_val = (if val_i32 < 0 -> i64 {
         builtin::i64_extend_i32_s(val_i32) + 4294967296_i64;
     } else {
         builtin::i64_extend_i32_s(val_i32);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, 0, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -1404,18 +1404,18 @@ fn i64::fmt_decimal(self, f) {
         write_decimal_digits(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
     } else {
-        abs_val = if is_negative -> i64 {
+        abs_val = (if is_negative -> i64 {
             0_i64 - value;
         } else {
             value;
-        };
+        });
         digit_count_10 = count_digits_i64(abs_val);
         offset_11 = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);
         write_decimal_digits(__inline_String__internal_raw_bytes_1: block -> ref array<u8> {
             __local_13 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_13.repr;
         }, offset_11, abs_val, digit_count_10);
-    };
+    }
 }
 
 fn u64::fmt_decimal(self, f) {
@@ -1445,14 +1445,14 @@ fn u64::fmt_decimal(self, f) {
             break __inline_String__internal_raw_bytes_0: __local_19.repr;
         }, offset_3, 48);
         return;
-    };
+    }
     digit_count = 0;
     temp = val_i64;
     b18: block {
         l19: loop {
             if (temp != 0_i64) == 0 {
                 break b18;
-            };
+            }
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
                 temp = temp / 10_i64;
@@ -1463,9 +1463,9 @@ fn u64::fmt_decimal(self, f) {
                 carry_10 = 0_i64;
                 if rem_adjusted_8 < 0_i64 {
                     carry_10 = -1_i64;
-                };
+                }
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
-            };
+            }
             continue l19;
         };
     };
@@ -1480,7 +1480,7 @@ fn u64::fmt_decimal(self, f) {
         l24: loop {
             if (temp != 0_i64) == 0 {
                 break b23;
-            };
+            }
             pos = pos - 1;
             digit = 0;
             if temp >= 0_i64 {
@@ -1493,14 +1493,14 @@ fn u64::fmt_decimal(self, f) {
                     digit = builtin::i32_wrap_i64(rem_adjusted_16);
                 } else {
                     digit = builtin::i32_wrap_i64(rem_adjusted_16 + 10_i64);
-                };
+                }
                 signed_quot_17 = temp / 10_i64;
                 carry_18 = 0_i64;
                 if rem_adjusted_16 < 0_i64 {
                     carry_18 = -1_i64;
-                };
+                }
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
-            };
+            }
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
             continue l24;
         };
@@ -1516,7 +1516,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -1535,7 +1535,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -1547,11 +1547,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -1561,7 +1561,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -1580,7 +1580,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -1593,7 +1593,7 @@ fn Formatter::write_char_n(self, c, n) {
             l38: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l38;
@@ -1618,44 +1618,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -1665,10 +1665,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -1676,12 +1676,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 export fn __cm_export__run as "run"

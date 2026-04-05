@@ -69,11 +69,11 @@ fn run() with Stdout {
     deg_as_rad = 180;
     if deg_as_rad > 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("f64 newtype cast works"), used: 22 });
-    };
+    }
     deg_f64 = 180;
     if deg_f64 > 90 {
         "core:cli/println"(String { repr: array.new_data<u8>("newtype to f64 cast works"), used: 25 });
-    };
+    }
     "core:cli/println"(String { repr: array.new_data<u8>("chained f64 newtype works"), used: 25 });
     "core:cli/println"(String { repr: array.new_data<u8>("newtype comparison works"), used: 24 });
     "core:cli/println"(String { repr: array.new_data<u8>("float newtype tests passed"), used: 26 });
@@ -101,7 +101,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -126,7 +126,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l4: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l4;
@@ -167,7 +167,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 

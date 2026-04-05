@@ -170,7 +170,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -195,7 +195,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l2: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l2;
@@ -236,7 +236,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -249,7 +249,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -268,11 +268,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -290,35 +290,35 @@ fn StrCharIter^Iterator::next(self) {
     let code_10: u32;
     let __local_11: u32;
     if self.byte_index >= self.used {
-        return 1; 0;
-    };
+        return 1, 0;
+    }
     b0 = builtin::array_get_u8(self.repr, self.byte_index);
     self.byte_index = self.byte_index + 1;
     if b0 <u 128 {
-        return 0; __inline_char__from_u32_unchecked_0: block -> char {
+        return 0, __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
         };
-    };
+    }
     if b0 <u 224 {
         b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
         self.byte_index = self.byte_index + 1;
         code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
-        return 0; code_3;
-    };
+        return 0, code_3;
+    }
     if b0 <u 240 {
         b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
         b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
         self.byte_index = self.byte_index + 2;
         code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
-        return 0; code_6;
-    };
+        return 0, code_6;
+    }
     b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
     b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
     b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
     self.byte_index = self.byte_index + 3;
     code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
-    return 0; code_10;
+    return 0, code_10;
 }
 
 fn String::push(self, c) {
@@ -326,7 +326,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -345,7 +345,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -358,7 +358,7 @@ fn Formatter::write_char_n(self, c, n) {
             l17: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l17;
@@ -374,14 +374,14 @@ fn Formatter::pad(self, content) {
     let left_pad: i32;
     let right_pad: i32;
     content_len = content.used;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         String::push_str(self.buf, content);
         return;
-    };
+    }
     padding = self.width - content_len;
     align = self.align;
     let __match_scrut_0: enum:Alignment;
@@ -398,7 +398,7 @@ fn Formatter::pad(self, content) {
     } else {
         Formatter::write_char_n(self, self.fill, padding);
         String::push_str(self.buf, content);
-    };
+    }
 }
 
 fn String^Inspect::inspect(self, f) {
@@ -440,10 +440,10 @@ fn String^Inspect::inspect(self, f) {
                     String::push(_licm_buf_33, 116);
                 } else {
                     String::push(_licm_buf_33, c);
-                };
+                }
             } else {
                 break b23;
-            };
+            }
             continue l24;
         };
     };

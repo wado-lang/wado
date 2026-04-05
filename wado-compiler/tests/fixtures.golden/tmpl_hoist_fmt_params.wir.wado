@@ -197,7 +197,7 @@ fn run() with Stdout {
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
-        };
+        }
         __initialize_module();
         global:__modules_initialized = 1;
     };
@@ -211,7 +211,7 @@ fn run() with Stdout {
             l2: loop {
                 if (i_1 < 5) == 0 {
                     break __for_0;
-                };
+                }
                 s_2 = __tmpl: block -> ref String {
                     __tmpl_buf_90.used = 0;
                     __fmt_buf_91.indent = 0;
@@ -244,7 +244,7 @@ fn run() with Stdout {
             l5: loop {
                 if (i_4 < 5) == 0 {
                     break __for_1;
-                };
+                }
                 f_5 = builtin::f64_convert_i32_s(i_4) * 1.5;
                 s_6 = __tmpl: block -> ref String {
                     __tmpl_buf_93.used = 0;
@@ -283,7 +283,7 @@ fn run() with Stdout {
             l8: loop {
                 if (i_8 < 5) == 0 {
                     break __for_2;
-                };
+                }
                 s_9 = __tmpl: block -> ref String {
                     __tmpl_buf_96.used = 0;
                     __fmt_buf_97.indent = 0;
@@ -325,7 +325,7 @@ fn run() with Stdout {
             l11: loop {
                 if (i_11 < 5) == 0 {
                     break __for_3;
-                };
+                }
                 f_12 = builtin::f64_convert_i32_s(i_11) / 3;
                 s_13 = __tmpl: block -> ref String {
                     __tmpl_buf_100.used = 0;
@@ -373,7 +373,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -398,7 +398,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l15: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l15;
@@ -420,7 +420,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -480,7 +480,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -499,15 +499,15 @@ fn unpack64(f) {
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
     if raw_exp == 0 {
         if raw_mantissa == 0_i64 {
-            return 0_i64; 0;
-        };
+            return 0_i64, 0;
+        }
         m_9 = raw_mantissa << 11_i64;
         s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
-        return m_9 << s; -1085 - builtin::i32_wrap_i64(s);
-    };
+        return m_9 << s, -1085 - builtin::i32_wrap_i64(s);
+    }
     m_12 = -9223372036854775808_i64 | (raw_mantissa << 11_i64);
     e = (raw_exp - 1) + -1085;
-    return m_12; e;
+    return m_12, e;
 }
 
 fn unrounded_div(u, d) {
@@ -553,57 +553,57 @@ fn pow10_coarse(i) {
                                                                                                                 unreachable;
                                                                                                                 break b21;
                                                                                                             };
-                                                                                                            return -9202643304706469457_i64; -2331608335343510137_i64;
+                                                                                                            return -9202643304706469457_i64, -2331608335343510137_i64;
                                                                                                         };
-                                                                                                        return -3512093806901185045_i64; -5910495864778290618_i64;
+                                                                                                        return -3512093806901185045_i64, -5910495864778290618_i64;
                                                                                                     };
-                                                                                                    return -6382629663588669918_i64; 5824576295778454961_i64;
+                                                                                                    return -6382629663588669918_i64, 5824576295778454961_i64;
                                                                                                 };
-                                                                                                return -8701430062309552535_i64; -6518754469289960082_i64;
+                                                                                                return -8701430062309552535_i64, -6518754469289960082_i64;
                                                                                             };
-                                                                                            return -2702340141148116919_i64; 5820440219632367201_i64;
+                                                                                            return -2702340141148116919_i64, 5820440219632367201_i64;
                                                                                         };
-                                                                                        return -5728515861582144019_i64; 4788037454677749836_i64;
+                                                                                        return -5728515861582144019_i64, 4788037454677749836_i64;
                                                                                     };
-                                                                                    return -8173041140997884609_i64; -6088502188546649757_i64;
+                                                                                    return -8173041140997884609_i64, -6088502188546649757_i64;
                                                                                 };
-                                                                                return -1848681798185579781_i64; -915538744049291539_i64;
+                                                                                return -1848681798185579781_i64, -915538744049291539_i64;
                                                                             };
-                                                                            return -5038936143766954516_i64; 7857851839894723564_i64;
+                                                                            return -5038936143766954516_i64, 7857851839894723564_i64;
                                                                         };
-                                                                        return -7616003081050118570_i64; -4209185567039092848_i64;
+                                                                        return -7616003081050118570_i64, -4209185567039092848_i64;
                                                                     };
-                                                                    return -948738275445456221_i64; 368606216923924028_i64;
+                                                                    return -948738275445456221_i64, 368606216923924028_i64;
                                                                 };
-                                                                return -4311967555482476979_i64; 6154202648235558777_i64;
+                                                                return -4311967555482476979_i64, 6154202648235558777_i64;
                                                             };
-                                                            return -7028762532061872567_i64; -8601490892183123070_i64;
+                                                            return -7028762532061872567_i64, -8601490892183123070_i64;
                                                         };
-                                                        return -9223372036854775808_i64; 0_i64;
+                                                        return -9223372036854775808_i64, 0_i64;
                                                     };
-                                                    return -3545582879861895366_i64; 0_i64;
+                                                    return -3545582879861895366_i64, 0_i64;
                                                 };
-                                                return -6409681921289327534_i64; 7381240676301154012_i64;
+                                                return -6409681921289327534_i64, 7381240676301154012_i64;
                                             };
-                                            return -8723282702051517698_i64; -7611128154919104932_i64;
+                                            return -8723282702051517698_i64, -7611128154919104932_i64;
                                         };
-                                        return -2737644984756826646_i64; 1725319251657714538_i64;
+                                        return -2737644984756826646_i64, 1725319251657714538_i64;
                                     };
-                                    return -5757034887131305499_i64; -6827560182880305040_i64;
+                                    return -5757034887131305499_i64, -6827560182880305040_i64;
                                 };
-                                return -8196078626372074882_i64; -1466078993672598280_i64;
+                                return -8196078626372074882_i64, -1466078993672598280_i64;
                             };
-                            return -1885900863153361278_i64; 8136200465769716229_i64;
+                            return -1885900863153361278_i64, 8136200465769716229_i64;
                         };
-                        return -5069001465015685406_i64; -7896285879677171347_i64;
+                        return -5069001465015685406_i64, -7896285879677171347_i64;
                     };
-                    return -7640289654143017766_i64; -5385653213018257807_i64;
+                    return -7640289654143017766_i64, -5385653213018257807_i64;
                 };
-                return -987975350460687152_i64; 4871985254153548563_i64;
+                return -987975350460687152_i64, 4871985254153548563_i64;
             };
-            return -4343663012265570552_i64; -758345818024902857_i64;
+            return -4343663012265570552_i64, -758345818024902857_i64;
         };
-        return -7054365918152680534_i64; -7784369436827535058_i64;
+        return -7054365918152680534_i64, -7784369436827535058_i64;
     };
 }
 
@@ -749,7 +749,7 @@ fn mul_pow10(p) {
     if r < 0 {
         q = q - 1;
         r = r + 27;
-    };
+    }
     let __sroa_c_hi: u64;
     let __sroa_c_lo: u64;
     multivalue_bind [__sroa_c_hi, __sroa_c_lo] = pow10_coarse(q - -13);
@@ -771,16 +771,16 @@ fn mul_pow10(p) {
         top_lo = top_lo + 1_i64;
         if top_lo == 0_i64 {
             top_hi = top_hi + 1_i64;
-        };
-    };
+        }
+    }
     if (top_hi >>u 63_i64) == 0_i64 {
         top_hi = (top_hi << 1_i64) | (top_lo >>u 63_i64);
         top_lo = top_lo << 1_i64;
-    };
+    }
     if top_lo != 0_i64 {
-        return top_hi + 1_i64; 0_i64 - top_lo;
-    };
-    return top_hi; 0_i64;
+        return top_hi + 1_i64, 0_i64 - top_lo;
+    }
+    return top_hi, 0_i64;
 }
 
 fn uscale(x, pm_hi, pm_lo, s) {
@@ -804,7 +804,7 @@ fn uscale(x, pm_hi, pm_lo, s) {
         mid2 = __local_11;
         sticky = builtin::i64_extend_i32_u((mid - mid2) >u 1_i64);
         hi = hi - builtin::i64_extend_i32_u(mid <u mid2);
-    };
+    }
     return (hi >>u builtin::i64_extend_i32_s(s)) | sticky;
 }
 
@@ -845,17 +845,17 @@ fn fixed_width_for_prec(f, precision) {
     s1 = 0 - ((e + lp1) + 3);
     u1 = uscale(m, __sroa_pm1_hi, __sroa_pm1_lo, s1);
     d1_floor = (u1 + 0_i64) >>u 2_i64;
-    decimal_pos = if d1_floor >=u 10_i64 -> i32 {
+    decimal_pos = (if d1_floor >=u 10_i64 -> i32 {
         2 - p1;
     } else {
         1 - p1;
-    };
+    });
     total_digits = decimal_pos + precision;
-    n = if total_digits > 18 -> i32 {
+    n = (if total_digits > 18 -> i32 {
         18;
     } else {
         select i32(total_digits < 1, 1, total_digits);
-    };
+    });
     p = (n - 1) - log10_e63;
     lp = (p * 108853) >> 15;
     let __sroa_pm_hi: u64;
@@ -869,16 +869,16 @@ fn fixed_width_for_prec(f, precision) {
         if n >= __local_30.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_30.repr, n);
     } {
         d = __inline_unrounded_round_8: block -> u64 {
             __local_29 = unrounded_div(u, 10_i64);
             break __inline_unrounded_round_8: ((__local_29 + 1_i64) + ((__local_29 >>u 2_i64) & 1_i64)) >>u 2_i64;
         };
-        return d; (0 - p) + 1;
-    };
-    return d; 0 - p;
+        return d, (0 - p) + 1;
+    }
+    return d, 0 - p;
 }
 
 fn short(f) {
@@ -916,11 +916,11 @@ fn short(f) {
     z = 11;
     p = 0;
     m_is_power_of_2 = m == -9223372036854775808_i64;
-    if if m_is_power_of_2 -> i32 {
+    if (if m_is_power_of_2 -> i32 {
         e > -1085;
     } else {
         0;
-    } {
+    }) {
         p = 0 - __inline_skewed_0: block -> i32 {
             __local_22 = e + 11;
             break __inline_skewed_0: ((__local_22 * 631305) - 261663) >> 21;
@@ -929,13 +929,13 @@ fn short(f) {
     } else {
         if e < -1085 {
             z = 11 + (-1085 - e);
-        };
+        }
         p = 0 - __inline_log10_pow2_1: block -> i32 {
             __local_23 = e + z;
             break __inline_log10_pow2_1: (__local_23 * 78913) >> 18;
         };
         min_m = m - (1_i64 << builtin::i64_extend_i32_s(z - 1));
-    };
+    }
     max_m = m + (1_i64 << builtin::i64_extend_i32_s(z - 1));
     odd = builtin::i32_wrap_i64((m >>u builtin::i64_extend_i32_s(z)) & 1_i64);
     lp = (p * 108853) >> 15;
@@ -966,16 +966,16 @@ fn short(f) {
         multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = trim_zeros(d_div_10, 0 - (p - 1));
         digits = __sroa___pattern_temp_0_0;
         exponent = __sroa___pattern_temp_0_1;
-        return digits; exponent;
-    };
+        return digits, exponent;
+    }
     d = dmin;
     if dmin <u dmax {
         d = __inline_unrounded_round_8: block -> u64 {
             __local_32 = uscale(m, __sroa_pm_hi, __sroa_pm_lo, s);
             break __inline_unrounded_round_8: ((__local_32 + 1_i64) + ((__local_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
         };
-    };
-    return d; 0 - p;
+    }
+    return d, 0 - p;
 }
 
 fn trim_zeros(x, p) {
@@ -1009,8 +1009,8 @@ fn trim_zeros(x, p) {
         xv = d1;
         pv = pv + 1;
     } else {
-        return xv; pv;
-    };
+        return xv, pv;
+    }
     d8 = __inline_rotate_right_2: block -> u64 {
         __local_22 = __inline_u64_mul_3: block -> u64 {
             multivalue_bind [__local_26, _] = i64.mul_wide_u(xv, -4078282918271054303_i64);
@@ -1021,7 +1021,7 @@ fn trim_zeros(x, p) {
     if d8 <=u 184467440737_i64 {
         xv = d8;
         pv = pv + 8;
-    };
+    }
     d4 = __inline_rotate_right_4: block -> u64 {
         __local_27 = __inline_u64_mul_5: block -> u64 {
             multivalue_bind [__local_31, _] = i64.mul_wide_u(xv, -3276141747490816367_i64);
@@ -1032,7 +1032,7 @@ fn trim_zeros(x, p) {
     if d4 <=u 1844674407370955_i64 {
         xv = d4;
         pv = pv + 4;
-    };
+    }
     d2 = __inline_rotate_right_6: block -> u64 {
         __local_32 = __inline_u64_mul_7: block -> u64 {
             multivalue_bind [__local_36, _] = i64.mul_wide_u(xv, -8116567392432202711_i64);
@@ -1043,7 +1043,7 @@ fn trim_zeros(x, p) {
     if d2 <=u 184467440737095516_i64 {
         xv = d2;
         pv = pv + 2;
-    };
+    }
     d1b = __inline_rotate_right_8: block -> u64 {
         __local_37 = __inline_u64_mul_9: block -> u64 {
             multivalue_bind [__local_41, _] = i64.mul_wide_u(xv, -3689348814741910323_i64);
@@ -1054,8 +1054,8 @@ fn trim_zeros(x, p) {
     if d1b <=u 1844674407370955161_i64 {
         xv = d1b;
         pv = pv + 1;
-    };
-    return xv; pv;
+    }
+    return xv, pv;
 }
 
 fn write_digits_at(buf, offset, val, nd) {
@@ -1070,7 +1070,7 @@ fn write_digits_at(buf, offset, val, nd) {
         l99: loop {
             if (idx >= offset) == 0 {
                 break b98;
-            };
+            }
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
             builtin::array_set_u8(_licm_repr_9, idx, value);
             v = v /u 10_i64;
@@ -1114,7 +1114,7 @@ fn write_decimal(buf, d, p, nd) {
         builtin::array_copy<u8>(raw, (start_7 + decimal_pos) + 1, raw, start_7 + decimal_pos, nd - decimal_pos);
         index = start_7 + decimal_pos;
         builtin::array_set_u8(buf.repr, index, 46);
-    };
+    }
 }
 
 fn write_decimal_prec(buf, d, p, nd, precision) {
@@ -1144,7 +1144,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
     if precision < 0 {
         write_decimal(buf, d, p, nd);
         return;
-    };
+    }
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
         leading_zeros = 0 - decimal_pos;
@@ -1153,7 +1153,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         if precision <= leading_zeros {
             String::append_byte_filled(buf, 48, precision);
             return;
-        };
+        }
         String::append_byte_filled(buf, 48, leading_zeros);
         remaining_prec = precision - leading_zeros;
         digits_to_output = select i32(remaining_prec < nd, remaining_prec, nd);
@@ -1164,7 +1164,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
             l107: loop {
                 if (skip_11 > 0) == 0 {
                     break b106;
-                };
+                }
                 trim_d_10 = trim_d_10 /u 10_i64;
                 skip_11 = skip_11 - 1;
                 continue l107;
@@ -1183,7 +1183,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         if precision > 0 {
             String::push(buf, 46);
             String::append_byte_filled(buf, 48, precision);
-        };
+        }
     } else {
         after_decimal = nd - decimal_pos;
         if precision <= after_decimal {
@@ -1194,7 +1194,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
                 l113: loop {
                     if (skip_17 > 0) == 0 {
                         break b112;
-                    };
+                    }
                     trim_d_16 = trim_d_16 /u 10_i64;
                     skip_17 = skip_17 - 1;
                     continue l113;
@@ -1209,7 +1209,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
             index_45 = start_19 + decimal_pos;
             builtin::array_set_u8(buf.repr, index_45, 46);
             return;
-        };
+        }
         trailing_21 = precision - after_decimal;
         start_22 = buf.used;
         n_49 = nd + 1;
@@ -1220,7 +1220,7 @@ fn write_decimal_prec(buf, d, p, nd, precision) {
         index_52 = start_22 + decimal_pos;
         builtin::array_set_u8(buf.repr, index_52, 46);
         String::append_byte_filled(buf, 48, trailing_21);
-    };
+    }
 }
 
 fn check_special(f) {
@@ -1228,19 +1228,19 @@ fn check_special(f) {
     let is_neg: bool;
     bits = builtin::i64_reinterpret_f64(f);
     if bits == 0_i64 {
-        return 1; 0; 1;
-    };
+        return 1, 0, 1;
+    }
     if bits == -9223372036854775808_i64 {
-        return 1; 1; 1;
-    };
+        return 1, 1, 1;
+    }
     is_neg = bits < 0_i64;
     if (bits & 9218868437227405312_i64) == 9218868437227405312_i64 {
         if (bits & 4503599627370495_i64) != 0_i64 {
-            return 1; 0; 3;
-        };
-        return 1; is_neg; 2;
-    };
-    return 0; is_neg; 0;
+            return 1, 0, 3;
+        }
+        return 1, is_neg, 2;
+    }
+    return 0, is_neg, 0;
 }
 
 fn __initialize_module() {
@@ -1256,7 +1256,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -1264,7 +1264,7 @@ fn count_digits_i64(val) {
             l121: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l121;
@@ -1287,7 +1287,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l125: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -1295,7 +1295,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn fmt_float_special(f, is_neg, kind, zero_repr) {
@@ -1310,19 +1310,19 @@ fn fmt_float_special(f, is_neg, kind, zero_repr) {
         String::push(f.buf, 97);
         String::push(f.buf, 78);
     } else if kind == 2 {
-        String::push_str(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, (if is_neg -> ref String {
             String { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
             String { repr: array.new_data<u8>("inf"), used: 3 };
-        });
+        }));
     } else {
-        String::push_str(f.buf, if is_neg -> ref String {
+        String::push_str(f.buf, (if is_neg -> ref String {
             String { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             String { repr: builtin::array_new<u8>(0), used: 0 };
-        });
+        }));
         String::push_str(f.buf, zero_repr);
-    };
+    }
     Formatter::apply_padding(f, mark);
 }
 
@@ -1331,7 +1331,7 @@ fn Array<u64>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u64>::grow(self);
-    };
+    }
     builtin::array_set<u64>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1358,7 +1358,7 @@ fn Array<u64>::grow(self) {
             l133: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
                 i = i + 1;
                 continue l133;
@@ -1375,11 +1375,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -1405,7 +1405,7 @@ fn f64::fmt_into(self, f) {
     if f.precision >= 0 {
         f64::fmt_fixed(self, f.precision, f);
         return;
-    };
+    }
     value = self;
     let __sroa___pattern_temp_0_0: bool;
     let __sroa___pattern_temp_0_1: bool;
@@ -1417,12 +1417,12 @@ fn f64::fmt_into(self, f) {
     if is_special {
         fmt_float_special(f, is_neg, kind, String { repr: array.new_data<u8>("0"), used: 1 });
         return;
-    };
-    abs_f = if is_neg -> f64 {
+    }
+    abs_f = (if is_neg -> f64 {
         builtin::f64_neg(value);
     } else {
         value;
-    };
+    });
     let __sroa_result_digits: u64;
     let __sroa_result_exponent: i32;
     multivalue_bind [__sroa_result_digits, __sroa_result_exponent] = short(abs_f);
@@ -1438,7 +1438,7 @@ fn f64::fmt_into(self, f) {
             if __local_14 >= __local_22.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_22.repr, __local_14);
         });
     };
@@ -1450,7 +1450,7 @@ fn f64::fmt_into(self, f) {
         String::push(f.buf, 45);
     } else if f.sign_plus {
         String::push(f.buf, 43);
-    };
+    }
     write_decimal(f.buf, d, p, nd);
     Formatter::apply_padding(f, mark);
 }
@@ -1480,11 +1480,11 @@ fn f64::fmt_fixed(self, precision, f) {
     is_neg = __sroa___pattern_temp_0_1;
     kind = __sroa___pattern_temp_0_2;
     if is_special {
-        if if let __match_scrut_0: enum:SpecialKind; __match_scrut_0 = kind; if __match_scrut_0 == 3 -> bool {
+        if (if let __match_scrut_0: enum:SpecialKind; __match_scrut_0 = kind; (if __match_scrut_0 == 3 -> bool {
             1;
         } else {
             0;
-        } -> i32 {
+        }) -> i32 {
             1;
         } else {
             let __match_scrut_1: enum:SpecialKind;
@@ -1493,11 +1493,11 @@ fn f64::fmt_fixed(self, precision, f) {
                 1;
             } else {
                 0;
-            };
-        } {
+            }
+        }) {
             fmt_float_special(f, is_neg, kind, String { repr: array.new_data<u8>("0"), used: 1 });
             return;
-        };
+        }
         mark_7 = __inline_String__len_1: block -> i32 {
             __local_16 = f.buf;
             break __inline_String__len_1: __local_16.used;
@@ -1506,20 +1506,20 @@ fn f64::fmt_fixed(self, precision, f) {
             String::push(f.buf, 45);
         } else if f.sign_plus {
             String::push(f.buf, 43);
-        };
+        }
         String::push(f.buf, 48);
         if precision > 0 {
             String::push(f.buf, 46);
             String::append_byte_filled(f.buf, 48, precision);
-        };
+        }
         Formatter::apply_padding(f, mark_7);
         return;
-    };
-    abs_f = if is_neg -> f64 {
+    }
+    abs_f = (if is_neg -> f64 {
         builtin::f64_neg(value);
     } else {
         value;
-    };
+    });
     let __sroa_result_digits: u64;
     let __sroa_result_exponent: i32;
     multivalue_bind [__sroa_result_digits, __sroa_result_exponent] = fixed_width_for_prec(abs_f, precision);
@@ -1535,7 +1535,7 @@ fn f64::fmt_fixed(self, precision, f) {
             if __local_20 >= __local_28.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_u64__IndexValue__index_value_0: builtin::array_get<u64>(__local_28.repr, __local_20);
         });
     };
@@ -1547,7 +1547,7 @@ fn f64::fmt_fixed(self, precision, f) {
         String::push(f.buf, 45);
     } else if f.sign_plus {
         String::push(f.buf, 43);
-    };
+    }
     write_decimal_prec(f.buf, d, p, nd, precision);
     Formatter::apply_padding(f, mark_13);
 }
@@ -1561,7 +1561,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -1580,7 +1580,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -1590,11 +1590,11 @@ fn String::append_byte_filled(self, byte, n) {
     let new_used: i32;
     if n <= 0 {
         return;
-    };
+    }
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_fill<u8>(self.repr, self.used, byte, n);
     self.used = new_used;
 }
@@ -1605,11 +1605,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -1619,7 +1619,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -1638,7 +1638,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Formatter::write_char_n(self, c, n) {
@@ -1651,7 +1651,7 @@ fn Formatter::write_char_n(self, c, n) {
             l165: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l165;
@@ -1692,13 +1692,13 @@ fn Formatter::apply_padding(self, start_pos) {
         __local_12 = self.buf;
         break __inline_String__len_0: __local_12.used;
     } - start_pos;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         return;
-    };
+    }
     padding = self.width - content_len;
     fill_byte = self.fill & 255;
     align = self.align;
@@ -1717,7 +1717,7 @@ fn Formatter::apply_padding(self, start_pos) {
             l172: loop {
                 if (i_8 >= 0) == 0 {
                     break b171;
-                };
+                }
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_2: block -> u8 {
                     __local_17 = start_pos + i_8;
@@ -1736,7 +1736,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 l175: loop {
                     if (j_9 < left_pad) == 0 {
                         break __for_1;
-                    };
+                    }
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
@@ -1754,7 +1754,7 @@ fn Formatter::apply_padding(self, start_pos) {
             l178: loop {
                 if (i_10 >= 0) == 0 {
                     break b177;
-                };
+                }
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_5: block -> u8 {
                     __local_25 = start_pos + i_10;
@@ -1773,7 +1773,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 l181: loop {
                     if (j_11 < padding) == 0 {
                         break __for_2;
-                    };
+                    }
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
@@ -1781,7 +1781,7 @@ fn Formatter::apply_padding(self, start_pos) {
                 };
             };
         };
-    };
+    }
 }
 
 fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
@@ -1800,44 +1800,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -1847,10 +1847,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -1858,12 +1858,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 export fn __cm_export__run as "run"

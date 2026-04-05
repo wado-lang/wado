@@ -98,7 +98,7 @@ fn run() with Stdout {
             if __sroa___pattern_temp_0_discriminant == 0 {
             } else {
                 break b0;
-            };
+            }
             continue l1;
         };
     };
@@ -127,7 +127,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -152,7 +152,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l5: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l5;
@@ -193,18 +193,18 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
 fn ArrayIter<i32>^Iterator::next(self) {
     let item: i32;
     if self.index >= self.used {
-        return 1; 0;
-    };
+        return 1, 0;
+    }
     item = builtin::array_get<i32>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; item;
+    return 0, item;
 }
 
 fn Array<i32>::push(self, value) {
@@ -212,7 +212,7 @@ fn Array<i32>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<i32>::grow(self);
-    };
+    }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -239,7 +239,7 @@ fn Array<i32>::grow(self) {
             l11: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
                 continue l11;

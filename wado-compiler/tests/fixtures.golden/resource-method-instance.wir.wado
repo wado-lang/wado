@@ -118,7 +118,7 @@ fn run() with Stdout {
         "core:cli/println"(String { repr: array.new_data<u8>("Resource extracted from Result"), used: 30 });
     } else {
         "core:cli/println"(String { repr: array.new_data<u8>("Failed to create socket"), used: 23 });
-    };
+    }
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -184,11 +184,11 @@ fn __cm_binding__TcpSocket_create(address_family) {
                     break __inline_memory_to_gc_string_0: String { repr: __local_10, used: __local_9 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:sockets/types.wado/ErrorCode::Other" { discriminant: 14, payload_0: __option_result };
-        };
+        }
         __result_val = Result<TcpSocket,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__outptr, 20, 4, 0));
     return __result_val;
 }
@@ -211,7 +211,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -238,7 +238,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
             l19: loop {
                 if (i < len) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
                 continue l19;
@@ -256,7 +256,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l22: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l22;
@@ -297,7 +297,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 

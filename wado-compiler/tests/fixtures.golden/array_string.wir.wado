@@ -102,7 +102,7 @@ fn join_names(names) {
             if 0 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref String>(names.repr, 0);
         });
         String::push_str(__local_1, String { repr: array.new_data<u8>(" and "), used: 5 });
@@ -110,7 +110,7 @@ fn join_names(names) {
             if 1 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_String__IndexValue__index_value_2: builtin::array_get<ref String>(names.repr, 1);
         });
         break __tmpl: __local_1;
@@ -131,7 +131,7 @@ fn array_string() with Stdout {
             if 0 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_String__IndexValue__index_value_7: builtin::array_get<ref String>(names.repr, 0);
         });
         String::push_str(__local_2, String { repr: array.new_data<u8>(", "), used: 2 });
@@ -139,7 +139,7 @@ fn array_string() with Stdout {
             if 1 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_String__IndexValue__index_value_8: builtin::array_get<ref String>(names.repr, 1);
         });
         String::push_str(__local_2, String { repr: array.new_data<u8>(", "), used: 2 });
@@ -147,7 +147,7 @@ fn array_string() with Stdout {
             if 2 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_String__IndexValue__index_value_9: builtin::array_get<ref String>(names.repr, 2);
         });
         break __tmpl: __local_2;
@@ -168,7 +168,7 @@ fn array_string_cast() with Stdout {
             if 0 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_String__IndexValue__index_value_6: builtin::array_get<ref String>(names.repr, 0);
         });
         String::push_str(__local_2, String { repr: array.new_data<u8>(" "), used: 1 });
@@ -176,7 +176,7 @@ fn array_string_cast() with Stdout {
             if 1 >= names.used {
                 "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            };
+            }
             break __inline_Array_String__IndexValue__index_value_7: builtin::array_get<ref String>(names.repr, 1);
         });
         break __tmpl: __local_2;
@@ -223,7 +223,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -248,7 +248,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l9: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l9;
@@ -270,7 +270,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -326,7 +326,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -339,7 +339,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -358,11 +358,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -372,7 +372,7 @@ fn Array<String>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<String>::grow(self);
-    };
+    }
     builtin::array_set<ref String>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -399,7 +399,7 @@ fn Array<String>::grow(self) {
             l18: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref String>(new_repr, i, builtin::array_get<ref String>(old_repr, i));
                 i = i + 1;
                 continue l18;

@@ -93,7 +93,7 @@ fn run() with Stdout {
         if 1 {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_8: builtin::array_get<i32>(arr.repr, 3);
     });
     "core:cli/println"(String { repr: array.new_data<u8>("should not reach here"), used: 21 });
@@ -121,7 +121,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -146,7 +146,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l3: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l3;
@@ -168,7 +168,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -224,7 +224,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -233,7 +233,7 @@ fn Array<i32>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<i32>::grow(self);
-    };
+    }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -260,7 +260,7 @@ fn Array<i32>::grow(self) {
             l9: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
                 continue l9;

@@ -328,12 +328,12 @@ fn run() with Stdout, Stderr, Preopens {
     if dirs.used == 0 {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
         return;
-    };
+    }
     dir = __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: block -> ref "tuple/[Descriptor, String]" {
         if 0 >= dirs.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: builtin::array_get<ref "tuple/[Descriptor, String]">(dirs.repr, 0);
     }.0;
     drop(__cm_binding__Descriptor_unlink_file_at(dir, String { repr: array.new_data<u8>("test_symlink"), used: 12 }));
@@ -350,10 +350,10 @@ fn run() with Stdout, Stderr, Preopens {
             test_link_at(dir);
             "core:cli/println"(String { repr: array.new_data<u8>("all symlink tests passed"), used: 24 });
             return;
-        };
+        }
         "core:cli/eprintln"(String { repr: array.new_data<u8>("symlink_at: failed with unexpected error"), used: 40 });
         return;
-    };
+    }
     readlink_result = __cm_binding__Descriptor_readlink_at(dir, String { repr: array.new_data<u8>("test_symlink"), used: 12 });
     if ref.test Result<String,ErrorCode>::Ok(readlink_result) {
         target = value_copy String(ref.cast Result<String,ErrorCode>::Ok(readlink_result).payload_0);
@@ -366,30 +366,30 @@ fn run() with Stdout, Stderr, Preopens {
                 String::push_str(__local_17, target);
                 break __tmpl: __local_17;
             });
-        };
+        }
     } else {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("readlink_at: failed"), used: 19 });
-    };
+    }
     open_via_link = __cm_binding__Descriptor_open_at(dir, 1, String { repr: array.new_data<u8>("test_symlink"), used: 12 }, 0, 1);
     if ref.test Result<Descriptor,ErrorCode>::Ok(open_via_link) {
         linked_file = ref.cast Result<Descriptor,ErrorCode>::Ok(open_via_link).payload_0;
         stat_result = __cm_binding__Descriptor_stat(linked_file);
         if ref.test Result<DescriptorStat,ErrorCode>::Ok(stat_result) {
             stat = ref.cast Result<DescriptorStat,ErrorCode>::Ok(stat_result).payload_0;
-            if if let __match_scrut_1: ref "wasi:filesystem/types.wado/DescriptorType"; __match_scrut_1 = stat.type; if __match_scrut_1.discriminant == 5 -> bool {
+            if (if let __match_scrut_1: ref "wasi:filesystem/types.wado/DescriptorType"; __match_scrut_1 = stat.type; (if __match_scrut_1.discriminant == 5 -> bool {
                 1;
             } else {
                 0;
-            } -> i32 {
+            }) -> i32 {
                 stat.size == 14_i64;
             } else {
                 0;
-            } {
+            }) {
                 "core:cli/println"(String { repr: array.new_data<u8>("symlink follow: opened file has correct type and size (correct)"), used: 63 });
             } else {
                 "core:cli/eprintln"(String { repr: array.new_data<u8>("symlink follow: unexpected type or size"), used: 39 });
-            };
-        };
+            }
+        }
         let __sroa___pattern_temp_5_0: i32;
         let __sroa___pattern_temp_5_1: i32;
         multivalue_bind [__sroa___pattern_temp_5_0, __sroa___pattern_temp_5_1] = __cm_binding__Descriptor_read_via_stream(linked_file, 0_i64);
@@ -405,7 +405,7 @@ fn run() with Stdout, Stderr, Preopens {
                 chunk = "core:internal/cm_stream_read_u8"(file_rx, 4096);
                 if chunk.used == 0 {
                     break b12;
-                };
+                }
                 "core:internal/cm_stream_write_u8"(out_tx, chunk);
                 continue l13;
             };
@@ -416,13 +416,13 @@ fn run() with Stdout, Stderr, Preopens {
         "wasi/future-drop-readable:transmission-filesystem"(read_future);
     } else {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("symlink follow: failed to open"), used: 30 });
-    };
+    }
     unlink_sym = __cm_binding__Descriptor_unlink_file_at(dir, String { repr: array.new_data<u8>("test_symlink"), used: 12 });
     if unlink_sym.discriminant == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("symlink cleanup: removed test_symlink"), used: 37 });
     } else {
         "core:cli/eprintln"(String { repr: array.new_data<u8>("symlink cleanup: failed"), used: 23 });
-    };
+    }
     test_link_at(dir);
     "core:cli/println"(String { repr: array.new_data<u8>("all symlink tests passed"), used: 24 });
 }
@@ -440,8 +440,8 @@ fn test_link_at(dir) with Stdout, Stderr {
             stat = ref.cast Result<DescriptorStat,ErrorCode>::Ok(link_stat).payload_0;
             if stat.size == 14_i64 {
                 "core:cli/println"(String { repr: array.new_data<u8>("link_at: hard link has correct size (correct)"), used: 45 });
-            };
-        };
+            }
+        }
         drop(__cm_binding__Descriptor_unlink_file_at(dir, String { repr: array.new_data<u8>("test_hardlink"), used: 13 }));
     } else if ref.test Result<unit,ErrorCode>::Err(link_result) {
         err = ref.cast Result<unit,ErrorCode>::Err(link_result).payload_0;
@@ -451,8 +451,8 @@ fn test_link_at(dir) with Stdout, Stderr {
             "core:cli/println"(String { repr: array.new_data<u8>("link_at: not supported (skipping)"), used: 33 });
         } else {
             "core:cli/eprintln"(String { repr: array.new_data<u8>("link_at: failed with unexpected error"), used: 37 });
-        };
-    };
+        }
+    }
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -485,7 +485,7 @@ fn __cm_binding__Preopens_get_directories() {
         l22: loop {
             if __i >= __count {
                 break b21;
-            };
+            }
             __elem_addr = __base + (__i * 12);
             __lifted_result_6 = builtin::load_i32(__elem_addr + 0);
             __lifted_result_7 = __inline_memory_to_gc_string_1: block -> ref String {
@@ -502,7 +502,7 @@ fn __cm_binding__Preopens_get_directories() {
     };
     if __count > 0 {
         drop("mem/realloc"(__base, __count * 12, 4, 0));
-    };
+    }
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __result;
 }
@@ -614,11 +614,11 @@ fn __cm_binding__Descriptor_unlink_file_at(self, path) {
                     break __inline_memory_to_gc_string_0: String { repr: __local_13, used: __local_12 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
-        };
+        }
         __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
 }
@@ -739,11 +739,11 @@ fn __cm_binding__Descriptor_symlink_at(self, old_path, new_path) {
                     break __inline_memory_to_gc_string_0: String { repr: __local_16, used: __local_15 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
-        };
+        }
         __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
 }
@@ -863,11 +863,11 @@ fn __cm_binding__Descriptor_readlink_at(self, path) {
                     break __inline_memory_to_gc_string_1: String { repr: __local_16, used: __local_15 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
-        };
+        }
         __result_val = Result<String,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
 }
@@ -987,11 +987,11 @@ fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
                     break __inline_memory_to_gc_string_0: String { repr: __local_17, used: __local_16 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
-        };
+        }
         __result_val = Result<Descriptor,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
 }
@@ -1066,9 +1066,9 @@ fn __cm_binding__Descriptor_stat(self) {
                     break __inline_memory_to_gc_string_0: String { repr: __local_33, used: __local_32 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 4) + 4), builtin::load_i32((((__async_outptr + 8) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult_6 = "wasi:filesystem/types.wado/DescriptorType::Other" { discriminant: 7, payload_0: __option_result_8 };
-        };
+        }
         __lifted_result_9 = builtin::load_i64((__async_outptr + 8) + 16);
         __lifted_result_10 = builtin::load_i64((__async_outptr + 8) + 24);
         __disc_11 = builtin::load_u8((__async_outptr + 8) + 32);
@@ -1078,7 +1078,7 @@ fn __cm_binding__Descriptor_stat(self) {
             __lifted_result_14 = builtin::load_i32((((__async_outptr + 8) + 32) + 8) + 8);
             __struct_result_15 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_13, nanoseconds: __lifted_result_14 };
             __option_result_12 = __struct_result_15;
-        };
+        }
         __disc_16 = builtin::load_u8((__async_outptr + 8) + 56);
         __option_result_17 = ref.null none;
         if __disc_16 != 0 {
@@ -1086,7 +1086,7 @@ fn __cm_binding__Descriptor_stat(self) {
             __lifted_result_19 = builtin::load_i32((((__async_outptr + 8) + 56) + 8) + 8);
             __struct_result_20 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_18, nanoseconds: __lifted_result_19 };
             __option_result_17 = __struct_result_20;
-        };
+        }
         __disc_21 = builtin::load_u8((__async_outptr + 8) + 80);
         __option_result_22 = ref.null none;
         if __disc_21 != 0 {
@@ -1094,7 +1094,7 @@ fn __cm_binding__Descriptor_stat(self) {
             __lifted_result_24 = builtin::load_i32((((__async_outptr + 8) + 80) + 8) + 8);
             __struct_result_25 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_23, nanoseconds: __lifted_result_24 };
             __option_result_22 = __struct_result_25;
-        };
+        }
         __struct_result_26 = "wasi:filesystem/types.wado/DescriptorStat" { type: __vresult_6, link_count: __lifted_result_9, size: __lifted_result_10, data_access_timestamp: __option_result_12, data_modification_timestamp: __option_result_17, status_change_timestamp: __option_result_22 };
         __result_val = Result<DescriptorStat,ErrorCode>::Ok { discriminant: 0, payload_0: __struct_result_26 };
     } else {
@@ -1183,11 +1183,11 @@ fn __cm_binding__Descriptor_stat(self) {
                     break __inline_memory_to_gc_string_1: String { repr: __local_36, used: __local_35 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 4) + 4), builtin::load_i32((((__async_outptr + 8) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult_28 = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result_30 };
-        };
+        }
         __result_val = Result<DescriptorStat,ErrorCode>::Err { discriminant: 1, payload_0: __vresult_28 };
-    };
+    }
     drop("mem/realloc"(__async_outptr, 112, 8, 0));
     return __result_val;
 }
@@ -1201,7 +1201,7 @@ fn __cm_binding__Descriptor_read_via_stream(self, offset) {
     __lifted_result_3 = builtin::load_i32(__outptr + 0);
     __lifted_result_4 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_3; __lifted_result_4;
+    return __lifted_result_3, __lifted_result_4;
 }
 
 fn __cm_binding__Descriptor_link_at(self, old_path_flags, old_path, new_descriptor, new_path) {
@@ -1322,11 +1322,11 @@ fn __cm_binding__Descriptor_link_at(self, old_path_flags, old_path, new_descript
                     break __inline_memory_to_gc_string_0: String { repr: __local_18, used: __local_17 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
-        };
+        }
         __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
 }
@@ -1403,9 +1403,9 @@ fn __cm_binding__Descriptor_stat_at(self, path_flags, path) {
                     break __inline_memory_to_gc_string_0: String { repr: __local_36, used: __local_35 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 4) + 4), builtin::load_i32((((__async_outptr + 8) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult_9 = "wasi:filesystem/types.wado/DescriptorType::Other" { discriminant: 7, payload_0: __option_result_11 };
-        };
+        }
         __lifted_result_12 = builtin::load_i64((__async_outptr + 8) + 16);
         __lifted_result_13 = builtin::load_i64((__async_outptr + 8) + 24);
         __disc_14 = builtin::load_u8((__async_outptr + 8) + 32);
@@ -1415,7 +1415,7 @@ fn __cm_binding__Descriptor_stat_at(self, path_flags, path) {
             __lifted_result_17 = builtin::load_i32((((__async_outptr + 8) + 32) + 8) + 8);
             __struct_result_18 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_16, nanoseconds: __lifted_result_17 };
             __option_result_15 = __struct_result_18;
-        };
+        }
         __disc_19 = builtin::load_u8((__async_outptr + 8) + 56);
         __option_result_20 = ref.null none;
         if __disc_19 != 0 {
@@ -1423,7 +1423,7 @@ fn __cm_binding__Descriptor_stat_at(self, path_flags, path) {
             __lifted_result_22 = builtin::load_i32((((__async_outptr + 8) + 56) + 8) + 8);
             __struct_result_23 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_21, nanoseconds: __lifted_result_22 };
             __option_result_20 = __struct_result_23;
-        };
+        }
         __disc_24 = builtin::load_u8((__async_outptr + 8) + 80);
         __option_result_25 = ref.null none;
         if __disc_24 != 0 {
@@ -1431,7 +1431,7 @@ fn __cm_binding__Descriptor_stat_at(self, path_flags, path) {
             __lifted_result_27 = builtin::load_i32((((__async_outptr + 8) + 80) + 8) + 8);
             __struct_result_28 = "wasi:clocks/system-clock.wado/Instant" { seconds: __lifted_result_26, nanoseconds: __lifted_result_27 };
             __option_result_25 = __struct_result_28;
-        };
+        }
         __struct_result_29 = "wasi:filesystem/types.wado/DescriptorStat" { type: __vresult_9, link_count: __lifted_result_12, size: __lifted_result_13, data_access_timestamp: __option_result_15, data_modification_timestamp: __option_result_20, status_change_timestamp: __option_result_25 };
         __result_val = Result<DescriptorStat,ErrorCode>::Ok { discriminant: 0, payload_0: __struct_result_29 };
     } else {
@@ -1520,11 +1520,11 @@ fn __cm_binding__Descriptor_stat_at(self, path_flags, path) {
                     break __inline_memory_to_gc_string_1: String { repr: __local_39, used: __local_38 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 4) + 4), builtin::load_i32((((__async_outptr + 8) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult_31 = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result_33 };
-        };
+        }
         __result_val = Result<DescriptorStat,ErrorCode>::Err { discriminant: 1, payload_0: __vresult_31 };
-    };
+    }
     drop("mem/realloc"(__async_outptr, 112, 8, 0));
     return __result_val;
 }
@@ -1547,7 +1547,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -1587,7 +1587,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
             l315: loop {
                 if (i < len) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
                 continue l315;
@@ -1605,7 +1605,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l318: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l318;
@@ -1627,7 +1627,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -1653,13 +1653,13 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
                 if __sroa_event_payload == 2 {
                     break b322;
-                };
+                }
                 continue l323;
             };
         };
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
-    };
+    }
 }
 
 fn "core:internal/log_stderr"(message) {  // from core:internal
@@ -1723,7 +1723,7 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {  // from core:internal
     result = "wasi/stream-read"(handle, ptr, max);
     if result == -1 {
         result = "core:internal/wait_for_blocked"(handle);
-    };
+    }
     count = result >> 4;
     arr = "core:internal/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
@@ -1747,7 +1747,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
     result = "wasi/stream-write"(handle, ptr, len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, len, 1, 0));
 }
 
@@ -1762,7 +1762,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -1776,7 +1776,7 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     evt_handle = builtin::load_i32(out_ptr);
     payload = builtin::load_i32(out_ptr + 4);
     drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return code; evt_handle; payload;
+    return code, evt_handle, payload;
 }
 
 fn String::grow(self, min_capacity) {
@@ -1788,7 +1788,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -1807,11 +1807,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -1821,7 +1821,7 @@ fn String^Eq::eq(self, other) {
     len_a = self.used;
     if len_a != other.used {
         return 0;
-    };
+    }
     return String^Eq::eq_bytes(self.repr, other.repr, len_a);
 }
 
@@ -1833,10 +1833,10 @@ fn String^Eq::eq_bytes(a, b, len) {
             l333: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
-                };
+                }
                 i = i + 1;
                 continue l333;
             };
@@ -1850,7 +1850,7 @@ fn Array<Tuple<Descriptor,String>>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<Tuple<Descriptor,String>>::grow(self);
-    };
+    }
     builtin::array_set<ref "tuple/[Descriptor, String]">(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1877,7 +1877,7 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
             l338: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref "tuple/[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple/[Descriptor, String]">(old_repr, i));
                 i = i + 1;
                 continue l338;
