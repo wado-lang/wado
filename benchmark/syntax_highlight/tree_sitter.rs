@@ -61,11 +61,12 @@ fn render_html(source: &[u8], events: Vec<HighlightEvent>) -> String {
 }
 
 fn main() {
-    let sql = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../sqlite_parse/queries.sql"
-    ))
-    .expect("Failed to read queries.sql");
+    let sql = std::fs::read_to_string("benchmark/sqlite_parse/queries.sql")
+        .or_else(|_| std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../sqlite_parse/queries.sql"
+        )))
+        .expect("Failed to read queries.sql");
 
     let iterations = 100;
 

@@ -234,8 +234,26 @@ set -e
 echo "=== Compiling tree-sitter benchmark ==="
 cargo build --release --manifest-path syntax_highlight/Cargo.toml --quiet
 
+echo "=== Compiling tree-sitter Wasm benchmark ==="
+WASI_SDK="$(cd "$(dirname "$(command -v clang)")/.." 2>/dev/null && pwd)"
+if [ -d "$WASI_SDK/share/wasi-sysroot" ]; then
+    CC_wasm32_wasip1="$WASI_SDK/bin/clang" \
+    CFLAGS_wasm32_wasip1="--sysroot=$WASI_SDK/share/wasi-sysroot" \
+    AR_wasm32_wasip1="$WASI_SDK/bin/llvm-ar" \
+    cargo build --release --target wasm32-wasip1 --manifest-path syntax_highlight/Cargo.toml --quiet
+    HAVE_TS_WASM=1
+else
+    echo "SKIP: tree-sitter Wasm (install wasi-sdk)"
+    HAVE_TS_WASM=0
+fi
+
 echo "=== tree-sitter (native) ==="
 ./syntax_highlight/target/release/syntax_highlight_bench
+
+if [ "$HAVE_TS_WASM" -eq 1 ]; then
+    echo "=== tree-sitter (Wasm/wasmtime) ==="
+    wasmtime --dir ..::. syntax_highlight/target/wasm32-wasip1/release/syntax_highlight_bench.wasm
+fi
 
 echo "=== Wado (Gale) ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 --dir ..::. syntax_highlight/syntax_highlight.wado

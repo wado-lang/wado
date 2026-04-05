@@ -56,6 +56,13 @@ Environment: Wado 2026-04-03, wasmtime 42.0.1, gcc 13.3.0, rustc 1.94.1, Zig 0.1
 | SQLite parse     | sqlparser-rs (Rust) | 167           | 3,910     | 23.42x   |
 | Syntax highlight | tree-sitter (Rust)  | 450           | 27,660    | 61.47x   |
 
+Syntax highlight Wasm-to-Wasm comparison (both on wasmtime):
+
+| Runtime                        | Time (ms) | Relative |
+| ------------------------------ | --------- | -------- |
+| tree-sitter (Wasm/wasmtime)    | 694       | 1.00x    |
+| **Wado** (Gale, Wasm/wasmtime) | 28,026    | 40.38x   |
+
 ## Profiling
 
 ```sh
