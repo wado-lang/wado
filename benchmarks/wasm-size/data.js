@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775345159996,
+  "lastUpdate": 1775350415233,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10241,6 +10241,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/24a675794789ce35ff9635e5a6e35bb6ca7ea050"
         },
         "date": 1775345159780,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1800,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8975,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20408,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "90e210dfe19da18665cc9ec16bc00b39bb7a1918",
+          "message": "Merge pull request #771 from wado-lang/claude/fix-golden-fixtures-30JQs\n\nFix WIR dump readability: parenthesize if-expressions, comma-separate multi-value returns",
+          "timestamp": "2026-04-05T09:50:43+09:00",
+          "tree_id": "02bd2f8feca78023a27061bc612edd9d7b4d34f9",
+          "url": "https://github.com/wado-lang/wado/commit/90e210dfe19da18665cc9ec16bc00b39bb7a1918"
+        },
+        "date": 1775350414995,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
