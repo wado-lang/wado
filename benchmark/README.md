@@ -248,8 +248,8 @@ Both implementations parse 81 SQL statements per iteration. The Gale parser is a
 
 | Runtime                                     | Time (ms) | Per iteration (us) | Relative |
 | ------------------------------------------- | --------- | ------------------ | -------- |
-| tree-sitter + tree-sitter-sql (native Rust) | 466       | 4,661              | 1.00x    |
-| **Wado** (Gale-generated highlighter, Wasm) | 28,368    | 283,679            | 60.86x   |
+| tree-sitter + tree-sitter-sql (native Rust) | 450       | 4,500              | 1.00x    |
+| **Wado** (Gale-generated highlighter, Wasm) | 27,660    | 276,602            | 61.47x   |
 
 Both implementations parse and highlight the same 81 SQLite statements, producing HTML with CSS classes. The Gale highlighter is auto-generated from ANTLR4's `SQLite.g4` grammar; tree-sitter uses `tree-sitter-sql` with `tree-sitter-highlight`.
 
