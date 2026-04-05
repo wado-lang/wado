@@ -1092,11 +1092,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             self.resolve_expr(&assign.value, ctx, Some(trait_info.input_type));
 
                         // Check: reject &T/&mut T assigned where non-ref expected
-                        self.typecheck(
-                            value.type_id,
-                            trait_info.input_type,
-                            assign.value.span(),
-                        );
+                        self.typecheck(value.type_id, trait_info.input_type, assign.value.span());
 
                         let receiver = self.adjust_receiver_for_self_kind(
                             indexed_expr,

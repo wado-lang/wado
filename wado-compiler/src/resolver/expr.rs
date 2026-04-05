@@ -381,9 +381,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     // Infer variant type for generic variants
                     let variant_type = if variant_info.type_params.is_empty() {
-                        self.type_table
-                            .borrow_mut()
-                            .make_variant(variant_info.name.clone(), variant_info.module_source.clone())
+                        self.type_table.borrow_mut().make_variant(
+                            variant_info.name.clone(),
+                            variant_info.module_source.clone(),
+                        )
                     } else {
                         self.infer_variant_type_args(
                             prefix,
@@ -478,9 +479,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
                     }
                     let variant_type = if variant_info.type_params.is_empty() {
-                        self.type_table
-                            .borrow_mut()
-                            .make_variant(variant_info.name.clone(), variant_info.module_source.clone())
+                        self.type_table.borrow_mut().make_variant(
+                            variant_info.name.clone(),
+                            variant_info.module_source.clone(),
+                        )
                     } else {
                         self.infer_variant_type_args(
                             type_name,

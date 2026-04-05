@@ -74,9 +74,7 @@ pub(super) fn check_assignable(
         // non-ref -> &T: incompatible for types that require boxing
         let needs_box = matches!(
             type_table.get(expected_inner),
-            ResolvedType::Variant { .. }
-                | ResolvedType::Primitive(_)
-                | ResolvedType::Enum { .. }
+            ResolvedType::Variant { .. } | ResolvedType::Primitive(_) | ResolvedType::Enum { .. }
         );
         if needs_box {
             return TypeCheckResult::Incompatible;
@@ -109,13 +107,15 @@ pub(super) fn check_assignable(
         return TypeCheckResult::Incompatible;
     }
     if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner)
-        && *base_type == expected_inner {
-            return TypeCheckResult::Incompatible;
-        }
+        && *base_type == expected_inner
+    {
+        return TypeCheckResult::Incompatible;
+    }
     if let ResolvedType::Newtype { base_type, .. } = type_table.get(expected_inner)
-        && *base_type == actual_inner {
-            return TypeCheckResult::Incompatible;
-        }
+        && *base_type == actual_inner
+    {
+        return TypeCheckResult::Incompatible;
+    }
 
     // Rule 6: Option compatibility
     let actual_option = type_table.as_option(actual);
@@ -138,7 +138,10 @@ pub(super) fn check_assignable(
 
     // Rule 7: Function types -- structural equivalence is complex, defer
     if matches!(type_table.get(actual_inner), ResolvedType::Function { .. })
-        || matches!(type_table.get(expected_inner), ResolvedType::Function { .. })
+        || matches!(
+            type_table.get(expected_inner),
+            ResolvedType::Function { .. }
+        )
     {
         return TypeCheckResult::Deferred;
     }
@@ -154,22 +157,22 @@ pub(super) fn check_assignable(
             type_args: expected_args,
             ..
         } = type_table.get(expected_inner)
-        {
-            if actual_name != expected_name {
-                return TypeCheckResult::Incompatible;
-            }
-            if actual_args.len() != expected_args.len() {
-                return TypeCheckResult::Incompatible;
-            }
-            for (a, e) in actual_args.iter().zip(expected_args.iter()) {
-                match check_assignable(*a, *e, type_table) {
-                    TypeCheckResult::Incompatible => return TypeCheckResult::Incompatible,
-                    TypeCheckResult::Deferred => return TypeCheckResult::Deferred,
-                    TypeCheckResult::Compatible => {}
-                }
-            }
-            return TypeCheckResult::Compatible;
+    {
+        if actual_name != expected_name {
+            return TypeCheckResult::Incompatible;
         }
+        if actual_args.len() != expected_args.len() {
+            return TypeCheckResult::Incompatible;
+        }
+        for (a, e) in actual_args.iter().zip(expected_args.iter()) {
+            match check_assignable(*a, *e, type_table) {
+                TypeCheckResult::Incompatible => return TypeCheckResult::Incompatible,
+                TypeCheckResult::Deferred => return TypeCheckResult::Deferred,
+                TypeCheckResult::Compatible => {}
+            }
+        }
+        return TypeCheckResult::Compatible;
+    }
 
     // Rule 9: General catch-all -- different concrete types
     if actual_inner != expected_inner {

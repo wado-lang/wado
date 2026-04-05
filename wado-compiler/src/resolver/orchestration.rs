@@ -118,7 +118,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .or_default()
                             .insert(
                                 enum_decl.name.clone(),
-                                EnumInfo::new(enum_decl.name.clone(), module_source.clone(), Vec::new()),
+                                EnumInfo::new(
+                                    enum_decl.name.clone(),
+                                    module_source.clone(),
+                                    Vec::new(),
+                                ),
                             );
                     }
                     Item::Resource(resource_decl) => {

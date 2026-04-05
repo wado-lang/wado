@@ -390,9 +390,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                             // Infer variant type: use GenericInstance for generic variants
                             let variant_type = if variant_info.type_params.is_empty() {
-                                self.type_table
-                                    .borrow_mut()
-                                    .make_variant(variant_info.name.clone(), variant_info.module_source.clone())
+                                self.type_table.borrow_mut().make_variant(
+                                    variant_info.name.clone(),
+                                    variant_info.module_source.clone(),
+                                )
                             } else {
                                 self.infer_variant_type_args(
                                     &prefix_owned,
@@ -1637,10 +1638,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .any(|&t| self.type_table.borrow().contains_type_param(t));
 
         if has_unresolved && self.trait_ctx.type_params.is_empty() {
-            return self
-                .type_table
-                .borrow_mut()
-                .make_variant(variant_info.name.clone(), variant_info.module_source.clone());
+            return self.type_table.borrow_mut().make_variant(
+                variant_info.name.clone(),
+                variant_info.module_source.clone(),
+            );
         }
 
         self.type_table.borrow_mut().make_generic_instance(

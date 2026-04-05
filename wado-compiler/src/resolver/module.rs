@@ -234,7 +234,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .collect();
                     self.enum_cases.insert(
                         enum_decl.name.clone(),
-                        EnumInfo::new(enum_decl.name.clone(), self.current_module_source.clone(), cases),
+                        EnumInfo::new(
+                            enum_decl.name.clone(),
+                            self.current_module_source.clone(),
+                            cases,
+                        ),
                     );
                 }
                 Item::Flags(flags_decl) => {

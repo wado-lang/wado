@@ -257,17 +257,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .borrow_mut()
                         .make_struct(struct_info.name.clone(), struct_info.module_source.clone())
                 } else if let Some(variant_info) = self.variant_cases.get(name) {
-                    self.type_table
-                        .borrow_mut()
-                        .make_variant(variant_info.name.clone(), variant_info.module_source.clone())
+                    self.type_table.borrow_mut().make_variant(
+                        variant_info.name.clone(),
+                        variant_info.module_source.clone(),
+                    )
                 } else if let Some(enum_info) = self.enum_cases.get(name) {
                     self.type_table
                         .borrow_mut()
                         .make_enum(enum_info.name.clone(), enum_info.module_source.clone())
                 } else if let Some(resource_info) = self.resource_types.get(name) {
-                    self.type_table
-                        .borrow_mut()
-                        .make_resource(resource_info.name.clone(), resource_info.module_source.clone())
+                    self.type_table.borrow_mut().make_resource(
+                        resource_info.name.clone(),
+                        resource_info.module_source.clone(),
+                    )
                 } else {
                     // Unknown type
                     TypeTable::UNKNOWN

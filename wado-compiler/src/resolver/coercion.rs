@@ -1,5 +1,8 @@
 //! Numeric literal coercion and type coercion.
 
+use super::Resolver;
+use super::types::{FunctionContext, TypeError};
+use super::util;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
@@ -8,9 +11,6 @@ use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt,
     TirStmtKind, TypeId, TypeTable,
 };
-use super::Resolver;
-use super::types::{FunctionContext, TypeError};
-use super::util;
 
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn try_coerce_numeric_literal(
