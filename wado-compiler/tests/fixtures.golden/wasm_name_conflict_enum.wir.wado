@@ -11,6 +11,8 @@ struct core:prelude/string.wado//String {
 
 enum ./sub/wasm_name_conflict_enum_mod_a.wado//enum:Direction { Up = 0, Down = 1 };  // from ./sub/wasm_name_conflict_enum_mod_a.wado
 
+enum ./sub/wasm_name_conflict_enum_mod_b.wado//enum:Direction { Left = 0, Right = 1 };  // from ./sub/wasm_name_conflict_enum_mod_b.wado
+
 type "" = fn(i32, i32, i32, i32) -> i32;
 
 type "" = fn(i32, i32, i32) -> i32;
@@ -66,7 +68,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn run() with Stdout {
     let u: "./sub/wasm_name_conflict_enum_mod_a.wado/enum:Direction";
-    let l: i32;
+    let l: "./sub/wasm_name_conflict_enum_mod_b.wado/enum:Direction";
     u = 0;
     l = 0;
     if u == 0 {
@@ -83,7 +85,7 @@ fn __cm_binding__Stdout_write_via_stream(data) {
 
 fn __cm_export__run() {
     let u: "./sub/wasm_name_conflict_enum_mod_a.wado/enum:Direction";
-    let l: i32;
+    let l: "./sub/wasm_name_conflict_enum_mod_b.wado/enum:Direction";
     u = 0;
     l = 0;
     if u == 0 {
@@ -116,15 +118,13 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     let rx: i32;
     let tx: i32;
     let handle: i32;
-    let future: i32;
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     handle = __cm_binding__Stdout_write_via_stream(rx);
     "core:cli/write_to_stream"(tx, message, 1);
-    future = handle;
-    "wasi/future-drop-readable:transmission-cli"(future);
+    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal

@@ -1,0 +1,12 @@
+// Type check: wrong type in struct field initialization should be a compile error
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() {
+    let p = Point { x: 10, y: "hello" };
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

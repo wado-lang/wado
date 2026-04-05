@@ -127,18 +127,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let initializer = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
         // Type check: initializer type must match declared type.
-        // `never` (bottom type) is assignable to any type.
-        if initializer.type_id != ty
-            && initializer.type_id != TypeTable::UNKNOWN
-            && initializer.type_id != TypeTable::NEVER
-            && ty != TypeTable::UNKNOWN
-        {
-            let _ = self.logger.error(TypeError::TypeMismatch {
-                expected: self.type_table.borrow().type_name(ty),
-                found: self.type_table.borrow().type_name(initializer.type_id),
-                span: global_decl.initializer.span(),
-            });
-        }
+        self.typecheck(initializer.type_id, ty, global_decl.initializer.span());
 
         Some(TirGlobal {
             name: global_decl.name.clone(),

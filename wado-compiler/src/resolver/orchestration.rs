@@ -75,6 +75,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .insert(
                                 struct_decl.name.clone(),
                                 StructFieldInfo {
+                                    name: struct_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     fields: Vec::new(),
                                     type_param_bounds,
@@ -95,6 +96,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .insert(
                                 variant_decl.name.clone(),
                                 VariantInfo {
+                                    name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     type_params,
                                     cases: Vec::new(),
@@ -116,7 +118,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .or_default()
                             .insert(
                                 enum_decl.name.clone(),
-                                EnumInfo::new(module_source.clone(), Vec::new()),
+                                EnumInfo::new(
+                                    enum_decl.name.clone(),
+                                    module_source.clone(),
+                                    Vec::new(),
+                                ),
                             );
                     }
                     Item::Resource(resource_decl) => {
@@ -126,6 +132,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .insert(
                                 resource_decl.name.clone(),
                                 ResourceInfo {
+                                    name: resource_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     methods: resource_decl
                                         .methods
@@ -268,6 +275,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                         // Update the nested map entry with actual fields
                         let info = StructFieldInfo {
+                            name: struct_decl.name.clone(),
                             module_source: module_source.clone(),
                             fields,
                             type_param_bounds,
@@ -370,6 +378,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .insert(
                                 variant_decl.name.clone(),
                                 VariantInfo {
+                                    name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     type_params,
                                     cases,
@@ -393,7 +402,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .or_default()
                             .insert(
                                 enum_decl.name.clone(),
-                                EnumInfo::new(module_source.clone(), cases),
+                                EnumInfo::new(enum_decl.name.clone(), module_source.clone(), cases),
                             );
                     }
                     Item::Flags(flags_decl) => {
@@ -2035,14 +2044,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     "!" => TypeTable::NEVER,
                     _ => {
                         // Check if it's a struct type
+                        // Use canonical name from info (not alias) for consistent TypeId interning
                         if let Some(info) = struct_fields.get(&named.name) {
-                            type_table.make_struct(named.name.clone(), info.module_source.clone())
+                            type_table.make_struct(info.name.clone(), info.module_source.clone())
                         } else if let Some(info) = resource_types.get(&named.name) {
-                            type_table.make_resource(named.name.clone(), info.module_source.clone())
+                            type_table.make_resource(info.name.clone(), info.module_source.clone())
                         } else if let Some(info) = variant_cases.get(&named.name) {
-                            type_table.make_variant(named.name.clone(), info.module_source.clone())
+                            type_table.make_variant(info.name.clone(), info.module_source.clone())
                         } else if let Some(info) = enum_cases.get(&named.name) {
-                            type_table.make_enum(named.name.clone(), info.module_source.clone())
+                            type_table.make_enum(info.name.clone(), info.module_source.clone())
                         } else if flags_cases.contains_key(&named.name) {
                             // Flags are newtypes over u32, should be handled by newtypes check above.
                             // This is a fallback in case the newtype wasn't registered yet.
@@ -2211,15 +2221,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     "()" => TypeTable::UNIT,
                     "!" => TypeTable::NEVER,
                     _ => {
-                        // Check if it's a struct type
+                        // Use canonical name from info (not alias) for consistent TypeId interning
                         if let Some(info) = struct_fields.get(&named.name) {
-                            type_table.make_struct(named.name.clone(), info.module_source.clone())
+                            type_table.make_struct(info.name.clone(), info.module_source.clone())
                         } else if let Some(info) = resource_types.get(&named.name) {
-                            type_table.make_resource(named.name.clone(), info.module_source.clone())
+                            type_table.make_resource(info.name.clone(), info.module_source.clone())
                         } else if let Some(info) = variant_cases.get(&named.name) {
-                            type_table.make_variant(named.name.clone(), info.module_source.clone())
+                            type_table.make_variant(info.name.clone(), info.module_source.clone())
                         } else if let Some(info) = enum_cases.get(&named.name) {
-                            type_table.make_enum(named.name.clone(), info.module_source.clone())
+                            type_table.make_enum(info.name.clone(), info.module_source.clone())
                         } else {
                             TypeTable::UNKNOWN
                         }

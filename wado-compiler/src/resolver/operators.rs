@@ -773,9 +773,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             && let Some(local) = ctx.lookup(name)
             && !local.is_mut
         {
-            let _ = self.logger.error(TypeError::TypeMismatch {
-                expected: "mutable variable".to_string(),
-                found: format!("immutable variable '{name}'"),
+            let _ = self.logger.error(TypeError::CannotAssign {
+                message: format!("cannot take &mut of immutable variable '{name}'"),
                 span: unary.span,
             });
         }
@@ -1074,7 +1073,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         _ => None,
                     };
                     if let Some(expected) = derefed_index_type {
-                        self.check_type_mismatch(index_type, expected, index_expr.index.span());
+                        self.typecheck(index_type, expected, index_expr.index.span());
                     }
 
                     let assign_info = self
@@ -1092,11 +1091,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             self.resolve_expr(&assign.value, ctx, Some(trait_info.input_type));
 
                         // Check: reject &T/&mut T assigned where non-ref expected
-                        self.check_type_mismatch(
-                            value.type_id,
-                            trait_info.input_type,
-                            assign.value.span(),
-                        );
+                        self.typecheck(value.type_id, trait_info.input_type, assign.value.span());
 
                         let receiver = self.adjust_receiver_for_self_kind(
                             indexed_expr,
@@ -1147,7 +1142,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let value = self.resolve_expr(&assign.value, ctx, Some(target.type_id));
 
         // Reject &T assigned where non-ref T expected
-        self.check_type_mismatch(value.type_id, target.type_id, assign.value.span());
+        self.typecheck(value.type_id, target.type_id, assign.value.span());
 
         // Handle assignment to global variables
         if let TirExprKind::GlobalVarGet {
