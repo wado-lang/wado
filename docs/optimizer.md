@@ -140,6 +140,8 @@ Hoists the backing array allocation for template strings out of loops. Each iter
 
 Hoists frequently accessed struct fields from GC heap objects to local scalar variables for the duration of a loop. Runs once after the fixed-point loop converges to avoid spurious re-triggering from the write-back/re-read statements it inserts.
 
+Write-back statements are inserted before `return` and `break` statements that exit the HFS loop scope. An optimization sinks write-backs for unlabeled `break` at loop depth 0, since those exit the HFS loop directly and the post-loop write-backs already cover them. This is tracked via a `loop_depth` counter that increments when recursing into nested loops.
+
 ### Dead Code Elimination (`dce.rs`)
 
 Removes unreachable functions, types, unused string literals, and unused WASI effect/function imports via call graph reachability analysis from the entry point. Also tracks feature usage (Stdout, Stderr, canonical builtins, box primitives) for conditional feature inclusion.

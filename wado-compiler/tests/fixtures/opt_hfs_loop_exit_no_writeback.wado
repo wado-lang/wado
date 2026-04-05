@@ -1,0 +1,43 @@
+// Verify that HFS write-backs are NOT inserted before `break;` that exits
+// the HFS loop directly.  The post-loop write-back covers them.
+//
+// Structure: a loop with hot field access (`state.counter`) that breaks
+// from the main loop body.  The WIR should show the post-loop write-back
+// but NOT a write-back immediately before the break.
+
+struct State {
+    counter: i32,
+    total: i32,
+    limit: i32,
+    data: Array<i32>,
+}
+
+fn process(state: &mut State) {
+    loop {
+        if state.counter >= state.limit {
+            // This break exits the HFS loop directly — no write-back needed
+            break;
+        }
+        state.total = state.total + state.data[state.counter];
+        state.counter = state.counter + 1;
+    }
+}
+
+export fn run() {
+    let mut state = State {
+        counter: 0,
+        total: 0,
+        limit: 5,
+        data: [10, 20, 30, 40, 50] as Array<i32>,
+    };
+    process(&mut state);
+    assert state.total == 150, `expected 150, got {state.total}`;
+    assert state.counter == 5, `expected 5, got {state.counter}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["state.counter = _hfs_counter_7;\n                break b0"],
+    "wir_expect:O2": ["_hfs_counter_7 = state.counter"]
+}
