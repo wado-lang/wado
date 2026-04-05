@@ -1868,10 +1868,20 @@ impl Parser {
         return self.tokens[self.pos - 1].span.end;
     }
 
-    fn expect(&mut self, kind: i32, name: String) -> Result<Token, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
             return Result::<Token, ParseError>::Ok(self.advance());
         }
+        let tok = &self.tokens[self.pos];
+        let name = token_kind_name(kind);
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
         return Result::<Token, ParseError>::Err(ParseError::new(
             `expected {name}, got "{tok.text}"`,
@@ -1889,7 +1899,7 @@ fn parse_html_document(p: &mut Parser) -> Result<HtmlDocumentNode, ParseError> {
         scriptlet_or_sea_ws_list.push(scriptlet_or_sea_ws);
     }
     let xml: Option<Token> = if p.peek_kind() == TK_XML {
-        let xml = p.expect(TK_XML, "XML")?;
+        let xml = p.expect(TK_XML)?;
         Option::<Token>::Some(xml)
     } else {
         null
@@ -1900,7 +1910,7 @@ fn parse_html_document(p: &mut Parser) -> Result<HtmlDocumentNode, ParseError> {
         scriptlet_or_sea_ws_list_2.push(scriptlet_or_sea_ws);
     }
     let dtd: Option<Token> = if p.peek_kind() == TK_DTD {
-        let dtd = p.expect(TK_DTD, "DTD")?;
+        let dtd = p.expect(TK_DTD)?;
         Option::<Token>::Some(dtd)
     } else {
         null
@@ -1930,14 +1940,14 @@ fn parse_scriptlet_or_sea_ws(p: &mut Parser) -> Result<ScriptletOrSeaWsNode, Par
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_SCRIPTLET {
-        let scriptlet = p.expect(TK_SCRIPTLET, "SCRIPTLET")?;
+        let scriptlet = p.expect(TK_SCRIPTLET)?;
         return Result::<ScriptletOrSeaWsNode, ParseError>::Ok(ScriptletOrSeaWsNode::Alt0(ScriptletOrSeaWsAlt0 {
             span: Span::new(start, p.last_end()),
             scriptlet,
         }));
     }
     if kind == TK_SEA_WS {
-        let sea_ws = p.expect(TK_SEA_WS, "SEA_WS")?;
+        let sea_ws = p.expect(TK_SEA_WS)?;
         return Result::<ScriptletOrSeaWsNode, ParseError>::Ok(ScriptletOrSeaWsNode::Alt1(ScriptletOrSeaWsAlt1 {
             span: Span::new(start, p.last_end()),
             sea_ws,
@@ -1975,8 +1985,8 @@ fn parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_TAG_OPEN {
-        let tag_open = p.expect(TK_TAG_OPEN, "TAG_OPEN")?;
-        let tag_name = p.expect(TK_TAG_NAME, "TAG_NAME")?;
+        let tag_open = p.expect(TK_TAG_OPEN)?;
+        let tag_name = p.expect(TK_TAG_NAME)?;
         let mut html_attribute_list: Array<HtmlAttributeNode> = [];
         while p.peek_kind() == TK_TAG_NAME {
             let html_attribute = parse_html_attribute(p)?;
@@ -1985,7 +1995,7 @@ fn parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
         let mut group_0_inner: Option<HtmlElementGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_TAG_CLOSE {
-            let tag_close = p.expect(TK_TAG_CLOSE, "TAG_CLOSE")?;
+            let tag_close = p.expect(TK_TAG_CLOSE)?;
             let html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem> = if p.peek_kind() matches { TK_HTML_TEXT | TK_SEA_WS | TK_TAG_OPEN | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT } {
                 let opt_saved = p.pos;
                 let mut opt_result: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem> = null;
@@ -1993,16 +2003,16 @@ fn parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
                     let _bt_r = parse_html_content(p);
                     if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
                     let html_content = _bt_r.unwrap();
-                    let _bt_r_2 = p.expect(TK_TAG_OPEN, "TAG_OPEN");
+                    let _bt_r_2 = p.expect(TK_TAG_OPEN);
                     if let Err(_) = _bt_r_2 { p.pos = opt_saved; break opt_bt; }
                     let tag_open = _bt_r_2.unwrap();
-                    let _bt_r_3 = p.expect(TK_TAG_SLASH, "TAG_SLASH");
+                    let _bt_r_3 = p.expect(TK_TAG_SLASH);
                     if let Err(_) = _bt_r_3 { p.pos = opt_saved; break opt_bt; }
                     let tag_slash = _bt_r_3.unwrap();
-                    let _bt_r_4 = p.expect(TK_TAG_NAME, "TAG_NAME");
+                    let _bt_r_4 = p.expect(TK_TAG_NAME);
                     if let Err(_) = _bt_r_4 { p.pos = opt_saved; break opt_bt; }
                     let tag_name = _bt_r_4.unwrap();
-                    let _bt_r_5 = p.expect(TK_TAG_CLOSE, "TAG_CLOSE");
+                    let _bt_r_5 = p.expect(TK_TAG_CLOSE);
                     if let Err(_) = _bt_r_5 { p.pos = opt_saved; break opt_bt; }
                     let tag_close = _bt_r_5.unwrap();
                     let html_content_tag_open_tag_slash_tag_name_tag_close = HtmlContentTagOpenTagSlashTagNameTagCloseItem {
@@ -2023,7 +2033,7 @@ fn parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
                 html_content_tag_open_tag_slash_tag_name_tag_close,
             }));
         } else if grp_kind == TK_TAG_SLASH_CLOSE {
-            let tag_slash_close = p.expect(TK_TAG_SLASH_CLOSE, "TAG_SLASH_CLOSE")?;
+            let tag_slash_close = p.expect(TK_TAG_SLASH_CLOSE)?;
             group_0_inner = Option::<HtmlElementGroup0>::Some(HtmlElementGroup0::Alt1(HtmlElementGroup0Alt1 {
                 tag_slash_close,
             }));
@@ -2038,7 +2048,7 @@ fn parse_html_element(p: &mut Parser) -> Result<HtmlElementNode, ParseError> {
         }));
     }
     if kind == TK_SCRIPTLET {
-        let scriptlet = p.expect(TK_SCRIPTLET, "SCRIPTLET")?;
+        let scriptlet = p.expect(TK_SCRIPTLET)?;
         return Result::<HtmlElementNode, ParseError>::Ok(HtmlElementNode::Alt1(HtmlElementAlt1 {
             span: Span::new(start, p.last_end()),
             scriptlet,
@@ -2083,7 +2093,7 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
                 html_element,
             }));
         } else if grp_kind == TK_CDATA {
-            let cdata = p.expect(TK_CDATA, "CDATA")?;
+            let cdata = p.expect(TK_CDATA)?;
             group_0_inner = Option::<HtmlContentGroup0>::Some(HtmlContentGroup0::Alt1(HtmlContentGroup0Alt1 {
                 cdata,
             }));
@@ -2115,10 +2125,10 @@ fn parse_html_content(p: &mut Parser) -> Result<HtmlContentNode, ParseError> {
 
 fn parse_html_attribute(p: &mut Parser) -> Result<HtmlAttributeNode, ParseError> {
     let start = p.peek().span.start;
-    let tag_name = p.expect(TK_TAG_NAME, "TAG_NAME")?;
+    let tag_name = p.expect(TK_TAG_NAME)?;
     let tag_equals_attvalue_value: Option<TagEqualsAttvalueValueItem> = if p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE {
-        let tag_equals = p.expect(TK_TAG_EQUALS, "TAG_EQUALS")?;
-        let attvalue_value = p.expect(TK_ATTVALUE_VALUE, "ATTVALUE_VALUE")?;
+        let tag_equals = p.expect(TK_TAG_EQUALS)?;
+        let attvalue_value = p.expect(TK_ATTVALUE_VALUE)?;
         let tag_equals_attvalue_value = TagEqualsAttvalueValueItem {
             tag_equals,
             attvalue_value,
@@ -2138,14 +2148,14 @@ fn parse_html_chardata(p: &mut Parser) -> Result<HtmlChardataNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_HTML_TEXT {
-        let html_text = p.expect(TK_HTML_TEXT, "HTML_TEXT")?;
+        let html_text = p.expect(TK_HTML_TEXT)?;
         return Result::<HtmlChardataNode, ParseError>::Ok(HtmlChardataNode::Alt0(HtmlChardataAlt0 {
             span: Span::new(start, p.last_end()),
             html_text,
         }));
     }
     if kind == TK_SEA_WS {
-        let sea_ws = p.expect(TK_SEA_WS, "SEA_WS")?;
+        let sea_ws = p.expect(TK_SEA_WS)?;
         return Result::<HtmlChardataNode, ParseError>::Ok(HtmlChardataNode::Alt1(HtmlChardataAlt1 {
             span: Span::new(start, p.last_end()),
             sea_ws,
@@ -2169,7 +2179,7 @@ fn parse_html_misc(p: &mut Parser) -> Result<HtmlMiscNode, ParseError> {
         }));
     }
     if kind == TK_SEA_WS {
-        let sea_ws = p.expect(TK_SEA_WS, "SEA_WS")?;
+        let sea_ws = p.expect(TK_SEA_WS)?;
         return Result::<HtmlMiscNode, ParseError>::Ok(HtmlMiscNode::Alt1(HtmlMiscAlt1 {
             span: Span::new(start, p.last_end()),
             sea_ws,
@@ -2186,14 +2196,14 @@ fn parse_html_comment(p: &mut Parser) -> Result<HtmlCommentNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_HTML_COMMENT {
-        let html_comment = p.expect(TK_HTML_COMMENT, "HTML_COMMENT")?;
+        let html_comment = p.expect(TK_HTML_COMMENT)?;
         return Result::<HtmlCommentNode, ParseError>::Ok(HtmlCommentNode::Alt0(HtmlCommentAlt0 {
             span: Span::new(start, p.last_end()),
             html_comment,
         }));
     }
     if kind == TK_HTML_CONDITIONAL_COMMENT {
-        let html_conditional_comment = p.expect(TK_HTML_CONDITIONAL_COMMENT, "HTML_CONDITIONAL_COMMENT")?;
+        let html_conditional_comment = p.expect(TK_HTML_CONDITIONAL_COMMENT)?;
         return Result::<HtmlCommentNode, ParseError>::Ok(HtmlCommentNode::Alt1(HtmlCommentAlt1 {
             span: Span::new(start, p.last_end()),
             html_conditional_comment,
@@ -2208,7 +2218,7 @@ fn parse_html_comment(p: &mut Parser) -> Result<HtmlCommentNode, ParseError> {
 
 fn parse_script(p: &mut Parser) -> Result<ScriptNode, ParseError> {
     let start = p.peek().span.start;
-    let script_open = p.expect(TK_SCRIPT_OPEN, "SCRIPT_OPEN")?;
+    let script_open = p.expect(TK_SCRIPT_OPEN)?;
     let script_body_or_script_short_body = p.advance();
     return Result::<ScriptNode, ParseError>::Ok(ScriptNode {
         span: Span::new(start, p.last_end()),
@@ -2219,7 +2229,7 @@ fn parse_script(p: &mut Parser) -> Result<ScriptNode, ParseError> {
 
 fn parse_style(p: &mut Parser) -> Result<StyleNode, ParseError> {
     let start = p.peek().span.start;
-    let style_open = p.expect(TK_STYLE_OPEN, "STYLE_OPEN")?;
+    let style_open = p.expect(TK_STYLE_OPEN)?;
     let style_body_or_style_short_body = p.advance();
     return Result::<StyleNode, ParseError>::Ok(StyleNode {
         span: Span::new(start, p.last_end()),

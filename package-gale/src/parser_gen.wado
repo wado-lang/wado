@@ -1091,12 +1091,28 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     let mut f7 = FnSpec::new("expect");
     f7.set_receiver("&mut self");
     f7.add_param("kind", "i32");
-    f7.add_param("name", "String");
     f7.set_return_type("Result<Token, ParseError>");
     f7.emit_begin(w);
     w.begin("if self.tokens[self.pos].kind == kind");
     w.line("return Result::<Token, ParseError>::Ok(self.advance());");
     w.end();
+    w.line("let tok = &self.tokens[self.pos];");
+    w.line("let name = token_kind_name(kind);");
+    w.line("return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.indent();
+    w.line("`expected {name}, got \"{tok.text}\"`,");
+    w.line("tok.span,");
+    w.line("[name],");
+    w.dedent();
+    w.line("));");
+    w.end();
+    w.blank();
+
+    let mut f8 = FnSpec::new("fail");
+    f8.set_receiver("&self");
+    f8.add_param("name", "String");
+    f8.set_return_type("Result<Token, ParseError>");
+    f8.emit_begin(w);
     w.line("let tok = &self.tokens[self.pos];");
     w.line("return Result::<Token, ParseError>::Err(ParseError::new(");
     w.indent();
@@ -1440,14 +1456,14 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     if let TokenRef(name) = elem {
         let const_name = `TK_{name}`;
         let field_name = dedup_name(&escape_ident(&to_lower(name)), name_counts);
-        w.line(`let {field_name} = p.expect({const_name}, {escape_string(name)})?;`);
+        w.line(`let {field_name} = p.expect({const_name})?;`);
         return;
     }
     if let Literal(text) = elem {
         let const_name = literal_const_name(text);
         let display = `'{text}'`;
         let field_name = dedup_name(&literal_field_name(text), name_counts);
-        w.line(`let {field_name} = p.expect({const_name}, {escape_string(&display)})?;`);
+        w.line(`let {field_name} = p.expect({const_name})?;`);
         return;
     }
     if let RuleRef(name) = elem {
@@ -2011,7 +2027,7 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext
     if let TokenRef(name) = elem {
         let const_name = `TK_{name}`;
         let r_var = dedup_name(&"opt_r", name_counts);
-        w.line(`let {r_var} = p.expect({const_name}, {escape_string(name)});`);
+        w.line(`let {r_var} = p.expect({const_name});`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         return;
     }
@@ -2019,7 +2035,7 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext
         let const_name = literal_const_name(text);
         let display = `'{text}'`;
         let r_var = dedup_name(&"opt_r", name_counts);
-        w.line(`let {r_var} = p.expect({const_name}, {escape_string(&display)});`);
+        w.line(`let {r_var} = p.expect({const_name});`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         return;
     }
@@ -2198,7 +2214,7 @@ fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &m
 ///           let r1 = parse_foo(p);
 ///           if let Err(_) = r1 { p.pos = saved; break bt; }
 ///           let foo = r1.unwrap();
-///           let r2 = p.expect(TK_DOT, "'.'");
+///           let r2 = p.expect(TK_DOT);
 ///           if let Err(_) = r2 { p.pos = saved; break bt; }
 ///           let dot = r2.unwrap();
 ///           result = Option::<Type>::Some(Type { foo, dot });
@@ -2257,14 +2273,14 @@ fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx
 /// Generate a failable element that uses proper variable names for struct
 /// construction, instead of the anonymous `opt_r` variables.
 ///
-/// For TokenRef/Literal: generates `let r = p.expect(...); if Err, break; let name = r.unwrap();`
+/// For TokenRef/Literal: generates `let r = p.expect(TK); if Err, break; let name = r.unwrap();`
 /// For RuleRef: generates `let r = parse_foo(p); if Err, break; let foo = r.unwrap();`
 fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, saved_var: &String, label: &String, name_counts: &mut Array<[String, i32]>) {
     if let TokenRef(name) = elem {
         let const_name = `TK_{name}`;
         let field_name = dedup_name(&escape_ident(&to_lower(name)), name_counts);
         let r_var = dedup_name(&"_bt_r", name_counts);
-        w.line(`let {r_var} = p.expect({const_name}, {escape_string(name)});`);
+        w.line(`let {r_var} = p.expect({const_name});`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         w.line(`let {field_name} = {r_var}.unwrap();`);
         return;
@@ -2274,7 +2290,7 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
         let display = `'{text}'`;
         let field_name = dedup_name(&literal_field_name(text), name_counts);
         let r_var = dedup_name(&"_bt_r", name_counts);
-        w.line(`let {r_var} = p.expect({const_name}, {escape_string(&display)});`);
+        w.line(`let {r_var} = p.expect({const_name});`);
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         w.line(`let {field_name} = {r_var}.unwrap();`);
         return;
@@ -2645,7 +2661,7 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
 
         w.begin(`if let None = {opt_var}`);
         let first_alt_name = group_case_name(&alts[0]);
-        w.line(`p.expect(-1, "{first_alt_name}")?;`);
+        w.line(`p.fail("{first_alt_name}")?;`);
         w.end();
         w.line(`let {var_name} = {opt_var}.unwrap();`);
     }
@@ -2915,7 +2931,7 @@ fn gen_general_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
         ctx.group_counter = gc_max;
 
         w.begin(`if let None = {opt_var}`);
-        w.line(`p.expect(-1, "group alternative")?;`);
+        w.line(`p.fail("group alternative")?;`);
         w.end();
         w.line(`let {var_name} = {opt_var}.unwrap();`);
     }

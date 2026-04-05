@@ -1255,10 +1255,20 @@ impl Parser {
         return self.tokens[self.pos - 1].span.end;
     }
 
-    fn expect(&mut self, kind: i32, name: String) -> Result<Token, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
             return Result::<Token, ParseError>::Ok(self.advance());
         }
+        let tok = &self.tokens[self.pos];
+        let name = token_kind_name(kind);
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
         return Result::<Token, ParseError>::Err(ParseError::new(
             `expected {name}, got "{tok.text}"`,
@@ -1273,7 +1283,7 @@ fn parse_equation(p: &mut Parser) -> Result<EquationNode, ParseError> {
     let expression = parse_expression(p)?;
     let relop = parse_relop(p)?;
     let expression_2 = parse_expression(p)?;
-    let eof = p.expect(TK_EOF, "EOF")?;
+    let eof = p.expect(TK_EOF)?;
     return Result::<EquationNode, ParseError>::Ok(EquationNode {
         span: Span::new(start, p.last_end()),
         expression,
@@ -1328,7 +1338,7 @@ fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError>
     let signed_atom = parse_signed_atom(p)?;
     let mut pow_signed_atom_list: Array<PowSignedAtomItem> = [];
     while p.peek_kind() == TK_POW {
-        let pow = p.expect(TK_POW, "POW")?;
+        let pow = p.expect(TK_POW)?;
         let signed_atom = parse_signed_atom(p)?;
         let pow_signed_atom = PowSignedAtomItem {
             pow,
@@ -1347,7 +1357,7 @@ fn parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_PLUS {
-        let plus = p.expect(TK_PLUS, "PLUS")?;
+        let plus = p.expect(TK_PLUS)?;
         let signed_atom = parse_signed_atom(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt0(SignedAtomAlt0 {
             span: Span::new(start, p.last_end()),
@@ -1356,7 +1366,7 @@ fn parse_signed_atom(p: &mut Parser) -> Result<SignedAtomNode, ParseError> {
         }));
     }
     if kind == TK_MINUS {
-        let minus = p.expect(TK_MINUS, "MINUS")?;
+        let minus = p.expect(TK_MINUS)?;
         let signed_atom = parse_signed_atom(p)?;
         return Result::<SignedAtomNode, ParseError>::Ok(SignedAtomNode::Alt1(SignedAtomAlt1 {
             span: Span::new(start, p.last_end()),
@@ -1410,9 +1420,9 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
         }));
     }
     if kind == TK_LPAREN {
-        let lparen = p.expect(TK_LPAREN, "LPAREN")?;
+        let lparen = p.expect(TK_LPAREN)?;
         let expression = parse_expression(p)?;
-        let rparen = p.expect(TK_RPAREN, "RPAREN")?;
+        let rparen = p.expect(TK_RPAREN)?;
         return Result::<AtomNode, ParseError>::Ok(AtomNode::Alt3(AtomAlt3 {
             span: Span::new(start, p.last_end()),
             lparen,
@@ -1429,7 +1439,7 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
 
 fn parse_scientific(p: &mut Parser) -> Result<ScientificNode, ParseError> {
     let start = p.peek().span.start;
-    let scientific_number = p.expect(TK_SCIENTIFIC_NUMBER, "SCIENTIFIC_NUMBER")?;
+    let scientific_number = p.expect(TK_SCIENTIFIC_NUMBER)?;
     return Result::<ScientificNode, ParseError>::Ok(ScientificNode {
         span: Span::new(start, p.last_end()),
         scientific_number,
@@ -1440,21 +1450,21 @@ fn parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_PI {
-        let pi = p.expect(TK_PI, "PI")?;
+        let pi = p.expect(TK_PI)?;
         return Result::<ConstantNode, ParseError>::Ok(ConstantNode::Alt0(ConstantAlt0 {
             span: Span::new(start, p.last_end()),
             pi,
         }));
     }
     if kind == TK_EULER {
-        let euler = p.expect(TK_EULER, "EULER")?;
+        let euler = p.expect(TK_EULER)?;
         return Result::<ConstantNode, ParseError>::Ok(ConstantNode::Alt1(ConstantAlt1 {
             span: Span::new(start, p.last_end()),
             euler,
         }));
     }
     if kind == TK_I {
-        let i = p.expect(TK_I, "I")?;
+        let i = p.expect(TK_I)?;
         return Result::<ConstantNode, ParseError>::Ok(ConstantNode::Alt2(ConstantAlt2 {
             span: Span::new(start, p.last_end()),
             i,
@@ -1469,7 +1479,7 @@ fn parse_constant(p: &mut Parser) -> Result<ConstantNode, ParseError> {
 
 fn parse_variable(p: &mut Parser) -> Result<VariableNode, ParseError> {
     let start = p.peek().span.start;
-    let variable = p.expect(TK_VARIABLE, "VARIABLE")?;
+    let variable = p.expect(TK_VARIABLE)?;
     return Result::<VariableNode, ParseError>::Ok(VariableNode {
         span: Span::new(start, p.last_end()),
         variable,
@@ -1479,11 +1489,11 @@ fn parse_variable(p: &mut Parser) -> Result<VariableNode, ParseError> {
 fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
     let start = p.peek().span.start;
     let funcname = parse_funcname(p)?;
-    let lparen = p.expect(TK_LPAREN, "LPAREN")?;
+    let lparen = p.expect(TK_LPAREN)?;
     let expression = parse_expression(p)?;
     let mut comma_expression_list: Array<CommaExpressionItem> = [];
     while p.peek_kind() == TK_COMMA {
-        let comma = p.expect(TK_COMMA, "COMMA")?;
+        let comma = p.expect(TK_COMMA)?;
         let expression = parse_expression(p)?;
         let comma_expression = CommaExpressionItem {
             comma,
@@ -1491,7 +1501,7 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
         };
         comma_expression_list.push(comma_expression);
     }
-    let rparen = p.expect(TK_RPAREN, "RPAREN")?;
+    let rparen = p.expect(TK_RPAREN)?;
     return Result::<FuncNode, ParseError>::Ok(FuncNode {
         span: Span::new(start, p.last_end()),
         funcname,
@@ -1506,63 +1516,63 @@ fn parse_funcname(p: &mut Parser) -> Result<FuncnameNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_COS {
-        let cos = p.expect(TK_COS, "COS")?;
+        let cos = p.expect(TK_COS)?;
         return Result::<FuncnameNode, ParseError>::Ok(FuncnameNode::Alt0(FuncnameAlt0 {
             span: Span::new(start, p.last_end()),
             cos,
         }));
     }
     if kind == TK_TAN {
-        let tan = p.expect(TK_TAN, "TAN")?;
+        let tan = p.expect(TK_TAN)?;
         return Result::<FuncnameNode, ParseError>::Ok(FuncnameNode::Alt1(FuncnameAlt1 {
             span: Span::new(start, p.last_end()),
             tan,
         }));
     }
     if kind == TK_SIN {
-        let sin = p.expect(TK_SIN, "SIN")?;
+        let sin = p.expect(TK_SIN)?;
         return Result::<FuncnameNode, ParseError>::Ok(FuncnameNode::Alt2(FuncnameAlt2 {
             span: Span::new(start, p.last_end()),
             sin,
         }));
     }
     if kind == TK_ACOS {
-        let acos = p.expect(TK_ACOS, "ACOS")?;
+        let acos = p.expect(TK_ACOS)?;
         return Result::<FuncnameNode, ParseError>::Ok(FuncnameNode::Alt3(FuncnameAlt3 {
             span: Span::new(start, p.last_end()),
             acos,
         }));
     }
     if kind == TK_ATAN {
-        let atan = p.expect(TK_ATAN, "ATAN")?;
+        let atan = p.expect(TK_ATAN)?;
         return Result::<FuncnameNode, ParseError>::Ok(FuncnameNode::Alt4(FuncnameAlt4 {
             span: Span::new(start, p.last_end()),
             atan,
         }));
     }
     if kind == TK_ASIN {
-        let asin = p.expect(TK_ASIN, "ASIN")?;
+        let asin = p.expect(TK_ASIN)?;
         return Result::<FuncnameNode, ParseError>::Ok(FuncnameNode::Alt5(FuncnameAlt5 {
             span: Span::new(start, p.last_end()),
             asin,
         }));
     }
     if kind == TK_LOG {
-        let log = p.expect(TK_LOG, "LOG")?;
+        let log = p.expect(TK_LOG)?;
         return Result::<FuncnameNode, ParseError>::Ok(FuncnameNode::Alt6(FuncnameAlt6 {
             span: Span::new(start, p.last_end()),
             log,
         }));
     }
     if kind == TK_LN {
-        let ln = p.expect(TK_LN, "LN")?;
+        let ln = p.expect(TK_LN)?;
         return Result::<FuncnameNode, ParseError>::Ok(FuncnameNode::Alt7(FuncnameAlt7 {
             span: Span::new(start, p.last_end()),
             ln,
         }));
     }
     if kind == TK_SQRT {
-        let sqrt = p.expect(TK_SQRT, "SQRT")?;
+        let sqrt = p.expect(TK_SQRT)?;
         return Result::<FuncnameNode, ParseError>::Ok(FuncnameNode::Alt8(FuncnameAlt8 {
             span: Span::new(start, p.last_end()),
             sqrt,
@@ -1579,21 +1589,21 @@ fn parse_relop(p: &mut Parser) -> Result<RelopNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_EQ {
-        let eq = p.expect(TK_EQ, "EQ")?;
+        let eq = p.expect(TK_EQ)?;
         return Result::<RelopNode, ParseError>::Ok(RelopNode::Alt0(RelopAlt0 {
             span: Span::new(start, p.last_end()),
             eq,
         }));
     }
     if kind == TK_GT {
-        let gt = p.expect(TK_GT, "GT")?;
+        let gt = p.expect(TK_GT)?;
         return Result::<RelopNode, ParseError>::Ok(RelopNode::Alt1(RelopAlt1 {
             span: Span::new(start, p.last_end()),
             gt,
         }));
     }
     if kind == TK_LT {
-        let lt = p.expect(TK_LT, "LT")?;
+        let lt = p.expect(TK_LT)?;
         return Result::<RelopNode, ParseError>::Ok(RelopNode::Alt2(RelopAlt2 {
             span: Span::new(start, p.last_end()),
             lt,

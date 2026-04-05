@@ -880,10 +880,20 @@ impl Parser {
         return self.tokens[self.pos - 1].span.end;
     }
 
-    fn expect(&mut self, kind: i32, name: String) -> Result<Token, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
             return Result::<Token, ParseError>::Ok(self.advance());
         }
+        let tok = &self.tokens[self.pos];
+        let name = token_kind_name(kind);
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
         return Result::<Token, ParseError>::Err(ParseError::new(
             `expected {name}, got "{tok.text}"`,
@@ -896,7 +906,7 @@ impl Parser {
 fn parse_json(p: &mut Parser) -> Result<JsonNode, ParseError> {
     let start = p.peek().span.start;
     let value = parse_value(p)?;
-    let eof = p.expect(TK_EOF, "EOF")?;
+    let eof = p.expect(TK_EOF)?;
     return Result::<JsonNode, ParseError>::Ok(JsonNode {
         span: Span::new(start, p.last_end()),
         value,
@@ -906,11 +916,11 @@ fn parse_json(p: &mut Parser) -> Result<JsonNode, ParseError> {
 
 fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let start = p.peek().span.start;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let pair = parse_pair(p)?;
     let mut comma_pair_list: Array<CommaPairItem> = [];
     while p.peek_kind() == TK_LIT_COMMA {
-        let comma = p.expect(TK_LIT_COMMA, "','")?;
+        let comma = p.expect(TK_LIT_COMMA)?;
         let pair = parse_pair(p)?;
         let comma_pair = CommaPairItem {
             comma,
@@ -918,7 +928,7 @@ fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
         };
         comma_pair_list.push(comma_pair);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
         span: Span::new(start, p.last_end()),
         lbrace,
@@ -930,8 +940,8 @@ fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
 
 fn parse_obj_bt_1(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let start = p.peek().span.start;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt1(ObjAlt1 {
         span: Span::new(start, p.last_end()),
         lbrace,
@@ -943,12 +953,12 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACE {
-        let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+        let lbrace = p.expect(TK_LIT_LBRACE)?;
         if p.peek_kind() == TK_STRING {
             let pair = parse_pair(p)?;
             let mut comma_pair_list: Array<CommaPairItem> = [];
             while p.peek_kind() == TK_LIT_COMMA {
-                let comma = p.expect(TK_LIT_COMMA, "','")?;
+                let comma = p.expect(TK_LIT_COMMA)?;
                 let pair = parse_pair(p)?;
                 let comma_pair = CommaPairItem {
                     comma,
@@ -956,7 +966,7 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
                 };
                 comma_pair_list.push(comma_pair);
             }
-            let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+            let rbrace = p.expect(TK_LIT_RBRACE)?;
             return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt0(ObjAlt0 {
                 span: Span::new(start, p.last_end()),
                 lbrace,
@@ -965,7 +975,7 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
                 rbrace,
             }));
         } else if p.peek_kind() == TK_LIT_RBRACE {
-            let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+            let rbrace = p.expect(TK_LIT_RBRACE)?;
             return Result::<ObjNode, ParseError>::Ok(ObjNode::Alt1(ObjAlt1 {
                 span: Span::new(start, p.last_end()),
                 lbrace,
@@ -982,8 +992,8 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
 
 fn parse_pair(p: &mut Parser) -> Result<PairNode, ParseError> {
     let start = p.peek().span.start;
-    let string = p.expect(TK_STRING, "STRING")?;
-    let colon = p.expect(TK_LIT_COLON, "':'")?;
+    let string = p.expect(TK_STRING)?;
+    let colon = p.expect(TK_LIT_COLON)?;
     let value = parse_value(p)?;
     return Result::<PairNode, ParseError>::Ok(PairNode {
         span: Span::new(start, p.last_end()),
@@ -995,11 +1005,11 @@ fn parse_pair(p: &mut Parser) -> Result<PairNode, ParseError> {
 
 fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let start = p.peek().span.start;
-    let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
+    let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let value = parse_value(p)?;
     let mut comma_value_list: Array<CommaValueItem> = [];
     while p.peek_kind() == TK_LIT_COMMA {
-        let comma = p.expect(TK_LIT_COMMA, "','")?;
+        let comma = p.expect(TK_LIT_COMMA)?;
         let value = parse_value(p)?;
         let comma_value = CommaValueItem {
             comma,
@@ -1007,7 +1017,7 @@ fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
         };
         comma_value_list.push(comma_value);
     }
-    let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
+    let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {
         span: Span::new(start, p.last_end()),
         lbracket,
@@ -1019,8 +1029,8 @@ fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
 
 fn parse_arr_bt_1(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let start = p.peek().span.start;
-    let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
-    let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
+    let lbracket = p.expect(TK_LIT_LBRACKET)?;
+    let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt1(ArrAlt1 {
         span: Span::new(start, p.last_end()),
         lbracket,
@@ -1032,12 +1042,12 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
-        let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
+        let lbracket = p.expect(TK_LIT_LBRACKET)?;
         if p.peek_kind() matches { TK_STRING | TK_NUMBER | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_TRUE | TK_LIT_FALSE | TK_LIT_NULL } {
             let value = parse_value(p)?;
             let mut comma_value_list: Array<CommaValueItem> = [];
             while p.peek_kind() == TK_LIT_COMMA {
-                let comma = p.expect(TK_LIT_COMMA, "','")?;
+                let comma = p.expect(TK_LIT_COMMA)?;
                 let value = parse_value(p)?;
                 let comma_value = CommaValueItem {
                     comma,
@@ -1045,7 +1055,7 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
                 };
                 comma_value_list.push(comma_value);
             }
-            let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
+            let rbracket = p.expect(TK_LIT_RBRACKET)?;
             return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt0(ArrAlt0 {
                 span: Span::new(start, p.last_end()),
                 lbracket,
@@ -1054,7 +1064,7 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
                 rbracket,
             }));
         } else if p.peek_kind() == TK_LIT_RBRACKET {
-            let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
+            let rbracket = p.expect(TK_LIT_RBRACKET)?;
             return Result::<ArrNode, ParseError>::Ok(ArrNode::Alt1(ArrAlt1 {
                 span: Span::new(start, p.last_end()),
                 lbracket,
@@ -1073,14 +1083,14 @@ fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_STRING {
-        let string = p.expect(TK_STRING, "STRING")?;
+        let string = p.expect(TK_STRING)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt0(ValueAlt0 {
             span: Span::new(start, p.last_end()),
             string,
         }));
     }
     if kind == TK_NUMBER {
-        let number = p.expect(TK_NUMBER, "NUMBER")?;
+        let number = p.expect(TK_NUMBER)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt1(ValueAlt1 {
             span: Span::new(start, p.last_end()),
             number,
@@ -1101,21 +1111,21 @@ fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
         }));
     }
     if kind == TK_LIT_TRUE {
-        let lit_true = p.expect(TK_LIT_TRUE, "'true'")?;
+        let lit_true = p.expect(TK_LIT_TRUE)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt4(ValueAlt4 {
             span: Span::new(start, p.last_end()),
             lit_true,
         }));
     }
     if kind == TK_LIT_FALSE {
-        let lit_false = p.expect(TK_LIT_FALSE, "'false'")?;
+        let lit_false = p.expect(TK_LIT_FALSE)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt5(ValueAlt5 {
             span: Span::new(start, p.last_end()),
             lit_false,
         }));
     }
     if kind == TK_LIT_NULL {
-        let lit_null = p.expect(TK_LIT_NULL, "'null'")?;
+        let lit_null = p.expect(TK_LIT_NULL)?;
         return Result::<ValueNode, ParseError>::Ok(ValueNode::Alt6(ValueAlt6 {
             span: Span::new(start, p.last_end()),
             lit_null,
