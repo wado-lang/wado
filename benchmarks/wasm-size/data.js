@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775395643093,
+  "lastUpdate": 1775396529797,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10436,6 +10436,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/05e8b64d5b1efa758c5f4eae5bf65945df4f898b"
         },
         "date": 1775395642859,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f710d7f0da0330f00dba1dd4e1d138f1d7bafb55",
+          "message": "Merge pull request #778 from wado-lang/claude/gale-syntax-highlighter-TTVpA\n\nRemove highlight_html_page, fix keyword heuristic for K_ rules",
+          "timestamp": "2026-04-05T22:38:21+09:00",
+          "tree_id": "b31fa747dabf73f018357722e01fb1b5dac40d2f",
+          "url": "https://github.com/wado-lang/wado/commit/f710d7f0da0330f00dba1dd4e1d138f1d7bafb55"
+        },
+        "date": 1775396529559,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
