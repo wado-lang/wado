@@ -68,3 +68,23 @@ test "tokenize macro invocation" {
     let tokens = rust::tokenize(&"println!(\"hello {}\", name);");
     assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
 }
+
+// --- Parser tests ---
+// The Rust lexer uses semantic predicates to distinguish identifiers from
+// keywords, so most identifiers are tokenized incorrectly (e.g., "main" becomes
+// separate tokens). Only inputs without identifiers can parse successfully.
+
+test "parse empty crate" {
+    // Empty input is valid: crate rule is `innerAttribute* item* EOF`
+    let result = rust::parse(&"");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse fails with identifiers" {
+    // "fn main() {}" fails because the lexer splits "main" into fragments
+    // due to missing semantic predicates for identifier tokenization.
+    let result = rust::parse(&"fn main() {}");
+    assert result matches { Err(_) }, "expected parse to fail due to missing semantic predicates";
+}

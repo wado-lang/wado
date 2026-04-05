@@ -66,3 +66,85 @@ test "tokenize enum" {
     let first = ts::token_kind_name(tokens[0].kind);
     assert first == "Enum", `expected Enum, got {first}`;
 }
+
+// --- Parser tests ---
+// The TypeScript grammar's generated entry rule is `initializer: '=' singleExpression`,
+// so only `= <expression>` inputs can be parsed. Identifiers are not tokenized
+// correctly due to missing semantic predicates, so only literal expressions work.
+
+test "parse initializer number" {
+    let result = ts::parse(&"= 1");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse initializer string" {
+    let result = ts::parse(&"= 'hello'");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse initializer boolean true" {
+    let result = ts::parse(&"= true");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse initializer boolean false" {
+    let result = ts::parse(&"= false");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse initializer null" {
+    let result = ts::parse(&"= null");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse initializer arithmetic" {
+    let result = ts::parse(&"= 1 + 2 * 3");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse initializer negation" {
+    let result = ts::parse(&"= -1");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse initializer logical not" {
+    let result = ts::parse(&"= !true");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse initializer parenthesized" {
+    let result = ts::parse(&"= (1 + 2)");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse initializer equality" {
+    let result = ts::parse(&"= 1 === 2");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
+
+test "parse initializer ternary" {
+    let result = ts::parse(&"= 1 ? 2 : 3");
+    if let Err(e) = &result {
+        panic(`parse failed: {e.message}`);
+    }
+}
