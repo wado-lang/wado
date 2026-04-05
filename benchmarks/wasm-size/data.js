@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775396529797,
+  "lastUpdate": 1775426948094,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10475,6 +10475,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f710d7f0da0330f00dba1dd4e1d138f1d7bafb55"
         },
         "date": 1775396529559,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "17ee838a6c43d9c1f26b7a5b86c3a281cd6ae002",
+          "message": "Merge pull request #779 from wado-lang/claude/optimize-syntax-highlight-VSxso\n\nOptimize HTML escaping and improve performance",
+          "timestamp": "2026-04-06T07:05:37+09:00",
+          "tree_id": "d1b1f88fd05b4176118b341a76ef1cd8a0cd7447",
+          "url": "https://github.com/wado-lang/wado/commit/17ee838a6c43d9c1f26b7a5b86c3a281cd6ae002"
+        },
+        "date": 1775426947859,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
