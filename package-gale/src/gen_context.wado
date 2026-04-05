@@ -81,12 +81,12 @@ impl GenContext {
     pub fn first_of_element(&mut self, elem: &Element, visiting: &mut Array<String>) -> Array<String> {
         return match elem {
             TokenRef(name) => [`TK_{name}`],
-            Literal(text) => [literal_const_name(&text)],
-            RuleRef(name) => self.first_of_rule(&name, visiting),
+            Literal(text) => [literal_const_name(text)],
+            RuleRef(name) => self.first_of_rule(name, visiting),
             Group(alts) => {
                 let mut result: Array<String> = [];
                 for let alt of alts {
-                    let af = self.first_of_alt(&alt, visiting);
+                    let af = self.first_of_alt(alt, visiting);
                     extend_dedup(&mut result, &af);
                 }
                 result;

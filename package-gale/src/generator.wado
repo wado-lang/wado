@@ -131,7 +131,7 @@ fn repeat_inner_field(elem: &Element, rule_name: &String, group_counter: &mut i3
                 type_str: "Token",
             });
         }
-        if is_single_alt_group(&alts) {
+        if is_single_alt_group(alts) {
             return Option::<Field>::Some(Field {
                 name: single_alt_group_field_name(&alts[0]),
                 type_str: single_alt_group_type_name(&alts[0]),
@@ -154,7 +154,7 @@ fn repeat_inner_field(elem: &Element, rule_name: &String, group_counter: &mut i3
 
 fn gen_group_variant_types(w: &mut CodeWriter, elements: &Array<Element>, emitted: &mut Array<String>, rule_name: &String, group_counter: &mut i32) {
     for let elem of elements {
-        gen_element_variant_types(w, &elem, emitted, rule_name, group_counter);
+        gen_element_variant_types(w, elem, emitted, rule_name, group_counter);
     }
 }
 
