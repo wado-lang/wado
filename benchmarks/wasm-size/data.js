@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775387183013,
+  "lastUpdate": 1775395643093,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10397,6 +10397,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fc77bd0a4e4c8e22bd10c244c7bba85eaaafd853"
         },
         "date": 1775387182782,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "05e8b64d5b1efa758c5f4eae5bf65945df4f898b",
+          "message": "Merge pull request #777 from wado-lang/claude/gale-syntax-highlighter-TTVpA\n\nAdd tree-sitter compatible syntax highlighter to Gale",
+          "timestamp": "2026-04-05T22:23:03+09:00",
+          "tree_id": "ac09037aa445ce45fcf02d0a617311fad4caf389",
+          "url": "https://github.com/wado-lang/wado/commit/05e8b64d5b1efa758c5f4eae5bf65945df4f898b"
+        },
+        "date": 1775395642859,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
