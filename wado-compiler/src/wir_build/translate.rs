@@ -6352,10 +6352,29 @@ impl FunctionTranslator<'_, '_> {
                                 self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
                             let payload_field_wir =
                                 self.get_case_payload_wir_type(&case_type_id, i);
-                            let needs_boxing = matches!(binding_wir, WirType::Ref { .. })
-                                && payload_field_wir.as_ref().is_some_and(|t| {
-                                    !matches!(t, WirType::Ref { .. } | WirType::AbstractRef { .. })
-                                });
+                            let needs_boxing =
+                                if let WirType::Ref {
+                                    type_id: binding_tid,
+                                    ..
+                                } = &binding_wir
+                                {
+                                    match payload_field_wir.as_ref() {
+                                        Some(WirType::Ref {
+                                            type_id: payload_tid,
+                                            ..
+                                        }) => {
+                                            // Boxing needed if binding type differs from
+                                            // payload type (e.g., binding expects Box<Inner>
+                                            // but payload is ref Inner for variant payloads)
+                                            binding_tid != payload_tid
+                                        }
+                                        Some(WirType::AbstractRef { .. }) => false,
+                                        Some(_) => true,
+                                        None => false,
+                                    }
+                                } else {
+                                    false
+                                };
                             let value = if needs_boxing {
                                 if let WirType::Ref {
                                     type_id: box_tid, ..

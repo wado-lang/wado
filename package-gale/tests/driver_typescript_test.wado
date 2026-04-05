@@ -4,6 +4,15 @@
 /// parsing is not supported without predicate evaluation. These tests
 /// verify tokenization of various TypeScript constructs.
 use ts from "./golden/typescript.wado";
+use { normalize_tree } from "./golden/typescript.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = ts::parse(input).unwrap();
+    let tree = ts::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
 
 test "tokenize variable declaration" {
     let tokens = ts::tokenize(&"let x = 42;");
@@ -289,4 +298,53 @@ test "parse nested ternary" {
     if let Err(e) = &result {
         panic(`parse failed: {e.message}`);
     }
+}
+
+test "tree: unsigned right shift" {
+    assert_tree(&"= 1 >>> 2", &"
+        (initializer =
+          (singleExpression
+            (singleExpression (literal (numericLiteral 1)))
+            > > >
+            (singleExpression (literal (numericLiteral 2)))))
+    ");
+}
+
+test "tree: shift right" {
+    assert_tree(&"= 1 >> 2", &"
+        (initializer =
+          (singleExpression
+            (singleExpression (literal (numericLiteral 1)))
+            > >
+            (singleExpression (literal (numericLiteral 2)))))
+    ");
+}
+
+test "tree: nested ternary" {
+    assert_tree(&"= 1 ? 2 ? 3 : 4 : 5", &"
+        (initializer =
+          (singleExpression
+            (singleExpression (literal (numericLiteral 1)))
+            ?
+            (singleExpression
+              (singleExpression (literal (numericLiteral 2)))
+              ?
+              (singleExpression (literal (numericLiteral 3)))
+              :
+              (singleExpression (literal (numericLiteral 4))))
+            :
+            (singleExpression (literal (numericLiteral 5)))))
+    ");
+}
+
+test "tree: simple ternary" {
+    assert_tree(&"= 1 ? 2 : 3", &"
+        (initializer =
+          (singleExpression
+            (singleExpression (literal (numericLiteral 1)))
+            ?
+            (singleExpression (literal (numericLiteral 2)))
+            :
+            (singleExpression (literal (numericLiteral 3)))))
+    ");
 }
