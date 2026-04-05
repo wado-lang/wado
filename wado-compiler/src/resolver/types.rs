@@ -12,6 +12,8 @@ use crate::token::Span;
 /// Struct field info: module source and field definitions
 #[derive(Clone)]
 pub(super) struct StructFieldInfo {
+    /// Canonical type name (original declaration name, not import alias).
+    pub(super) name: String,
     pub(super) module_source: ModuleSource,
     /// Field definitions: (name, `type_id`, `is_pub`) triples
     pub(super) fields: Vec<(String, TypeId, bool)>,
@@ -35,6 +37,8 @@ pub(super) struct VariantCaseData {
 /// Variant info: module source, type parameters, and cases
 #[derive(Clone)]
 pub(super) struct VariantInfo {
+    /// Canonical type name (original declaration name, not import alias).
+    pub(super) name: String,
     pub(super) module_source: ModuleSource,
     pub(super) type_params: Vec<String>,
     pub(super) cases: Vec<VariantCaseData>,
@@ -54,6 +58,8 @@ pub(super) struct EnumCaseData {
 /// Enum info: module source and cases (enums have no type parameters or payloads)
 #[derive(Clone)]
 pub(super) struct EnumInfo {
+    /// Canonical type name (original declaration name, not import alias).
+    pub(super) name: String,
     pub(super) module_source: ModuleSource,
     pub(super) cases: Vec<EnumCaseData>,
     /// O(1) lookup from case name to discriminant index
@@ -61,9 +67,10 @@ pub(super) struct EnumInfo {
 }
 
 impl EnumInfo {
-    pub(super) fn new(module_source: ModuleSource, cases: Vec<EnumCaseData>) -> Self {
+    pub(super) fn new(name: String, module_source: ModuleSource, cases: Vec<EnumCaseData>) -> Self {
         let case_index = cases.iter().map(|c| (c.name.clone(), c.index)).collect();
         Self {
+            name,
             module_source,
             cases,
             case_index,
@@ -97,6 +104,8 @@ pub(super) struct FlagsInfo {
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(super) struct ResourceInfo {
+    /// Canonical type name (original declaration name, not import alias).
+    pub(super) name: String,
     pub(super) module_source: ModuleSource,
     /// Method names defined on this resource (both static and instance)
     pub(super) methods: Vec<String>,
@@ -200,6 +209,38 @@ pub enum TypeError {
 
     /// Invalid stores declaration
     InvalidStores { message: String, span: Span },
+
+    /// Private field access from outside the declaring module
+    PrivateFieldAccess {
+        struct_name: String,
+        field_name: String,
+        span: Span,
+    },
+
+    /// Method not found on type
+    MethodNotFound {
+        type_name: String,
+        method_name: String,
+        hint: String,
+        span: Span,
+    },
+
+    /// Invalid use of ? operator
+    InvalidQuestionMark { message: String, span: Span },
+
+    /// Type does not implement required trait in usage context
+    MissingTraitImpl {
+        type_name: String,
+        trait_name: String,
+        span: Span,
+    },
+
+    /// Pattern expects different type kind (tuple, struct, variant, enum)
+    PatternTypeMismatch {
+        expected: String,
+        found: String,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for TypeError {
@@ -353,6 +394,62 @@ impl std::fmt::Display for TypeError {
             TypeError::InvalidStores { message, span } => {
                 write!(f, "{}:{}: {}", span.line, span.column, message)
             }
+            TypeError::PrivateFieldAccess {
+                struct_name,
+                field_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: field `{}` of struct `{}` is private",
+                    span.line, span.column, field_name, struct_name
+                )
+            }
+            TypeError::MethodNotFound {
+                type_name,
+                method_name,
+                hint,
+                span,
+            } => {
+                if hint.is_empty() {
+                    write!(
+                        f,
+                        "{}:{}: no method '{}' found on type '{}'",
+                        span.line, span.column, method_name, type_name
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{}:{}: no method '{}' found on type '{}'; {}",
+                        span.line, span.column, method_name, type_name, hint
+                    )
+                }
+            }
+            TypeError::InvalidQuestionMark { message, span } => {
+                write!(f, "{}:{}: {}", span.line, span.column, message)
+            }
+            TypeError::MissingTraitImpl {
+                type_name,
+                trait_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: type '{}' does not implement {}",
+                    span.line, span.column, type_name, trait_name
+                )
+            }
+            TypeError::PatternTypeMismatch {
+                expected,
+                found,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: pattern mismatch: expected '{}', found '{}'",
+                    span.line, span.column, expected, found
+                )
+            }
         }
     }
 }
@@ -485,6 +582,50 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             TypeError::InvalidStores { message, span } => {
                 (Code::InvalidSyntax, message.clone(), *span)
             }
+            TypeError::PrivateFieldAccess {
+                struct_name,
+                field_name,
+                span,
+            } => (
+                Code::ImmutableAssignment,
+                format!("field `{field_name}` of struct `{struct_name}` is private"),
+                *span,
+            ),
+            TypeError::MethodNotFound {
+                type_name,
+                method_name,
+                hint,
+                span,
+            } => (
+                Code::UndefinedVariable,
+                if hint.is_empty() {
+                    format!("no method '{method_name}' found on type '{type_name}'")
+                } else {
+                    format!("no method '{method_name}' found on type '{type_name}'; {hint}")
+                },
+                *span,
+            ),
+            TypeError::InvalidQuestionMark { message, span } => {
+                (Code::TypeMismatch, message.clone(), *span)
+            }
+            TypeError::MissingTraitImpl {
+                type_name,
+                trait_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!("type '{type_name}' does not implement {trait_name}"),
+                *span,
+            ),
+            TypeError::PatternTypeMismatch {
+                expected,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!("pattern mismatch: expected '{expected}', found '{found}'"),
+                *span,
+            ),
         };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,

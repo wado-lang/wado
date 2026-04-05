@@ -53,7 +53,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Check each argument type against expected parameter type
                     for (i, arg) in args.iter().enumerate() {
                         if let Some(&expected) = fn_params.get(i) {
-                            self.check_type_mismatch(
+                            self.typecheck(
                                 arg.type_id,
                                 expected,
                                 call.args.get(i).map_or(call.span, ast::Expr::span),
@@ -114,7 +114,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Check each argument type against expected parameter type
                 for (i, arg) in args.iter().enumerate() {
                     if let Some(&expected) = fn_params.get(i) {
-                        self.check_type_mismatch(
+                        self.typecheck(
                             arg.type_id,
                             expected,
                             call.args.get(i).map_or(call.span, ast::Expr::span),
@@ -390,9 +390,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                             // Infer variant type: use GenericInstance for generic variants
                             let variant_type = if variant_info.type_params.is_empty() {
-                                self.type_table
-                                    .borrow_mut()
-                                    .make_variant(prefix_owned, variant_info.module_source.clone())
+                                self.type_table.borrow_mut().make_variant(
+                                    variant_info.name.clone(),
+                                    variant_info.module_source.clone(),
+                                )
                             } else {
                                 self.infer_variant_type_args(
                                     &prefix_owned,
@@ -417,7 +418,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         // If no matching case, check for From<T> synthesis requests
                         else if suffix == "from" && args.len() == 1 {
                             let target_type_id = self.type_table.borrow_mut().make_variant(
-                                prefix.to_string(),
+                                variant_info.name.clone(),
                                 variant_info.module_source.clone(),
                             );
                             let from_type = args[0].type_id;
@@ -515,7 +516,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     let payload = args.into_iter().next().map(Box::new);
                                     let variant_type = if variant_info.type_params.is_empty() {
                                         self.type_table.borrow_mut().make_variant(
-                                            type_name.to_string(),
+                                            variant_info.name.clone(),
                                             variant_info.module_source.clone(),
                                         )
                                     } else {
@@ -743,7 +744,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
-                self.check_type_mismatch(
+                self.typecheck(
                     arg.type_id,
                     expected,
                     call.args.get(i).map_or(call.span, ast::Expr::span),
@@ -1272,6 +1273,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     )
                     .map(|func| func.params.clone());
                     if let Some(params) = params {
+                        // Temporarily swap to the definition module's type maps
+                        // so that type names resolve to the correct module's types
+                        // (e.g., "Direction" resolves to module B's Direction, not module A's)
+                        let callee_module = self
+                            .loaded_modules
+                            .iter()
+                            .find(|(ms, _)| **ms == src)
+                            .map(|(_, m)| m);
+                        let (imported_type_sources, import_original_names) =
+                            if let Some(module) = callee_module {
+                                Self::build_imported_type_sources(
+                                    module,
+                                    &src,
+                                    Some(&self.entry_module_source),
+                                )
+                            } else {
+                                (IndexMap::default(), IndexMap::default())
+                            };
                         let saved_newtypes =
                             if let Some(module_newtypes) = self.all_newtypes.get(&src) {
                                 Some(std::mem::replace(
@@ -1281,7 +1300,57 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             } else {
                                 None
                             };
+                        let saved_enum_cases = std::mem::replace(
+                            &mut self.enum_cases,
+                            Self::build_module_map(
+                                &self.all_enum_cases,
+                                &src,
+                                &imported_type_sources,
+                                &import_original_names,
+                            ),
+                        );
+                        let saved_struct_fields = std::mem::replace(
+                            &mut self.struct_fields,
+                            Self::build_module_map(
+                                &self.all_struct_fields,
+                                &src,
+                                &imported_type_sources,
+                                &import_original_names,
+                            ),
+                        );
+                        let saved_variant_cases = std::mem::replace(
+                            &mut self.variant_cases,
+                            Self::build_module_map(
+                                &self.all_variant_cases,
+                                &src,
+                                &imported_type_sources,
+                                &import_original_names,
+                            ),
+                        );
+                        let saved_flags_cases = std::mem::replace(
+                            &mut self.flags_cases,
+                            Self::build_module_map(
+                                &self.all_flags_cases,
+                                &src,
+                                &imported_type_sources,
+                                &import_original_names,
+                            ),
+                        );
+                        let saved_resource_types = std::mem::replace(
+                            &mut self.resource_types,
+                            Self::build_module_map(
+                                &self.all_resource_types,
+                                &src,
+                                &imported_type_sources,
+                                &import_original_names,
+                            ),
+                        );
                         let result = params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+                        self.resource_types = saved_resource_types;
+                        self.flags_cases = saved_flags_cases;
+                        self.variant_cases = saved_variant_cases;
+                        self.struct_fields = saved_struct_fields;
+                        self.enum_cases = saved_enum_cases;
                         if let Some(saved) = saved_newtypes {
                             self.newtypes = saved;
                         }
@@ -1589,14 +1658,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .any(|&t| self.type_table.borrow().contains_type_param(t));
 
         if has_unresolved && self.trait_ctx.type_params.is_empty() {
-            return self
-                .type_table
-                .borrow_mut()
-                .make_variant(variant_name.to_string(), variant_info.module_source.clone());
+            return self.type_table.borrow_mut().make_variant(
+                variant_info.name.clone(),
+                variant_info.module_source.clone(),
+            );
         }
 
         self.type_table.borrow_mut().make_generic_instance(
-            variant_name.to_string(),
+            variant_info.name.clone(),
             module_source,
             type_args,
         )

@@ -1,0 +1,15 @@
+// Type check: passing wrong struct type to function should be a compile error
+struct Foo { x: i32 }
+struct Bar { x: i32 }
+
+fn takes_foo(f: &Foo) -> i32 {
+    return f.x;
+}
+
+export fn run() {
+    let b = Bar { x: 42 };
+    takes_foo(&b);
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

@@ -122,6 +122,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     self.struct_fields.insert(
                         struct_decl.name.clone(),
                         StructFieldInfo {
+                            name: struct_decl.name.clone(),
                             module_source: self.current_module_source.clone(),
                             fields,
                             type_param_bounds,
@@ -201,6 +202,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     self.variant_cases.insert(
                         variant_decl.name.clone(),
                         VariantInfo {
+                            name: variant_decl.name.clone(),
                             module_source: self.current_module_source.clone(),
                             type_params,
                             cases,
@@ -232,7 +234,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .collect();
                     self.enum_cases.insert(
                         enum_decl.name.clone(),
-                        EnumInfo::new(self.current_module_source.clone(), cases),
+                        EnumInfo::new(
+                            enum_decl.name.clone(),
+                            self.current_module_source.clone(),
+                            cases,
+                        ),
                     );
                 }
                 Item::Flags(flags_decl) => {

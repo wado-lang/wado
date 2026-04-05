@@ -151,16 +151,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .map(|(i, elem)| {
                                 let expected = expected_elem_types.get(i).copied();
                                 let resolved = self.resolve_expr(elem, ctx, expected);
-                                // Check if element type matches expected
-                                if let Some(expected_type) = expected
-                                    && resolved.type_id != expected_type
-                                    && resolved.type_id != TypeTable::UNKNOWN
-                                {
-                                    let _ = self.logger.error(TypeError::TypeMismatch {
-                                        expected: self.type_table.borrow().type_name(expected_type),
-                                        found: self.type_table.borrow().type_name(resolved.type_id),
-                                        span: elem.span(),
-                                    });
+                                if let Some(expected_type) = expected {
+                                    self.typecheck(resolved.type_id, expected_type, elem.span());
                                 }
                                 resolved
                             })
@@ -168,7 +160,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                         // Also check length mismatch
                         if tuple_lit.elements.len() != expected_elem_types.len() {
-                            let _ = self.logger.error(TypeError::TypeMismatch {
+                            let _ = self.logger.error(TypeError::PatternTypeMismatch {
                                 expected: format!(
                                     "tuple with {} elements",
                                     expected_elem_types.len()
@@ -219,17 +211,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         {
                             for (fname, _, is_pub) in &struct_info.fields {
                                 if !is_pub && struct_lit.fields.iter().any(|f| f.name == *fname) {
-                                    let _ =
-                                            self.logger.error(TypeError::TypeMismatch {
-                                                expected: format!(
-                                                    "accessible field (field `{fname}` of struct `{name}` is private)"
-                                                ),
-                                                found: format!(
-                                                    "private field in struct literal from module `{}`",
-                                                    self.current_module_source
-                                                ),
-                                                span: struct_lit.span,
-                                            });
+                                    let _ = self.logger.error(TypeError::PrivateFieldAccess {
+                                        struct_name: name.clone(),
+                                        field_name: fname.clone(),
+                                        span: struct_lit.span,
+                                    });
                                 }
                             }
                         }
@@ -280,11 +266,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else {
                         // Target type does not implement KeyValueLiteral
                         let type_name = self.type_table.borrow().type_name(target_type);
-                        let _ = self.logger.error(TypeError::TypeMismatch {
-                            expected: type_name.clone(),
-                            found: format!(
-                                "anonymous struct literal ({type_name} does not implement KeyValueLiteral)"
-                            ),
+                        let _ = self.logger.error(TypeError::MissingTraitImpl {
+                            type_name,
+                            trait_name: "KeyValueLiteral".to_string(),
                             span: struct_lit.span,
                         });
                         let value = self.resolve_expr(ast_value, ctx, None);
@@ -306,8 +290,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Type check: if type annotation is present, verify value type matches.
-        // `never` (bottom type) is assignable to any type, so skip the check for it.
-        if let Some(_annotated_type) = &let_stmt.ty
+        // Uses direct comparison instead of typecheck() because we need to catch
+        // type-param-to-concrete mismatches (e.g., `let n: i32 = x` where x: T)
+        // at definition time. check_assignable defers all type param cases because
+        // trait impls legitimately use TypeParam-vs-concrete (monomorphized later).
+        if let_stmt.ty.is_some()
             && value.type_id != type_id
             && value.type_id != TypeTable::UNKNOWN
             && value.type_id != TypeTable::NEVER
@@ -583,7 +570,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         elem_types
                     } else {
                         // Error: expected tuple type
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
                             expected: "tuple type".to_string(),
                             found: type_table.type_name(type_id),
                             span,
@@ -595,14 +582,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Check length
                 if *has_rest {
                     if patterns.len() > elem_types.len() {
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
                             expected: format!("tuple with at least {} elements", patterns.len()),
                             found: format!("tuple with {} elements", elem_types.len()),
                             span,
                         });
                     }
                 } else if patterns.len() != elem_types.len() {
-                    let _ = self.logger.error(TypeError::TypeMismatch {
+                    let _ = self.logger.error(TypeError::PatternTypeMismatch {
                         expected: format!("tuple with {} elements", elem_types.len()),
                         found: format!("pattern with {} elements", patterns.len()),
                         span,
@@ -646,7 +633,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Compare the short name (strip module prefix if needed)
                     let actual_short = actual_name.rsplit("::").next().unwrap_or(actual_name);
                     if actual_short != expected_name {
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
                             expected: expected_name.clone(),
                             found: self.type_table.borrow().type_name(type_id),
                             span: *pat_span,
@@ -655,7 +642,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
 
                 if struct_name.is_none() {
-                    let _ = self.logger.error(TypeError::TypeMismatch {
+                    let _ = self.logger.error(TypeError::PatternTypeMismatch {
                         expected: "struct type".to_string(),
                         found: self.type_table.borrow().type_name(type_id),
                         span: *pat_span,
@@ -697,7 +684,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .map(|(name, _, _)| name.clone())
                             .collect();
                         if !missing.is_empty() {
-                            let _ = self.logger.error(TypeError::TypeMismatch {
+                            let _ = self.logger.error(TypeError::PatternTypeMismatch {
                                         expected: format!(
                                             "all fields (missing: {}), or use `..` to ignore remaining fields",
                                             missing.join(", ")
@@ -764,8 +751,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check return value type matches function return type
         if let Some(value) = &value {
-            self.check_type_mismatch(value.type_id, return_type, ret_stmt.span);
-            self.check_return_type_mismatch(value.type_id, return_type, ret_stmt.span);
+            self.typecheck_return(value.type_id, return_type, ret_stmt.span);
         }
 
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)
@@ -1253,7 +1239,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 case_index: case_data.index,
                             };
                         }
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
                             expected: format!(
                                 "one of: {}",
                                 enum_info
@@ -1268,7 +1254,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                         return TirPattern::Wildcard;
                     }
-                    let _ = self.logger.error(TypeError::TypeMismatch {
+                    let _ = self.logger.error(TypeError::PatternTypeMismatch {
                         expected: format!("enum type `{name}`"),
                         found: "unknown enum".to_string(),
                         span: *span,
@@ -1291,7 +1277,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         if self.variant_cases.contains_key(name) {
                             self.get_variant_case_payload_type(name, variant_name, type_args, *span)
                         } else {
-                            let _ = self.logger.error(TypeError::TypeMismatch {
+                            let _ = self.logger.error(TypeError::PatternTypeMismatch {
                                 expected: "variant type".to_string(),
                                 found: name.clone(),
                                 span: *span,
@@ -1300,7 +1286,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         }
                     }
                     _ => {
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
                             expected: "variant or enum type".to_string(),
                             found: format!("{resolved_type:?}"),
                             span: *span,
@@ -1358,7 +1344,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if let ResolvedType::Struct { ref name, .. } = resolved {
                         let actual_short = name.rsplit("::").next().unwrap_or(name);
                         if actual_short != expected_name {
-                            let _ = self.logger.error(TypeError::TypeMismatch {
+                            let _ = self.logger.error(TypeError::PatternTypeMismatch {
                                 expected: expected_name.clone(),
                                 found: self.type_table.borrow().type_name(scrutinee_type),
                                 span: *pat_span,
@@ -1408,7 +1394,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .map(|(name, _, _)| name.clone())
                                 .collect();
                             if !missing.is_empty() {
-                                let _ = self.logger.error(TypeError::TypeMismatch {
+                                let _ = self.logger.error(TypeError::PatternTypeMismatch {
                                         expected: format!(
                                             "all fields (missing: {}), or use `..` to ignore remaining fields",
                                             missing.join(", ")
@@ -1557,13 +1543,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check if variant exists but case not found
         if self.variant_cases.contains_key(variant_name) {
-            let _ = self.logger.error(TypeError::TypeMismatch {
+            let _ = self.logger.error(TypeError::PatternTypeMismatch {
                 expected: format!("valid case of variant {variant_name}"),
                 found: case_name.to_string(),
                 span,
             });
         } else {
-            let _ = self.logger.error(TypeError::TypeMismatch {
+            let _ = self.logger.error(TypeError::PatternTypeMismatch {
                 expected: "known variant type".to_string(),
                 found: variant_name.to_string(),
                 span,
@@ -1647,9 +1633,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 )
             {
                 let type_name = self.type_table.borrow().type_name(iterable_type_id);
-                let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: "type that implements IntoIterator".to_string(),
-                    found: format!("'{type_name}' does not implement IntoIterator"),
+                let _ = self.logger.error(TypeError::MissingTraitImpl {
+                    type_name,
+                    trait_name: "IntoIterator".to_string(),
                     span: for_of.span,
                 });
             }
@@ -2056,9 +2042,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 )
             {
                 let type_name = self.type_table.borrow().type_name(iter_type_id);
-                let _ = self.logger.error(TypeError::TypeMismatch {
-                    expected: "iterator type that implements Iterator".to_string(),
-                    found: format!("'{type_name}' does not implement Iterator"),
+                let _ = self.logger.error(TypeError::MissingTraitImpl {
+                    type_name,
+                    trait_name: "Iterator".to_string(),
                     span,
                 });
             }
