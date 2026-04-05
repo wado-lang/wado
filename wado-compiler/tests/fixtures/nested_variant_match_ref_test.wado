@@ -1,0 +1,31 @@
+#![TODO]
+/// Minimal reproduction: nested `match` on a reference to a variant that wraps
+/// another variant crashes codegen with:
+///   "type mismatch: expected (ref null $type), found (ref $type)"
+///
+/// Using `if let` instead of `match` on the inner variant does NOT trigger the bug.
+
+variant Outer {
+    W(Inner),
+}
+
+variant Inner {
+    X,
+}
+
+fn f(node: &Outer) {
+    match node {
+        W(inner) => {
+            match inner {
+                X => {}
+            }
+        }
+    }
+}
+
+test "nested variant match on reference" {
+    f(&Outer::W(Inner::X));
+}
+
+__DATA__
+{"test": {}}
