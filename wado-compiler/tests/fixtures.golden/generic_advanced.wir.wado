@@ -215,7 +215,7 @@ condition: p.x == 10
             break __tmpl: __local_21;
         });
         unreachable;
-    };
+    }
     __v0_4 = p.y;
     __cond_5 = __v0_4 == 20;
     if __cond_5 == 0 {
@@ -247,7 +247,7 @@ condition: p.y == 20
             break __tmpl: __local_23;
         });
         unreachable;
-    };
+    }
     v = BTPoint { x: 99, y: 99 };
     __sroa_b_value = v;
     __v0_6 = p.x;
@@ -281,7 +281,7 @@ condition: p.x == 10
             break __tmpl: __local_25;
         });
         unreachable;
-    };
+    }
     __v0_8 = __sroa_b_value.x;
     __cond_9 = __v0_8 == 99;
     if __cond_9 == 0 {
@@ -309,16 +309,16 @@ condition: b.value.x == 99
             break __tmpl: __local_27;
         });
         unreachable;
-    };
+    }
     __sroa_pa_value = BTPoint { x: 1, y: 2 };
     __sroa_pb_value = BTPoint { x: 1, y: 2 };
     __v0_18 = __sroa_pa_value;
     __v1 = __sroa_pb_value;
-    __cond_20 = if __v0_18.x == __v1.x -> i32 {
+    __cond_20 = (if __v0_18.x == __v1.x -> i32 {
         __v0_18.y == __v1.y;
     } else {
         0;
-    };
+    });
     if __cond_20 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_33 = String { repr: builtin::array_new<u8>(160), used: 0 };
@@ -347,7 +347,7 @@ condition: pa.get() == pb.get()
             break __tmpl: __local_33;
         });
         unreachable;
-    };
+    }
 }
 
 fn __test_1_field_monomorphization() {
@@ -411,12 +411,12 @@ condition: container.len() == 3
             break __tmpl: __local_9;
         });
         unreachable;
-    };
+    }
     __v0_3 = __inline_Array_i32__IndexValue__index_value_19: block -> i32 {
         if 0 >= __sroa_container_items.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_19: builtin::array_get<i32>(__sroa_container_items.repr, 0);
     };
     __cond_4 = __v0_3 == 10;
@@ -445,12 +445,12 @@ condition: container.get(0) == 10
             break __tmpl: __local_11;
         });
         unreachable;
-    };
+    }
     __v0_5 = __inline_Array_i32__IndexValue__index_value_28: block -> i32 {
         if 1 >= __sroa_container_items.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_28: builtin::array_get<i32>(__sroa_container_items.repr, 1);
     };
     __cond_6 = __v0_5 == 20;
@@ -479,12 +479,12 @@ condition: container.get(1) == 20
             break __tmpl: __local_13;
         });
         unreachable;
-    };
+    }
     __v0_7 = __inline_Array_i32__IndexValue__index_value_37: block -> i32 {
         if 2 >= __sroa_container_items.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_37: builtin::array_get<i32>(__sroa_container_items.repr, 2);
     };
     __cond_8 = __v0_7 == 30;
@@ -513,7 +513,7 @@ condition: container.get(2) == 30
             break __tmpl: __local_15;
         });
         unreachable;
-    };
+    }
 }
 
 fn partition(arr, low, high, cmp) {
@@ -532,7 +532,7 @@ fn partition(arr, low, high, cmp) {
         if high >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_0: builtin::array_get<i32>(arr.repr, high);
     } };
     i = low - 1;
@@ -544,7 +544,7 @@ fn partition(arr, low, high, cmp) {
             l15: loop {
                 if (j < high) == 0 {
                     break __for_0;
-                };
+                }
                 if block -> bool {
                     let __indirect_call_0: ref "canonical/CanonicalClosure_0";
                     __indirect_call_0 = ref.cast "canonical/CanonicalClosure_0"(cmp);
@@ -552,7 +552,7 @@ fn partition(arr, low, high, cmp) {
                         if j >= _licm_used_33 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
-                        };
+                        }
                         break __inline_Array_i32__IndexValue__index_value_1: builtin::array_get<i32>(_licm_repr_34, j);
                     } }, pivot);
                 } {
@@ -561,27 +561,27 @@ fn partition(arr, low, high, cmp) {
                         if i >= _licm_used_33 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
-                        };
+                        }
                         break __inline_Array_i32__IndexValue__index_value_2: builtin::array_get<i32>(_licm_repr_34, i);
                     };
                     value_17 = __inline_Array_i32__IndexValue__index_value_4: block -> i32 {
                         if j >= _licm_used_33 {
                             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                             unreachable;
-                        };
+                        }
                         break __inline_Array_i32__IndexValue__index_value_4: builtin::array_get<i32>(_licm_repr_34, j);
                     };
                     if i >= _licm_used_33 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    };
+                    }
                     builtin::array_set<i32>(_licm_repr_34, i, value_17);
                     if j >= _licm_used_33 {
                         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    };
+                    }
                     builtin::array_set<i32>(_licm_repr_34, j, tmp_7);
-                };
+                }
                 j = j + 1;
                 continue l15;
             };
@@ -592,7 +592,7 @@ fn partition(arr, low, high, cmp) {
         if __local_24 >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_6: builtin::array_get<i32>(arr.repr, __local_24);
     };
     index = i + 1;
@@ -600,18 +600,18 @@ fn partition(arr, low, high, cmp) {
         if high >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_8: builtin::array_get<i32>(arr.repr, high);
     };
     if index >= arr.used {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    };
+    }
     builtin::array_set<i32>(arr.repr, index, value_27);
     if high >= arr.used {
         "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    };
+    }
     builtin::array_set<i32>(arr.repr, high, tmp_8);
     return i + 1;
 }
@@ -622,7 +622,7 @@ fn quicksort(arr, low, high, cmp) {
         pi = partition(arr, low, high, cmp);
         quicksort(arr, low, pi - 1, cmp);
         quicksort(arr, pi + 1, high, cmp);
-    };
+    }
 }
 
 fn __test_2_quicksort_with_closure_param() {
@@ -667,7 +667,7 @@ fn __test_2_quicksort_with_closure_param() {
         if 0 >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_15: builtin::array_get<i32>(arr.repr, 0);
     };
     __cond_3 = __v0_2 == 1;
@@ -703,12 +703,12 @@ condition: arr[0] == 1
             break __tmpl: __local_12;
         });
         unreachable;
-    };
+    }
     __v0_4 = __inline_Array_i32__IndexValue__index_value_23: block -> i32 {
         if 4 >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_23: builtin::array_get<i32>(arr.repr, 4);
     };
     __cond_5 = __v0_4 == 5;
@@ -744,12 +744,12 @@ condition: arr[4] == 5
             break __tmpl: __local_14;
         });
         unreachable;
-    };
+    }
     __v0_6 = __inline_Array_i32__IndexValue__index_value_31: block -> i32 {
         if 8 >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_31: builtin::array_get<i32>(arr.repr, 8);
     };
     __cond_7 = __v0_6 == 9;
@@ -785,13 +785,13 @@ condition: arr[8] == 9
             break __tmpl: __local_16;
         });
         unreachable;
-    };
+    }
     quicksort$__Closure_1(arr, 0, arr.used - 1, __Closure_1 {  });
     __v0_8 = __inline_Array_i32__IndexValue__index_value_40: block -> i32 {
         if 0 >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_40: builtin::array_get<i32>(arr.repr, 0);
     };
     __cond_9 = __v0_8 == 9;
@@ -827,12 +827,12 @@ condition: arr[0] == 9
             break __tmpl: __local_18;
         });
         unreachable;
-    };
+    }
     __v0_10 = __inline_Array_i32__IndexValue__index_value_48: block -> i32 {
         if 8 >= arr.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_i32__IndexValue__index_value_48: builtin::array_get<i32>(arr.repr, 8);
     };
     __cond_11 = __v0_10 == 1;
@@ -868,7 +868,7 @@ condition: arr[8] == 1
             break __tmpl: __local_20;
         });
         unreachable;
-    };
+    }
 }
 
 fn __cm_export____test_0_box_with_trait_method() {
@@ -892,7 +892,7 @@ fn quicksort$__Closure_0(arr, low, high, cmp) {
         pi = partition(arr, low, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_0") });
         quicksort(arr, low, pi - 1, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_0") });
         quicksort(arr, pi + 1, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_0") });
-    };
+    }
 }
 
 fn quicksort$__Closure_1(arr, low, high, cmp) {
@@ -901,7 +901,7 @@ fn quicksort$__Closure_1(arr, low, high, cmp) {
         pi = partition(arr, low, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_1") });
         quicksort(arr, low, pi - 1, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_1") });
         quicksort(arr, pi + 1, high, "canonical/CanonicalClosure_0" { env: cmp, func: ref.as_non_null(ref.func "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_1") });
-    };
+    }
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
@@ -912,7 +912,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l42: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l42;
@@ -934,7 +934,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -990,7 +990,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -999,7 +999,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -1007,7 +1007,7 @@ fn count_digits_i64(val) {
             l48: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l48;
@@ -1030,7 +1030,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l52: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -1038,7 +1038,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1048,11 +1048,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -1070,7 +1070,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -1089,7 +1089,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -1101,11 +1101,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -1115,7 +1115,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -1134,7 +1134,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn BTPoint^Inspect::inspect(self, f) {
@@ -1162,7 +1162,7 @@ fn Array<i32>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<i32>::grow(self);
-    };
+    }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1189,7 +1189,7 @@ fn Array<i32>::grow(self) {
             l65: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
                 continue l65;
@@ -1217,7 +1217,7 @@ fn Formatter::write_char_n(self, c, n) {
             l68: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l68;
@@ -1242,44 +1242,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -1289,10 +1289,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -1300,12 +1300,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 fn "closure/wado-compiler/tests/fixtures/generic_advanced.wado/__closure_wrapper_0"(__env, __p0, __p1) {

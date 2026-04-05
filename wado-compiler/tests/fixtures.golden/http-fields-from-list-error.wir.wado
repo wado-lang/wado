@@ -579,13 +579,13 @@ fn handle() {
     valid_result = __cm_binding__Fields_from_list(valid_entries);
     let __match_scrut_0: ref Result<Fields,HeaderError>;
     __match_scrut_0 = valid_result;
-    __cond_4 = if ref.test Result<Fields,HeaderError>::Ok(__match_scrut_0) -> bool {
+    __cond_4 = (if ref.test Result<Fields,HeaderError>::Ok(__match_scrut_0) -> bool {
         let __cast_1: ref Result<Fields,HeaderError>::Ok;
         __cast_1 = ref.cast Result<Fields,HeaderError>::Ok(__match_scrut_0);
         1;
     } else {
         0;
-    };
+    });
     if __cond_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_18 = String { repr: builtin::array_new<u8>(116), used: 0 };
@@ -610,12 +610,12 @@ condition: valid_result matches { Ok(_) }
             break __tmpl: __local_18;
         });
         unreachable;
-    };
+    }
     null_byte = __seq_lit: block -> ref Array<u8> {
         __local_5 = Array<u8> { repr: array.new_fixed<u8>(0), used: 1 };
         break __seq_lit: __local_5;
     };
-    null_name = value_copy String(let __match_scrut_1: ref Result<String,String>; __match_scrut_1 = String::from_utf8<Array<u8>>(null_byte); if ref.test Result<String,String>::Ok(__match_scrut_1) -> ref String {
+    null_name = value_copy String(let __match_scrut_1: ref Result<String,String>; __match_scrut_1 = String::from_utf8<Array<u8>>(null_byte); (if ref.test Result<String,String>::Ok(__match_scrut_1) -> ref String {
         let __cast_3: ref Result<String,String>::Ok;
         __cast_3 = ref.cast Result<String,String>::Ok(__match_scrut_1);
         __local_7 = __cast_3.payload_0;
@@ -627,7 +627,7 @@ condition: valid_result matches { Ok(_) }
         unreachable;
     } else {
         unreachable;
-    });
+    }));
     invalid_entries = __seq_lit: block -> ref Array<Tuple<String,Array<u8>>> {
         __local_9 = Array<Tuple<String,Array<u8>>> { repr: array.new_fixed<ref "tuple/[String, Array<u8>]">("tuple/[String, Array<u8>]" { 0: null_name, 1: ref.as_non_null(__inline_String__as_bytes_16: block -> ref Array<u8> {
             break __inline_String__as_bytes_16: StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("value"), used: 5, index: 0 });
@@ -637,13 +637,13 @@ condition: valid_result matches { Ok(_) }
     invalid_result = __cm_binding__Fields_from_list(invalid_entries);
     let __match_scrut_2: ref Result<Fields,HeaderError>;
     __match_scrut_2 = invalid_result;
-    __cond_12 = if ref.test Result<Fields,HeaderError>::Err(__match_scrut_2) -> bool {
+    __cond_12 = (if ref.test Result<Fields,HeaderError>::Err(__match_scrut_2) -> bool {
         let __cast_4: ref Result<Fields,HeaderError>::Err;
         __cast_4 = ref.cast Result<Fields,HeaderError>::Err(__match_scrut_2);
         1;
     } else {
         0;
-    };
+    });
     if __cond_12 == 0 {
         "core:internal/panic"(__tmpl: block -> ref String {
             __local_20 = String { repr: builtin::array_new<u8>(119), used: 0 };
@@ -668,7 +668,7 @@ condition: invalid_result matches { Err(_) }
             break __tmpl: __local_20;
         });
         unreachable;
-    };
+    }
     let __pair_temp_5: i64;
     __pair_temp_5 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_5);
@@ -705,20 +705,20 @@ condition: invalid_result matches { Err(_) }
                 __len_42 = builtin::i32_wrap_i64(__packed_40 >> 32_i64);
                 __opt_inner_0_38 = __ptr_41;
                 __opt_inner_1_39 = __len_42;
-            };
+            }
             __opt_val_43 = __case_payload_34.info_code;
             __opt_disc_44 = ref.test Option<u16>::Some(__opt_val_43);
             __opt_inner_0_45 = 0;
             if __opt_disc_44 != 0 {
                 __flat_46 = ref.cast Option<u16>::Some(__opt_val_43).payload_0;
                 __opt_inner_0_45 = __flat_46;
-            };
+            }
             __tv_2 = __opt_disc_37;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_38);
             __tv_4 = __opt_inner_1_39;
             __tv_5 = __opt_disc_44;
             __tv_6 = __opt_inner_0_45;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val) {
             __case_payload_47 = ref.cast "wasi:http/types.wado/ErrorCode::TlsAlertReceived"(__err_val).payload_0;
             __opt_val_49 = __case_payload_47.alert_id;
@@ -727,7 +727,7 @@ condition: invalid_result matches { Err(_) }
             if __opt_disc_50 != 0 {
                 __flat_52 = ref.cast Option<u8>::Some(__opt_val_49).payload_0;
                 __opt_inner_0_51 = __flat_52;
-            };
+            }
             __opt_val_53 = __case_payload_47.alert_message;
             __opt_disc_54 = ref.is_null(__opt_val_53) == 0;
             __opt_inner_0_55 = 0;
@@ -738,13 +738,13 @@ condition: invalid_result matches { Err(_) }
                 __len_59 = builtin::i32_wrap_i64(__packed_57 >> 32_i64);
                 __opt_inner_0_55 = __ptr_58;
                 __opt_inner_1_56 = __len_59;
-            };
+            }
             __tv_2 = __opt_disc_50;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_51);
             __tv_4 = __opt_disc_54;
             __tv_5 = __opt_inner_0_55;
             __tv_6 = __opt_inner_1_56;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val) {
             __case_payload_60 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestBodySize"(__err_val).payload_0;
             __opt_disc_62 = ref.test Option<u64>::Some(__case_payload_60);
@@ -752,10 +752,10 @@ condition: invalid_result matches { Err(_) }
             if __opt_disc_62 != 0 {
                 __flat_64 = ref.cast Option<u64>::Some(__case_payload_60).payload_0;
                 __opt_inner_0_63 = __flat_64;
-            };
+            }
             __tv_2 = __opt_disc_62;
             __tv_3 = __opt_inner_0_63;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val) {
             __case_payload_65 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_67 = ref.test Option<u32>::Some(__case_payload_65);
@@ -763,10 +763,10 @@ condition: invalid_result matches { Err(_) }
             if __opt_disc_67 != 0 {
                 __flat_69 = ref.cast Option<u32>::Some(__case_payload_65).payload_0;
                 __opt_inner_0_68 = __flat_69;
-            };
+            }
             __tv_2 = __opt_disc_67;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_68);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize"(__err_val) {
             __case_payload_70 = value_copy Option<FieldSizePayload>(ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestHeaderSize"(__err_val).payload_0);
             __opt_disc_72 = ref.is_null(__case_payload_70) == 0;
@@ -787,27 +787,27 @@ condition: invalid_result matches { Err(_) }
                     __len_85 = builtin::i32_wrap_i64(__packed_83 >> 32_i64);
                     __opt_inner_0_81 = __ptr_84;
                     __opt_inner_1_82 = __len_85;
-                };
+                }
                 __opt_val_86 = __struct_val.field_size;
                 __opt_disc_87 = ref.test Option<u32>::Some(__opt_val_86);
                 __opt_inner_0_88 = 0;
                 if __opt_disc_87 != 0 {
                     __flat_89 = ref.cast Option<u32>::Some(__opt_val_86).payload_0;
                     __opt_inner_0_88 = __flat_89;
-                };
+                }
                 __opt_inner_0_73 = __opt_disc_80;
                 __opt_inner_1_74 = __opt_inner_0_81;
                 __opt_inner_2 = __opt_inner_1_82;
                 __opt_inner_3 = __opt_disc_87;
                 __opt_inner_4 = __opt_inner_0_88;
-            };
+            }
             __tv_2 = __opt_disc_72;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_73);
             __tv_4 = __opt_inner_1_74;
             __tv_5 = __opt_inner_2;
             __tv_6 = __opt_inner_3;
             __tv_7 = __opt_inner_4;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val) {
             __case_payload_90 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_92 = ref.test Option<u32>::Some(__case_payload_90);
@@ -815,10 +815,10 @@ condition: invalid_result matches { Err(_) }
             if __opt_disc_92 != 0 {
                 __flat_94 = ref.cast Option<u32>::Some(__case_payload_90).payload_0;
                 __opt_inner_0_93 = __flat_94;
-            };
+            }
             __tv_2 = __opt_disc_92;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_93);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val) {
             __case_payload_95 = ref.cast "wasi:http/types.wado/ErrorCode::HttpRequestTrailerSize"(__err_val).payload_0;
             __opt_val_97 = __case_payload_95.field_name;
@@ -831,20 +831,20 @@ condition: invalid_result matches { Err(_) }
                 __len_103 = builtin::i32_wrap_i64(__packed_101 >> 32_i64);
                 __opt_inner_0_99 = __ptr_102;
                 __opt_inner_1_100 = __len_103;
-            };
+            }
             __opt_val_104 = __case_payload_95.field_size;
             __opt_disc_105 = ref.test Option<u32>::Some(__opt_val_104);
             __opt_inner_0_106 = 0;
             if __opt_disc_105 != 0 {
                 __flat_107 = ref.cast Option<u32>::Some(__opt_val_104).payload_0;
                 __opt_inner_0_106 = __flat_107;
-            };
+            }
             __tv_2 = __opt_disc_98;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_99);
             __tv_4 = __opt_inner_1_100;
             __tv_5 = __opt_disc_105;
             __tv_6 = __opt_inner_0_106;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val) {
             __case_payload_108 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSectionSize"(__err_val).payload_0;
             __opt_disc_110 = ref.test Option<u32>::Some(__case_payload_108);
@@ -852,10 +852,10 @@ condition: invalid_result matches { Err(_) }
             if __opt_disc_110 != 0 {
                 __flat_112 = ref.cast Option<u32>::Some(__case_payload_108).payload_0;
                 __opt_inner_0_111 = __flat_112;
-            };
+            }
             __tv_2 = __opt_disc_110;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_111);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val) {
             __case_payload_113 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseHeaderSize"(__err_val).payload_0;
             __opt_val_115 = __case_payload_113.field_name;
@@ -868,20 +868,20 @@ condition: invalid_result matches { Err(_) }
                 __len_121 = builtin::i32_wrap_i64(__packed_119 >> 32_i64);
                 __opt_inner_0_117 = __ptr_120;
                 __opt_inner_1_118 = __len_121;
-            };
+            }
             __opt_val_122 = __case_payload_113.field_size;
             __opt_disc_123 = ref.test Option<u32>::Some(__opt_val_122);
             __opt_inner_0_124 = 0;
             if __opt_disc_123 != 0 {
                 __flat_125 = ref.cast Option<u32>::Some(__opt_val_122).payload_0;
                 __opt_inner_0_124 = __flat_125;
-            };
+            }
             __tv_2 = __opt_disc_116;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_117);
             __tv_4 = __opt_inner_1_118;
             __tv_5 = __opt_disc_123;
             __tv_6 = __opt_inner_0_124;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val) {
             __case_payload_126 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseBodySize"(__err_val).payload_0;
             __opt_disc_128 = ref.test Option<u64>::Some(__case_payload_126);
@@ -889,10 +889,10 @@ condition: invalid_result matches { Err(_) }
             if __opt_disc_128 != 0 {
                 __flat_130 = ref.cast Option<u64>::Some(__case_payload_126).payload_0;
                 __opt_inner_0_129 = __flat_130;
-            };
+            }
             __tv_2 = __opt_disc_128;
             __tv_3 = __opt_inner_0_129;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val) {
             __case_payload_131 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSectionSize"(__err_val).payload_0;
             __opt_disc_133 = ref.test Option<u32>::Some(__case_payload_131);
@@ -900,10 +900,10 @@ condition: invalid_result matches { Err(_) }
             if __opt_disc_133 != 0 {
                 __flat_135 = ref.cast Option<u32>::Some(__case_payload_131).payload_0;
                 __opt_inner_0_134 = __flat_135;
-            };
+            }
             __tv_2 = __opt_disc_133;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_134);
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val) {
             __case_payload_136 = ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTrailerSize"(__err_val).payload_0;
             __opt_val_138 = __case_payload_136.field_name;
@@ -916,20 +916,20 @@ condition: invalid_result matches { Err(_) }
                 __len_144 = builtin::i32_wrap_i64(__packed_142 >> 32_i64);
                 __opt_inner_0_140 = __ptr_143;
                 __opt_inner_1_141 = __len_144;
-            };
+            }
             __opt_val_145 = __case_payload_136.field_size;
             __opt_disc_146 = ref.test Option<u32>::Some(__opt_val_145);
             __opt_inner_0_147 = 0;
             if __opt_disc_146 != 0 {
                 __flat_148 = ref.cast Option<u32>::Some(__opt_val_145).payload_0;
                 __opt_inner_0_147 = __flat_148;
-            };
+            }
             __tv_2 = __opt_disc_139;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_140);
             __tv_4 = __opt_inner_1_141;
             __tv_5 = __opt_disc_146;
             __tv_6 = __opt_inner_0_147;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding"(__err_val) {
             __case_payload_149 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseTransferCoding"(__err_val).payload_0);
             __opt_disc_151 = ref.is_null(__case_payload_149) == 0;
@@ -941,11 +941,11 @@ condition: invalid_result matches { Err(_) }
                 __len_156 = builtin::i32_wrap_i64(__packed_154 >> 32_i64);
                 __opt_inner_0_152 = __ptr_155;
                 __opt_inner_1_153 = __len_156;
-            };
+            }
             __tv_2 = __opt_disc_151;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_152);
             __tv_4 = __opt_inner_1_153;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding"(__err_val) {
             __case_payload_157 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::HttpResponseContentCoding"(__err_val).payload_0);
             __opt_disc_159 = ref.is_null(__case_payload_157) == 0;
@@ -957,11 +957,11 @@ condition: invalid_result matches { Err(_) }
                 __len_164 = builtin::i32_wrap_i64(__packed_162 >> 32_i64);
                 __opt_inner_0_160 = __ptr_163;
                 __opt_inner_1_161 = __len_164;
-            };
+            }
             __tv_2 = __opt_disc_159;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_160);
             __tv_4 = __opt_inner_1_161;
-        };
+        }
         if ref.test "wasi:http/types.wado/ErrorCode::InternalError"(__err_val) {
             __case_payload_165 = value_copy Option<String>(ref.cast "wasi:http/types.wado/ErrorCode::InternalError"(__err_val).payload_0);
             __opt_disc_167 = ref.is_null(__case_payload_165) == 0;
@@ -973,13 +973,13 @@ condition: invalid_result matches { Err(_) }
                 __len_172 = builtin::i32_wrap_i64(__packed_170 >> 32_i64);
                 __opt_inner_0_168 = __ptr_171;
                 __opt_inner_1_169 = __len_172;
-            };
+            }
             __tv_2 = __opt_disc_167;
             __tv_3 = builtin::i64_extend_i32_s(__opt_inner_0_168);
             __tv_4 = __opt_inner_1_169;
-        };
+        }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
-    };
+    }
     let __fw_write_ptr_6: i32;
     let __fw_handle_6: i32;
     let __fw_result_6: i32;
@@ -998,7 +998,7 @@ condition: invalid_result matches { Err(_) }
         __fw_evt_6 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_6, __fw_evt_6));
         drop("mem/realloc"(__fw_evt_6, 8, 4, 0));
-    };
+    }
     drop("mem/realloc"(__fw_write_ptr_6, 40, 8, 0));
 }
 
@@ -1034,13 +1034,13 @@ fn __cm_binding__Fields_from_list(entries) {
         l46: loop {
             if __entries_i >= __entries_len {
                 break b45;
-            };
+            }
             __entries_addr = __entries_base + (__entries_i * 16);
             __entries_elem = __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: block -> ref "tuple/[String, Array<u8>]" {
                 if __entries_i >= _licm_used_27 {
                     "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                };
+                }
                 break __inline_Array_Tuple_String_Array_u8____IndexValue__index_value_1: builtin::array_get<ref "tuple/[String, Array<u8>]">(_licm_repr_28, __entries_i);
             };
             __packed = "core:internal/cm_lower_string"(__entries_elem.0);
@@ -1086,11 +1086,11 @@ fn __cm_binding__Fields_from_list(entries) {
                     break __inline_memory_to_gc_string_5: String { repr: __local_26, used: __local_25 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:http/types.wado/HeaderError::Other" { discriminant: 4, payload_0: __option_result };
-        };
+        }
         __result_val = Result<Fields,HeaderError>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__outptr, 20, 4, 0));
     return __result_val;
 }
@@ -1109,13 +1109,13 @@ fn __cm_binding__Response_new(headers, contents, trailers) {
     __contents_inner0 = 0;
     if ref.test Option<Stream<u8>>::Some(contents) {
         __contents_inner0 = ref.cast Option<Stream<u8>>::Some(contents).payload_0;
-    };
+    }
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Response::new"(headers, __contents_disc, __contents_inner0, trailers, __outptr);
     __lifted_result_7 = builtin::load_i32(__outptr + 0);
     __lifted_result_8 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_7; __lifted_result_8;
+    return __lifted_result_7, __lifted_result_8;
 }
 
 fn __cm_export__handle(request) {
@@ -1132,7 +1132,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
             l57: loop {
                 if (i < len) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
                 continue l57;
@@ -1150,7 +1150,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l60: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l60;
@@ -1172,7 +1172,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -1239,7 +1239,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -1248,7 +1248,7 @@ fn count_digits_i64(val) {
     let t: i64;
     if val == 0_i64 {
         return 1;
-    };
+    }
     n = 0;
     __for_1: block {
         t = val;
@@ -1256,7 +1256,7 @@ fn count_digits_i64(val) {
             l66: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
-                };
+                }
                 n = n + 1;
                 t = t / 10_i64;
                 continue l66;
@@ -1279,7 +1279,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 l70: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
-                    };
+                    }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
@@ -1287,7 +1287,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                 };
             };
         };
-    };
+    }
 }
 
 fn i32::fmt_decimal(self, f) {
@@ -1297,11 +1297,11 @@ fn i32::fmt_decimal(self, f) {
     let offset: i32;
     let __local_6: ref String;
     is_negative = self < 0;
-    abs_val = if is_negative -> i64 {
+    abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
-    };
+    });
     digit_count = count_digits_i64(abs_val);
     offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
@@ -1319,7 +1319,7 @@ fn String::grow(self, min_capacity) {
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
-    };
+    }
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
@@ -1338,7 +1338,7 @@ fn String::internal_reserve_uninit(self, n) {
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     start = self.used;
     self.used = new_used;
     return start;
@@ -1350,11 +1350,11 @@ fn String::push_str(self, other) {
     other_len = other.used;
     if other_len == 0 {
         return;
-    };
+    }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
-    };
+    }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
@@ -1380,7 +1380,7 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
                     self.index = _hfs_index_13;
                     break b77;
                     break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
-                };
+                }
                 byte = builtin::array_get_u8(_licm_repr_12, _hfs_index_13);
                 _hfs_index_13 = _hfs_index_13 + 1;
                 Array<u8>::push(result, byte);
@@ -1398,7 +1398,7 @@ fn String::push(self, c) {
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         String::grow(self, self.used + 4);
-    };
+    }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
@@ -1417,7 +1417,7 @@ fn String::push(self, c) {
         builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
-    };
+    }
 }
 
 fn Array<u8>::push(self, value) {
@@ -1425,7 +1425,7 @@ fn Array<u8>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u8>::grow(self);
-    };
+    }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1452,7 +1452,7 @@ fn Array<u8>::grow(self) {
             l86: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
                 continue l86;
@@ -1493,17 +1493,17 @@ fn String::from_utf8<Array<u8>>(bytes) {
                     multivalue_bind [__sroa___pattern_temp_1_discriminant, __sroa___pattern_temp_1_payload_0] = ArrayIter<u8>^Iterator::next(iter);
                     if __sroa___pattern_temp_1_discriminant == 0 {
                         b1_5 = __sroa___pattern_temp_1_payload_0;
-                        if if b1_5 <u 128 -> i32 {
+                        if (if b1_5 <u 128 -> i32 {
                             1;
                         } else {
                             b1_5 >u 191;
-                        } {
+                        }) {
                             return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                        };
+                        }
                         code = ((b0 & 31) << 6) | (b1_5 & 63);
                     } else {
                         return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                    };
+                    }
                 } else if b0 <u 240 {
                     let __sroa___pattern_temp_2_discriminant: i32;
                     let __sroa___pattern_temp_2_payload_0: u8;
@@ -1515,41 +1515,41 @@ fn String::from_utf8<Array<u8>>(bytes) {
                         multivalue_bind [__sroa___pattern_temp_3_discriminant, __sroa___pattern_temp_3_payload_0] = ArrayIter<u8>^Iterator::next(iter);
                         if __sroa___pattern_temp_3_discriminant == 0 {
                             b2_7 = __sroa___pattern_temp_3_payload_0;
-                            if if b0 == 224 -> i32 {
+                            if (if b0 == 224 -> i32 {
                                 b1_6 <u 160;
                             } else {
                                 0;
-                            } {
+                            }) {
                                 return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 } };
-                            };
-                            if if b0 == 237 -> i32 {
+                            }
+                            if (if b0 == 237 -> i32 {
                                 b1_6 >=u 160;
                             } else {
                                 0;
-                            } {
+                            }) {
                                 return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: surrogate codepoint"), used: 34 } };
-                            };
-                            if if b1_6 <u 128 -> i32 {
+                            }
+                            if (if b1_6 <u 128 -> i32 {
                                 1;
                             } else {
                                 b1_6 >u 191;
-                            } {
+                            }) {
                                 return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                            };
-                            if if b2_7 <u 128 -> i32 {
+                            }
+                            if (if b2_7 <u 128 -> i32 {
                                 1;
                             } else {
                                 b2_7 >u 191;
-                            } {
+                            }) {
                                 return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                            };
+                            }
                             code = (((b0 & 15) << 12) | ((b1_6 & 63) << 6)) | (b2_7 & 63);
                         } else {
                             return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                        };
+                        }
                     } else {
                         return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                    };
+                    }
                 } else if b0 <u 245 {
                     let __sroa___pattern_temp_4_discriminant: i32;
                     let __sroa___pattern_temp_4_payload_0: u8;
@@ -1566,58 +1566,58 @@ fn String::from_utf8<Array<u8>>(bytes) {
                             multivalue_bind [__sroa___pattern_temp_6_discriminant, __sroa___pattern_temp_6_payload_0] = ArrayIter<u8>^Iterator::next(iter);
                             if __sroa___pattern_temp_6_discriminant == 0 {
                                 b3 = __sroa___pattern_temp_6_payload_0;
-                                if if b0 == 240 -> i32 {
+                                if (if b0 == 240 -> i32 {
                                     b1_8 <u 144;
                                 } else {
                                     0;
-                                } {
+                                }) {
                                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: overlong sequence"), used: 32 } };
-                                };
-                                if if b0 == 244 -> i32 {
+                                }
+                                if (if b0 == 244 -> i32 {
                                     b1_8 >u 143;
                                 } else {
                                     0;
-                                } {
+                                }) {
                                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: out of Unicode range"), used: 35 } };
-                                };
-                                if if b1_8 <u 128 -> i32 {
+                                }
+                                if (if b1_8 <u 128 -> i32 {
                                     1;
                                 } else {
                                     b1_8 >u 191;
-                                } {
+                                }) {
                                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                                };
-                                if if b2_9 <u 128 -> i32 {
+                                }
+                                if (if b2_9 <u 128 -> i32 {
                                     1;
                                 } else {
                                     b2_9 >u 191;
-                                } {
+                                }) {
                                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                                };
-                                if if b3 <u 128 -> i32 {
+                                }
+                                if (if b3 <u 128 -> i32 {
                                     1;
                                 } else {
                                     b3 >u 191;
-                                } {
+                                }) {
                                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: bad continuation byte"), used: 36 } };
-                                };
+                                }
                                 code = ((((b0 & 7) << 18) | ((b1_8 & 63) << 12)) | ((b2_9 & 63) << 6)) | (b3 & 63);
                             } else {
                                 return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                            };
+                            }
                         } else {
                             return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                        };
+                        }
                     } else {
                         return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: truncated sequence"), used: 33 } };
-                    };
+                    }
                 } else {
                     return Result<String,String>::Err { discriminant: 1, payload_0: String { repr: array.new_data<u8>("invalid UTF-8: byte out of range"), used: 32 } };
-                };
+                }
                 String::push(builder, code);
             } else {
                 break b88;
-            };
+            }
             continue l89;
         };
     };
@@ -1627,11 +1627,11 @@ fn String::from_utf8<Array<u8>>(bytes) {
 fn ArrayIter<u8>^Iterator::next(self) {
     let item: u8;
     if self.index >= self.used {
-        return 1; 0;
-    };
+        return 1, 0;
+    }
     item = builtin::array_get<u8>(self.repr, self.index);
     self.index = self.index + 1;
-    return 0; item;
+    return 0, item;
 }
 
 fn Array<u8>::push(self, value) {
@@ -1639,7 +1639,7 @@ fn Array<u8>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u8>::grow(self);
-    };
+    }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1666,7 +1666,7 @@ fn Array<u8>::grow(self) {
             l125: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
                 continue l125;
@@ -1681,7 +1681,7 @@ fn Array<Tuple<String,Array<u8>>>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<Tuple<String,Array<u8>>>::grow(self);
-    };
+    }
     builtin::array_set<ref "tuple/[String, Array<u8>]">(self.repr, used, value);
     self.used = used + 1;
 }
@@ -1708,7 +1708,7 @@ fn Array<Tuple<String,Array<u8>>>::grow(self) {
             l129: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref "tuple/[String, Array<u8>]">(new_repr, i, builtin::array_get<ref "tuple/[String, Array<u8>]">(old_repr, i));
                 i = i + 1;
                 continue l129;
@@ -1728,7 +1728,7 @@ fn Formatter::write_char_n(self, c, n) {
             l132: loop {
                 if (i < n) == 0 {
                     break __for_0;
-                };
+                }
                 String::push(_licm_buf_4, c);
                 i = i + 1;
                 continue l132;
@@ -1753,44 +1753,44 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         sign = String { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
         sign = String { repr: array.new_data<u8>("+"), used: 1 };
-    };
+    }
     sign_len = sign.used;
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
-    if if self.width <= 0 -> i32 {
+    if (if self.width <= 0 -> i32 {
         1;
     } else {
         content_len >= self.width;
-    } {
+    }) {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         Formatter::write_char_n(self, 48, padding);
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
     align = self.align;
     let __match_scrut_0: enum:Alignment;
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, padding);
         return offset_10;
@@ -1800,10 +1800,10 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, left_pad);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
         Formatter::write_char_n(self, self.fill, right_pad);
         return offset_13;
@@ -1811,12 +1811,12 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         Formatter::write_char_n(self, self.fill, padding);
         if sign_len > 0 {
             String::push_str(self.buf, sign);
-        };
+        }
         if prefix_len > 0 {
             String::push_str(self.buf, prefix);
-        };
+        }
         return String::internal_reserve_uninit(self.buf, digit_count);
-    };
+    }
 }
 
 export fn __cm_export__handle as "handle"

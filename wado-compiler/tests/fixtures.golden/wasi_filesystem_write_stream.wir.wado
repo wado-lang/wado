@@ -230,12 +230,12 @@ fn run() with Stdout, Stderr, Preopens {
     dirs = __cm_binding__Preopens_get_directories();
     if dirs.used == 0 {
         return;
-    };
+    }
     dir = __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: block -> ref "tuple/[Descriptor, String]" {
         if 0 >= dirs.used {
             "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        };
+        }
         break __inline_Array_Tuple_Descriptor_String___IndexValue__index_value_3: builtin::array_get<ref "tuple/[Descriptor, String]">(dirs.repr, 0);
     }.0;
     write_result = __cm_binding__Descriptor_open_at(dir, 0, String { repr: array.new_data<u8>("test_output.txt"), used: 15 }, 9, 3);
@@ -268,7 +268,7 @@ fn run() with Stdout, Stderr, Preopens {
                 chunk = "core:internal/cm_stream_read_u8"(file_rx, 4096);
                 if chunk.used == 0 {
                     break b3;
-                };
+                }
                 "core:internal/cm_stream_write_u8"(out_tx, chunk);
                 continue l4;
             };
@@ -278,7 +278,7 @@ fn run() with Stdout, Stderr, Preopens {
         "wasi/future-drop-readable:transmission-cli"(sub2);
         "wasi/future-drop-readable:transmission-filesystem"(read_done);
         drop(__cm_binding__Descriptor_unlink_file_at(dir, String { repr: array.new_data<u8>("test_output.txt"), used: 15 }));
-    };
+    }
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -307,7 +307,7 @@ fn __cm_binding__Preopens_get_directories() {
         l7: loop {
             if __i >= __count {
                 break b6;
-            };
+            }
             __elem_addr = __base + (__i * 12);
             __lifted_result_6 = builtin::load_i32(__elem_addr + 0);
             __lifted_result_7 = __inline_memory_to_gc_string_1: block -> ref String {
@@ -324,7 +324,7 @@ fn __cm_binding__Preopens_get_directories() {
     };
     if __count > 0 {
         drop("mem/realloc"(__base, __count * 12, 4, 0));
-    };
+    }
     drop("mem/realloc"(__outptr, 8, 4, 0));
     return __result;
 }
@@ -444,11 +444,11 @@ fn __cm_binding__Descriptor_open_at(self, path_flags, path, open_flags, flags) {
                     break __inline_memory_to_gc_string_0: String { repr: __local_17, used: __local_16 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
-        };
+        }
         __result_val = Result<Descriptor,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
 }
@@ -466,7 +466,7 @@ fn __cm_binding__Descriptor_read_via_stream(self, offset) {
     __lifted_result_3 = builtin::load_i32(__outptr + 0);
     __lifted_result_4 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return __lifted_result_3; __lifted_result_4;
+    return __lifted_result_3, __lifted_result_4;
 }
 
 fn __cm_binding__Descriptor_unlink_file_at(self, path) {
@@ -576,11 +576,11 @@ fn __cm_binding__Descriptor_unlink_file_at(self, path) {
                     break __inline_memory_to_gc_string_0: String { repr: __local_13, used: __local_12 };
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
-            };
+            }
             __vresult = "wasi:filesystem/types.wado/ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
-        };
+        }
         __result_val = Result<unit,ErrorCode>::Err { discriminant: 1, payload_0: __vresult };
-    };
+    }
     drop("mem/realloc"(__async_outptr, 20, 4, 0));
     return __result_val;
 }
@@ -600,7 +600,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {  // from core:internal
             l87: loop {
                 if (i < len) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
                 continue l87;
@@ -618,7 +618,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l90: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l90;
@@ -640,7 +640,7 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -666,13 +666,13 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
                 if __sroa_event_payload == 2 {
                     break b94;
-                };
+                }
                 continue l95;
             };
         };
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
-    };
+    }
 }
 
 fn "core:internal/log_stderr"(message) {  // from core:internal
@@ -736,7 +736,7 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {  // from core:internal
     result = "wasi/stream-read"(handle, ptr, max);
     if result == -1 {
         result = "core:internal/wait_for_blocked"(handle);
-    };
+    }
     count = result >> 4;
     arr = "core:internal/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
@@ -760,7 +760,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
     result = "wasi/stream-write"(handle, ptr, len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, len, 1, 0));
 }
 
@@ -775,7 +775,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
@@ -789,7 +789,7 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     evt_handle = builtin::load_i32(out_ptr);
     payload = builtin::load_i32(out_ptr + 4);
     drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return code; evt_handle; payload;
+    return code, evt_handle, payload;
 }
 
 fn Array<Tuple<Descriptor,String>>::push(self, value) {
@@ -797,7 +797,7 @@ fn Array<Tuple<Descriptor,String>>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<Tuple<Descriptor,String>>::grow(self);
-    };
+    }
     builtin::array_set<ref "tuple/[Descriptor, String]">(self.repr, used, value);
     self.used = used + 1;
 }
@@ -824,7 +824,7 @@ fn Array<Tuple<Descriptor,String>>::grow(self) {
             l102: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<ref "tuple/[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple/[Descriptor, String]">(old_repr, i));
                 i = i + 1;
                 continue l102;
@@ -839,7 +839,7 @@ fn Array<u8>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<u8>::grow(self);
-    };
+    }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
@@ -866,7 +866,7 @@ fn Array<u8>::grow(self) {
             l106: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
                 continue l106;

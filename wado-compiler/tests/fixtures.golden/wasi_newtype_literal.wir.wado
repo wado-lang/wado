@@ -75,13 +75,13 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
                 if __sroa_event_payload == 2 {
                     break b1;
-                };
+                }
                 continue l2;
             };
         };
         "wasi/subtask-drop"(subtask);
         "wasi/waitable-set-drop"(ws);
-    };
+    }
 }
 
 fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
@@ -94,7 +94,7 @@ fn "core:internal/cm_waitable_set_wait"(ws) {  // from core:internal
     evt_handle = builtin::load_i32(out_ptr);
     payload = builtin::load_i32(out_ptr + 4);
     drop("mem/realloc"(out_ptr, 8, 4, 0));
-    return code; evt_handle; payload;
+    return code, evt_handle, payload;
 }
 
 export fn __cm_export____test_0_literal_coercion_to_duration_via_effect_fn as "__test_0_literal_coercion_to_duration_via_effect_fn"

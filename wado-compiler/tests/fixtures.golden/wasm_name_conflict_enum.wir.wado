@@ -71,10 +71,10 @@ fn run() with Stdout {
     l = 0;
     if u == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("up: true"), used: 8 });
-    };
+    }
     if l == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("left: true"), used: 10 });
-    };
+    }
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -88,10 +88,10 @@ fn __cm_export__run() {
     l = 0;
     if u == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("up: true"), used: 8 });
-    };
+    }
     if l == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("left: true"), used: 10 });
-    };
+    }
     "wasi/task-return"(0);
 }
 
@@ -108,7 +108,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -135,7 +135,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l6: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l6;
@@ -176,7 +176,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 

@@ -107,13 +107,13 @@ fn run() with Stdout {
     __match_scrut_0 = less;
     if __match_scrut_0 == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("Less matches Less"), used: 17 });
-    };
+    }
     if equal == 1 {
         "core:cli/println"(String { repr: array.new_data<u8>("Equal matches Equal"), used: 19 });
-    };
+    }
     if greater == 2 {
         "core:cli/println"(String { repr: array.new_data<u8>("Greater matches Greater"), used: 23 });
-    };
+    }
     arr1 = __seq_lit: block -> ref Array<i32> {
         __local_3 = Array<i32> { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_3;
@@ -128,34 +128,34 @@ fn run() with Stdout {
     };
     if Array<i32>^Ord::cmp(arr1, arr2) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("arr1 < arr2"), used: 11 });
-    };
+    }
     if Array<i32>^Ord::cmp(arr1, arr3) != 2 {
         "core:cli/println"(String { repr: array.new_data<u8>("arr1 <= arr3"), used: 12 });
-    };
+    }
     if Array<i32>^Ord::cmp(arr2, arr1) == 2 {
         "core:cli/println"(String { repr: array.new_data<u8>("arr2 > arr1"), used: 11 });
-    };
+    }
     if Array<i32>^Ord::cmp(arr3, arr1) != 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("arr3 >= arr1"), used: 12 });
-    };
+    }
     if Array<i32>^Eq::eq(arr1, arr3) {
         "core:cli/println"(String { repr: array.new_data<u8>("arr1 == arr3"), used: 12 });
-    };
+    }
     s1 = String { repr: array.new_data<u8>("apple"), used: 5 };
     s2 = String { repr: array.new_data<u8>("banana"), used: 6 };
     s3 = String { repr: array.new_data<u8>("apple"), used: 5 };
     if String^Ord::cmp(s1, s2) == 0 {
         "core:cli/println"(String { repr: array.new_data<u8>("apple < banana"), used: 14 });
-    };
+    }
     if String^Ord::cmp(s1, s3) != 2 {
         "core:cli/println"(String { repr: array.new_data<u8>("apple <= apple"), used: 14 });
-    };
+    }
     if String^Ord::cmp(s2, s1) == 2 {
         "core:cli/println"(String { repr: array.new_data<u8>("banana > apple"), used: 14 });
-    };
+    }
     if String^Eq::eq(s1, s3) {
         "core:cli/println"(String { repr: array.new_data<u8>("apple == apple"), used: 14 });
-    };
+    }
 }
 
 fn __cm_binding__Stdout_write_via_stream(data) {
@@ -180,7 +180,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
         "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
     } else {
         "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    };
+    }
     "wasi/stream-drop-writable"(tx);
 }
 
@@ -207,7 +207,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
             l14: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
                 continue l14;
@@ -248,17 +248,17 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
         drop("core:internal/wait_for_blocked"(handle));
-    };
+    }
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
 fn i32^Ord::cmp(self, other) {
     if self < other {
         return 0;
-    };
+    }
     if self > other {
         return 2;
-    };
+    }
     return 1;
 }
 
@@ -267,7 +267,7 @@ fn String^Eq::eq(self, other) {
     len_a = self.used;
     if len_a != other.used {
         return 0;
-    };
+    }
     return String^Eq::eq_bytes(self.repr, other.repr, len_a);
 }
 
@@ -279,10 +279,10 @@ fn String^Eq::eq_bytes(a, b, len) {
             l21: loop {
                 if (i < len) == 0 {
                     break __for_1;
-                };
+                }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                     return 0;
-                };
+                }
                 i = i + 1;
                 continue l21;
             };
@@ -311,15 +311,15 @@ fn String^Ord::cmp(self, other) {
             l25: loop {
                 if (i < min_len) == 0 {
                     break __for_2;
-                };
+                }
                 a_byte = builtin::array_get_u8(a_repr, i);
                 b_byte = builtin::array_get_u8(b_repr, i);
                 if a_byte <u b_byte {
                     return 0;
-                };
+                }
                 if a_byte >u b_byte {
                     return 2;
-                };
+                }
                 i = i + 1;
                 continue l25;
             };
@@ -327,10 +327,10 @@ fn String^Ord::cmp(self, other) {
     };
     if len_a < len_b {
         return 0;
-    };
+    }
     if len_a > len_b {
         return 2;
-    };
+    }
     return 1;
 }
 
@@ -341,7 +341,7 @@ fn Array<i32>^Eq::eq(self, other) {
     let _licm_repr_5: ref array<i32>;
     if self.used != other.used {
         return 0;
-    };
+    }
     __for_9: block {
         i = 0;
         _licm_used_3 = self.used;
@@ -351,10 +351,10 @@ fn Array<i32>^Eq::eq(self, other) {
             l33: loop {
                 if (i < _licm_used_3) == 0 {
                     break __for_9;
-                };
+                }
                 if (builtin::array_get<i32>(_licm_repr_4, i) == builtin::array_get<i32>(_licm_repr_5, i)) == 0 {
                     return 0;
-                };
+                }
                 i = i + 1;
                 continue l33;
             };
@@ -385,15 +385,15 @@ fn Array<i32>^Ord::cmp(self, other) {
             l37: loop {
                 if (i < min_len) == 0 {
                     break __for_10;
-                };
+                }
                 a = builtin::array_get<i32>(_licm_repr_8, i);
                 b = builtin::array_get<i32>(_licm_repr_9, i);
                 if i32^Ord::cmp(a, b) == 0 {
                     return 0;
-                };
+                }
                 if i32^Ord::cmp(a, b) == 2 {
                     return 2;
-                };
+                }
                 i = i + 1;
                 continue l37;
             };
@@ -401,10 +401,10 @@ fn Array<i32>^Ord::cmp(self, other) {
     };
     if self.used < other.used {
         return 0;
-    };
+    }
     if self.used > other.used {
         return 2;
-    };
+    }
     return 1;
 }
 
@@ -413,7 +413,7 @@ fn Array<i32>::push(self, value) {
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         Array<i32>::grow(self);
-    };
+    }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
@@ -440,7 +440,7 @@ fn Array<i32>::grow(self) {
             l45: loop {
                 if (i < used) == 0 {
                     break __for_0;
-                };
+                }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
                 i = i + 1;
                 continue l45;
