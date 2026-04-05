@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775363208212,
+  "lastUpdate": 1775367721338,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10319,6 +10319,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d51a81a75d2619374cbe532d8529e394992a583d"
         },
         "date": 1775363208141,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20402,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "867d9e29c2e6fcc59d33eb59191e7673ebecf09e",
+          "message": "Merge pull request #772 from wado-lang/claude/add-parser-tests-svRXo\n\nAdd parser tests, fix for-of continue bug, and add codegen crash repro",
+          "timestamp": "2026-04-05T14:39:06+09:00",
+          "tree_id": "159de572906efb266555ecc5862bb2296c117478",
+          "url": "https://github.com/wado-lang/wado/commit/867d9e29c2e6fcc59d33eb59191e7673ebecf09e"
+        },
+        "date": 1775367721209,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
