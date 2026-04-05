@@ -34,20 +34,12 @@ fn read_file_bytes(path: String) -> Array<u8> with Preopens {
     return buf;
 }
 
-test "compression round-trip" {
-    let mut data: Array<u8> = [];
-    for let mut i = 0; i < 100; i += 1 {
-        data.push((i % 256) as u8);
-    }
-    let compressed = zlib_compress(&data);
-    let decompressed = inflate_zlib(&compressed).unwrap();
-    assert decompressed.len() == 100;
-    assert decompressed[0] == 0;
-    assert decompressed[99] == 99;
+test "benchmark" {
+    run();
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
-    let data = read_file_bytes("json_twitter/twitter.json");
+    let data = read_file_bytes("benchmark/json_twitter/twitter.json");
     let iterations = 10;
 
     println(`zlib {data.len()} bytes x {iterations} iterations`);

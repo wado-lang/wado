@@ -36,7 +36,7 @@ for (const opt of OPT_LEVELS) {
   output = runBench('benchmark/fts/fts.wado', opt);
   benchmarks.push({ name: `fts (${label})`, unit: 'ms', value: parseMs(output) });
 
-  output = runBench('benchmark/zlib/zlib_bench.wado', opt, ['--dir', 'benchmark::.']);
+  output = runBench('benchmark/zlib/zlib_bench.wado', opt);
   benchmarks.push({ name: `zlib/compress (${label})`, unit: 'ms', value: parseMs(output, /Compress: ([\d.]+) ms/) });
   benchmarks.push({ name: `zlib/decompress (${label})`, unit: 'ms', value: parseMs(output, /Decompress: ([\d.]+) ms/) });
 

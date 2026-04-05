@@ -3192,9 +3192,20 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         ctx.group_counter = ctx.alt_gc_starts[lr_idx];
         let gc_lr = ctx.group_counter;
 
+        // Collect all LR suffix first tokens to detect when a delimiter
+        // following a non-final self-ref is also an LR binary operator.
+        let mut lr_suffix_first_tokens = TreeSet::<String>::new();
+        for let lr_i of lr_indices {
+            let lr_alt = &rule.alternatives[*lr_i];
+            if lr_alt.elements.len() > 1 {
+                let sf = ctx.first_of_elements_from(&lr_alt.elements, 1);
+                for let t of sf {
+                    lr_suffix_first_tokens.insert(t);
+                }
+            }
+        }
+
         // Find the last self-recursive element index in the suffix.
-        // Non-final self-refs use min_prec 0 (delimited by following fixed tokens).
-        // Only the final self-ref uses inner_min_prec.
         let mut last_self_ref_idx = -1;
         for let mut ei2 = 1; ei2 < alt.elements.len(); ei2 += 1 {
             if let RuleRef(name2) = &alt.elements[ei2] {
@@ -3209,7 +3220,28 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             if let RuleRef(name) = elem {
                 if *name == rule.name {
                     let field_name = dedup_name(&escape_ident(&to_snake_case(name)), &mut name_counts);
-                    let prec = if ei == last_self_ref_idx { inner_min_prec } else { 0 };
+                    let mut prec = inner_min_prec;
+                    if ei != last_self_ref_idx && ei + 1 < alt.elements.len() {
+                        // Non-final self-ref: use min_prec 0 unless the next
+                        // delimiter token is also an LR operator (e.g. AND in
+                        // BETWEEN...AND). In that case, keep inner_min_prec to
+                        // prevent the delimiter from being consumed as a binary op.
+                        let next_elem = &alt.elements[ei + 1];
+                        let mut next_is_lr_op = false;
+                        if let TokenRef(tn) = next_elem {
+                            if lr_suffix_first_tokens.contains(`TK_{*tn}`) {
+                                next_is_lr_op = true;
+                            }
+                        }
+                        if let Literal(lit) = next_elem {
+                            if lr_suffix_first_tokens.contains(literal_const_name(lit)) {
+                                next_is_lr_op = true;
+                            }
+                        }
+                        if !next_is_lr_op {
+                            prec = 0;
+                        }
+                    }
                     w.line(`let {field_name} = {prec_fn}(p, {prec})?;`);
                 } else {
                     let elem_fn = `parse_{to_snake_case(name)}`;
