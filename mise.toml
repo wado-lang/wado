@@ -91,7 +91,12 @@ cargo test
 
 [tasks.test-wado]
 description = "Run Wado module tests"
-run = "cargo run -p wado-cli -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado package-gale"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo run -p wado-cli -- test example/*.wado wado-compiler/lib/core wasm-size/*/*.wado package-gale
+cargo run -p wado-cli -- test --dir benchmark::. benchmark/*/*.wado
+"""
 
 [tasks.test-cov]
 description = "Run tests with coverage"
