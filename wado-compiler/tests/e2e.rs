@@ -869,4 +869,3 @@ datatest_mini::harness! {
     { test = fixture_test_o3, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
     { test = fixture_test_os, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
 }
-
