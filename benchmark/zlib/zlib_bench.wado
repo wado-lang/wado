@@ -35,39 +35,7 @@ fn read_file_bytes(path: String) -> Array<u8> with Preopens {
 }
 
 test "benchmark" {
-    let data = read_file_bytes("benchmark/json_twitter/twitter.json");
-    let iterations = 10;
-
-    println(`zlib {data.len()} bytes x {iterations} iterations`);
-
-    let t0 = MonotonicClock::now();
-    let mut compressed: Array<u8> = [];
-    for let mut iter = 0; iter < iterations; iter += 1 {
-        compressed = zlib_compress(&data);
-    }
-    let t1 = MonotonicClock::now();
-
-    let compress_ns = (t1 - t0) as u64;
-    let compress_ms = compress_ns / 1000000;
-    println(`Compressed: {data.len()} -> {compressed.len()} bytes`);
-    println(`Compress: {compress_ms} ms`);
-
-    let t2 = MonotonicClock::now();
-    let mut decompressed: Array<u8> = [];
-    for let mut iter = 0; iter < iterations; iter += 1 {
-        decompressed = inflate_zlib(&compressed).unwrap();
-    }
-    let t3 = MonotonicClock::now();
-
-    let decompress_ns = (t3 - t2) as u64;
-    let decompress_ms = decompress_ns / 1000000;
-    println(`Decompress: {decompress_ms} ms`);
-
-    assert decompressed.len() == data.len(), "decompressed size mismatch";
-
-    let total_ns = (t1 - t0 + t3 - t2) as u64;
-    let total_ms = total_ns / 1000000;
-    println(`Elapsed: {total_ms} ms`);
+    run();
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {

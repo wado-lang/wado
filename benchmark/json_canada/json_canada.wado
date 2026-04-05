@@ -62,35 +62,7 @@ fn read_file(path: String) -> String with Preopens {
 }
 
 test "benchmark" {
-    let json_data = read_file("benchmark/json_canada/canada.json");
-    let iterations = 1;
-    println(`json-canada: {json_data.len()} bytes, {iterations} iterations`);
-
-    let start = MonotonicClock::now();
-    let mut total_points = 0;
-    for let mut i = 0; i < iterations; i += 1 {
-        let result = from_string::<FeatureCollection>(json_data);
-        if let Ok(fc) = result {
-            for let feat of fc.features {
-                for let ring of feat.geometry.coordinates {
-                    total_points = total_points + ring.len();
-                }
-            }
-        } else {
-            if let Err(e) = result {
-                println(`Parse error: {e.message}`);
-            }
-            break;
-        }
-    }
-    let end = MonotonicClock::now();
-    let elapsed_ns = (end - start) as u64;
-    let elapsed_ms = elapsed_ns / 1000000;
-    let elapsed_us = elapsed_ns / 1000;
-
-    assert total_points == 55563 * iterations;
-    println(`Parsed {total_points} total coordinate points`);
-    println(`Elapsed: {elapsed_ms}.{elapsed_us % 1000} ms`);
+    run();
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {

@@ -32,29 +32,7 @@ fn read_file(path: String) -> String with Preopens {
 
 #[timeout_ms(120000)]
 test "benchmark" {
-    let sql = read_file("benchmark/sqlite_parse/queries.sql");
-    let iterations = 100;
-    println(`sqlite-parse (Gale): {sql.len()} bytes, {iterations} iterations`);
-
-    let warmup = sqlite::parse(&sql);
-    if let Err(e) = warmup {
-        panic(`Parse error: {e.message}`);
-    }
-
-    let start = MonotonicClock::now();
-    for let mut i = 0; i < iterations; i += 1 {
-        let result = sqlite::parse(&sql);
-        if let Err(e) = result {
-            panic(`Parse error on iteration {i}: {e.message}`);
-        }
-    }
-    let end = MonotonicClock::now();
-    let elapsed_ns = (end - start) as u64;
-    let elapsed_us = elapsed_ns / 1000;
-    let per_iter_us = elapsed_us / iterations as u64;
-
-    println(`Elapsed: {elapsed_us / 1000}.{elapsed_us % 1000} ms ({iterations} iterations)`);
-    println(`Per iteration: {per_iter_us}.{elapsed_us * 1000 / iterations as u64 % 1000} us`);
+    run();
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {

@@ -121,34 +121,7 @@ fn read_file(path: String) -> String with Preopens {
 }
 
 test "benchmark" {
-    let json_data = read_file("benchmark/json_catalog/citm_catalog.json");
-    let iterations = 1;
-    println(`json-catalog: {json_data.len()} bytes, {iterations} iterations`);
-
-    let start = MonotonicClock::now();
-    let mut total_events = 0;
-    let mut total_performances = 0;
-    for let mut i = 0; i < iterations; i += 1 {
-        let result = from_string::<CitmCatalog>(json_data);
-        if let Ok(catalog) = result {
-            total_events = total_events + catalog.events.len();
-            total_performances = total_performances + catalog.performances.len();
-        } else {
-            if let Err(e) = result {
-                println(`Parse error: {e.message}`);
-            }
-            break;
-        }
-    }
-    let end = MonotonicClock::now();
-    let elapsed_ns = (end - start) as u64;
-    let elapsed_ms = elapsed_ns / 1000000;
-    let elapsed_us = elapsed_ns / 1000;
-
-    assert total_events == 184 * iterations;
-    assert total_performances == 243 * iterations;
-    println(`Parsed {total_events} events, {total_performances} performances`);
-    println(`Elapsed: {elapsed_ms}.{elapsed_us % 1000} ms`);
+    run();
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
