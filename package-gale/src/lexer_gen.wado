@@ -465,8 +465,11 @@ fn try_extract_ci_char(cc: &CharClass) -> Option<char> {
 /// Extracts a [lowercase_char, is_case_insensitive] pair from a lexer element.
 fn try_extract_keyword_char(elem: &LexerElement, all_rules: &Array<LexerRule>) -> Option<[char, bool]> {
     if let Literal(text) = elem {
-        if text.len() == 1 {
-            return Option::<[char, bool]>::Some([text.chars().next().unwrap().to_ascii_lowercase(), false]);
+        let mut iter = text.chars();
+        if let Some(c) = iter.next() {
+            if let None = iter.next() {
+                return Option::<[char, bool]>::Some([c.to_ascii_lowercase(), false]);
+            }
         }
         return null;
     }
