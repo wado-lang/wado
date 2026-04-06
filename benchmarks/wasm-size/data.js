@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775426948094,
+  "lastUpdate": 1775434665175,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10514,6 +10514,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/17ee838a6c43d9c1f26b7a5b86c3a281cd6ae002"
         },
         "date": 1775426947859,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f448faa995a1e35e19e2b5451cd7a5f21cd3b8f0",
+          "message": "Merge pull request #780 from wado-lang/claude/optimize-sqlite-parse-4HzLe\n\nOptimize Gale lexer/parser: keyword table + expect lazy string",
+          "timestamp": "2026-04-06T09:14:20+09:00",
+          "tree_id": "fe8ca5740ced236ccdf8a72a83e103f0cb9b87ab",
+          "url": "https://github.com/wado-lang/wado/commit/f448faa995a1e35e19e2b5451cd7a5f21cd3b8f0"
+        },
+        "date": 1775434664941,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
