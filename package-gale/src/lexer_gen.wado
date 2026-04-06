@@ -22,6 +22,12 @@ pub struct LitToken {
     pub const_name: String,
 }
 
+pub struct KeywordInfo {
+    pub rule_name: String,
+    pub lowercase_text: String,
+    pub case_insensitive: bool,
+}
+
 fn seen_contains(seen: &Array<String>, text: &String) -> bool {
     for let item of seen {
         if *item == *text {
@@ -93,10 +99,12 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, l
 }
 
 pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
+    let keywords = collect_keyword_rules(&grammar.lexer_rules);
     gen_lexer_struct(w);
-    gen_lexer_match_fns(w, &grammar.lexer_rules);
+    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords);
     gen_literal_match_fns(w, lit_tokens);
-    gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names);
+    gen_keyword_classifier_fn(w, &keywords);
+    gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names, &keywords);
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
 
@@ -142,12 +150,14 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
     w.blank();
 }
 
-fn gen_lexer_match_fns(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
+fn gen_lexer_match_fns(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, keywords: &Array<KeywordInfo>) {
     for let rule of lexer_rules {
         if rule.body.is_empty() {
             // Virtual token (from `tokens { }` block): no match function needed
         } else if !rule.is_fragment {
-            gen_lexer_match_fn(w, rule, lexer_rules);
+            if !is_keyword_rule_name(&rule.name, keywords) {
+                gen_lexer_match_fn(w, rule, lexer_rules);
+            }
         } else if fragment_is_recursive(rule, lexer_rules) {
             gen_lexer_match_fn(w, rule, lexer_rules);
         }
@@ -428,6 +438,175 @@ fn find_fragment(all_rules: &Array<LexerRule>, name: &String) -> Option<&LexerRu
     return null;
 }
 
+// --- Keyword detection and classification ---
+
+/// Tries to extract a single lowercase char from a case-insensitive CharClass (e.g., [aA]).
+fn try_extract_ci_char(cc: &CharClass) -> Option<char> {
+    if cc.negated { return null; }
+    if cc.ranges.len() == 1 {
+        let r = &cc.ranges[0];
+        if r.start == r.end {
+            return Option::<char>::Some(r.start.to_ascii_lowercase());
+        }
+        return null;
+    }
+    if cc.ranges.len() == 2 {
+        let r0 = &cc.ranges[0];
+        let r1 = &cc.ranges[1];
+        if r0.start == r0.end && r1.start == r1.end && r0.start != r1.start
+            && r0.start.to_ascii_lowercase() == r1.start.to_ascii_lowercase()
+        {
+            return Option::<char>::Some(r0.start.to_ascii_lowercase());
+        }
+    }
+    return null;
+}
+
+/// Extracts a [lowercase_char, is_case_insensitive] pair from a lexer element.
+fn try_extract_keyword_char(elem: &LexerElement, all_rules: &Array<LexerRule>) -> Option<[char, bool]> {
+    if let Literal(text) = elem {
+        let mut iter = text.chars();
+        if let Some(c) = iter.next() {
+            if let None = iter.next() {
+                return Option::<[char, bool]>::Some([c.to_ascii_lowercase(), false]);
+            }
+        }
+        return null;
+    }
+    if let CharClass(cc) = elem {
+        let ch = try_extract_ci_char(cc);
+        if let Some(c) = ch {
+            return Option::<[char, bool]>::Some([c, true]);
+        }
+        if !cc.negated && cc.ranges.len() == 1 && cc.ranges[0].start == cc.ranges[0].end {
+            return Option::<[char, bool]>::Some([cc.ranges[0].start.to_ascii_lowercase(), false]);
+        }
+        return null;
+    }
+    if let RuleRef(name) = elem {
+        let frag = find_fragment(all_rules, name);
+        if let Some(f) = frag {
+            if f.body.len() == 1 && f.body[0].elements.len() == 1 {
+                return try_extract_keyword_char(&f.body[0].elements[0], all_rules);
+            }
+        }
+        return null;
+    }
+    return null;
+}
+
+/// Analyzes a lexer rule to determine if it's a fixed keyword pattern.
+/// Returns KeywordInfo if it matches a sequence of case-insensitive (or literal) chars.
+fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>) -> Option<KeywordInfo> {
+    if rule.is_fragment || rule.body.len() != 1 { return null; }
+    let alt = &rule.body[0];
+    if alt.elements.is_empty() { return null; }
+    let mut text = String::with_capacity(alt.elements.len());
+    let mut all_ci = true;
+    for let elem of &alt.elements {
+        if let Some(pair) = try_extract_keyword_char(elem, all_rules) {
+            text.push(pair.0);
+            if !pair.1 { all_ci = false; }
+        } else {
+            return null;
+        }
+    }
+    // Only optimize pure ASCII-letter keywords
+    for let c of text.chars() {
+        if !c.is_ascii_lowercase() { return null; }
+    }
+    return Option::<KeywordInfo>::Some(KeywordInfo {
+        rule_name: rule.name,
+        lowercase_text: text,
+        case_insensitive: all_ci,
+    });
+}
+
+/// Collects all keyword rules from the grammar.
+pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>) -> Array<KeywordInfo> {
+    let mut result: Array<KeywordInfo> = [];
+    for let rule of lexer_rules {
+        if rule.is_fragment || rule.body.is_empty() { continue; }
+        let info = try_extract_keyword_info(rule, lexer_rules);
+        if let Some(kw) = info {
+            result.push(kw);
+        }
+    }
+    return result;
+}
+
+fn is_keyword_rule_name(name: &String, keywords: &Array<KeywordInfo>) -> bool {
+    for let kw of keywords {
+        if kw.rule_name == *name { return true; }
+    }
+    return false;
+}
+
+fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &Array<KeywordInfo>) {
+    if keywords.is_empty() { return; }
+
+    let mut f = FnSpec::new("classify_keyword");
+    f.add_param("chars", "&Array<char>");
+    f.add_param("start", "i32");
+    f.add_param("end", "i32");
+    f.set_return_type("i32");
+    f.emit_begin(w);
+
+    w.line("let len = end - start;");
+
+    // Find min/max keyword length (ASCII keywords: byte len == char count)
+    let mut min_len = 9999;
+    let mut max_len = 0;
+    for let kw of keywords {
+        let l = kw.lowercase_text.len();
+        if l < min_len { min_len = l; }
+        if l > max_len { max_len = l; }
+    }
+
+    let mut first_len = true;
+    for let mut target_len = min_len; target_len <= max_len; target_len += 1 {
+        // Check if any keywords have this length
+        let mut has_any = false;
+        for let kw of keywords {
+            if kw.lowercase_text.len() == target_len { has_any = true; }
+        }
+        if !has_any { continue; }
+
+        if first_len {
+            w.begin(`if len == {target_len}`);
+            first_len = false;
+        } else {
+            w.else_begin(`else if len == {target_len}`);
+        }
+
+        // Generate checks for each keyword of this length
+        for let kw of keywords {
+            let kw_chars: Array<char> = kw.lowercase_text.chars().collect();
+            if kw_chars.len() != target_len { continue; }
+
+            w.write("if ");
+            for let mut ci = 0; ci < kw_chars.len(); ci += 1 {
+                if ci > 0 { w.write(" && "); }
+                let lower = kw_chars[ci];
+                let upper = kw_chars[ci].to_ascii_uppercase();
+                if kw.case_insensitive {
+                    w.write(`(chars[start + {ci}] == {escape_char(lower)} || chars[start + {ci}] == {escape_char(upper)})`);
+                } else {
+                    w.write(`chars[start + {ci}] == {escape_char(lower)}`);
+                }
+            }
+            w.write(` \{ return TK_{kw.rule_name}; \}\n`);
+        }
+    }
+    if !first_len {
+        w.end();
+    }
+
+    w.line("return -1;");
+    w.end();
+    w.blank();
+}
+
 fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &Array<LitToken>) {
     for let lit of lit_tokens {
         let chars: Array<char> = lit.text.chars().collect();
@@ -462,7 +641,7 @@ fn has_modes(mode_names: &Array<String>) -> bool {
     return mode_names.len() > 1;
 }
 
-fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>, mode_names: &Array<String>) {
+fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>, mode_names: &Array<String>, keywords: &Array<KeywordInfo>) {
     let use_modes = has_modes(mode_names);
 
     let mut f = FnSpec::new("tokenize");
@@ -509,7 +688,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                 }
             }
             for let rule of lexer_rules {
-                if !rule.is_fragment && !rule.body.is_empty() && rule.mode == mi {
+                if !rule.is_fragment && !rule.body.is_empty() && rule.mode == mi && !is_keyword_rule_name(&rule.name, keywords) {
                     let fn_name = `try_{to_lower(&rule.name)}`;
                     w.line(`end = {fn_name}(&lexer.chars, start);`);
                     let mut extra = String::with_capacity(64);
@@ -536,12 +715,21 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
             w.line(`if end > best_end \{ best_end = end; best_kind = {lit.const_name}; \}`);
         }
         for let rule of lexer_rules {
-            if !rule.is_fragment && !rule.body.is_empty() {
+            if !rule.is_fragment && !rule.body.is_empty() && !is_keyword_rule_name(&rule.name, keywords) {
                 let fn_name = `try_{to_lower(&rule.name)}`;
                 w.line(`end = {fn_name}(&lexer.chars, start);`);
                 w.line(`if end > best_end \{ best_end = end; best_kind = TK_{rule.name}; \}`);
             }
         }
+    }
+
+    // Keyword reclassification: after matching a non-keyword token,
+    // check if the matched text is actually a keyword.
+    if !keywords.is_empty() {
+        w.begin("if best_end > start");
+        w.line("let kw_kind = classify_keyword(&lexer.chars, start, best_end);");
+        w.line("if kw_kind >= 0 { best_kind = kw_kind; }");
+        w.end();
     }
 
     w.begin("if best_end <= start");

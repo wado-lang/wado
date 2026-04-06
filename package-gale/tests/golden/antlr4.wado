@@ -3659,10 +3659,20 @@ impl Parser {
         return self.tokens[self.pos - 1].span.end;
     }
 
-    fn expect(&mut self, kind: i32, name: String) -> Result<Token, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
             return Result::<Token, ParseError>::Ok(self.advance());
         }
+        let tok = &self.tokens[self.pos];
+        let name = token_kind_name(kind);
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
         return Result::<Token, ParseError>::Err(ParseError::new(
             `expected {name}, got "{tok.text}"`,
@@ -3686,7 +3696,7 @@ fn parse_grammar_spec(p: &mut Parser) -> Result<GrammarSpecNode, ParseError> {
         let mode_spec = parse_mode_spec(p)?;
         mode_spec_list.push(mode_spec);
     }
-    let eof = p.expect(TK_EOF, "EOF")?;
+    let eof = p.expect(TK_EOF)?;
     return Result::<GrammarSpecNode, ParseError>::Ok(GrammarSpecNode {
         span: Span::new(start, p.last_end()),
         grammar_decl,
@@ -3701,7 +3711,7 @@ fn parse_grammar_decl(p: &mut Parser) -> Result<GrammarDeclNode, ParseError> {
     let start = p.peek().span.start;
     let grammar_type = parse_grammar_type(p)?;
     let identifier = parse_identifier(p)?;
-    let semi = p.expect(TK_SEMI, "SEMI")?;
+    let semi = p.expect(TK_SEMI)?;
     return Result::<GrammarDeclNode, ParseError>::Ok(GrammarDeclNode {
         span: Span::new(start, p.last_end()),
         grammar_type,
@@ -3714,8 +3724,8 @@ fn parse_grammar_type(p: &mut Parser) -> Result<GrammarTypeNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LEXER {
-        let lexer = p.expect(TK_LEXER, "LEXER")?;
-        let grammar = p.expect(TK_GRAMMAR, "GRAMMAR")?;
+        let lexer = p.expect(TK_LEXER)?;
+        let grammar = p.expect(TK_GRAMMAR)?;
         return Result::<GrammarTypeNode, ParseError>::Ok(GrammarTypeNode::Alt0(GrammarTypeAlt0 {
             span: Span::new(start, p.last_end()),
             lexer,
@@ -3723,8 +3733,8 @@ fn parse_grammar_type(p: &mut Parser) -> Result<GrammarTypeNode, ParseError> {
         }));
     }
     if kind == TK_PARSER {
-        let parser = p.expect(TK_PARSER, "PARSER")?;
-        let grammar = p.expect(TK_GRAMMAR, "GRAMMAR")?;
+        let parser = p.expect(TK_PARSER)?;
+        let grammar = p.expect(TK_GRAMMAR)?;
         return Result::<GrammarTypeNode, ParseError>::Ok(GrammarTypeNode::Alt1(GrammarTypeAlt1 {
             span: Span::new(start, p.last_end()),
             parser,
@@ -3732,7 +3742,7 @@ fn parse_grammar_type(p: &mut Parser) -> Result<GrammarTypeNode, ParseError> {
         }));
     }
     if kind == TK_GRAMMAR {
-        let grammar = p.expect(TK_GRAMMAR, "GRAMMAR")?;
+        let grammar = p.expect(TK_GRAMMAR)?;
         return Result::<GrammarTypeNode, ParseError>::Ok(GrammarTypeNode::Alt2(GrammarTypeAlt2 {
             span: Span::new(start, p.last_end()),
             grammar,
@@ -3792,18 +3802,18 @@ fn parse_prequel_construct(p: &mut Parser) -> Result<PrequelConstructNode, Parse
 
 fn parse_options_spec(p: &mut Parser) -> Result<OptionsSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let options = p.expect(TK_OPTIONS, "OPTIONS")?;
+    let options = p.expect(TK_OPTIONS)?;
     let mut option_semi_list: Array<OptionSemiItem> = [];
     while p.peek_kind() matches { TK_RULE_REF | TK_TOKEN_REF } {
         let option = parse_option(p)?;
-        let semi = p.expect(TK_SEMI, "SEMI")?;
+        let semi = p.expect(TK_SEMI)?;
         let option_semi = OptionSemiItem {
             option,
             semi,
         };
         option_semi_list.push(option_semi);
     }
-    let rbrace = p.expect(TK_RBRACE, "RBRACE")?;
+    let rbrace = p.expect(TK_RBRACE)?;
     return Result::<OptionsSpecNode, ParseError>::Ok(OptionsSpecNode {
         span: Span::new(start, p.last_end()),
         options,
@@ -3815,7 +3825,7 @@ fn parse_options_spec(p: &mut Parser) -> Result<OptionsSpecNode, ParseError> {
 fn parse_option(p: &mut Parser) -> Result<OptionNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
-    let assign = p.expect(TK_ASSIGN, "ASSIGN")?;
+    let assign = p.expect(TK_ASSIGN)?;
     let option_value = parse_option_value(p)?;
     return Result::<OptionNode, ParseError>::Ok(OptionNode {
         span: Span::new(start, p.last_end()),
@@ -3832,7 +3842,7 @@ fn parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
         let identifier = parse_identifier(p)?;
         let mut dot_identifier_list: Array<DotIdentifierItem> = [];
         while p.peek_kind() == TK_DOT {
-            let dot = p.expect(TK_DOT, "DOT")?;
+            let dot = p.expect(TK_DOT)?;
             let identifier = parse_identifier(p)?;
             let dot_identifier = DotIdentifierItem {
                 dot,
@@ -3847,7 +3857,7 @@ fn parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
         }));
     }
     if kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL, "STRING_LITERAL")?;
+        let string_literal = p.expect(TK_STRING_LITERAL)?;
         return Result::<OptionValueNode, ParseError>::Ok(OptionValueNode::Alt1(OptionValueAlt1 {
             span: Span::new(start, p.last_end()),
             string_literal,
@@ -3861,7 +3871,7 @@ fn parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
         }));
     }
     if kind == TK_INT {
-        let int = p.expect(TK_INT, "INT")?;
+        let int = p.expect(TK_INT)?;
         return Result::<OptionValueNode, ParseError>::Ok(OptionValueNode::Alt3(OptionValueAlt3 {
             span: Span::new(start, p.last_end()),
             int,
@@ -3876,11 +3886,11 @@ fn parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
 
 fn parse_delegate_grammars(p: &mut Parser) -> Result<DelegateGrammarsNode, ParseError> {
     let start = p.peek().span.start;
-    let import_ = p.expect(TK_IMPORT, "IMPORT")?;
+    let import_ = p.expect(TK_IMPORT)?;
     let delegate_grammar = parse_delegate_grammar(p)?;
     let mut comma_delegate_grammar_list: Array<CommaDelegateGrammarItem> = [];
     while p.peek_kind() == TK_COMMA {
-        let comma = p.expect(TK_COMMA, "COMMA")?;
+        let comma = p.expect(TK_COMMA)?;
         let delegate_grammar = parse_delegate_grammar(p)?;
         let comma_delegate_grammar = CommaDelegateGrammarItem {
             comma,
@@ -3888,7 +3898,7 @@ fn parse_delegate_grammars(p: &mut Parser) -> Result<DelegateGrammarsNode, Parse
         };
         comma_delegate_grammar_list.push(comma_delegate_grammar);
     }
-    let semi = p.expect(TK_SEMI, "SEMI")?;
+    let semi = p.expect(TK_SEMI)?;
     return Result::<DelegateGrammarsNode, ParseError>::Ok(DelegateGrammarsNode {
         span: Span::new(start, p.last_end()),
         import_,
@@ -3910,7 +3920,7 @@ fn parse_delegate_grammar_bt_1(p: &mut Parser) -> Result<DelegateGrammarNode, Pa
 fn parse_delegate_grammar_bt_0(p: &mut Parser) -> Result<DelegateGrammarNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
-    let assign = p.expect(TK_ASSIGN, "ASSIGN")?;
+    let assign = p.expect(TK_ASSIGN)?;
     let identifier_2 = parse_identifier(p)?;
     return Result::<DelegateGrammarNode, ParseError>::Ok(DelegateGrammarNode::Alt0(DelegateGrammarAlt0 {
         span: Span::new(start, p.last_end()),
@@ -3943,14 +3953,14 @@ fn parse_delegate_grammar(p: &mut Parser) -> Result<DelegateGrammarNode, ParseEr
 
 fn parse_tokens_spec(p: &mut Parser) -> Result<TokensSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let tokens = p.expect(TK_TOKENS, "TOKENS")?;
+    let tokens = p.expect(TK_TOKENS)?;
     let id_list: Option<IdListNode> = if p.peek_kind() matches { TK_RULE_REF | TK_TOKEN_REF } {
         let id_list = parse_id_list(p)?;
         Option::<IdListNode>::Some(id_list)
     } else {
         null
     };
-    let rbrace = p.expect(TK_RBRACE, "RBRACE")?;
+    let rbrace = p.expect(TK_RBRACE)?;
     return Result::<TokensSpecNode, ParseError>::Ok(TokensSpecNode {
         span: Span::new(start, p.last_end()),
         tokens,
@@ -3961,14 +3971,14 @@ fn parse_tokens_spec(p: &mut Parser) -> Result<TokensSpecNode, ParseError> {
 
 fn parse_channels_spec(p: &mut Parser) -> Result<ChannelsSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let channels = p.expect(TK_CHANNELS, "CHANNELS")?;
+    let channels = p.expect(TK_CHANNELS)?;
     let id_list: Option<IdListNode> = if p.peek_kind() matches { TK_RULE_REF | TK_TOKEN_REF } {
         let id_list = parse_id_list(p)?;
         Option::<IdListNode>::Some(id_list)
     } else {
         null
     };
-    let rbrace = p.expect(TK_RBRACE, "RBRACE")?;
+    let rbrace = p.expect(TK_RBRACE)?;
     return Result::<ChannelsSpecNode, ParseError>::Ok(ChannelsSpecNode {
         span: Span::new(start, p.last_end()),
         channels,
@@ -3982,7 +3992,7 @@ fn parse_id_list(p: &mut Parser) -> Result<IdListNode, ParseError> {
     let identifier = parse_identifier(p)?;
     let mut comma_identifier_list: Array<CommaIdentifierItem> = [];
     while p.peek_kind() == TK_COMMA {
-        let comma = p.expect(TK_COMMA, "COMMA")?;
+        let comma = p.expect(TK_COMMA)?;
         let identifier = parse_identifier(p)?;
         let comma_identifier = CommaIdentifierItem {
             comma,
@@ -3991,7 +4001,7 @@ fn parse_id_list(p: &mut Parser) -> Result<IdListNode, ParseError> {
         comma_identifier_list.push(comma_identifier);
     }
     let comma: Option<Token> = if p.peek_kind() == TK_COMMA {
-        let comma = p.expect(TK_COMMA, "COMMA")?;
+        let comma = p.expect(TK_COMMA)?;
         Option::<Token>::Some(comma)
     } else {
         null
@@ -4006,7 +4016,7 @@ fn parse_id_list(p: &mut Parser) -> Result<IdListNode, ParseError> {
 
 fn parse_action_(p: &mut Parser) -> Result<ActionNode, ParseError> {
     let start = p.peek().span.start;
-    let at = p.expect(TK_AT, "AT")?;
+    let at = p.expect(TK_AT)?;
     let action_scope_name_coloncolon: Option<ActionScopeNameColoncolonItem> = if p.peek_kind() matches { TK_RULE_REF | TK_TOKEN_REF | TK_LEXER | TK_PARSER } {
         let opt_saved = p.pos;
         let mut opt_result: Option<ActionScopeNameColoncolonItem> = null;
@@ -4014,7 +4024,7 @@ fn parse_action_(p: &mut Parser) -> Result<ActionNode, ParseError> {
             let _bt_r = parse_action_scope_name(p);
             if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
             let action_scope_name = _bt_r.unwrap();
-            let _bt_r_2 = p.expect(TK_COLONCOLON, "COLONCOLON");
+            let _bt_r_2 = p.expect(TK_COLONCOLON);
             if let Err(_) = _bt_r_2 { p.pos = opt_saved; break opt_bt; }
             let coloncolon = _bt_r_2.unwrap();
             let action_scope_name_coloncolon = ActionScopeNameColoncolonItem {
@@ -4049,14 +4059,14 @@ fn parse_action_scope_name(p: &mut Parser) -> Result<ActionScopeNameNode, ParseE
         }));
     }
     if kind == TK_LEXER {
-        let lexer = p.expect(TK_LEXER, "LEXER")?;
+        let lexer = p.expect(TK_LEXER)?;
         return Result::<ActionScopeNameNode, ParseError>::Ok(ActionScopeNameNode::Alt1(ActionScopeNameAlt1 {
             span: Span::new(start, p.last_end()),
             lexer,
         }));
     }
     if kind == TK_PARSER {
-        let parser = p.expect(TK_PARSER, "PARSER")?;
+        let parser = p.expect(TK_PARSER)?;
         return Result::<ActionScopeNameNode, ParseError>::Ok(ActionScopeNameNode::Alt2(ActionScopeNameAlt2 {
             span: Span::new(start, p.last_end()),
             parser,
@@ -4071,7 +4081,7 @@ fn parse_action_scope_name(p: &mut Parser) -> Result<ActionScopeNameNode, ParseE
 
 fn parse_action_block(p: &mut Parser) -> Result<ActionBlockNode, ParseError> {
     let start = p.peek().span.start;
-    let action = p.expect(TK_ACTION, "ACTION")?;
+    let action = p.expect(TK_ACTION)?;
     return Result::<ActionBlockNode, ParseError>::Ok(ActionBlockNode {
         span: Span::new(start, p.last_end()),
         action,
@@ -4080,13 +4090,13 @@ fn parse_action_block(p: &mut Parser) -> Result<ActionBlockNode, ParseError> {
 
 fn parse_arg_action_block(p: &mut Parser) -> Result<ArgActionBlockNode, ParseError> {
     let start = p.peek().span.start;
-    let begin_argument = p.expect(TK_BEGIN_ARGUMENT, "BEGIN_ARGUMENT")?;
+    let begin_argument = p.expect(TK_BEGIN_ARGUMENT)?;
     let mut argument_content_list: Array<Token> = [];
     while p.peek_kind() == TK_ARGUMENT_CONTENT {
-        let argument_content = p.expect(TK_ARGUMENT_CONTENT, "ARGUMENT_CONTENT")?;
+        let argument_content = p.expect(TK_ARGUMENT_CONTENT)?;
         argument_content_list.push(argument_content);
     }
-    let end_argument = p.expect(TK_END_ARGUMENT, "END_ARGUMENT")?;
+    let end_argument = p.expect(TK_END_ARGUMENT)?;
     return Result::<ArgActionBlockNode, ParseError>::Ok(ArgActionBlockNode {
         span: Span::new(start, p.last_end()),
         begin_argument,
@@ -4097,9 +4107,9 @@ fn parse_arg_action_block(p: &mut Parser) -> Result<ArgActionBlockNode, ParseErr
 
 fn parse_mode_spec(p: &mut Parser) -> Result<ModeSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let mode = p.expect(TK_MODE, "MODE")?;
+    let mode = p.expect(TK_MODE)?;
     let identifier = parse_identifier(p)?;
-    let semi = p.expect(TK_SEMI, "SEMI")?;
+    let semi = p.expect(TK_SEMI)?;
     let mut lexer_rule_spec_list: Array<LexerRuleSpecNode> = [];
     while p.peek_kind() matches { TK_FRAGMENT | TK_TOKEN_REF } {
         let lexer_rule_spec = parse_lexer_rule_spec(p)?;
@@ -4176,7 +4186,7 @@ fn parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseErr
     } else {
         null
     };
-    let rule_ref = p.expect(TK_RULE_REF, "RULE_REF")?;
+    let rule_ref = p.expect(TK_RULE_REF)?;
     let arg_action_block: Option<ArgActionBlockNode> = if p.peek_kind() == TK_BEGIN_ARGUMENT {
         let arg_action_block = parse_arg_action_block(p)?;
         Option::<ArgActionBlockNode>::Some(arg_action_block)
@@ -4206,9 +4216,9 @@ fn parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseErr
         let rule_prequel = parse_rule_prequel(p)?;
         rule_prequel_list.push(rule_prequel);
     }
-    let colon = p.expect(TK_COLON, "COLON")?;
+    let colon = p.expect(TK_COLON)?;
     let rule_block = parse_rule_block(p)?;
-    let semi = p.expect(TK_SEMI, "SEMI")?;
+    let semi = p.expect(TK_SEMI)?;
     let exception_group = parse_exception_group(p)?;
     return Result::<ParserRuleSpecNode, ParseError>::Ok(ParserRuleSpecNode {
         span: Span::new(start, p.last_end()),
@@ -4248,7 +4258,7 @@ fn parse_exception_group(p: &mut Parser) -> Result<ExceptionGroupNode, ParseErro
 
 fn parse_exception_handler(p: &mut Parser) -> Result<ExceptionHandlerNode, ParseError> {
     let start = p.peek().span.start;
-    let catch = p.expect(TK_CATCH, "CATCH")?;
+    let catch = p.expect(TK_CATCH)?;
     let arg_action_block = parse_arg_action_block(p)?;
     let action_block = parse_action_block(p)?;
     return Result::<ExceptionHandlerNode, ParseError>::Ok(ExceptionHandlerNode {
@@ -4261,7 +4271,7 @@ fn parse_exception_handler(p: &mut Parser) -> Result<ExceptionHandlerNode, Parse
 
 fn parse_finally_clause(p: &mut Parser) -> Result<FinallyClauseNode, ParseError> {
     let start = p.peek().span.start;
-    let finally = p.expect(TK_FINALLY, "FINALLY")?;
+    let finally = p.expect(TK_FINALLY)?;
     let action_block = parse_action_block(p)?;
     return Result::<FinallyClauseNode, ParseError>::Ok(FinallyClauseNode {
         span: Span::new(start, p.last_end()),
@@ -4296,7 +4306,7 @@ fn parse_rule_prequel(p: &mut Parser) -> Result<RulePrequelNode, ParseError> {
 
 fn parse_rule_returns(p: &mut Parser) -> Result<RuleReturnsNode, ParseError> {
     let start = p.peek().span.start;
-    let returns = p.expect(TK_RETURNS, "RETURNS")?;
+    let returns = p.expect(TK_RETURNS)?;
     let arg_action_block = parse_arg_action_block(p)?;
     return Result::<RuleReturnsNode, ParseError>::Ok(RuleReturnsNode {
         span: Span::new(start, p.last_end()),
@@ -4307,11 +4317,11 @@ fn parse_rule_returns(p: &mut Parser) -> Result<RuleReturnsNode, ParseError> {
 
 fn parse_throws_spec(p: &mut Parser) -> Result<ThrowsSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let throws = p.expect(TK_THROWS, "THROWS")?;
+    let throws = p.expect(TK_THROWS)?;
     let qualified_identifier = parse_qualified_identifier(p)?;
     let mut comma_qualified_identifier_list: Array<CommaQualifiedIdentifierItem> = [];
     while p.peek_kind() == TK_COMMA {
-        let comma = p.expect(TK_COMMA, "COMMA")?;
+        let comma = p.expect(TK_COMMA)?;
         let qualified_identifier = parse_qualified_identifier(p)?;
         let comma_qualified_identifier = CommaQualifiedIdentifierItem {
             comma,
@@ -4329,7 +4339,7 @@ fn parse_throws_spec(p: &mut Parser) -> Result<ThrowsSpecNode, ParseError> {
 
 fn parse_locals_spec(p: &mut Parser) -> Result<LocalsSpecNode, ParseError> {
     let start = p.peek().span.start;
-    let locals = p.expect(TK_LOCALS, "LOCALS")?;
+    let locals = p.expect(TK_LOCALS)?;
     let arg_action_block = parse_arg_action_block(p)?;
     return Result::<LocalsSpecNode, ParseError>::Ok(LocalsSpecNode {
         span: Span::new(start, p.last_end()),
@@ -4340,7 +4350,7 @@ fn parse_locals_spec(p: &mut Parser) -> Result<LocalsSpecNode, ParseError> {
 
 fn parse_rule_action(p: &mut Parser) -> Result<RuleActionNode, ParseError> {
     let start = p.peek().span.start;
-    let at = p.expect(TK_AT, "AT")?;
+    let at = p.expect(TK_AT)?;
     let identifier = parse_identifier(p)?;
     let action_block = parse_action_block(p)?;
     return Result::<RuleActionNode, ParseError>::Ok(RuleActionNode {
@@ -4370,28 +4380,28 @@ fn parse_rule_modifier(p: &mut Parser) -> Result<RuleModifierNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_PUBLIC {
-        let public = p.expect(TK_PUBLIC, "PUBLIC")?;
+        let public = p.expect(TK_PUBLIC)?;
         return Result::<RuleModifierNode, ParseError>::Ok(RuleModifierNode::Alt0(RuleModifierAlt0 {
             span: Span::new(start, p.last_end()),
             public,
         }));
     }
     if kind == TK_PRIVATE {
-        let private = p.expect(TK_PRIVATE, "PRIVATE")?;
+        let private = p.expect(TK_PRIVATE)?;
         return Result::<RuleModifierNode, ParseError>::Ok(RuleModifierNode::Alt1(RuleModifierAlt1 {
             span: Span::new(start, p.last_end()),
             private,
         }));
     }
     if kind == TK_PROTECTED {
-        let protected = p.expect(TK_PROTECTED, "PROTECTED")?;
+        let protected = p.expect(TK_PROTECTED)?;
         return Result::<RuleModifierNode, ParseError>::Ok(RuleModifierNode::Alt2(RuleModifierAlt2 {
             span: Span::new(start, p.last_end()),
             protected,
         }));
     }
     if kind == TK_FRAGMENT {
-        let fragment = p.expect(TK_FRAGMENT, "FRAGMENT")?;
+        let fragment = p.expect(TK_FRAGMENT)?;
         return Result::<RuleModifierNode, ParseError>::Ok(RuleModifierNode::Alt3(RuleModifierAlt3 {
             span: Span::new(start, p.last_end()),
             fragment,
@@ -4418,7 +4428,7 @@ fn parse_rule_alt_list(p: &mut Parser) -> Result<RuleAltListNode, ParseError> {
     let labeled_alt = parse_labeled_alt(p)?;
     let mut or_labeled_alt_list: Array<OrLabeledAltItem> = [];
     while p.peek_kind() == TK_OR {
-        let or = p.expect(TK_OR, "OR")?;
+        let or = p.expect(TK_OR)?;
         let labeled_alt = parse_labeled_alt(p)?;
         let or_labeled_alt = OrLabeledAltItem {
             or,
@@ -4437,7 +4447,7 @@ fn parse_labeled_alt(p: &mut Parser) -> Result<LabeledAltNode, ParseError> {
     let start = p.peek().span.start;
     let alternative = parse_alternative(p)?;
     let pound_identifier: Option<PoundIdentifierItem> = if p.peek_kind() == TK_POUND {
-        let pound = p.expect(TK_POUND, "POUND")?;
+        let pound = p.expect(TK_POUND)?;
         let identifier = parse_identifier(p)?;
         let pound_identifier = PoundIdentifierItem {
             pound,
@@ -4457,21 +4467,21 @@ fn parse_labeled_alt(p: &mut Parser) -> Result<LabeledAltNode, ParseError> {
 fn parse_lexer_rule_spec(p: &mut Parser) -> Result<LexerRuleSpecNode, ParseError> {
     let start = p.peek().span.start;
     let fragment: Option<Token> = if p.peek_kind() == TK_FRAGMENT {
-        let fragment = p.expect(TK_FRAGMENT, "FRAGMENT")?;
+        let fragment = p.expect(TK_FRAGMENT)?;
         Option::<Token>::Some(fragment)
     } else {
         null
     };
-    let token_ref = p.expect(TK_TOKEN_REF, "TOKEN_REF")?;
+    let token_ref = p.expect(TK_TOKEN_REF)?;
     let options_spec: Option<OptionsSpecNode> = if p.peek_kind() == TK_OPTIONS {
         let options_spec = parse_options_spec(p)?;
         Option::<OptionsSpecNode>::Some(options_spec)
     } else {
         null
     };
-    let colon = p.expect(TK_COLON, "COLON")?;
+    let colon = p.expect(TK_COLON)?;
     let lexer_rule_block = parse_lexer_rule_block(p)?;
-    let semi = p.expect(TK_SEMI, "SEMI")?;
+    let semi = p.expect(TK_SEMI)?;
     return Result::<LexerRuleSpecNode, ParseError>::Ok(LexerRuleSpecNode {
         span: Span::new(start, p.last_end()),
         fragment,
@@ -4497,7 +4507,7 @@ fn parse_lexer_alt_list(p: &mut Parser) -> Result<LexerAltListNode, ParseError> 
     let lexer_alt = parse_lexer_alt(p)?;
     let mut or_lexer_alt_list: Array<OrLexerAltItem> = [];
     while p.peek_kind() == TK_OR {
-        let or = p.expect(TK_OR, "OR")?;
+        let or = p.expect(TK_OR)?;
         let lexer_alt = parse_lexer_alt(p)?;
         let or_lexer_alt = OrLexerAltItem {
             or,
@@ -4603,7 +4613,7 @@ fn parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
     if kind == TK_ACTION {
         let action_block = parse_action_block(p)?;
         let question: Option<Token> = if p.peek_kind() == TK_QUESTION {
-            let question = p.expect(TK_QUESTION, "QUESTION")?;
+            let question = p.expect(TK_QUESTION)?;
             Option::<Token>::Some(question)
         } else {
             null
@@ -4623,9 +4633,9 @@ fn parse_lexer_element(p: &mut Parser) -> Result<LexerElementNode, ParseError> {
 
 fn parse_lexer_block(p: &mut Parser) -> Result<LexerBlockNode, ParseError> {
     let start = p.peek().span.start;
-    let lparen = p.expect(TK_LPAREN, "LPAREN")?;
+    let lparen = p.expect(TK_LPAREN)?;
     let lexer_alt_list = parse_lexer_alt_list(p)?;
-    let rparen = p.expect(TK_RPAREN, "RPAREN")?;
+    let rparen = p.expect(TK_RPAREN)?;
     return Result::<LexerBlockNode, ParseError>::Ok(LexerBlockNode {
         span: Span::new(start, p.last_end()),
         lparen,
@@ -4636,11 +4646,11 @@ fn parse_lexer_block(p: &mut Parser) -> Result<LexerBlockNode, ParseError> {
 
 fn parse_lexer_commands(p: &mut Parser) -> Result<LexerCommandsNode, ParseError> {
     let start = p.peek().span.start;
-    let rarrow = p.expect(TK_RARROW, "RARROW")?;
+    let rarrow = p.expect(TK_RARROW)?;
     let lexer_command = parse_lexer_command(p)?;
     let mut comma_lexer_command_list: Array<CommaLexerCommandItem> = [];
     while p.peek_kind() == TK_COMMA {
-        let comma = p.expect(TK_COMMA, "COMMA")?;
+        let comma = p.expect(TK_COMMA)?;
         let lexer_command = parse_lexer_command(p)?;
         let comma_lexer_command = CommaLexerCommandItem {
             comma,
@@ -4668,9 +4678,9 @@ fn parse_lexer_command_bt_1(p: &mut Parser) -> Result<LexerCommandNode, ParseErr
 fn parse_lexer_command_bt_0(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
     let start = p.peek().span.start;
     let lexer_command_name = parse_lexer_command_name(p)?;
-    let lparen = p.expect(TK_LPAREN, "LPAREN")?;
+    let lparen = p.expect(TK_LPAREN)?;
     let lexer_command_expr = parse_lexer_command_expr(p)?;
-    let rparen = p.expect(TK_RPAREN, "RPAREN")?;
+    let rparen = p.expect(TK_RPAREN)?;
     return Result::<LexerCommandNode, ParseError>::Ok(LexerCommandNode::Alt0(LexerCommandAlt0 {
         span: Span::new(start, p.last_end()),
         lexer_command_name,
@@ -4716,7 +4726,7 @@ fn parse_lexer_command_name(p: &mut Parser) -> Result<LexerCommandNameNode, Pars
         }));
     }
     if kind == TK_MODE {
-        let mode = p.expect(TK_MODE, "MODE")?;
+        let mode = p.expect(TK_MODE)?;
         return Result::<LexerCommandNameNode, ParseError>::Ok(LexerCommandNameNode::Alt1(LexerCommandNameAlt1 {
             span: Span::new(start, p.last_end()),
             mode,
@@ -4740,7 +4750,7 @@ fn parse_lexer_command_expr(p: &mut Parser) -> Result<LexerCommandExprNode, Pars
         }));
     }
     if kind == TK_INT {
-        let int = p.expect(TK_INT, "INT")?;
+        let int = p.expect(TK_INT)?;
         return Result::<LexerCommandExprNode, ParseError>::Ok(LexerCommandExprNode::Alt1(LexerCommandExprAlt1 {
             span: Span::new(start, p.last_end()),
             int,
@@ -4758,7 +4768,7 @@ fn parse_alt_list(p: &mut Parser) -> Result<AltListNode, ParseError> {
     let alternative = parse_alternative(p)?;
     let mut or_alternative_list: Array<OrAlternativeItem> = [];
     while p.peek_kind() == TK_OR {
-        let or = p.expect(TK_OR, "OR")?;
+        let or = p.expect(TK_OR)?;
         let alternative = parse_alternative(p)?;
         let or_alternative = OrAlternativeItem {
             or,
@@ -4882,7 +4892,7 @@ fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
     if kind == TK_ACTION {
         let action_block = parse_action_block(p)?;
         let question: Option<Token> = if p.peek_kind() == TK_QUESTION {
-            let question = p.expect(TK_QUESTION, "QUESTION")?;
+            let question = p.expect(TK_QUESTION)?;
             Option::<Token>::Some(question)
         } else {
             null
@@ -4909,11 +4919,11 @@ fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
 
 fn parse_predicate_options(p: &mut Parser) -> Result<PredicateOptionsNode, ParseError> {
     let start = p.peek().span.start;
-    let lt = p.expect(TK_LT, "LT")?;
+    let lt = p.expect(TK_LT)?;
     let predicate_option = parse_predicate_option(p)?;
     let mut comma_predicate_option_list: Array<CommaPredicateOptionItem> = [];
     while p.peek_kind() == TK_COMMA {
-        let comma = p.expect(TK_COMMA, "COMMA")?;
+        let comma = p.expect(TK_COMMA)?;
         let predicate_option = parse_predicate_option(p)?;
         let comma_predicate_option = CommaPredicateOptionItem {
             comma,
@@ -4921,7 +4931,7 @@ fn parse_predicate_options(p: &mut Parser) -> Result<PredicateOptionsNode, Parse
         };
         comma_predicate_option_list.push(comma_predicate_option);
     }
-    let gt = p.expect(TK_GT, "GT")?;
+    let gt = p.expect(TK_GT)?;
     return Result::<PredicateOptionsNode, ParseError>::Ok(PredicateOptionsNode {
         span: Span::new(start, p.last_end()),
         lt,
@@ -4943,7 +4953,7 @@ fn parse_predicate_option_bt_0(p: &mut Parser) -> Result<PredicateOptionNode, Pa
 fn parse_predicate_option_bt_1(p: &mut Parser) -> Result<PredicateOptionNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
-    let assign = p.expect(TK_ASSIGN, "ASSIGN")?;
+    let assign = p.expect(TK_ASSIGN)?;
     let mut group_0_inner: Option<PredicateOptionGroup0> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_ACTION {
@@ -4952,12 +4962,12 @@ fn parse_predicate_option_bt_1(p: &mut Parser) -> Result<PredicateOptionNode, Pa
             action_block,
         }));
     } else if grp_kind == TK_INT {
-        let int = p.expect(TK_INT, "INT")?;
+        let int = p.expect(TK_INT)?;
         group_0_inner = Option::<PredicateOptionGroup0>::Some(PredicateOptionGroup0::Alt1(PredicateOptionGroup0Alt1 {
             int,
         }));
     } else if grp_kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL, "STRING_LITERAL")?;
+        let string_literal = p.expect(TK_STRING_LITERAL)?;
         group_0_inner = Option::<PredicateOptionGroup0>::Some(PredicateOptionGroup0::Alt2(PredicateOptionGroup0Alt2 {
             string_literal,
         }));
@@ -5044,9 +5054,9 @@ fn parse_ebnf_suffix(p: &mut Parser) -> Result<EbnfSuffixNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_QUESTION {
-        let question = p.expect(TK_QUESTION, "QUESTION")?;
+        let question = p.expect(TK_QUESTION)?;
         let question_2: Option<Token> = if p.peek_kind() == TK_QUESTION {
-            let question = p.expect(TK_QUESTION, "QUESTION")?;
+            let question = p.expect(TK_QUESTION)?;
             Option::<Token>::Some(question)
         } else {
             null
@@ -5058,9 +5068,9 @@ fn parse_ebnf_suffix(p: &mut Parser) -> Result<EbnfSuffixNode, ParseError> {
         }));
     }
     if kind == TK_STAR {
-        let star = p.expect(TK_STAR, "STAR")?;
+        let star = p.expect(TK_STAR)?;
         let question: Option<Token> = if p.peek_kind() == TK_QUESTION {
-            let question = p.expect(TK_QUESTION, "QUESTION")?;
+            let question = p.expect(TK_QUESTION)?;
             Option::<Token>::Some(question)
         } else {
             null
@@ -5072,9 +5082,9 @@ fn parse_ebnf_suffix(p: &mut Parser) -> Result<EbnfSuffixNode, ParseError> {
         }));
     }
     if kind == TK_PLUS {
-        let plus = p.expect(TK_PLUS, "PLUS")?;
+        let plus = p.expect(TK_PLUS)?;
         let question: Option<Token> = if p.peek_kind() == TK_QUESTION {
-            let question = p.expect(TK_QUESTION, "QUESTION")?;
+            let question = p.expect(TK_QUESTION)?;
             Option::<Token>::Some(question)
         } else {
             null
@@ -5135,7 +5145,7 @@ fn parse_lexer_atom(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
         }));
     }
     if kind == TK_LEXER_CHAR_SET {
-        let lexer_char_set = p.expect(TK_LEXER_CHAR_SET, "LEXER_CHAR_SET")?;
+        let lexer_char_set = p.expect(TK_LEXER_CHAR_SET)?;
         return Result::<LexerAtomNode, ParseError>::Ok(LexerAtomNode::Alt3(LexerAtomAlt3 {
             span: Span::new(start, p.last_end()),
             lexer_char_set,
@@ -5195,7 +5205,7 @@ fn parse_atom(p: &mut Parser) -> Result<AtomNode, ParseError> {
 
 fn parse_wildcard(p: &mut Parser) -> Result<WildcardNode, ParseError> {
     let start = p.peek().span.start;
-    let dot = p.expect(TK_DOT, "DOT")?;
+    let dot = p.expect(TK_DOT)?;
     let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
         let element_options = parse_element_options(p)?;
         Option::<ElementOptionsNode>::Some(element_options)
@@ -5211,7 +5221,7 @@ fn parse_wildcard(p: &mut Parser) -> Result<WildcardNode, ParseError> {
 
 fn parse_not_set_bt_0(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     let start = p.peek().span.start;
-    let not = p.expect(TK_NOT, "NOT")?;
+    let not = p.expect(TK_NOT)?;
     let set_element = parse_set_element(p)?;
     return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt0(NotSetAlt0 {
         span: Span::new(start, p.last_end()),
@@ -5222,7 +5232,7 @@ fn parse_not_set_bt_0(p: &mut Parser) -> Result<NotSetNode, ParseError> {
 
 fn parse_not_set_bt_1(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     let start = p.peek().span.start;
-    let not = p.expect(TK_NOT, "NOT")?;
+    let not = p.expect(TK_NOT)?;
     let block_set = parse_block_set(p)?;
     return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt1(NotSetAlt1 {
         span: Span::new(start, p.last_end()),
@@ -5235,7 +5245,7 @@ fn parse_not_set(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_NOT {
-        let not = p.expect(TK_NOT, "NOT")?;
+        let not = p.expect(TK_NOT)?;
         if p.peek_kind() matches { TK_TOKEN_REF | TK_STRING_LITERAL | TK_LEXER_CHAR_SET } {
             let set_element = parse_set_element(p)?;
             return Result::<NotSetNode, ParseError>::Ok(NotSetNode::Alt0(NotSetAlt0 {
@@ -5261,11 +5271,11 @@ fn parse_not_set(p: &mut Parser) -> Result<NotSetNode, ParseError> {
 
 fn parse_block_set(p: &mut Parser) -> Result<BlockSetNode, ParseError> {
     let start = p.peek().span.start;
-    let lparen = p.expect(TK_LPAREN, "LPAREN")?;
+    let lparen = p.expect(TK_LPAREN)?;
     let set_element = parse_set_element(p)?;
     let mut or_set_element_list: Array<OrSetElementItem> = [];
     while p.peek_kind() == TK_OR {
-        let or = p.expect(TK_OR, "OR")?;
+        let or = p.expect(TK_OR)?;
         let set_element = parse_set_element(p)?;
         let or_set_element = OrSetElementItem {
             or,
@@ -5273,7 +5283,7 @@ fn parse_block_set(p: &mut Parser) -> Result<BlockSetNode, ParseError> {
         };
         or_set_element_list.push(or_set_element);
     }
-    let rparen = p.expect(TK_RPAREN, "RPAREN")?;
+    let rparen = p.expect(TK_RPAREN)?;
     return Result::<BlockSetNode, ParseError>::Ok(BlockSetNode {
         span: Span::new(start, p.last_end()),
         lparen,
@@ -5285,7 +5295,7 @@ fn parse_block_set(p: &mut Parser) -> Result<BlockSetNode, ParseError> {
 
 fn parse_set_element_bt_1(p: &mut Parser) -> Result<SetElementNode, ParseError> {
     let start = p.peek().span.start;
-    let string_literal = p.expect(TK_STRING_LITERAL, "STRING_LITERAL")?;
+    let string_literal = p.expect(TK_STRING_LITERAL)?;
     let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
         let element_options = parse_element_options(p)?;
         Option::<ElementOptionsNode>::Some(element_options)
@@ -5312,7 +5322,7 @@ fn parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
-        let token_ref = p.expect(TK_TOKEN_REF, "TOKEN_REF")?;
+        let token_ref = p.expect(TK_TOKEN_REF)?;
         let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
             let element_options = parse_element_options(p)?;
             Option::<ElementOptionsNode>::Some(element_options)
@@ -5338,7 +5348,7 @@ fn parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
         }
     }
     if kind == TK_LEXER_CHAR_SET {
-        let lexer_char_set = p.expect(TK_LEXER_CHAR_SET, "LEXER_CHAR_SET")?;
+        let lexer_char_set = p.expect(TK_LEXER_CHAR_SET)?;
         return Result::<SetElementNode, ParseError>::Ok(SetElementNode::Alt3(SetElementAlt3 {
             span: Span::new(start, p.last_end()),
             lexer_char_set,
@@ -5353,7 +5363,7 @@ fn parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
 
 fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
     let start = p.peek().span.start;
-    let lparen = p.expect(TK_LPAREN, "LPAREN")?;
+    let lparen = p.expect(TK_LPAREN)?;
     let options_spec_rule_action_colon: Option<OptionsSpecOptRuleActionListColonItem> = if p.peek_kind() == TK_OPTIONS && p.peek_at(1) == TK_AT && p.peek_at(2) == TK_COLON {
         let options_spec: Option<OptionsSpecNode> = if p.peek_kind() == TK_OPTIONS {
             let options_spec = parse_options_spec(p)?;
@@ -5366,7 +5376,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
             let rule_action = parse_rule_action(p)?;
             rule_action_list.push(rule_action);
         }
-        let colon = p.expect(TK_COLON, "COLON")?;
+        let colon = p.expect(TK_COLON)?;
         let options_spec_rule_action_colon = OptionsSpecOptRuleActionListColonItem {
             options_spec,
             rule_action_list,
@@ -5380,7 +5390,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
             let rule_action = parse_rule_action(p)?;
             rule_action_list.push(rule_action);
         }
-        let colon = p.expect(TK_COLON, "COLON")?;
+        let colon = p.expect(TK_COLON)?;
         let options_spec_rule_action_colon = OptionsSpecOptRuleActionListColonItem {
             options_spec,
             rule_action_list,
@@ -5395,7 +5405,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
             null
         };
         let mut rule_action_list: Array<RuleActionNode> = [];
-        let colon = p.expect(TK_COLON, "COLON")?;
+        let colon = p.expect(TK_COLON)?;
         let options_spec_rule_action_colon = OptionsSpecOptRuleActionListColonItem {
             options_spec,
             rule_action_list,
@@ -5405,7 +5415,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
     } else if p.peek_kind() == TK_COLON {
         let options_spec: Option<OptionsSpecNode> = null;
         let mut rule_action_list: Array<RuleActionNode> = [];
-        let colon = p.expect(TK_COLON, "COLON")?;
+        let colon = p.expect(TK_COLON)?;
         let options_spec_rule_action_colon = OptionsSpecOptRuleActionListColonItem {
             options_spec,
             rule_action_list,
@@ -5416,7 +5426,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
         null
     };
     let alt_list = parse_alt_list(p)?;
-    let rparen = p.expect(TK_RPAREN, "RPAREN")?;
+    let rparen = p.expect(TK_RPAREN)?;
     return Result::<BlockNode, ParseError>::Ok(BlockNode {
         span: Span::new(start, p.last_end()),
         lparen,
@@ -5428,7 +5438,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
 
 fn parse_ruleref(p: &mut Parser) -> Result<RulerefNode, ParseError> {
     let start = p.peek().span.start;
-    let rule_ref = p.expect(TK_RULE_REF, "RULE_REF")?;
+    let rule_ref = p.expect(TK_RULE_REF)?;
     let arg_action_block: Option<ArgActionBlockNode> = if p.peek_kind() == TK_BEGIN_ARGUMENT {
         let arg_action_block = parse_arg_action_block(p)?;
         Option::<ArgActionBlockNode>::Some(arg_action_block)
@@ -5451,9 +5461,9 @@ fn parse_ruleref(p: &mut Parser) -> Result<RulerefNode, ParseError> {
 
 fn parse_character_range(p: &mut Parser) -> Result<CharacterRangeNode, ParseError> {
     let start = p.peek().span.start;
-    let string_literal = p.expect(TK_STRING_LITERAL, "STRING_LITERAL")?;
-    let range = p.expect(TK_RANGE, "RANGE")?;
-    let string_literal_2 = p.expect(TK_STRING_LITERAL, "STRING_LITERAL")?;
+    let string_literal = p.expect(TK_STRING_LITERAL)?;
+    let range = p.expect(TK_RANGE)?;
+    let string_literal_2 = p.expect(TK_STRING_LITERAL)?;
     return Result::<CharacterRangeNode, ParseError>::Ok(CharacterRangeNode {
         span: Span::new(start, p.last_end()),
         string_literal,
@@ -5466,7 +5476,7 @@ fn parse_terminal_def(p: &mut Parser) -> Result<TerminalDefNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
-        let token_ref = p.expect(TK_TOKEN_REF, "TOKEN_REF")?;
+        let token_ref = p.expect(TK_TOKEN_REF)?;
         let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
             let element_options = parse_element_options(p)?;
             Option::<ElementOptionsNode>::Some(element_options)
@@ -5480,7 +5490,7 @@ fn parse_terminal_def(p: &mut Parser) -> Result<TerminalDefNode, ParseError> {
         }));
     }
     if kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL, "STRING_LITERAL")?;
+        let string_literal = p.expect(TK_STRING_LITERAL)?;
         let element_options: Option<ElementOptionsNode> = if p.peek_kind() == TK_LT {
             let element_options = parse_element_options(p)?;
             Option::<ElementOptionsNode>::Some(element_options)
@@ -5502,11 +5512,11 @@ fn parse_terminal_def(p: &mut Parser) -> Result<TerminalDefNode, ParseError> {
 
 fn parse_element_options(p: &mut Parser) -> Result<ElementOptionsNode, ParseError> {
     let start = p.peek().span.start;
-    let lt = p.expect(TK_LT, "LT")?;
+    let lt = p.expect(TK_LT)?;
     let element_option = parse_element_option(p)?;
     let mut comma_element_option_list: Array<CommaElementOptionItem> = [];
     while p.peek_kind() == TK_COMMA {
-        let comma = p.expect(TK_COMMA, "COMMA")?;
+        let comma = p.expect(TK_COMMA)?;
         let element_option = parse_element_option(p)?;
         let comma_element_option = CommaElementOptionItem {
             comma,
@@ -5514,7 +5524,7 @@ fn parse_element_options(p: &mut Parser) -> Result<ElementOptionsNode, ParseErro
         };
         comma_element_option_list.push(comma_element_option);
     }
-    let gt = p.expect(TK_GT, "GT")?;
+    let gt = p.expect(TK_GT)?;
     return Result::<ElementOptionsNode, ParseError>::Ok(ElementOptionsNode {
         span: Span::new(start, p.last_end()),
         lt,
@@ -5536,7 +5546,7 @@ fn parse_element_option_bt_0(p: &mut Parser) -> Result<ElementOptionNode, ParseE
 fn parse_element_option_bt_1(p: &mut Parser) -> Result<ElementOptionNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
-    let assign = p.expect(TK_ASSIGN, "ASSIGN")?;
+    let assign = p.expect(TK_ASSIGN)?;
     let mut group_0_inner: Option<ElementOptionGroup0> = null;
     let grp_kind = p.peek_kind();
     if grp_kind matches { TK_RULE_REF | TK_TOKEN_REF } {
@@ -5545,12 +5555,12 @@ fn parse_element_option_bt_1(p: &mut Parser) -> Result<ElementOptionNode, ParseE
             qualified_identifier,
         }));
     } else if grp_kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL, "STRING_LITERAL")?;
+        let string_literal = p.expect(TK_STRING_LITERAL)?;
         group_0_inner = Option::<ElementOptionGroup0>::Some(ElementOptionGroup0::Alt1(ElementOptionGroup0Alt1 {
             string_literal,
         }));
     } else if grp_kind == TK_INT {
-        let int = p.expect(TK_INT, "INT")?;
+        let int = p.expect(TK_INT)?;
         group_0_inner = Option::<ElementOptionGroup0>::Some(ElementOptionGroup0::Alt2(ElementOptionGroup0Alt2 {
             int,
         }));
@@ -5589,14 +5599,14 @@ fn parse_identifier(p: &mut Parser) -> Result<IdentifierNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_RULE_REF {
-        let rule_ref = p.expect(TK_RULE_REF, "RULE_REF")?;
+        let rule_ref = p.expect(TK_RULE_REF)?;
         return Result::<IdentifierNode, ParseError>::Ok(IdentifierNode::Alt0(IdentifierAlt0 {
             span: Span::new(start, p.last_end()),
             rule_ref,
         }));
     }
     if kind == TK_TOKEN_REF {
-        let token_ref = p.expect(TK_TOKEN_REF, "TOKEN_REF")?;
+        let token_ref = p.expect(TK_TOKEN_REF)?;
         return Result::<IdentifierNode, ParseError>::Ok(IdentifierNode::Alt1(IdentifierAlt1 {
             span: Span::new(start, p.last_end()),
             token_ref,
@@ -5614,7 +5624,7 @@ fn parse_qualified_identifier(p: &mut Parser) -> Result<QualifiedIdentifierNode,
     let identifier = parse_identifier(p)?;
     let mut dot_identifier_list: Array<DotIdentifierItem> = [];
     while p.peek_kind() == TK_DOT {
-        let dot = p.expect(TK_DOT, "DOT")?;
+        let dot = p.expect(TK_DOT)?;
         let identifier = parse_identifier(p)?;
         let dot_identifier = DotIdentifierItem {
             dot,

@@ -28786,10 +28786,20 @@ impl Parser {
         return self.tokens[self.pos - 1].span.end;
     }
 
-    fn expect(&mut self, kind: i32, name: String) -> Result<Token, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
         if self.tokens[self.pos].kind == kind {
             return Result::<Token, ParseError>::Ok(self.advance());
         }
+        let tok = &self.tokens[self.pos];
+        let name = token_kind_name(kind);
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected {name}, got "{tok.text}"`,
+            tok.span,
+            [name],
+        ));
+    }
+
+    fn fail(&self, name: String) -> Result<Token, ParseError> {
         let tok = &self.tokens[self.pos];
         return Result::<Token, ParseError>::Err(ParseError::new(
             `expected {name}, got "{tok.text}"`,
@@ -28858,7 +28868,7 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
         };
         nested_statement_item_list.push(nested_statement_item);
     }
-    let eof = p.expect(TK_EOF, "EOF")?;
+    let eof = p.expect(TK_EOF)?;
     return Result::<StylesheetNode, ParseError>::Ok(StylesheetNode {
         span: Span::new(start, p.last_end()),
         ws,
@@ -28872,11 +28882,11 @@ fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
 
 fn parse_charset_bt_0(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     let start = p.peek().span.start;
-    let charset = p.expect(TK_Charset, "Charset")?;
+    let charset = p.expect(TK_Charset)?;
     let ws = parse_ws(p)?;
-    let string_ = p.expect(TK_String_, "String_")?;
+    let string_ = p.expect(TK_String_)?;
     let ws_2 = parse_ws(p)?;
-    let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+    let semicolon = p.expect(TK_LIT_SEMI)?;
     let ws_3 = parse_ws(p)?;
     return Result::<CharsetNode, ParseError>::Ok(CharsetNode::goodCharset(CharsetgoodCharset {
         span: Span::new(start, p.last_end()),
@@ -28891,9 +28901,9 @@ fn parse_charset_bt_0(p: &mut Parser) -> Result<CharsetNode, ParseError> {
 
 fn parse_charset_bt_1(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     let start = p.peek().span.start;
-    let charset = p.expect(TK_Charset, "Charset")?;
+    let charset = p.expect(TK_Charset)?;
     let ws = parse_ws(p)?;
-    let string_ = p.expect(TK_String_, "String_")?;
+    let string_ = p.expect(TK_String_)?;
     let ws_2 = parse_ws(p)?;
     return Result::<CharsetNode, ParseError>::Ok(CharsetNode::badCharset(CharsetbadCharset {
         span: Span::new(start, p.last_end()),
@@ -28926,12 +28936,12 @@ fn parse_charset(p: &mut Parser) -> Result<CharsetNode, ParseError> {
 
 fn parse_imports_bt_0(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
-    let import_ = p.expect(TK_Import, "Import")?;
+    let import_ = p.expect(TK_Import)?;
     let ws = parse_ws(p)?;
     let mut group_0_inner: Option<ImportsGroup0> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_, "String_")?;
+        let string_ = p.expect(TK_String_)?;
         group_0_inner = Option::<ImportsGroup0>::Some(ImportsGroup0::Alt0(ImportsGroup0Alt0 {
             string_,
         }));
@@ -28944,7 +28954,7 @@ fn parse_imports_bt_0(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let group_0 = group_0_inner;
     let ws_2 = parse_ws(p)?;
     let media_query_list = parse_media_query_list(p)?;
-    let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+    let semicolon = p.expect(TK_LIT_SEMI)?;
     let ws_3 = parse_ws(p)?;
     return Result::<ImportsNode, ParseError>::Ok(ImportsNode::goodImport0(ImportsgoodImport0 {
         span: Span::new(start, p.last_end()),
@@ -28960,12 +28970,12 @@ fn parse_imports_bt_0(p: &mut Parser) -> Result<ImportsNode, ParseError> {
 
 fn parse_imports_bt_1(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
-    let import_ = p.expect(TK_Import, "Import")?;
+    let import_ = p.expect(TK_Import)?;
     let ws = parse_ws(p)?;
     let mut group_1_inner: Option<ImportsGroup1> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_, "String_")?;
+        let string_ = p.expect(TK_String_)?;
         group_1_inner = Option::<ImportsGroup1>::Some(ImportsGroup1::Alt0(ImportsGroup1Alt0 {
             string_,
         }));
@@ -28977,7 +28987,7 @@ fn parse_imports_bt_1(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     }
     let group_1 = group_1_inner;
     let ws_2 = parse_ws(p)?;
-    let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+    let semicolon = p.expect(TK_LIT_SEMI)?;
     let ws_3 = parse_ws(p)?;
     return Result::<ImportsNode, ParseError>::Ok(ImportsNode::goodImport1(ImportsgoodImport1 {
         span: Span::new(start, p.last_end()),
@@ -28992,12 +29002,12 @@ fn parse_imports_bt_1(p: &mut Parser) -> Result<ImportsNode, ParseError> {
 
 fn parse_imports_bt_2(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
-    let import_ = p.expect(TK_Import, "Import")?;
+    let import_ = p.expect(TK_Import)?;
     let ws = parse_ws(p)?;
     let mut group_2_inner: Option<ImportsGroup2> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_, "String_")?;
+        let string_ = p.expect(TK_String_)?;
         group_2_inner = Option::<ImportsGroup2>::Some(ImportsGroup2::Alt0(ImportsGroup2Alt0 {
             string_,
         }));
@@ -29022,12 +29032,12 @@ fn parse_imports_bt_2(p: &mut Parser) -> Result<ImportsNode, ParseError> {
 
 fn parse_imports_bt_3(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
-    let import_ = p.expect(TK_Import, "Import")?;
+    let import_ = p.expect(TK_Import)?;
     let ws = parse_ws(p)?;
     let mut group_3_inner: Option<ImportsGroup3> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_, "String_")?;
+        let string_ = p.expect(TK_String_)?;
         group_3_inner = Option::<ImportsGroup3>::Some(ImportsGroup3::Alt0(ImportsGroup3Alt0 {
             string_,
         }));
@@ -29082,7 +29092,7 @@ fn parse_imports(p: &mut Parser) -> Result<ImportsNode, ParseError> {
 
 fn parse_namespace__bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     let start = p.peek().span.start;
-    let namespace = p.expect(TK_Namespace, "Namespace")?;
+    let namespace = p.expect(TK_Namespace)?;
     let ws = parse_ws(p)?;
     let namespace_prefix_ws: Option<NamespacePrefixWsItem> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
         let opt_saved = p.pos;
@@ -29107,7 +29117,7 @@ fn parse_namespace__bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     let mut group_0_inner: Option<NamespaceGroup0> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_, "String_")?;
+        let string_ = p.expect(TK_String_)?;
         group_0_inner = Option::<NamespaceGroup0>::Some(NamespaceGroup0::Alt0(NamespaceGroup0Alt0 {
             string_,
         }));
@@ -29119,7 +29129,7 @@ fn parse_namespace__bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     }
     let group_0 = group_0_inner;
     let ws_2 = parse_ws(p)?;
-    let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+    let semicolon = p.expect(TK_LIT_SEMI)?;
     let ws_3 = parse_ws(p)?;
     return Result::<NamespaceNode, ParseError>::Ok(NamespaceNode::goodNamespace(NamespacegoodNamespace {
         span: Span::new(start, p.last_end()),
@@ -29135,7 +29145,7 @@ fn parse_namespace__bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
 
 fn parse_namespace__bt_1(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     let start = p.peek().span.start;
-    let namespace = p.expect(TK_Namespace, "Namespace")?;
+    let namespace = p.expect(TK_Namespace)?;
     let ws = parse_ws(p)?;
     let namespace_prefix_ws: Option<NamespacePrefixWsItem> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
         let opt_saved = p.pos;
@@ -29160,7 +29170,7 @@ fn parse_namespace__bt_1(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     let mut group_1_inner: Option<NamespaceGroup1> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_, "String_")?;
+        let string_ = p.expect(TK_String_)?;
         group_1_inner = Option::<NamespaceGroup1>::Some(NamespaceGroup1::Alt0(NamespaceGroup1Alt0 {
             string_,
         }));
@@ -29213,7 +29223,7 @@ fn parse_namespace_prefix(p: &mut Parser) -> Result<NamespacePrefixNode, ParseEr
 
 fn parse_media(p: &mut Parser) -> Result<MediaNode, ParseError> {
     let start = p.peek().span.start;
-    let media = p.expect(TK_Media, "Media")?;
+    let media = p.expect(TK_Media)?;
     let ws = parse_ws(p)?;
     let media_query_list = parse_media_query_list(p)?;
     let group_rule_body = parse_group_rule_body(p)?;
@@ -29239,7 +29249,7 @@ fn parse_media_query_list(p: &mut Parser) -> Result<MediaQueryListNode, ParseErr
             let media_query = _bt_r.unwrap();
             let mut comma_ws_media_query_list: Array<CommaWsMediaQueryItem> = [];
             while p.peek_kind() == TK_Comma {
-                let comma = p.expect(TK_Comma, "Comma")?;
+                let comma = p.expect(TK_Comma)?;
                 let ws = parse_ws(p)?;
                 let media_query = parse_media_query(p)?;
                 let comma_ws_media_query = CommaWsMediaQueryItem {
@@ -29287,7 +29297,7 @@ fn parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
         let ws_2 = parse_ws(p)?;
         let mut and_ws_media_expression_list: Array<AndWsMediaExpressionItem> = [];
         while p.peek_kind() == TK_And {
-            let and = p.expect(TK_And, "And")?;
+            let and = p.expect(TK_And)?;
             let ws = parse_ws(p)?;
             let media_expression = parse_media_expression(p)?;
             let and_ws_media_expression = AndWsMediaExpressionItem {
@@ -29310,7 +29320,7 @@ fn parse_media_query(p: &mut Parser) -> Result<MediaQueryNode, ParseError> {
         let media_expression = parse_media_expression(p)?;
         let mut and_ws_media_expression_list: Array<AndWsMediaExpressionItem> = [];
         while p.peek_kind() == TK_And {
-            let and = p.expect(TK_And, "And")?;
+            let and = p.expect(TK_And)?;
             let ws = parse_ws(p)?;
             let media_expression = parse_media_expression(p)?;
             let and_ws_media_expression = AndWsMediaExpressionItem {
@@ -29344,11 +29354,11 @@ fn parse_media_type(p: &mut Parser) -> Result<MediaTypeNode, ParseError> {
 
 fn parse_media_expression(p: &mut Parser) -> Result<MediaExpressionNode, ParseError> {
     let start = p.peek().span.start;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    let lparen = p.expect(TK_LIT_LPAREN)?;
     let ws = parse_ws(p)?;
     let media_feature = parse_media_feature(p)?;
     let colon_ws_expr: Option<ColonWsExprItem> = if p.peek_kind() == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON, "':'")?;
+        let colon = p.expect(TK_LIT_COLON)?;
         let ws = parse_ws(p)?;
         let expr = parse_expr(p)?;
         let colon_ws_expr = ColonWsExprItem {
@@ -29360,7 +29370,7 @@ fn parse_media_expression(p: &mut Parser) -> Result<MediaExpressionNode, ParseEr
     } else {
         null
     };
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let rparen = p.expect(TK_LIT_RPAREN)?;
     let ws_2 = parse_ws(p)?;
     return Result::<MediaExpressionNode, ParseError>::Ok(MediaExpressionNode {
         span: Span::new(start, p.last_end()),
@@ -29386,7 +29396,7 @@ fn parse_media_feature(p: &mut Parser) -> Result<MediaFeatureNode, ParseError> {
 
 fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
     let start = p.peek().span.start;
-    let page = p.expect(TK_Page, "Page")?;
+    let page = p.expect(TK_Page)?;
     let ws = parse_ws(p)?;
     let pseudo_page: Option<PseudoPageNode> = if p.peek_kind() == TK_LIT_COLON {
         let pseudo_page = parse_pseudo_page(p)?;
@@ -29394,7 +29404,7 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
     } else {
         null
     };
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_2 = parse_ws(p)?;
     let declaration: Option<DeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         let declaration = parse_declaration(p)?;
@@ -29404,7 +29414,7 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
     };
     let mut semicolon_ws_declaration_list: Array<SemicolonWsDeclarationOptItem> = [];
     while p.peek_kind() == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+        let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = parse_ws(p)?;
         let declaration: Option<DeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
             let declaration = parse_declaration(p)?;
@@ -29419,7 +29429,7 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
         };
         semicolon_ws_declaration_list.push(semicolon_ws_declaration);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_3 = parse_ws(p)?;
     return Result::<PageNode, ParseError>::Ok(PageNode {
         span: Span::new(start, p.last_end()),
@@ -29437,7 +29447,7 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
 
 fn parse_pseudo_page(p: &mut Parser) -> Result<PseudoPageNode, ParseError> {
     let start = p.peek().span.start;
-    let colon = p.expect(TK_LIT_COLON, "':'")?;
+    let colon = p.expect(TK_LIT_COLON)?;
     let ident = parse_ident(p)?;
     let ws = parse_ws(p)?;
     return Result::<PseudoPageNode, ParseError>::Ok(PseudoPageNode {
@@ -29453,7 +29463,7 @@ fn parse_selector_group(p: &mut Parser) -> Result<SelectorGroupNode, ParseError>
     let selector = parse_selector(p)?;
     let mut comma_ws_selector_list: Array<CommaWsSelectorItem> = [];
     while p.peek_kind() == TK_Comma {
-        let comma = p.expect(TK_Comma, "Comma")?;
+        let comma = p.expect(TK_Comma)?;
         let ws = parse_ws(p)?;
         let selector = parse_selector(p)?;
         let comma_ws_selector = CommaWsSelectorItem {
@@ -29498,7 +29508,7 @@ fn parse_combinator(p: &mut Parser) -> Result<CombinatorNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Plus {
-        let plus = p.expect(TK_Plus, "Plus")?;
+        let plus = p.expect(TK_Plus)?;
         let ws = parse_ws(p)?;
         return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt0(CombinatorAlt0 {
             span: Span::new(start, p.last_end()),
@@ -29507,7 +29517,7 @@ fn parse_combinator(p: &mut Parser) -> Result<CombinatorNode, ParseError> {
         }));
     }
     if kind == TK_Greater {
-        let greater = p.expect(TK_Greater, "Greater")?;
+        let greater = p.expect(TK_Greater)?;
         let ws = parse_ws(p)?;
         return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt1(CombinatorAlt1 {
             span: Span::new(start, p.last_end()),
@@ -29516,7 +29526,7 @@ fn parse_combinator(p: &mut Parser) -> Result<CombinatorNode, ParseError> {
         }));
     }
     if kind == TK_Tilde {
-        let tilde = p.expect(TK_Tilde, "Tilde")?;
+        let tilde = p.expect(TK_Tilde)?;
         let ws = parse_ws(p)?;
         return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt2(CombinatorAlt2 {
             span: Span::new(start, p.last_end()),
@@ -29525,7 +29535,7 @@ fn parse_combinator(p: &mut Parser) -> Result<CombinatorNode, ParseError> {
         }));
     }
     if kind == TK_Space {
-        let space = p.expect(TK_Space, "Space")?;
+        let space = p.expect(TK_Space)?;
         let ws = parse_ws(p)?;
         return Result::<CombinatorNode, ParseError>::Ok(CombinatorNode::Alt3(CombinatorAlt3 {
             span: Span::new(start, p.last_end()),
@@ -29566,7 +29576,7 @@ fn parse_simple_selector_sequence(p: &mut Parser) -> Result<SimpleSelectorSequen
         let mut group_0_list: Array<SimpleSelectorSequenceGroup0> = [];
         while p.peek_kind() matches { TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot } {
             let group_0: SimpleSelectorSequenceGroup0 = if p.peek_kind() == TK_Hash {
-                let hash = p.expect(TK_Hash, "Hash")?;
+                let hash = p.expect(TK_Hash)?;
                 SimpleSelectorSequenceGroup0::Alt0(SimpleSelectorSequenceGroup0Alt0 {
                     hash,
                 })
@@ -29605,7 +29615,7 @@ fn parse_simple_selector_sequence(p: &mut Parser) -> Result<SimpleSelectorSequen
         while _plus_first || p.peek_kind() matches { TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot } {
             _plus_first = false;
             let group_1: SimpleSelectorSequenceGroup1 = if p.peek_kind() == TK_Hash {
-                let hash = p.expect(TK_Hash, "Hash")?;
+                let hash = p.expect(TK_Hash)?;
                 SimpleSelectorSequenceGroup1::Alt0(SimpleSelectorSequenceGroup1Alt0 {
                     hash,
                 })
@@ -29672,7 +29682,7 @@ fn parse_type_namespace_prefix(p: &mut Parser) -> Result<TypeNamespacePrefixNode
                     ident,
                 })
             } else {
-                let star = p.expect(TK_LIT_STAR, "'*'")?;
+                let star = p.expect(TK_LIT_STAR)?;
                 TypeNamespacePrefixGroup0::Alt1(TypeNamespacePrefixGroup0Alt1 {
                     star,
                 })
@@ -29683,7 +29693,7 @@ fn parse_type_namespace_prefix(p: &mut Parser) -> Result<TypeNamespacePrefixNode
     } else {
         null
     };
-    let pipe = p.expect(TK_LIT_PIPE, "'|'")?;
+    let pipe = p.expect(TK_LIT_PIPE)?;
     return Result::<TypeNamespacePrefixNode, ParseError>::Ok(TypeNamespacePrefixNode {
         span: Span::new(start, p.last_end()),
         group_0,
@@ -29708,7 +29718,7 @@ fn parse_universal(p: &mut Parser) -> Result<UniversalNode, ParseError> {
     } else {
         null
     };
-    let star = p.expect(TK_LIT_STAR, "'*'")?;
+    let star = p.expect(TK_LIT_STAR)?;
     return Result::<UniversalNode, ParseError>::Ok(UniversalNode {
         span: Span::new(start, p.last_end()),
         type_namespace_prefix,
@@ -29718,7 +29728,7 @@ fn parse_universal(p: &mut Parser) -> Result<UniversalNode, ParseError> {
 
 fn parse_class_name(p: &mut Parser) -> Result<ClassNameNode, ParseError> {
     let start = p.peek().span.start;
-    let dot = p.expect(TK_LIT_DOT, "'.'")?;
+    let dot = p.expect(TK_LIT_DOT)?;
     let ident = parse_ident(p)?;
     return Result::<ClassNameNode, ParseError>::Ok(ClassNameNode {
         span: Span::new(start, p.last_end()),
@@ -29729,7 +29739,7 @@ fn parse_class_name(p: &mut Parser) -> Result<ClassNameNode, ParseError> {
 
 fn parse_attrib(p: &mut Parser) -> Result<AttribNode, ParseError> {
     let start = p.peek().span.start;
-    let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
+    let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let ws = parse_ws(p)?;
     let type_namespace_prefix: Option<TypeNamespacePrefixNode> = if p.peek_kind() matches { TK_LIT_STAR | TK_LIT_PIPE } {
         let type_namespace_prefix = parse_type_namespace_prefix(p)?;
@@ -29755,7 +29765,7 @@ fn parse_attrib(p: &mut Parser) -> Result<AttribNode, ParseError> {
                     ident,
                 }));
             } else if grp_kind == TK_String_ {
-                let string_ = p.expect(TK_String_, "String_")?;
+                let string_ = p.expect(TK_String_)?;
                 group_0_inner = Option::<AttribGroup0>::Some(AttribGroup0::Alt1(AttribGroup0Alt1 {
                     string_,
                 }));
@@ -29776,7 +29786,7 @@ fn parse_attrib(p: &mut Parser) -> Result<AttribNode, ParseError> {
     } else {
         null
     };
-    let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
+    let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<AttribNode, ParseError>::Ok(AttribNode {
         span: Span::new(start, p.last_end()),
         lbracket,
@@ -29791,9 +29801,9 @@ fn parse_attrib(p: &mut Parser) -> Result<AttribNode, ParseError> {
 
 fn parse_pseudo(p: &mut Parser) -> Result<PseudoNode, ParseError> {
     let start = p.peek().span.start;
-    let colon = p.expect(TK_LIT_COLON, "':'")?;
+    let colon = p.expect(TK_LIT_COLON)?;
     let colon_2: Option<Token> = if p.peek_kind() == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON, "':'")?;
+        let colon = p.expect(TK_LIT_COLON)?;
         Option::<Token>::Some(colon)
     } else {
         null
@@ -29818,10 +29828,10 @@ fn parse_pseudo(p: &mut Parser) -> Result<PseudoNode, ParseError> {
 
 fn parse_functional_pseudo(p: &mut Parser) -> Result<FunctionalPseudoNode, ParseError> {
     let start = p.peek().span.start;
-    let function_ = p.expect(TK_Function_, "Function_")?;
+    let function_ = p.expect(TK_Function_)?;
     let ws = parse_ws(p)?;
     let expression = parse_expression(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<FunctionalPseudoNode, ParseError>::Ok(FunctionalPseudoNode {
         span: Span::new(start, p.last_end()),
         function_,
@@ -29840,32 +29850,32 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         let mut group_0_inner: Option<ExpressionGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_Plus {
-            let plus = p.expect(TK_Plus, "Plus")?;
+            let plus = p.expect(TK_Plus)?;
             group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt0(ExpressionGroup0Alt0 {
                 plus,
             }));
         } else if grp_kind == TK_Minus {
-            let minus = p.expect(TK_Minus, "Minus")?;
+            let minus = p.expect(TK_Minus)?;
             group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt1(ExpressionGroup0Alt1 {
                 minus,
             }));
         } else if grp_kind == TK_Dimension {
-            let dimension = p.expect(TK_Dimension, "Dimension")?;
+            let dimension = p.expect(TK_Dimension)?;
             group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt2(ExpressionGroup0Alt2 {
                 dimension,
             }));
         } else if grp_kind == TK_UnknownDimension {
-            let unknowndimension = p.expect(TK_UnknownDimension, "UnknownDimension")?;
+            let unknowndimension = p.expect(TK_UnknownDimension)?;
             group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt3(ExpressionGroup0Alt3 {
                 unknowndimension,
             }));
         } else if grp_kind == TK_Number {
-            let number = p.expect(TK_Number, "Number")?;
+            let number = p.expect(TK_Number)?;
             group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt4(ExpressionGroup0Alt4 {
                 number,
             }));
         } else if grp_kind == TK_String_ {
-            let string_ = p.expect(TK_String_, "String_")?;
+            let string_ = p.expect(TK_String_)?;
             group_0_inner = Option::<ExpressionGroup0>::Some(ExpressionGroup0::Alt5(ExpressionGroup0Alt5 {
                 string_,
             }));
@@ -29891,11 +29901,11 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
 
 fn parse_negation(p: &mut Parser) -> Result<NegationNode, ParseError> {
     let start = p.peek().span.start;
-    let pseudonot = p.expect(TK_PseudoNot, "PseudoNot")?;
+    let pseudonot = p.expect(TK_PseudoNot)?;
     let ws = parse_ws(p)?;
     let negation_arg = parse_negation_arg(p)?;
     let ws_2 = parse_ws(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<NegationNode, ParseError>::Ok(NegationNode {
         span: Span::new(start, p.last_end()),
         pseudonot,
@@ -29940,7 +29950,7 @@ fn parse_negation_arg(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
         }
     }
     if kind == TK_Hash {
-        let hash = p.expect(TK_Hash, "Hash")?;
+        let hash = p.expect(TK_Hash)?;
         return Result::<NegationArgNode, ParseError>::Ok(NegationArgNode::Alt2(NegationArgAlt2 {
             span: Span::new(start, p.last_end()),
             hash,
@@ -29978,7 +29988,7 @@ fn parse_operator_(p: &mut Parser) -> Result<OperatorNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_SLASH {
-        let slash = p.expect(TK_LIT_SLASH, "'/'")?;
+        let slash = p.expect(TK_LIT_SLASH)?;
         let ws = parse_ws(p)?;
         return Result::<OperatorNode, ParseError>::Ok(OperatorNode::goodOperator0(OperatorgoodOperator0 {
             span: Span::new(start, p.last_end()),
@@ -29987,7 +29997,7 @@ fn parse_operator_(p: &mut Parser) -> Result<OperatorNode, ParseError> {
         }));
     }
     if kind == TK_Comma {
-        let comma = p.expect(TK_Comma, "Comma")?;
+        let comma = p.expect(TK_Comma)?;
         let ws = parse_ws(p)?;
         return Result::<OperatorNode, ParseError>::Ok(OperatorNode::goodOperator1(OperatorgoodOperator1 {
             span: Span::new(start, p.last_end()),
@@ -29996,7 +30006,7 @@ fn parse_operator_(p: &mut Parser) -> Result<OperatorNode, ParseError> {
         }));
     }
     if kind == TK_Space {
-        let space = p.expect(TK_Space, "Space")?;
+        let space = p.expect(TK_Space)?;
         let ws = parse_ws(p)?;
         return Result::<OperatorNode, ParseError>::Ok(OperatorNode::goodOperator2(OperatorgoodOperator2 {
             span: Span::new(start, p.last_end()),
@@ -30005,7 +30015,7 @@ fn parse_operator_(p: &mut Parser) -> Result<OperatorNode, ParseError> {
         }));
     }
     if kind == TK_LIT_EQ {
-        let eq = p.expect(TK_LIT_EQ, "'='")?;
+        let eq = p.expect(TK_LIT_EQ)?;
         let ws = parse_ws(p)?;
         return Result::<OperatorNode, ParseError>::Ok(OperatorNode::badOperator(OperatorbadOperator {
             span: Span::new(start, p.last_end()),
@@ -30033,7 +30043,7 @@ fn parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
         }));
     }
     if kind == TK_Variable {
-        let variable = p.expect(TK_Variable, "Variable")?;
+        let variable = p.expect(TK_Variable)?;
         let ws = parse_ws(p)?;
         return Result::<PropertyNode, ParseError>::Ok(PropertyNode::goodProperty1(PropertygoodProperty1 {
             span: Span::new(start, p.last_end()),
@@ -30042,7 +30052,7 @@ fn parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
         }));
     }
     if kind == TK_LIT_STAR {
-        let star = p.expect(TK_LIT_STAR, "'*'")?;
+        let star = p.expect(TK_LIT_STAR)?;
         let ident = parse_ident(p)?;
         return Result::<PropertyNode, ParseError>::Ok(PropertyNode::badProperty0(PropertybadProperty0 {
             span: Span::new(start, p.last_end()),
@@ -30051,7 +30061,7 @@ fn parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
         }));
     }
     if kind == TK_LIT__ {
-        let lit__ = p.expect(TK_LIT__, "'_'")?;
+        let lit__ = p.expect(TK_LIT__)?;
         let ident = parse_ident(p)?;
         return Result::<PropertyNode, ParseError>::Ok(PropertyNode::badProperty1(PropertybadProperty1 {
             span: Span::new(start, p.last_end()),
@@ -30073,7 +30083,7 @@ fn parse_ruleset_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError> {
         let any_ = parse_any_(p)?;
         any__list.push(any_);
     }
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = parse_ws(p)?;
     let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         let declaration_list = parse_declaration_list(p)?;
@@ -30081,7 +30091,7 @@ fn parse_ruleset_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     } else {
         null
     };
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_2 = parse_ws(p)?;
     return Result::<RulesetNode, ParseError>::Ok(RulesetNode::unknownRuleset(RulesetunknownRuleset {
         span: Span::new(start, p.last_end()),
@@ -30097,7 +30107,7 @@ fn parse_ruleset_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError> {
 fn parse_ruleset_bt_0(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     let start = p.peek().span.start;
     let selector_group = parse_selector_group(p)?;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = parse_ws(p)?;
     let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         let declaration_list = parse_declaration_list(p)?;
@@ -30105,7 +30115,7 @@ fn parse_ruleset_bt_0(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     } else {
         null
     };
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_2 = parse_ws(p)?;
     return Result::<RulesetNode, ParseError>::Ok(RulesetNode::knownRuleset(RulesetknownRuleset {
         span: Span::new(start, p.last_end()),
@@ -30148,7 +30158,7 @@ fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseEr
     let start = p.peek().span.start;
     let mut semicolon_ws_list: Array<SemicolonWsItem> = [];
     while p.peek_kind() == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+        let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = parse_ws(p)?;
         let semicolon_ws = SemicolonWsItem {
             semicolon,
@@ -30160,7 +30170,7 @@ fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseEr
     let ws = parse_ws(p)?;
     let mut semicolon_ws_declaration_list: Array<SemicolonWsDeclarationOptItem> = [];
     while p.peek_kind() == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+        let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = parse_ws(p)?;
         let declaration: Option<DeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
             let declaration = parse_declaration(p)?;
@@ -30187,7 +30197,7 @@ fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseEr
 fn parse_declaration_bt_0(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let property_ = parse_property_(p)?;
-    let colon = p.expect(TK_LIT_COLON, "':'")?;
+    let colon = p.expect(TK_LIT_COLON)?;
     let ws = parse_ws(p)?;
     let expr = parse_expr(p)?;
     let prio: Option<PrioNode> = if p.peek_kind() == TK_Important {
@@ -30209,7 +30219,7 @@ fn parse_declaration_bt_0(p: &mut Parser) -> Result<DeclarationNode, ParseError>
 fn parse_declaration_bt_1(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let property_ = parse_property_(p)?;
-    let colon = p.expect(TK_LIT_COLON, "':'")?;
+    let colon = p.expect(TK_LIT_COLON)?;
     let ws = parse_ws(p)?;
     let value = parse_value(p)?;
     return Result::<DeclarationNode, ParseError>::Ok(DeclarationNode::unknownDeclaration(DeclarationunknownDeclaration {
@@ -30245,7 +30255,7 @@ fn parse_declaration(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
 
 fn parse_prio(p: &mut Parser) -> Result<PrioNode, ParseError> {
     let start = p.peek().span.start;
-    let important = p.expect(TK_Important, "Important")?;
+    let important = p.expect(TK_Important)?;
     let ws = parse_ws(p)?;
     return Result::<PrioNode, ParseError>::Ok(PrioNode {
         span: Span::new(start, p.last_end()),
@@ -30271,7 +30281,7 @@ fn parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
                 block,
             })
         } else {
-            let atkeyword = p.expect(TK_AtKeyword, "AtKeyword")?;
+            let atkeyword = p.expect(TK_AtKeyword)?;
             let ws = parse_ws(p)?;
             ValueGroup0::Alt2(ValueGroup0Alt2 {
                 atkeyword,
@@ -30416,7 +30426,7 @@ fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
         }
     }
     if kind == TK_String_ {
-        let string_ = p.expect(TK_String_, "String_")?;
+        let string_ = p.expect(TK_String_)?;
         let ws = parse_ws(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm3(TermknownTerm3 {
             span: Span::new(start, p.last_end()),
@@ -30425,7 +30435,7 @@ fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
         }));
     }
     if kind == TK_UnicodeRange {
-        let unicoderange = p.expect(TK_UnicodeRange, "UnicodeRange")?;
+        let unicoderange = p.expect(TK_UnicodeRange)?;
         let ws = parse_ws(p)?;
         return Result::<TermNode, ParseError>::Ok(TermNode::knownTerm4(TermknownTerm4 {
             span: Span::new(start, p.last_end()),
@@ -30495,10 +30505,10 @@ fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
 
 fn parse_function_(p: &mut Parser) -> Result<FunctionNode, ParseError> {
     let start = p.peek().span.start;
-    let function_ = p.expect(TK_Function_, "Function_")?;
+    let function_ = p.expect(TK_Function_)?;
     let ws = parse_ws(p)?;
     let expr = parse_expr(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let rparen = p.expect(TK_LIT_RPAREN)?;
     let ws_2 = parse_ws(p)?;
     return Result::<FunctionNode, ParseError>::Ok(FunctionNode {
         span: Span::new(start, p.last_end()),
@@ -30512,10 +30522,10 @@ fn parse_function_(p: &mut Parser) -> Result<FunctionNode, ParseError> {
 
 fn parse_dx_image_transform(p: &mut Parser) -> Result<DxImageTransformNode, ParseError> {
     let start = p.peek().span.start;
-    let dximagetransform = p.expect(TK_DxImageTransform, "DxImageTransform")?;
+    let dximagetransform = p.expect(TK_DxImageTransform)?;
     let ws = parse_ws(p)?;
     let expr = parse_expr(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let rparen = p.expect(TK_LIT_RPAREN)?;
     let ws_2 = parse_ws(p)?;
     return Result::<DxImageTransformNode, ParseError>::Ok(DxImageTransformNode {
         span: Span::new(start, p.last_end()),
@@ -30529,7 +30539,7 @@ fn parse_dx_image_transform(p: &mut Parser) -> Result<DxImageTransformNode, Pars
 
 fn parse_hexcolor(p: &mut Parser) -> Result<HexcolorNode, ParseError> {
     let start = p.peek().span.start;
-    let hash = p.expect(TK_Hash, "Hash")?;
+    let hash = p.expect(TK_Hash)?;
     let ws = parse_ws(p)?;
     return Result::<HexcolorNode, ParseError>::Ok(HexcolorNode {
         span: Span::new(start, p.last_end()),
@@ -30551,7 +30561,7 @@ fn parse_number(p: &mut Parser) -> Result<NumberNode, ParseError> {
     } else {
         null
     };
-    let number = p.expect(TK_Number, "Number")?;
+    let number = p.expect(TK_Number)?;
     return Result::<NumberNode, ParseError>::Ok(NumberNode {
         span: Span::new(start, p.last_end()),
         plus_or_minus,
@@ -30572,7 +30582,7 @@ fn parse_percentage(p: &mut Parser) -> Result<PercentageNode, ParseError> {
     } else {
         null
     };
-    let percentage = p.expect(TK_Percentage, "Percentage")?;
+    let percentage = p.expect(TK_Percentage)?;
     return Result::<PercentageNode, ParseError>::Ok(PercentageNode {
         span: Span::new(start, p.last_end()),
         plus_or_minus,
@@ -30593,7 +30603,7 @@ fn parse_dimension(p: &mut Parser) -> Result<DimensionNode, ParseError> {
     } else {
         null
     };
-    let dimension = p.expect(TK_Dimension, "Dimension")?;
+    let dimension = p.expect(TK_Dimension)?;
     return Result::<DimensionNode, ParseError>::Ok(DimensionNode {
         span: Span::new(start, p.last_end()),
         plus_or_minus,
@@ -30614,7 +30624,7 @@ fn parse_unknown_dimension(p: &mut Parser) -> Result<UnknownDimensionNode, Parse
     } else {
         null
     };
-    let unknowndimension = p.expect(TK_UnknownDimension, "UnknownDimension")?;
+    let unknowndimension = p.expect(TK_UnknownDimension)?;
     return Result::<UnknownDimensionNode, ParseError>::Ok(UnknownDimensionNode {
         span: Span::new(start, p.last_end()),
         plus_or_minus,
@@ -30736,7 +30746,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
         }
     }
     if kind == TK_String_ {
-        let string_ = p.expect(TK_String_, "String_")?;
+        let string_ = p.expect(TK_String_)?;
         let ws = parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt5(AnyAlt5 {
             span: Span::new(start, p.last_end()),
@@ -30754,7 +30764,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
         }));
     }
     if kind == TK_Hash {
-        let hash = p.expect(TK_Hash, "Hash")?;
+        let hash = p.expect(TK_Hash)?;
         let ws = parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt7(AnyAlt7 {
             span: Span::new(start, p.last_end()),
@@ -30763,7 +30773,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
         }));
     }
     if kind == TK_UnicodeRange {
-        let unicoderange = p.expect(TK_UnicodeRange, "UnicodeRange")?;
+        let unicoderange = p.expect(TK_UnicodeRange)?;
         let ws = parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt8(AnyAlt8 {
             span: Span::new(start, p.last_end()),
@@ -30772,7 +30782,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
         }));
     }
     if kind == TK_Includes {
-        let includes = p.expect(TK_Includes, "Includes")?;
+        let includes = p.expect(TK_Includes)?;
         let ws = parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt9(AnyAlt9 {
             span: Span::new(start, p.last_end()),
@@ -30781,7 +30791,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
         }));
     }
     if kind == TK_DashMatch {
-        let dashmatch = p.expect(TK_DashMatch, "DashMatch")?;
+        let dashmatch = p.expect(TK_DashMatch)?;
         let ws = parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt10(AnyAlt10 {
             span: Span::new(start, p.last_end()),
@@ -30790,7 +30800,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
         }));
     }
     if kind == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON, "':'")?;
+        let colon = p.expect(TK_LIT_COLON)?;
         let ws = parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt11(AnyAlt11 {
             span: Span::new(start, p.last_end()),
@@ -30799,7 +30809,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
         }));
     }
     if kind == TK_Function_ {
-        let function_ = p.expect(TK_Function_, "Function_")?;
+        let function_ = p.expect(TK_Function_)?;
         let ws = parse_ws(p)?;
         let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
         while p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_LBRACE | TK_AtKeyword | TK_LIT_SEMI | TK_Cdo | TK_Cdc } {
@@ -30812,7 +30822,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
             };
             any__or_unused_list.push(any__or_unused);
         }
-        let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+        let rparen = p.expect(TK_LIT_RPAREN)?;
         let ws_2 = parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt12(AnyAlt12 {
             span: Span::new(start, p.last_end()),
@@ -30824,7 +30834,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
         }));
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+        let lparen = p.expect(TK_LIT_LPAREN)?;
         let ws = parse_ws(p)?;
         let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
         while p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_LBRACE | TK_AtKeyword | TK_LIT_SEMI | TK_Cdo | TK_Cdc } {
@@ -30837,7 +30847,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
             };
             any__or_unused_list.push(any__or_unused);
         }
-        let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+        let rparen = p.expect(TK_LIT_RPAREN)?;
         let ws_2 = parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt13(AnyAlt13 {
             span: Span::new(start, p.last_end()),
@@ -30849,7 +30859,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
         }));
     }
     if kind == TK_LIT_LBRACKET {
-        let lbracket = p.expect(TK_LIT_LBRACKET, "'['")?;
+        let lbracket = p.expect(TK_LIT_LBRACKET)?;
         let ws = parse_ws(p)?;
         let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
         while p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_LBRACE | TK_AtKeyword | TK_LIT_SEMI | TK_Cdo | TK_Cdc } {
@@ -30862,7 +30872,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
             };
             any__or_unused_list.push(any__or_unused);
         }
-        let rbracket = p.expect(TK_LIT_RBRACKET, "']'")?;
+        let rbracket = p.expect(TK_LIT_RBRACKET)?;
         let ws_2 = parse_ws(p)?;
         return Result::<AnyNode, ParseError>::Ok(AnyNode::Alt14(AnyAlt14 {
             span: Span::new(start, p.last_end()),
@@ -30882,7 +30892,7 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
 
 fn parse_at_rule(p: &mut Parser) -> Result<AtRuleNode, ParseError> {
     let start = p.peek().span.start;
-    let atkeyword = p.expect(TK_AtKeyword, "AtKeyword")?;
+    let atkeyword = p.expect(TK_AtKeyword)?;
     let ws = parse_ws(p)?;
     let mut any__list: Array<AnyNode> = [];
     while p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET } {
@@ -30897,7 +30907,7 @@ fn parse_at_rule(p: &mut Parser) -> Result<AtRuleNode, ParseError> {
             block,
         }));
     } else if grp_kind == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+        let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = parse_ws(p)?;
         group_0_inner = Option::<AtRuleGroup0>::Some(AtRuleGroup0::Alt1(AtRuleGroup0Alt1 {
             semicolon,
@@ -30925,7 +30935,7 @@ fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
         }));
     }
     if kind == TK_AtKeyword {
-        let atkeyword = p.expect(TK_AtKeyword, "AtKeyword")?;
+        let atkeyword = p.expect(TK_AtKeyword)?;
         let ws = parse_ws(p)?;
         return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt1(UnusedAlt1 {
             span: Span::new(start, p.last_end()),
@@ -30934,7 +30944,7 @@ fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
         }));
     }
     if kind == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+        let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = parse_ws(p)?;
         return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt2(UnusedAlt2 {
             span: Span::new(start, p.last_end()),
@@ -30943,7 +30953,7 @@ fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
         }));
     }
     if kind == TK_Cdo {
-        let cdo = p.expect(TK_Cdo, "Cdo")?;
+        let cdo = p.expect(TK_Cdo)?;
         let ws = parse_ws(p)?;
         return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt3(UnusedAlt3 {
             span: Span::new(start, p.last_end()),
@@ -30952,7 +30962,7 @@ fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
         }));
     }
     if kind == TK_Cdc {
-        let cdc = p.expect(TK_Cdc, "Cdc")?;
+        let cdc = p.expect(TK_Cdc)?;
         let ws = parse_ws(p)?;
         return Result::<UnusedNode, ParseError>::Ok(UnusedNode::Alt4(UnusedAlt4 {
             span: Span::new(start, p.last_end()),
@@ -30969,7 +30979,7 @@ fn parse_unused(p: &mut Parser) -> Result<UnusedNode, ParseError> {
 
 fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
     let start = p.peek().span.start;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = parse_ws(p)?;
     let mut group_0_list: Array<BlockGroup0> = [];
     while p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ | TK_LIT_PIPE | TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACE | TK_Media | TK_Page | TK_FontFace | TK_Keyframes | TK_Supports | TK_Viewport | TK_CounterStyle | TK_FontFeatureValues | TK_AtKeyword } {
@@ -30980,7 +30990,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
             let mut bt_done = false;
             if !bt_done {
                 bt_try: {
-                    let _bt_r = p.expect(TK_AtKeyword, "AtKeyword");
+                    let _bt_r = p.expect(TK_AtKeyword);
                     if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
                     let atkeyword = _bt_r.unwrap();
                     let _bt_r_2 = parse_ws(p);
@@ -30995,7 +31005,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
             }
             if !bt_done {
                 bt_try_2: {
-                    let _bt_r = p.expect(TK_LIT_SEMI, "';'");
+                    let _bt_r = p.expect(TK_LIT_SEMI);
                     if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_2; }
                     let semicolon = _bt_r.unwrap();
                     let _bt_r_2 = parse_ws(p);
@@ -31049,12 +31059,12 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
             }
         }
         if let None = group_0_opt {
-            p.expect(-1, "group alternative")?;
+            p.fail("group alternative")?;
         }
         let group_0 = group_0_opt.unwrap();
         group_0_list.push(group_0);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_2 = parse_ws(p)?;
     return Result::<BlockNode, ParseError>::Ok(BlockNode {
         span: Span::new(start, p.last_end()),
@@ -31148,14 +31158,14 @@ fn parse_nested_statement(p: &mut Parser) -> Result<NestedStatementNode, ParseEr
 
 fn parse_group_rule_body(p: &mut Parser) -> Result<GroupRuleBodyNode, ParseError> {
     let start = p.peek().span.start;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = parse_ws(p)?;
     let mut nested_statement_list: Array<NestedStatementNode> = [];
     while p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR | TK_LIT_PIPE | TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACE | TK_Media | TK_Page | TK_FontFace | TK_Keyframes | TK_Supports | TK_Viewport | TK_CounterStyle | TK_FontFeatureValues | TK_AtKeyword } {
         let nested_statement = parse_nested_statement(p)?;
         nested_statement_list.push(nested_statement);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_2 = parse_ws(p)?;
     return Result::<GroupRuleBodyNode, ParseError>::Ok(GroupRuleBodyNode {
         span: Span::new(start, p.last_end()),
@@ -31169,7 +31179,7 @@ fn parse_group_rule_body(p: &mut Parser) -> Result<GroupRuleBodyNode, ParseError
 
 fn parse_supports_rule(p: &mut Parser) -> Result<SupportsRuleNode, ParseError> {
     let start = p.peek().span.start;
-    let supports = p.expect(TK_Supports, "Supports")?;
+    let supports = p.expect(TK_Supports)?;
     let ws = parse_ws(p)?;
     let supports_condition = parse_supports_condition(p)?;
     let ws_2 = parse_ws(p)?;
@@ -31248,11 +31258,11 @@ fn parse_supports_condition(p: &mut Parser) -> Result<SupportsConditionNode, Par
 
 fn parse_supports_condition_in_parens_bt_0(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
     let start = p.peek().span.start;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    let lparen = p.expect(TK_LIT_LPAREN)?;
     let ws = parse_ws(p)?;
     let supports_condition = parse_supports_condition(p)?;
     let ws_2 = parse_ws(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<SupportsConditionInParensNode, ParseError>::Ok(SupportsConditionInParensNode::Alt0(SupportsConditionInParensAlt0 {
         span: Span::new(start, p.last_end()),
         lparen,
@@ -31313,9 +31323,9 @@ fn parse_supports_condition_in_parens(p: &mut Parser) -> Result<SupportsConditio
 
 fn parse_supports_negation(p: &mut Parser) -> Result<SupportsNegationNode, ParseError> {
     let start = p.peek().span.start;
-    let not = p.expect(TK_Not, "Not")?;
+    let not = p.expect(TK_Not)?;
     let ws = parse_ws(p)?;
-    let space = p.expect(TK_Space, "Space")?;
+    let space = p.expect(TK_Space)?;
     let ws_2 = parse_ws(p)?;
     let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
     return Result::<SupportsNegationNode, ParseError>::Ok(SupportsNegationNode {
@@ -31336,11 +31346,11 @@ fn parse_supports_conjunction(p: &mut Parser) -> Result<SupportsConjunctionNode,
     while _plus_first || p.peek_kind() matches { TK_Comment | TK_Space } {
         _plus_first = false;
         let ws = parse_ws(p)?;
-        let space = p.expect(TK_Space, "Space")?;
+        let space = p.expect(TK_Space)?;
         let ws_2 = parse_ws(p)?;
-        let and = p.expect(TK_And, "And")?;
+        let and = p.expect(TK_And)?;
         let ws_3 = parse_ws(p)?;
-        let space_2 = p.expect(TK_Space, "Space")?;
+        let space_2 = p.expect(TK_Space)?;
         let ws_4 = parse_ws(p)?;
         let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
         let ws_space_ws_and_ws_space_ws_supports_condition_in_parens = WsSpaceWsAndWsSpaceWsSupportsConditionInParensItem {
@@ -31370,11 +31380,11 @@ fn parse_supports_disjunction(p: &mut Parser) -> Result<SupportsDisjunctionNode,
     while _plus_first || p.peek_kind() matches { TK_Comment | TK_Space } {
         _plus_first = false;
         let ws = parse_ws(p)?;
-        let space = p.expect(TK_Space, "Space")?;
+        let space = p.expect(TK_Space)?;
         let ws_2 = parse_ws(p)?;
-        let or = p.expect(TK_Or, "Or")?;
+        let or = p.expect(TK_Or)?;
         let ws_3 = parse_ws(p)?;
-        let space_2 = p.expect(TK_Space, "Space")?;
+        let space_2 = p.expect(TK_Space)?;
         let ws_4 = parse_ws(p)?;
         let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
         let ws_space_ws_or_ws_space_ws_supports_condition_in_parens = WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem {
@@ -31398,10 +31408,10 @@ fn parse_supports_disjunction(p: &mut Parser) -> Result<SupportsDisjunctionNode,
 
 fn parse_supports_declaration_condition(p: &mut Parser) -> Result<SupportsDeclarationConditionNode, ParseError> {
     let start = p.peek().span.start;
-    let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+    let lparen = p.expect(TK_LIT_LPAREN)?;
     let ws = parse_ws(p)?;
     let declaration = parse_declaration(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<SupportsDeclarationConditionNode, ParseError>::Ok(SupportsDeclarationConditionNode {
         span: Span::new(start, p.last_end()),
         lparen,
@@ -31425,7 +31435,7 @@ fn parse_general_enclosed(p: &mut Parser) -> Result<GeneralEnclosedNode, ParseEr
         };
         any__or_unused_list.push(any__or_unused);
     }
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<GeneralEnclosedNode, ParseError>::Ok(GeneralEnclosedNode {
         span: Span::new(start, p.last_end()),
         function__or_lparen,
@@ -31438,11 +31448,11 @@ fn parse_url(p: &mut Parser) -> Result<UrlNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Url_ {
-        let url_ = p.expect(TK_Url_, "Url_")?;
+        let url_ = p.expect(TK_Url_)?;
         let ws = parse_ws(p)?;
-        let string_ = p.expect(TK_String_, "String_")?;
+        let string_ = p.expect(TK_String_)?;
         let ws_2 = parse_ws(p)?;
-        let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+        let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<UrlNode, ParseError>::Ok(UrlNode::Alt0(UrlAlt0 {
             span: Span::new(start, p.last_end()),
             url_,
@@ -31453,7 +31463,7 @@ fn parse_url(p: &mut Parser) -> Result<UrlNode, ParseError> {
         }));
     }
     if kind == TK_Url {
-        let url = p.expect(TK_Url, "Url")?;
+        let url = p.expect(TK_Url)?;
         return Result::<UrlNode, ParseError>::Ok(UrlNode::Alt1(UrlAlt1 {
             span: Span::new(start, p.last_end()),
             url,
@@ -31468,11 +31478,11 @@ fn parse_url(p: &mut Parser) -> Result<UrlNode, ParseError> {
 
 fn parse_var_(p: &mut Parser) -> Result<VarNode, ParseError> {
     let start = p.peek().span.start;
-    let var = p.expect(TK_Var, "Var")?;
+    let var = p.expect(TK_Var)?;
     let ws = parse_ws(p)?;
-    let variable = p.expect(TK_Variable, "Variable")?;
+    let variable = p.expect(TK_Variable)?;
     let ws_2 = parse_ws(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let rparen = p.expect(TK_LIT_RPAREN)?;
     let ws_3 = parse_ws(p)?;
     return Result::<VarNode, ParseError>::Ok(VarNode {
         span: Span::new(start, p.last_end()),
@@ -31487,10 +31497,10 @@ fn parse_var_(p: &mut Parser) -> Result<VarNode, ParseError> {
 
 fn parse_calc(p: &mut Parser) -> Result<CalcNode, ParseError> {
     let start = p.peek().span.start;
-    let calc = p.expect(TK_Calc, "Calc")?;
+    let calc = p.expect(TK_Calc)?;
     let ws = parse_ws(p)?;
     let calc_sum = parse_calc_sum(p)?;
-    let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+    let rparen = p.expect(TK_LIT_RPAREN)?;
     let ws_2 = parse_ws(p)?;
     return Result::<CalcNode, ParseError>::Ok(CalcNode {
         span: Span::new(start, p.last_end()),
@@ -31507,11 +31517,11 @@ fn parse_calc_sum(p: &mut Parser) -> Result<CalcSumNode, ParseError> {
     let calc_product = parse_calc_product(p)?;
     let mut space_ws_item_ws_space_ws_calc_product_list: Array<SpaceWsItemWsSpaceWsCalcProductItem> = [];
     while p.peek_kind() == TK_Space {
-        let space = p.expect(TK_Space, "Space")?;
+        let space = p.expect(TK_Space)?;
         let ws = parse_ws(p)?;
         let plus_or_minus = p.advance();
         let ws_2 = parse_ws(p)?;
-        let space_2 = p.expect(TK_Space, "Space")?;
+        let space_2 = p.expect(TK_Space)?;
         let ws_3 = parse_ws(p)?;
         let calc_product = parse_calc_product(p)?;
         let space_ws_item_ws_space_ws_calc_product = SpaceWsItemWsSpaceWsCalcProductItem {
@@ -31538,7 +31548,7 @@ fn parse_calc_product(p: &mut Parser) -> Result<CalcProductNode, ParseError> {
     let mut group_0_list: Array<CalcProductGroup0> = [];
     while p.peek_kind() matches { TK_LIT_STAR | TK_LIT_SLASH } {
         let group_0: CalcProductGroup0 = if p.peek_kind() == TK_LIT_STAR {
-            let star = p.expect(TK_LIT_STAR, "'*'")?;
+            let star = p.expect(TK_LIT_STAR)?;
             let ws = parse_ws(p)?;
             let calc_value = parse_calc_value(p)?;
             CalcProductGroup0::Alt0(CalcProductGroup0Alt0 {
@@ -31547,7 +31557,7 @@ fn parse_calc_product(p: &mut Parser) -> Result<CalcProductNode, ParseError> {
                 calc_value,
             })
         } else {
-            let slash = p.expect(TK_LIT_SLASH, "'/'")?;
+            let slash = p.expect(TK_LIT_SLASH)?;
             let ws = parse_ws(p)?;
             let number = parse_number(p)?;
             let ws_2 = parse_ws(p)?;
@@ -31672,10 +31682,10 @@ fn parse_calc_value(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
         }
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, "'('")?;
+        let lparen = p.expect(TK_LIT_LPAREN)?;
         let ws = parse_ws(p)?;
         let calc_sum = parse_calc_sum(p)?;
-        let rparen = p.expect(TK_LIT_RPAREN, "')'")?;
+        let rparen = p.expect(TK_LIT_RPAREN)?;
         let ws_2 = parse_ws(p)?;
         return Result::<CalcValueNode, ParseError>::Ok(CalcValueNode::Alt4(CalcValueAlt4 {
             span: Span::new(start, p.last_end()),
@@ -31695,9 +31705,9 @@ fn parse_calc_value(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
 
 fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> {
     let start = p.peek().span.start;
-    let fontface = p.expect(TK_FontFace, "FontFace")?;
+    let fontface = p.expect(TK_FontFace)?;
     let ws = parse_ws(p)?;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_2 = parse_ws(p)?;
     let font_face_declaration: Option<FontFaceDeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         let font_face_declaration = parse_font_face_declaration(p)?;
@@ -31707,7 +31717,7 @@ fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> 
     };
     let mut semicolon_ws_font_face_declaration_list: Array<SemicolonWsFontFaceDeclarationOptItem> = [];
     while p.peek_kind() == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+        let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = parse_ws(p)?;
         let font_face_declaration: Option<FontFaceDeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
             let font_face_declaration = parse_font_face_declaration(p)?;
@@ -31722,7 +31732,7 @@ fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> 
         };
         semicolon_ws_font_face_declaration_list.push(semicolon_ws_font_face_declaration);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_3 = parse_ws(p)?;
     return Result::<FontFaceRuleNode, ParseError>::Ok(FontFaceRuleNode {
         span: Span::new(start, p.last_end()),
@@ -31740,7 +31750,7 @@ fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> 
 fn parse_font_face_declaration_bt_0(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let property_ = parse_property_(p)?;
-    let colon = p.expect(TK_LIT_COLON, "':'")?;
+    let colon = p.expect(TK_LIT_COLON)?;
     let ws = parse_ws(p)?;
     let expr = parse_expr(p)?;
     return Result::<FontFaceDeclarationNode, ParseError>::Ok(FontFaceDeclarationNode::knownFontFaceDeclaration(FontFaceDeclarationknownFontFaceDeclaration {
@@ -31755,7 +31765,7 @@ fn parse_font_face_declaration_bt_0(p: &mut Parser) -> Result<FontFaceDeclaratio
 fn parse_font_face_declaration_bt_1(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let property_ = parse_property_(p)?;
-    let colon = p.expect(TK_LIT_COLON, "':'")?;
+    let colon = p.expect(TK_LIT_COLON)?;
     let ws = parse_ws(p)?;
     let value = parse_value(p)?;
     return Result::<FontFaceDeclarationNode, ParseError>::Ok(FontFaceDeclarationNode::unknownFontFaceDeclaration(FontFaceDeclarationunknownFontFaceDeclaration {
@@ -31791,20 +31801,20 @@ fn parse_font_face_declaration(p: &mut Parser) -> Result<FontFaceDeclarationNode
 
 fn parse_keyframes_rule(p: &mut Parser) -> Result<KeyframesRuleNode, ParseError> {
     let start = p.peek().span.start;
-    let keyframes = p.expect(TK_Keyframes, "Keyframes")?;
+    let keyframes = p.expect(TK_Keyframes)?;
     let ws = parse_ws(p)?;
-    let space = p.expect(TK_Space, "Space")?;
+    let space = p.expect(TK_Space)?;
     let ws_2 = parse_ws(p)?;
     let ident = parse_ident(p)?;
     let ws_3 = parse_ws(p)?;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_4 = parse_ws(p)?;
     let mut keyframe_block_list: Array<KeyframeBlockNode> = [];
     while p.peek_kind() matches { TK_From | TK_To | TK_Percentage } {
         let keyframe_block = parse_keyframe_block(p)?;
         keyframe_block_list.push(keyframe_block);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_5 = parse_ws(p)?;
     return Result::<KeyframesRuleNode, ParseError>::Ok(KeyframesRuleNode {
         span: Span::new(start, p.last_end()),
@@ -31825,7 +31835,7 @@ fn parse_keyframes_rule(p: &mut Parser) -> Result<KeyframesRuleNode, ParseError>
 fn parse_keyframe_block(p: &mut Parser) -> Result<KeyframeBlockNode, ParseError> {
     let start = p.peek().span.start;
     let keyframe_selector = parse_keyframe_selector(p)?;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = parse_ws(p)?;
     let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         let declaration_list = parse_declaration_list(p)?;
@@ -31833,7 +31843,7 @@ fn parse_keyframe_block(p: &mut Parser) -> Result<KeyframeBlockNode, ParseError>
     } else {
         null
     };
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_2 = parse_ws(p)?;
     let keyframe_selector_lbrace_ws_declaration_list_rbrace_ws = KeyframeSelectorLbraceWsDeclarationListOptRbraceWsItem {
         keyframe_selector,
@@ -31855,7 +31865,7 @@ fn parse_keyframe_selector(p: &mut Parser) -> Result<KeyframeSelectorNode, Parse
     let ws = parse_ws(p)?;
     let mut comma_ws_item_ws_list: Array<CommaWsItemWsItem> = [];
     while p.peek_kind() == TK_Comma {
-        let comma = p.expect(TK_Comma, "Comma")?;
+        let comma = p.expect(TK_Comma)?;
         let ws = parse_ws(p)?;
         let from__or_to_or_percentage = p.advance();
         let ws_2 = parse_ws(p)?;
@@ -31877,9 +31887,9 @@ fn parse_keyframe_selector(p: &mut Parser) -> Result<KeyframeSelectorNode, Parse
 
 fn parse_viewport(p: &mut Parser) -> Result<ViewportNode, ParseError> {
     let start = p.peek().span.start;
-    let viewport = p.expect(TK_Viewport, "Viewport")?;
+    let viewport = p.expect(TK_Viewport)?;
     let ws = parse_ws(p)?;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_2 = parse_ws(p)?;
     let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         let declaration_list = parse_declaration_list(p)?;
@@ -31887,7 +31897,7 @@ fn parse_viewport(p: &mut Parser) -> Result<ViewportNode, ParseError> {
     } else {
         null
     };
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_3 = parse_ws(p)?;
     return Result::<ViewportNode, ParseError>::Ok(ViewportNode {
         span: Span::new(start, p.last_end()),
@@ -31903,11 +31913,11 @@ fn parse_viewport(p: &mut Parser) -> Result<ViewportNode, ParseError> {
 
 fn parse_counter_style(p: &mut Parser) -> Result<CounterStyleNode, ParseError> {
     let start = p.peek().span.start;
-    let counterstyle = p.expect(TK_CounterStyle, "CounterStyle")?;
+    let counterstyle = p.expect(TK_CounterStyle)?;
     let ws = parse_ws(p)?;
     let ident = parse_ident(p)?;
     let ws_2 = parse_ws(p)?;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_3 = parse_ws(p)?;
     let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         let declaration_list = parse_declaration_list(p)?;
@@ -31915,7 +31925,7 @@ fn parse_counter_style(p: &mut Parser) -> Result<CounterStyleNode, ParseError> {
     } else {
         null
     };
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_4 = parse_ws(p)?;
     return Result::<CounterStyleNode, ParseError>::Ok(CounterStyleNode {
         span: Span::new(start, p.last_end()),
@@ -31933,18 +31943,18 @@ fn parse_counter_style(p: &mut Parser) -> Result<CounterStyleNode, ParseError> {
 
 fn parse_font_feature_values_rule(p: &mut Parser) -> Result<FontFeatureValuesRuleNode, ParseError> {
     let start = p.peek().span.start;
-    let fontfeaturevalues = p.expect(TK_FontFeatureValues, "FontFeatureValues")?;
+    let fontfeaturevalues = p.expect(TK_FontFeatureValues)?;
     let ws = parse_ws(p)?;
     let font_family_name_list = parse_font_family_name_list(p)?;
     let ws_2 = parse_ws(p)?;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_3 = parse_ws(p)?;
     let mut feature_value_block_list: Array<FeatureValueBlockNode> = [];
     while p.peek_kind() == TK_AtKeyword {
         let feature_value_block = parse_feature_value_block(p)?;
         feature_value_block_list.push(feature_value_block);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_4 = parse_ws(p)?;
     return Result::<FontFeatureValuesRuleNode, ParseError>::Ok(FontFeatureValuesRuleNode {
         span: Span::new(start, p.last_end()),
@@ -31966,7 +31976,7 @@ fn parse_font_family_name_list(p: &mut Parser) -> Result<FontFamilyNameListNode,
     let mut ws_comma_ws_font_family_name_list: Array<WsCommaWsFontFamilyNameItem> = [];
     while p.peek_kind() matches { TK_Comment | TK_Space } {
         let ws = parse_ws(p)?;
-        let comma = p.expect(TK_Comma, "Comma")?;
+        let comma = p.expect(TK_Comma)?;
         let ws_2 = parse_ws(p)?;
         let font_family_name = parse_font_family_name(p)?;
         let ws_comma_ws_font_family_name = WsCommaWsFontFamilyNameItem {
@@ -31988,7 +31998,7 @@ fn parse_font_family_name(p: &mut Parser) -> Result<FontFamilyNameNode, ParseErr
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_String_ {
-        let string_ = p.expect(TK_String_, "String_")?;
+        let string_ = p.expect(TK_String_)?;
         return Result::<FontFamilyNameNode, ParseError>::Ok(FontFamilyNameNode::Alt0(FontFamilyNameAlt0 {
             span: Span::new(start, p.last_end()),
             string_,
@@ -32023,7 +32033,7 @@ fn parse_feature_value_block(p: &mut Parser) -> Result<FeatureValueBlockNode, Pa
     let start = p.peek().span.start;
     let feature_type = parse_feature_type(p)?;
     let ws = parse_ws(p)?;
-    let lbrace = p.expect(TK_LIT_LBRACE, "'{'")?;
+    let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_2 = parse_ws(p)?;
     let feature_value_definition: Option<FeatureValueDefinitionNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
         let feature_value_definition = parse_feature_value_definition(p)?;
@@ -32034,7 +32044,7 @@ fn parse_feature_value_block(p: &mut Parser) -> Result<FeatureValueBlockNode, Pa
     let mut ws_semicolon_ws_feature_value_definition_list: Array<WsSemicolonWsFeatureValueDefinitionOptItem> = [];
     while p.peek_kind() matches { TK_Comment | TK_Space } {
         let ws = parse_ws(p)?;
-        let semicolon = p.expect(TK_LIT_SEMI, "';'")?;
+        let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws_2 = parse_ws(p)?;
         let feature_value_definition: Option<FeatureValueDefinitionNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
             let feature_value_definition = parse_feature_value_definition(p)?;
@@ -32050,7 +32060,7 @@ fn parse_feature_value_block(p: &mut Parser) -> Result<FeatureValueBlockNode, Pa
         };
         ws_semicolon_ws_feature_value_definition_list.push(ws_semicolon_ws_feature_value_definition);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, "'}'")?;
+    let rbrace = p.expect(TK_LIT_RBRACE)?;
     let ws_3 = parse_ws(p)?;
     return Result::<FeatureValueBlockNode, ParseError>::Ok(FeatureValueBlockNode {
         span: Span::new(start, p.last_end()),
@@ -32067,7 +32077,7 @@ fn parse_feature_value_block(p: &mut Parser) -> Result<FeatureValueBlockNode, Pa
 
 fn parse_feature_type(p: &mut Parser) -> Result<FeatureTypeNode, ParseError> {
     let start = p.peek().span.start;
-    let atkeyword = p.expect(TK_AtKeyword, "AtKeyword")?;
+    let atkeyword = p.expect(TK_AtKeyword)?;
     return Result::<FeatureTypeNode, ParseError>::Ok(FeatureTypeNode {
         span: Span::new(start, p.last_end()),
         atkeyword,
@@ -32078,7 +32088,7 @@ fn parse_feature_value_definition(p: &mut Parser) -> Result<FeatureValueDefiniti
     let start = p.peek().span.start;
     let ident = parse_ident(p)?;
     let ws = parse_ws(p)?;
-    let colon = p.expect(TK_LIT_COLON, "':'")?;
+    let colon = p.expect(TK_LIT_COLON)?;
     let ws_2 = parse_ws(p)?;
     let number = parse_number(p)?;
     let mut ws_number_list: Array<WsNumberItem> = [];
@@ -32106,49 +32116,49 @@ fn parse_ident(p: &mut Parser) -> Result<IdentNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Ident {
-        let ident = p.expect(TK_Ident, "Ident")?;
+        let ident = p.expect(TK_Ident)?;
         return Result::<IdentNode, ParseError>::Ok(IdentNode::Alt0(IdentAlt0 {
             span: Span::new(start, p.last_end()),
             ident,
         }));
     }
     if kind == TK_MediaOnly {
-        let mediaonly = p.expect(TK_MediaOnly, "MediaOnly")?;
+        let mediaonly = p.expect(TK_MediaOnly)?;
         return Result::<IdentNode, ParseError>::Ok(IdentNode::Alt1(IdentAlt1 {
             span: Span::new(start, p.last_end()),
             mediaonly,
         }));
     }
     if kind == TK_Not {
-        let not = p.expect(TK_Not, "Not")?;
+        let not = p.expect(TK_Not)?;
         return Result::<IdentNode, ParseError>::Ok(IdentNode::Alt2(IdentAlt2 {
             span: Span::new(start, p.last_end()),
             not,
         }));
     }
     if kind == TK_And {
-        let and = p.expect(TK_And, "And")?;
+        let and = p.expect(TK_And)?;
         return Result::<IdentNode, ParseError>::Ok(IdentNode::Alt3(IdentAlt3 {
             span: Span::new(start, p.last_end()),
             and,
         }));
     }
     if kind == TK_Or {
-        let or = p.expect(TK_Or, "Or")?;
+        let or = p.expect(TK_Or)?;
         return Result::<IdentNode, ParseError>::Ok(IdentNode::Alt4(IdentAlt4 {
             span: Span::new(start, p.last_end()),
             or,
         }));
     }
     if kind == TK_From {
-        let from_ = p.expect(TK_From, "From")?;
+        let from_ = p.expect(TK_From)?;
         return Result::<IdentNode, ParseError>::Ok(IdentNode::Alt5(IdentAlt5 {
             span: Span::new(start, p.last_end()),
             from_,
         }));
     }
     if kind == TK_To {
-        let to = p.expect(TK_To, "To")?;
+        let to = p.expect(TK_To)?;
         return Result::<IdentNode, ParseError>::Ok(IdentNode::Alt6(IdentAlt6 {
             span: Span::new(start, p.last_end()),
             to,
