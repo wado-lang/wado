@@ -240,14 +240,6 @@ impl<'a> WirUnparser<'a> {
 
         self.unparse_type_comment(type_idx, &s.meta);
 
-        if let Some(ref origin) = s.generic_origin {
-            self.write(&format!(
-                "  // {}<T> with T={}",
-                origin.base_name,
-                origin.type_args.join(", ")
-            ));
-        }
-
         if let Some(ref newtype) = s.newtype_origin {
             self.write(&format!(
                 "  // newtype {} from {}",
@@ -397,7 +389,7 @@ impl<'a> WirUnparser<'a> {
                 self.write("]");
             }
         }
-        self.write(&format!(";  // #{type_idx}"));
+        self.write(&format!(";  // TypeId({type_idx})"));
         self.newline();
     }
 
@@ -1311,6 +1303,7 @@ impl<'a> WirUnparser<'a> {
             WirInstr::StructNew { type_id, fields } => {
                 let tid = type_id.to_string();
                 let field_names = self.struct_field_names(type_id);
+                self.write("struct.new ");
                 self.write_name(&tid);
                 self.write(" { ");
                 for (i, f) in fields.iter().enumerate() {
@@ -2030,18 +2023,12 @@ impl<'a> WirUnparser<'a> {
         self.write("}");
     }
 
-    fn unparse_source_comment(&mut self, meta: &crate::wir::WirMeta) {
-        if let Some(ref source) = meta.module_source {
-            self.write(&format!("  // from {source}"));
-        }
+    fn unparse_source_comment(&mut self, _meta: &crate::wir::WirMeta) {
+        // Intentionally omitted: "// from ..." comments add noise without value.
     }
 
-    fn unparse_type_comment(&mut self, type_idx: usize, meta: &crate::wir::WirMeta) {
-        if let Some(ref source) = meta.module_source {
-            self.write(&format!("  // #{type_idx} from {source}"));
-        } else {
-            self.write(&format!("  // #{type_idx}"));
-        }
+    fn unparse_type_comment(&mut self, type_idx: usize, _meta: &crate::wir::WirMeta) {
+        self.write(&format!("  // TypeId({type_idx})"));
     }
 
     /// Format a `WirType` with shortened names.
