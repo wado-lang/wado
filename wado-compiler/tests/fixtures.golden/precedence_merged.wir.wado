@@ -4,264 +4,264 @@
 
 array builtin::array<u64> (mut u64);
 
-struct core:prelude//Array<u64> {  // Array<T> with T=u64
-    mut repr: ref array<u64>,
+struct core:prelude//Array<u64> {  // from core:prelude  // Array<T> with T=u64
+    mut repr: ref builtin::array<u64>,
     mut used: i32,
 }
 
-type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/task-return" = fn(i32);
+type "functype//wasi/task-return" = fn(i32);
 
-type "functype/__test_0_arithmetic_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__test_0_arithmetic_precedence" = fn();
 
-type "functype/__test_1_assignment_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__test_1_assignment_precedence" = fn();
 
-type "functype/__test_2_bitwise_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__test_2_bitwise_precedence" = fn();
 
-type "functype/__test_3_bitwise_vs_comparison_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__test_3_bitwise_vs_comparison_precedence" = fn();
 
-type "functype/__test_4_comparison_chaining" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__test_4_comparison_chaining" = fn();
 
-type "functype/__test_5_comparison_vs_logical_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__test_5_comparison_vs_logical_precedence" = fn();
 
-type "functype/__test_6_parentheses" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__test_6_parentheses" = fn();
 
-type "functype/__test_7_shift_vs_arithmetic_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__test_7_shift_vs_arithmetic_precedence" = fn();
 
-type "functype/__test_8_unary_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__test_8_unary_precedence" = fn();
 
-type "functype/__cm_export____test_0_arithmetic_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_0_arithmetic_precedence" = fn();
 
-type "functype/__cm_export____test_1_assignment_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_1_assignment_precedence" = fn();
 
-type "functype/__cm_export____test_2_bitwise_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_2_bitwise_precedence" = fn();
 
-type "functype/__cm_export____test_3_bitwise_vs_comparison_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_3_bitwise_vs_comparison_precedence" = fn();
 
-type "functype/__cm_export____test_4_comparison_chaining" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_4_comparison_chaining" = fn();
 
-type "functype/__cm_export____test_5_comparison_vs_logical_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_5_comparison_vs_logical_precedence" = fn();
 
-type "functype/__cm_export____test_6_parentheses" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_6_parentheses" = fn();
 
-type "functype/__cm_export____test_7_shift_vs_arithmetic_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_7_shift_vs_arithmetic_precedence" = fn();
 
-type "functype/__cm_export____test_8_unary_precedence" = fn();
+type "functype//wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_8_unary_precedence" = fn();
 
-type "functype/__initialize_module" = fn();
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();
 
-type "functype/Array<u64>::push" = fn(ref Array<u64>, u64);
+type "functype//core:prelude/fpfmt.wado/Array<u64>::push" = fn(ref "core:prelude//Array<u64>", u64);
 
-type "functype/Array<u64>::grow" = fn(ref Array<u64>);
+type "functype//core:prelude/fpfmt.wado/Array<u64>::grow" = fn(ref "core:prelude//Array<u64>");
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
-global mut global:__modules_initialized: bool = 0;
+global mut global:__modules_initialized: bool = 0;  // from wado-compiler/tests/fixtures/precedence_merged.wado
 
-fn __test_0_arithmetic_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__test_0_arithmetic_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
 }
 
-fn __test_1_assignment_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__test_1_assignment_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
 }
 
-fn __test_2_bitwise_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__test_2_bitwise_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
 }
 
-fn __test_3_bitwise_vs_comparison_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__test_3_bitwise_vs_comparison_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
 }
 
-fn __test_4_comparison_chaining() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__test_4_comparison_chaining"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
 }
 
-fn __test_5_comparison_vs_logical_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__test_5_comparison_vs_logical_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
 }
 
-fn __test_6_parentheses() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__test_6_parentheses"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
 }
 
-fn __test_7_shift_vs_arithmetic_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__test_7_shift_vs_arithmetic_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
 }
 
-fn __test_8_unary_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__test_8_unary_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
 }
 
-fn __cm_export____test_0_arithmetic_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_0_arithmetic_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
-        global:__modules_initialized = 1;
-    };
-    "wasi/task-return"(0);
-}
-
-fn __cm_export____test_1_assignment_precedence() {
-    __test_1_assignment_precedence();
-    "wasi/task-return"(0);
-}
-
-fn __cm_export____test_2_bitwise_precedence() {
-    __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_3_bitwise_vs_comparison_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_1_assignment_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
+    "wado-compiler/tests/fixtures/precedence_merged.wado/__test_1_assignment_precedence"();
+    "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_2_bitwise_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_4_comparison_chaining() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_3_bitwise_vs_comparison_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_5_comparison_vs_logical_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_4_comparison_chaining"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_6_parentheses() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_5_comparison_vs_logical_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_7_shift_vs_arithmetic_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_6_parentheses"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_8_unary_precedence() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_7_shift_vs_arithmetic_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        __initialize_module();
+        "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
     "wasi/task-return"(0);
 }
 
-fn __initialize_module() {
+fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_8_unary_precedence"() {  // from wado-compiler/tests/fixtures/precedence_merged.wado
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    "wasi/task-return"(0);
 }
 
-fn Array<u64>::push(self, value) {
+fn "core:prelude/fpfmt.wado/__initialize_module"() {  // from core:prelude/fpfmt.wado
+}
+
+fn "core:prelude/fpfmt.wado/Array<u64>::push"(self, value) {  // from core:prelude/fpfmt.wado
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<u64>::grow(self);
+        "core:prelude/fpfmt.wado/Array<u64>::grow"(self);
     }
     builtin::array_set<u64>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<u64>::grow(self) {
+fn "core:prelude/fpfmt.wado/Array<u64>::grow"(self) {  // from core:prelude/fpfmt.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<u64>;
-    let old_repr: ref array<u64>;
+    let new_repr: ref builtin::array<u64>;
+    let old_repr: ref builtin::array<u64>;
     let used: i32;
     let i: i32;
     let __local_7: i32;
@@ -289,12 +289,12 @@ fn Array<u64>::grow(self) {
     self.repr = new_repr;
 }
 
-export fn __cm_export____test_0_arithmetic_precedence as "__test_0_arithmetic_precedence"
-export fn __cm_export____test_1_assignment_precedence as "__test_1_assignment_precedence"
-export fn __cm_export____test_2_bitwise_precedence as "__test_2_bitwise_precedence"
-export fn __cm_export____test_3_bitwise_vs_comparison_precedence as "__test_3_bitwise_vs_comparison_precedence"
-export fn __cm_export____test_4_comparison_chaining as "__test_4_comparison_chaining"
-export fn __cm_export____test_5_comparison_vs_logical_precedence as "__test_5_comparison_vs_logical_precedence"
-export fn __cm_export____test_6_parentheses as "__test_6_parentheses"
-export fn __cm_export____test_7_shift_vs_arithmetic_precedence as "__test_7_shift_vs_arithmetic_precedence"
-export fn __cm_export____test_8_unary_precedence as "__test_8_unary_precedence"
+export fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_0_arithmetic_precedence" as "__test_0_arithmetic_precedence"
+export fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_1_assignment_precedence" as "__test_1_assignment_precedence"
+export fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_2_bitwise_precedence" as "__test_2_bitwise_precedence"
+export fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_3_bitwise_vs_comparison_precedence" as "__test_3_bitwise_vs_comparison_precedence"
+export fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_4_comparison_chaining" as "__test_4_comparison_chaining"
+export fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_5_comparison_vs_logical_precedence" as "__test_5_comparison_vs_logical_precedence"
+export fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_6_parentheses" as "__test_6_parentheses"
+export fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_7_shift_vs_arithmetic_precedence" as "__test_7_shift_vs_arithmetic_precedence"
+export fn "wado-compiler/tests/fixtures/precedence_merged.wado/__cm_export____test_8_unary_precedence" as "__test_8_unary_precedence"

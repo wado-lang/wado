@@ -4,68 +4,68 @@
 
 array builtin::array<u8> (mut u8);
 
-struct core:prelude/string.wado//String {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//String {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-struct wado-compiler/tests/fixtures/serde_serialize_enum.wado//JsonSerializer {
-    mut buf: ref String,
+struct wado-compiler/tests/fixtures/serde_serialize_enum.wado//JsonSerializer {  // from wado-compiler/tests/fixtures/serde_serialize_enum.wado
+    mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError {
-    mut message: ref String,
+struct wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError {  // from wado-compiler/tests/fixtures/serde_serialize_enum.wado
+    mut message: ref "core:prelude/string.wado//String",
 }
 
-enum wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color { Red = 0, Green = 1, Blue = 2 };
+enum wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color { Red = 0, Green = 1, Blue = 2 };  // from wado-compiler/tests/fixtures/serde_serialize_enum.wado
 
-type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
-type "functype/wasi/task-return" = fn(i32);
+type "functype//wasi/task-return" = fn(i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
+type "functype//wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype//wasi/waitable-set-drop" = fn(i32);
 
-type "functype/wasi/waitable-set-new" = fn() -> i32;
+type "functype//wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
-type "functype/run" = fn();
+type "functype//wado-compiler/tests/fixtures/serde_serialize_enum.wado/run" = fn();
 
-type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype//wado-compiler/tests/fixtures/serde_serialize_enum.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_export__run" = fn();
+type "functype//wado-compiler/tests/fixtures/serde_serialize_enum.wado/__cm_export__run" = fn();
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);
 
-type "functype/core:cli/println" = fn(ref String);
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);
 
-type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;
 
-type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;
 
-type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);
 
-type "functype/String::grow" = fn(ref String, i32);
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);
 
-type "functype/String::push_str" = fn(ref String, ref String);
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");
 
-type "functype/wasi/stream-drop-writable" = fn(i32);
+type "functype//wasi/stream-drop-writable" = fn(i32);
 
-type "functype/wasi/stream-new" = fn() -> i64;
+type "functype//wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/Color^Serialize::serialize<JsonSerializer>" = fn(enum:Color, ref String) -> ref null SerializeError;
+type "functype//wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<JsonSerializer>" = fn("wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError";
 
-type "functype/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref String, ref String) -> ref null SerializeError;
+type "functype//wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError";
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -80,33 +80,33 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn run() with Stdout {
-    let ser: ref JsonSerializer;
-    let c: enum:Color;
-    let c2: enum:Color;
-    ser = JsonSerializer { buf: String { repr: builtin::array_new<u8>(0), used: 0 } };
+fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/run"() with Stdout {  // from wado-compiler/tests/fixtures/serde_serialize_enum.wado
+    let ser: ref "wado-compiler/tests/fixtures/serde_serialize_enum.wado//JsonSerializer";
+    let c: "wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color";
+    let c2: "wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color";
+    ser = "wado-compiler/tests/fixtures/serde_serialize_enum.wado//JsonSerializer" { buf: "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     c = 0;
-    drop(Color^Serialize::serialize<JsonSerializer>(c, ser.buf));
+    drop("wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<JsonSerializer>"(c, ser.buf));
     "core:cli/println"(ser.buf);
-    ser.buf = String { repr: builtin::array_new<u8>(0), used: 0 };
+    ser.buf = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     c2 = 2;
-    drop(Color^Serialize::serialize<JsonSerializer>(c2, ser.buf));
+    drop("wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<JsonSerializer>"(c2, ser.buf));
     "core:cli/println"(ser.buf);
 }
 
-fn __cm_binding__Stdout_write_via_stream(data) {
+fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/__cm_binding__Stdout_write_via_stream"(data) {  // from wado-compiler/tests/fixtures/serde_serialize_enum.wado
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn __cm_export__run() {
-    run();
+fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/__cm_export__run"() {  // from wado-compiler/tests/fixtures/serde_serialize_enum.wado
+    "wado-compiler/tests/fixtures/serde_serialize_enum.wado/run"();
     "wasi/task-return"(0);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
-    let bytes: ref array<u8>;
+    let bytes: ref builtin::array<u8>;
     let len: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -128,7 +128,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = __cm_binding__Stdout_write_via_stream(rx);
+    handle = "wado-compiler/tests/fixtures/serde_serialize_enum.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -186,10 +186,10 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn String::grow(self, min_capacity) {
+fn "core:prelude/string.wado/String::grow"(self, min_capacity) {  // from core:prelude/string.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     let __local_5: i32;
     let __local_7: i32;
     capacity = builtin::array_len(self.repr);
@@ -208,7 +208,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::push_str(self, other) {
+fn "core:prelude/string.wado/String::push_str"(self, other) {  // from core:prelude/string.wado
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -217,34 +217,34 @@ fn String::push_str(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
+        "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
 
-fn JsonSerializer^Serializer::serialize_unit_variant(self, variant_name) {
-    let __local_4: ref String;
-    String::push_str(self, __tmpl: block -> ref String {
-        __local_4 = String { repr: builtin::array_new<u8>(18), used: 0 };
-        String::push_str(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
-        String::push_str(__local_4, variant_name);
-        String::push_str(__local_4, String { repr: array.new_data<u8>("\""), used: 1 });
+fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(self, variant_name) {  // from wado-compiler/tests/fixtures/serde_serialize_enum.wado
+    let __local_4: ref "core:prelude/string.wado//String";
+    "core:prelude/string.wado/String::push_str"(self, __tmpl: block -> ref "core:prelude/string.wado//String" {
+        __local_4 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
+        "core:prelude/string.wado/String::push_str"(__local_4, "core:prelude/string.wado//String" { repr: array.new_data<u8>("\""), used: 1 });
+        "core:prelude/string.wado/String::push_str"(__local_4, variant_name);
+        "core:prelude/string.wado/String::push_str"(__local_4, "core:prelude/string.wado//String" { repr: array.new_data<u8>("\""), used: 1 });
         break __tmpl: __local_4;
     });
     return ref.null none;
 }
 
-fn Color^Serialize::serialize<JsonSerializer>(self, s) {
-    return let __match_scrut_0: enum:Color, __match_scrut_0 = self, (if __match_scrut_0 == 0 -> ref null SerializeError {
-        JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Red"), used: 3 });
-    } else if __match_scrut_0 == 1 -> ref null SerializeError {
-        JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Green"), used: 5 });
-    } else if __match_scrut_0 == 2 -> ref null SerializeError {
-        JsonSerializer^Serializer::serialize_unit_variant(s, String { repr: array.new_data<u8>("Blue"), used: 4 });
+fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/Color^Serialize::serialize<JsonSerializer>"(self, s) {  // from wado-compiler/tests/fixtures/serde_serialize_enum.wado
+    return let __match_scrut_0: "wado-compiler/tests/fixtures/serde_serialize_enum.wado//enum:Color", __match_scrut_0 = self, (if __match_scrut_0 == 0 -> ref null "wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError" {
+        "wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(s, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Red"), used: 3 });
+    } else if __match_scrut_0 == 1 -> ref null "wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError" {
+        "wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(s, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Green"), used: 5 });
+    } else if __match_scrut_0 == 2 -> ref null "wado-compiler/tests/fixtures/serde_serialize_enum.wado//SerializeError" {
+        "wado-compiler/tests/fixtures/serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(s, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Blue"), used: 4 });
     } else {
         unreachable;
     });
 }
 
-export fn __cm_export__run as "run"
+export fn "wado-compiler/tests/fixtures/serde_serialize_enum.wado/__cm_export__run" as "run"

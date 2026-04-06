@@ -4,18 +4,18 @@
 
 array builtin::array<u8> (mut u8);
 
-struct core:prelude/string.wado//StrUtf8ByteIter {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//StrUtf8ByteIter {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude/string.wado//String {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//String {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {
+struct core:prelude/format.wado//Formatter {  // from core:prelude/format.wado
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
@@ -23,105 +23,105 @@ struct core:prelude/format.wado//Formatter {
     mut width: i32,
     mut precision: i32,
     mut indent: i32,
-    mut buf: ref String,
+    mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude//Array<u8> {  // Array<T> with T=u8
-    mut repr: ref array<u8>,
+struct core:prelude//Array<u8> {  // from core:prelude  // Array<T> with T=u8
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // from core:prelude/format.wado
 
-type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
-type "functype/wasi/task-return" = fn(i32);
+type "functype//wasi/task-return" = fn(i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
+type "functype//wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype//wasi/waitable-set-drop" = fn(i32);
 
-type "functype/wasi/waitable-set-new" = fn() -> i32;
+type "functype//wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
-type "functype/run" = fn();
+type "functype//wado-compiler/tests/fixtures/base64_decode.wado/run" = fn();
 
-type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype//wado-compiler/tests/fixtures/base64_decode.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_export__run" = fn();
+type "functype//wado-compiler/tests/fixtures/base64_decode.wado/__cm_export__run" = fn();
 
-type "functype/core:base64/build_decode_table" = fn() -> ref Array<u8>;
+type "functype//core:base64/build_decode_table" = fn() -> ref "core:prelude//Array<u8>";
 
-type "functype/core:base64/encode_impl" = fn(ref Array<u8>, ref Array<u8>, bool) -> ref String;
+type "functype//core:base64/encode_impl" = fn(ref "core:prelude//Array<u8>", ref "core:prelude//Array<u8>", bool) -> ref "core:prelude/string.wado//String";
 
-type "functype/core:base64/decode_impl" = fn(ref Array<u8>, i32) -> ref null Array<u8>;
+type "functype//core:base64/decode_impl" = fn(ref "core:prelude//Array<u8>", i32) -> ref null "core:prelude//Array<u8>";
 
-type "functype/core:base64/__initialize_module" = fn();
+type "functype//core:base64/__initialize_module" = fn();
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);
 
-type "functype/core:cli/println" = fn(ref String);
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);
 
-type "functype/core:internal/log_stderr" = fn(ref String);
+type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/panic" = fn(ref String);
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;
 
-type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;
 
-type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);
 
-type "functype/count_digits_i64" = fn(i64) -> i32;
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);
 
-type "functype/core:base64/Array<u8>::push" = fn(ref Array<u8>, u8);
+type "functype//core:base64/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);
 
-type "functype/core:base64/Array<u8>::grow" = fn(ref Array<u8>);
+type "functype//core:base64/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");
 
-type "functype/String::grow" = fn(ref String, i32);
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;
 
-type "functype/String::push_str" = fn(ref String, ref String);
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");
 
-type "functype/StrUtf8ByteIter^Iterator::collect" = fn(ref StrUtf8ByteIter) -> ref Array<u8>;
+type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//Array<u8>";
 
-type "functype/String::push" = fn(ref String, char);
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);
 
-type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
+type "functype//core:prelude/string.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);
 
-type "functype/Array<u8>::grow" = fn(ref Array<u8>);
+type "functype//core:prelude/string.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");
 
-type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
+type "functype//wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);
 
-type "functype/Array<u8>::grow" = fn(ref Array<u8>);
+type "functype//wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");
 
-type "functype/Array<u8>^Eq::eq" = fn(ref Array<u8>, ref Array<u8>) -> bool;
+type "functype//wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>^Eq::eq" = fn(ref "core:prelude//Array<u8>", ref "core:prelude//Array<u8>") -> bool;
 
-type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;
 
-type "functype/wasi/stream-drop-writable" = fn(i32);
+type "functype//wasi/stream-drop-writable" = fn(i32);
 
-type "functype/wasi/stream-new" = fn() -> i64;
+type "functype//wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -137,60 +137,60 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:core::base64::STANDARD_TABLE: ref null Array<u8> = ref.null none;  // from core:base64
-global mut global:core::base64::URL_SAFE_TABLE: ref null Array<u8> = ref.null none;  // from core:base64
-global mut global:core::base64::DECODE_TABLE: ref null Array<u8> = ref.null none;  // from core:base64
-global mut global:__modules_initialized: bool = 0;
+global mut global:core::base64::STANDARD_TABLE: ref null "core:prelude//Array<u8>" = ref.null none;  // from core:base64
+global mut global:core::base64::URL_SAFE_TABLE: ref null "core:prelude//Array<u8>" = ref.null none;  // from core:base64
+global mut global:core::base64::DECODE_TABLE: ref null "core:prelude//Array<u8>" = ref.null none;  // from core:base64
+global mut global:__modules_initialized: bool = 0;  // from wado-compiler/tests/fixtures/base64_decode.wado
 
-fn run() with Stdout {
-    let hello: ref Array<u8>;
-    let __local_1: ref Array<u8>;
+fn "wado-compiler/tests/fixtures/base64_decode.wado/run"() with Stdout {  // from wado-compiler/tests/fixtures/base64_decode.wado
+    let hello: ref "core:prelude//Array<u8>";
+    let __local_1: ref "core:prelude//Array<u8>";
     let __cond_2: bool;
-    let __local_3: ref Array<u8>;
+    let __local_3: ref "core:prelude//Array<u8>";
     let __cond_4: bool;
-    let __local_5: ref Array<u8>;
+    let __local_5: ref "core:prelude//Array<u8>";
     let __cond_6: bool;
-    let __local_7: ref Array<u8>;
-    let data: ref Array<u8>;
-    let __local_9: ref Array<u8>;
+    let __local_7: ref "core:prelude//Array<u8>";
+    let data: ref "core:prelude//Array<u8>";
+    let __local_9: ref "core:prelude//Array<u8>";
     let __cond_10: bool;
-    let __local_11: ref Array<u8>;
+    let __local_11: ref "core:prelude//Array<u8>";
     let __cond_12: bool;
-    let raw: ref Array<u8>;
-    let __local_14: ref Array<u8>;
+    let raw: ref "core:prelude//Array<u8>";
+    let __local_14: ref "core:prelude//Array<u8>";
     let __cond_15: bool;
     let __cond_16: bool;
     let __cond_17: bool;
     let __cond_18: bool;
-    let __local_19: ref String;
-    let __local_20: ref Formatter;
-    let __local_21: ref String;
-    let __local_22: ref Formatter;
-    let __local_23: ref String;
-    let __local_24: ref Formatter;
-    let __local_25: ref String;
-    let __local_26: ref Formatter;
-    let __local_27: ref String;
-    let __local_28: ref Formatter;
-    let __local_29: ref String;
-    let __local_30: ref Formatter;
-    let __local_31: ref String;
-    let __local_32: ref Formatter;
-    let __local_33: ref String;
-    let __local_34: ref Formatter;
-    let __local_35: ref String;
-    let __local_36: ref Formatter;
-    let __local_40: ref Array<u8>;
-    let __local_48: ref Array<u8>;
-    let __local_56: ref Array<u8>;
-    let __local_78: ref String;
-    let __local_79: ref Array<u8>;
-    let __local_87: ref String;
-    let __local_88: ref Array<u8>;
-    let __local_96: ref Array<u8>;
-    let __local_104: ref Array<u8>;
-    let __local_112: ref Array<u8>;
-    let __local_120: ref Array<u8>;
+    let __local_19: ref "core:prelude/string.wado//String";
+    let __local_20: ref "core:prelude/format.wado//Formatter";
+    let __local_21: ref "core:prelude/string.wado//String";
+    let __local_22: ref "core:prelude/format.wado//Formatter";
+    let __local_23: ref "core:prelude/string.wado//String";
+    let __local_24: ref "core:prelude/format.wado//Formatter";
+    let __local_25: ref "core:prelude/string.wado//String";
+    let __local_26: ref "core:prelude/format.wado//Formatter";
+    let __local_27: ref "core:prelude/string.wado//String";
+    let __local_28: ref "core:prelude/format.wado//Formatter";
+    let __local_29: ref "core:prelude/string.wado//String";
+    let __local_30: ref "core:prelude/format.wado//Formatter";
+    let __local_31: ref "core:prelude/string.wado//String";
+    let __local_32: ref "core:prelude/format.wado//Formatter";
+    let __local_33: ref "core:prelude/string.wado//String";
+    let __local_34: ref "core:prelude/format.wado//Formatter";
+    let __local_35: ref "core:prelude/string.wado//String";
+    let __local_36: ref "core:prelude/format.wado//Formatter";
+    let __local_40: ref "core:prelude//Array<u8>";
+    let __local_48: ref "core:prelude//Array<u8>";
+    let __local_56: ref "core:prelude//Array<u8>";
+    let __local_78: ref "core:prelude/string.wado//String";
+    let __local_79: ref "core:prelude//Array<u8>";
+    let __local_87: ref "core:prelude/string.wado//String";
+    let __local_88: ref "core:prelude//Array<u8>";
+    let __local_96: ref "core:prelude//Array<u8>";
+    let __local_104: ref "core:prelude//Array<u8>";
+    let __local_112: ref "core:prelude//Array<u8>";
+    let __local_120: ref "core:prelude//Array<u8>";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -198,86 +198,86 @@ fn run() with Stdout {
         "core:base64/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    hello = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_2: block -> ref StrUtf8ByteIter {
-        break __inline_String__bytes_2: StrUtf8ByteIter { repr: array.new_data<u8>("Hello"), used: 5, index: 0 };
+    hello = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__inline_String__bytes_2: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
+        break __inline_String__bytes_2: "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("Hello"), used: 5, index: 0 };
     });
-    let __match_scrut_0: ref null Array<u8>;
-    __match_scrut_0 = __inline_decode_3: block -> ref null Array<u8> {
-        __local_40 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("SGVsbG8="), used: 8, index: 0 });
+    let __match_scrut_0: ref null "core:prelude//Array<u8>";
+    __match_scrut_0 = __inline_decode_3: block -> ref null "core:prelude//Array<u8>" {
+        __local_40 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"("core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("SGVsbG8="), used: 8, index: 0 });
         break __inline_decode_3: "core:base64/decode_impl"(__local_40, __local_40.used);
     };
     __cond_2 = (if ref.is_null(__match_scrut_0) == 0 -> bool {
-        let __cast_1: ref null Array<u8>;
+        let __cast_1: ref null "core:prelude//Array<u8>";
         __cast_1 = ref.as_non_null(__match_scrut_0);
         __local_1 = ref.as_non_null(__cast_1);
-        Array<u8>^Eq::eq(__local_1, hello);
+        "wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>^Eq::eq"(__local_1, hello);
     } else {
         0;
     });
     if __cond_2 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_19 = String { repr: builtin::array_new<u8>(138), used: 0 };
-            String::push_str(__local_19, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_19, 114);
-            String::push(__local_19, 117);
-            String::push(__local_19, 110);
-            String::push(__local_19, 32);
-            String::push(__local_19, 97);
-            String::push(__local_19, 116);
-            String::push(__local_19, 32);
-            String::push_str(__local_19, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
-            String::push(__local_19, 58);
-            __local_20 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
-            i32::fmt_decimal(8, __local_20);
-            String::push_str(__local_19, String { repr: array.new_data<u8>("
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_19 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(138), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_19, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push"(__local_19, 114);
+            "core:prelude/string.wado/String::push"(__local_19, 117);
+            "core:prelude/string.wado/String::push"(__local_19, 110);
+            "core:prelude/string.wado/String::push"(__local_19, 32);
+            "core:prelude/string.wado/String::push"(__local_19, 97);
+            "core:prelude/string.wado/String::push"(__local_19, 116);
+            "core:prelude/string.wado/String::push"(__local_19, 32);
+            "core:prelude/string.wado/String::push_str"(__local_19, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
+            "core:prelude/string.wado/String::push"(__local_19, 58);
+            __local_20 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_19 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(8, __local_20);
+            "core:prelude/string.wado/String::push_str"(__local_19, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: decode(\"SGVsbG8=\") matches { Some(d) && d == hello }
 "), used: 65 });
             break __tmpl: __local_19;
         });
         unreachable;
     }
-    let __match_scrut_1: ref null Array<u8>;
-    __match_scrut_1 = __inline_decode_8: block -> ref null Array<u8> {
-        __local_48 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("SGVsbG8"), used: 7, index: 0 });
+    let __match_scrut_1: ref null "core:prelude//Array<u8>";
+    __match_scrut_1 = __inline_decode_8: block -> ref null "core:prelude//Array<u8>" {
+        __local_48 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"("core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("SGVsbG8"), used: 7, index: 0 });
         break __inline_decode_8: "core:base64/decode_impl"(__local_48, __local_48.used);
     };
     __cond_4 = (if ref.is_null(__match_scrut_1) == 0 -> bool {
-        let __cast_2: ref null Array<u8>;
+        let __cast_2: ref null "core:prelude//Array<u8>";
         __cast_2 = ref.as_non_null(__match_scrut_1);
         __local_3 = ref.as_non_null(__cast_2);
-        Array<u8>^Eq::eq(__local_3, hello);
+        "wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>^Eq::eq"(__local_3, hello);
     } else {
         0;
     });
     if __cond_4 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_21 = String { repr: builtin::array_new<u8>(137), used: 0 };
-            String::push_str(__local_21, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_21, 114);
-            String::push(__local_21, 117);
-            String::push(__local_21, 110);
-            String::push(__local_21, 32);
-            String::push(__local_21, 97);
-            String::push(__local_21, 116);
-            String::push(__local_21, 32);
-            String::push_str(__local_21, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
-            String::push(__local_21, 58);
-            __local_22 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
-            i32::fmt_decimal(11, __local_22);
-            String::push_str(__local_21, String { repr: array.new_data<u8>("
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_21 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(137), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_21, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push"(__local_21, 114);
+            "core:prelude/string.wado/String::push"(__local_21, 117);
+            "core:prelude/string.wado/String::push"(__local_21, 110);
+            "core:prelude/string.wado/String::push"(__local_21, 32);
+            "core:prelude/string.wado/String::push"(__local_21, 97);
+            "core:prelude/string.wado/String::push"(__local_21, 116);
+            "core:prelude/string.wado/String::push"(__local_21, 32);
+            "core:prelude/string.wado/String::push_str"(__local_21, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
+            "core:prelude/string.wado/String::push"(__local_21, 58);
+            __local_22 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_21 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(11, __local_22);
+            "core:prelude/string.wado/String::push_str"(__local_21, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: decode(\"SGVsbG8\") matches { Some(d) && d == hello }
 "), used: 64 });
             break __tmpl: __local_21;
         });
         unreachable;
     }
-    let __match_scrut_2: ref null Array<u8>;
-    __match_scrut_2 = __inline_decode_13: block -> ref null Array<u8> {
-        __local_56 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: builtin::array_new<u8>(0), used: 0, index: 0 });
+    let __match_scrut_2: ref null "core:prelude//Array<u8>";
+    __match_scrut_2 = __inline_decode_13: block -> ref null "core:prelude//Array<u8>" {
+        __local_56 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"("core:prelude/string.wado//StrUtf8ByteIter" { repr: builtin::array_new<u8>(0), used: 0, index: 0 });
         break __inline_decode_13: "core:base64/decode_impl"(__local_56, __local_56.used);
     };
     __cond_6 = (if ref.is_null(__match_scrut_2) == 0 -> bool {
-        let __cast_3: ref null Array<u8>;
+        let __cast_3: ref null "core:prelude//Array<u8>";
         __cast_3 = ref.as_non_null(__match_scrut_2);
         __local_5 = ref.as_non_null(__cast_3);
         __local_5.used == 0;
@@ -285,178 +285,178 @@ condition: decode(\"SGVsbG8\") matches { Some(d) && d == hello }
         0;
     });
     if __cond_6 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_23 = String { repr: builtin::array_new<u8>(132), used: 0 };
-            String::push_str(__local_23, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_23, 114);
-            String::push(__local_23, 117);
-            String::push(__local_23, 110);
-            String::push(__local_23, 32);
-            String::push(__local_23, 97);
-            String::push(__local_23, 116);
-            String::push(__local_23, 32);
-            String::push_str(__local_23, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
-            String::push(__local_23, 58);
-            __local_24 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_23 };
-            i32::fmt_decimal(14, __local_24);
-            String::push_str(__local_23, String { repr: array.new_data<u8>("
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_23 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(132), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_23, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push"(__local_23, 114);
+            "core:prelude/string.wado/String::push"(__local_23, 117);
+            "core:prelude/string.wado/String::push"(__local_23, 110);
+            "core:prelude/string.wado/String::push"(__local_23, 32);
+            "core:prelude/string.wado/String::push"(__local_23, 97);
+            "core:prelude/string.wado/String::push"(__local_23, 116);
+            "core:prelude/string.wado/String::push"(__local_23, 32);
+            "core:prelude/string.wado/String::push_str"(__local_23, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
+            "core:prelude/string.wado/String::push"(__local_23, 58);
+            __local_24 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_23 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(14, __local_24);
+            "core:prelude/string.wado/String::push_str"(__local_23, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: decode(\"\") matches { Some(d) && d.len() == 0 }
 "), used: 59 });
             break __tmpl: __local_23;
         });
         unreachable;
     }
-    data = __seq_lit: block -> ref Array<u8> {
-        __local_7 = Array<u8> { repr: array.new_fixed<u8>(1, 2, 3, 4, 5), used: 5 };
+    data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
+        __local_7 = "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_7;
     };
-    let __match_scrut_3: ref null Array<u8>;
-    __match_scrut_3 = __inline_decode_28: block -> ref null Array<u8> {
+    let __match_scrut_3: ref null "core:prelude//Array<u8>";
+    __match_scrut_3 = __inline_decode_28: block -> ref null "core:prelude//Array<u8>" {
         __local_78 = "core:base64/encode_impl"(data, global:core::base64::STANDARD_TABLE, 1);
-        __local_79 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: __local_78.repr, used: __local_78.used, index: 0 });
+        __local_79 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"("core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_78.repr, used: __local_78.used, index: 0 });
         break __inline_decode_28: "core:base64/decode_impl"(__local_79, __local_79.used);
     };
     __cond_10 = (if ref.is_null(__match_scrut_3) == 0 -> bool {
-        let __cast_4: ref null Array<u8>;
+        let __cast_4: ref null "core:prelude//Array<u8>";
         __cast_4 = ref.as_non_null(__match_scrut_3);
         __local_9 = ref.as_non_null(__cast_4);
-        Array<u8>^Eq::eq(__local_9, data);
+        "wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>^Eq::eq"(__local_9, data);
     } else {
         0;
     });
     if __cond_10 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_25 = String { repr: builtin::array_new<u8>(140), used: 0 };
-            String::push_str(__local_25, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_25, 114);
-            String::push(__local_25, 117);
-            String::push(__local_25, 110);
-            String::push(__local_25, 32);
-            String::push(__local_25, 97);
-            String::push(__local_25, 116);
-            String::push(__local_25, 32);
-            String::push_str(__local_25, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
-            String::push(__local_25, 58);
-            __local_26 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_25 };
-            i32::fmt_decimal(18, __local_26);
-            String::push_str(__local_25, String { repr: array.new_data<u8>("
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_25 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(140), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_25, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push"(__local_25, 114);
+            "core:prelude/string.wado/String::push"(__local_25, 117);
+            "core:prelude/string.wado/String::push"(__local_25, 110);
+            "core:prelude/string.wado/String::push"(__local_25, 32);
+            "core:prelude/string.wado/String::push"(__local_25, 97);
+            "core:prelude/string.wado/String::push"(__local_25, 116);
+            "core:prelude/string.wado/String::push"(__local_25, 32);
+            "core:prelude/string.wado/String::push_str"(__local_25, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
+            "core:prelude/string.wado/String::push"(__local_25, 58);
+            __local_26 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_25 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(18, __local_26);
+            "core:prelude/string.wado/String::push_str"(__local_25, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: decode(encode(&data)) matches { Some(d) && d == data }
 "), used: 67 });
             break __tmpl: __local_25;
         });
         unreachable;
     }
-    let __match_scrut_4: ref null Array<u8>;
-    __match_scrut_4 = __inline_decode_34: block -> ref null Array<u8> {
+    let __match_scrut_4: ref null "core:prelude//Array<u8>";
+    __match_scrut_4 = __inline_decode_34: block -> ref null "core:prelude//Array<u8>" {
         __local_87 = "core:base64/encode_impl"(data, global:core::base64::URL_SAFE_TABLE, 0);
-        __local_88 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: __local_87.repr, used: __local_87.used, index: 0 });
+        __local_88 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"("core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_87.repr, used: __local_87.used, index: 0 });
         break __inline_decode_34: "core:base64/decode_impl"(__local_88, __local_88.used);
     };
     __cond_12 = (if ref.is_null(__match_scrut_4) == 0 -> bool {
-        let __cast_5: ref null Array<u8>;
+        let __cast_5: ref null "core:prelude//Array<u8>";
         __cast_5 = ref.as_non_null(__match_scrut_4);
         __local_11 = ref.as_non_null(__cast_5);
-        Array<u8>^Eq::eq(__local_11, data);
+        "wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>^Eq::eq"(__local_11, data);
     } else {
         0;
     });
     if __cond_12 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_27 = String { repr: builtin::array_new<u8>(144), used: 0 };
-            String::push_str(__local_27, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_27, 114);
-            String::push(__local_27, 117);
-            String::push(__local_27, 110);
-            String::push(__local_27, 32);
-            String::push(__local_27, 97);
-            String::push(__local_27, 116);
-            String::push(__local_27, 32);
-            String::push_str(__local_27, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
-            String::push(__local_27, 58);
-            __local_28 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_27 };
-            i32::fmt_decimal(21, __local_28);
-            String::push_str(__local_27, String { repr: array.new_data<u8>("
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_27 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(144), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_27, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push"(__local_27, 114);
+            "core:prelude/string.wado/String::push"(__local_27, 117);
+            "core:prelude/string.wado/String::push"(__local_27, 110);
+            "core:prelude/string.wado/String::push"(__local_27, 32);
+            "core:prelude/string.wado/String::push"(__local_27, 97);
+            "core:prelude/string.wado/String::push"(__local_27, 116);
+            "core:prelude/string.wado/String::push"(__local_27, 32);
+            "core:prelude/string.wado/String::push_str"(__local_27, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
+            "core:prelude/string.wado/String::push"(__local_27, 58);
+            __local_28 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_27 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(21, __local_28);
+            "core:prelude/string.wado/String::push_str"(__local_27, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: decode(encode_url(&data)) matches { Some(d) && d == data }
 "), used: 71 });
             break __tmpl: __local_27;
         });
         unreachable;
     }
-    raw = StrUtf8ByteIter^Iterator::collect(__inline_String__bytes_39: block -> ref StrUtf8ByteIter {
-        break __inline_String__bytes_39: StrUtf8ByteIter { repr: array.new_data<u8>("SGVsbG8="), used: 8, index: 0 };
+    raw = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__inline_String__bytes_39: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
+        break __inline_String__bytes_39: "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("SGVsbG8="), used: 8, index: 0 };
     });
-    let __match_scrut_5: ref null Array<u8>;
-    __match_scrut_5 = __inline_decode_bytes_40: block -> ref null Array<u8> {
+    let __match_scrut_5: ref null "core:prelude//Array<u8>";
+    __match_scrut_5 = __inline_decode_bytes_40: block -> ref null "core:prelude//Array<u8>" {
         __local_96 = raw;
         break __inline_decode_bytes_40: "core:base64/decode_impl"(__local_96, __local_96.used);
     };
     __cond_15 = (if ref.is_null(__match_scrut_5) == 0 -> bool {
-        let __cast_6: ref null Array<u8>;
+        let __cast_6: ref null "core:prelude//Array<u8>";
         __cast_6 = ref.as_non_null(__match_scrut_5);
         __local_14 = ref.as_non_null(__cast_6);
-        Array<u8>^Eq::eq(__local_14, hello);
+        "wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>^Eq::eq"(__local_14, hello);
     } else {
         0;
     });
     if __cond_15 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_29 = String { repr: builtin::array_new<u8>(138), used: 0 };
-            String::push_str(__local_29, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_29, 114);
-            String::push(__local_29, 117);
-            String::push(__local_29, 110);
-            String::push(__local_29, 32);
-            String::push(__local_29, 97);
-            String::push(__local_29, 116);
-            String::push(__local_29, 32);
-            String::push_str(__local_29, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
-            String::push(__local_29, 58);
-            __local_30 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_29 };
-            i32::fmt_decimal(25, __local_30);
-            String::push_str(__local_29, String { repr: array.new_data<u8>("
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_29 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(138), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_29, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push"(__local_29, 114);
+            "core:prelude/string.wado/String::push"(__local_29, 117);
+            "core:prelude/string.wado/String::push"(__local_29, 110);
+            "core:prelude/string.wado/String::push"(__local_29, 32);
+            "core:prelude/string.wado/String::push"(__local_29, 97);
+            "core:prelude/string.wado/String::push"(__local_29, 116);
+            "core:prelude/string.wado/String::push"(__local_29, 32);
+            "core:prelude/string.wado/String::push_str"(__local_29, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
+            "core:prelude/string.wado/String::push"(__local_29, 58);
+            __local_30 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_29 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(25, __local_30);
+            "core:prelude/string.wado/String::push_str"(__local_29, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: decode_bytes(&raw) matches { Some(d) && d == hello }
 "), used: 65 });
             break __tmpl: __local_29;
         });
         unreachable;
     }
-    let __match_scrut_6: ref null Array<u8>;
-    __match_scrut_6 = __inline_decode_45: block -> ref null Array<u8> {
-        __local_104 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("abc+def_ghi"), used: 11, index: 0 });
+    let __match_scrut_6: ref null "core:prelude//Array<u8>";
+    __match_scrut_6 = __inline_decode_45: block -> ref null "core:prelude//Array<u8>" {
+        __local_104 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"("core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("abc+def_ghi"), used: 11, index: 0 });
         break __inline_decode_45: "core:base64/decode_impl"(__local_104, __local_104.used);
     };
     __cond_16 = (if ref.is_null(__match_scrut_6) == 0 -> bool {
-        let __cast_7: ref null Array<u8>;
+        let __cast_7: ref null "core:prelude//Array<u8>";
         __cast_7 = ref.as_non_null(__match_scrut_6);
         1;
     } else {
         0;
     });
     if __cond_16 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_31 = String { repr: builtin::array_new<u8>(127), used: 0 };
-            String::push_str(__local_31, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_31, 114);
-            String::push(__local_31, 117);
-            String::push(__local_31, 110);
-            String::push(__local_31, 32);
-            String::push(__local_31, 97);
-            String::push(__local_31, 116);
-            String::push(__local_31, 32);
-            String::push_str(__local_31, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
-            String::push(__local_31, 58);
-            __local_32 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_31 };
-            i32::fmt_decimal(28, __local_32);
-            String::push_str(__local_31, String { repr: array.new_data<u8>("
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_31 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(127), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_31, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push"(__local_31, 114);
+            "core:prelude/string.wado/String::push"(__local_31, 117);
+            "core:prelude/string.wado/String::push"(__local_31, 110);
+            "core:prelude/string.wado/String::push"(__local_31, 32);
+            "core:prelude/string.wado/String::push"(__local_31, 97);
+            "core:prelude/string.wado/String::push"(__local_31, 116);
+            "core:prelude/string.wado/String::push"(__local_31, 32);
+            "core:prelude/string.wado/String::push_str"(__local_31, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
+            "core:prelude/string.wado/String::push"(__local_31, 58);
+            __local_32 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_31 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(28, __local_32);
+            "core:prelude/string.wado/String::push_str"(__local_31, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: decode(\"abc+def_ghi\") matches { Some(_) }
 "), used: 54 });
             break __tmpl: __local_31;
         });
         unreachable;
     }
-    let __match_scrut_7: ref null Array<u8>;
-    __match_scrut_7 = __inline_decode_50: block -> ref null Array<u8> {
-        __local_112 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("!!!"), used: 3, index: 0 });
+    let __match_scrut_7: ref null "core:prelude//Array<u8>";
+    __match_scrut_7 = __inline_decode_50: block -> ref null "core:prelude//Array<u8>" {
+        __local_112 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"("core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("!!!"), used: 3, index: 0 });
         break __inline_decode_50: "core:base64/decode_impl"(__local_112, __local_112.used);
     };
     __cond_17 = (if ref.is_null(__match_scrut_7) -> bool {
@@ -465,30 +465,30 @@ condition: decode(\"abc+def_ghi\") matches { Some(_) }
         0;
     });
     if __cond_17 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_33 = String { repr: builtin::array_new<u8>(116), used: 0 };
-            String::push_str(__local_33, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_33, 114);
-            String::push(__local_33, 117);
-            String::push(__local_33, 110);
-            String::push(__local_33, 32);
-            String::push(__local_33, 97);
-            String::push(__local_33, 116);
-            String::push(__local_33, 32);
-            String::push_str(__local_33, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
-            String::push(__local_33, 58);
-            __local_34 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_33 };
-            i32::fmt_decimal(31, __local_34);
-            String::push_str(__local_33, String { repr: array.new_data<u8>("
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_33 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(116), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_33, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push"(__local_33, 114);
+            "core:prelude/string.wado/String::push"(__local_33, 117);
+            "core:prelude/string.wado/String::push"(__local_33, 110);
+            "core:prelude/string.wado/String::push"(__local_33, 32);
+            "core:prelude/string.wado/String::push"(__local_33, 97);
+            "core:prelude/string.wado/String::push"(__local_33, 116);
+            "core:prelude/string.wado/String::push"(__local_33, 32);
+            "core:prelude/string.wado/String::push_str"(__local_33, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
+            "core:prelude/string.wado/String::push"(__local_33, 58);
+            __local_34 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_33 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(31, __local_34);
+            "core:prelude/string.wado/String::push_str"(__local_33, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: decode(\"!!!\") matches { None }
 "), used: 43 });
             break __tmpl: __local_33;
         });
         unreachable;
     }
-    let __match_scrut_8: ref null Array<u8>;
-    __match_scrut_8 = __inline_decode_55: block -> ref null Array<u8> {
-        __local_120 = StrUtf8ByteIter^Iterator::collect(StrUtf8ByteIter { repr: array.new_data<u8>("A"), used: 1, index: 0 });
+    let __match_scrut_8: ref null "core:prelude//Array<u8>";
+    __match_scrut_8 = __inline_decode_55: block -> ref null "core:prelude//Array<u8>" {
+        __local_120 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"("core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("A"), used: 1, index: 0 });
         break __inline_decode_55: "core:base64/decode_impl"(__local_120, __local_120.used);
     };
     __cond_18 = (if ref.is_null(__match_scrut_8) -> bool {
@@ -497,45 +497,45 @@ condition: decode(\"!!!\") matches { None }
         0;
     });
     if __cond_18 == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_35 = String { repr: builtin::array_new<u8>(114), used: 0 };
-            String::push_str(__local_35, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push(__local_35, 114);
-            String::push(__local_35, 117);
-            String::push(__local_35, 110);
-            String::push(__local_35, 32);
-            String::push(__local_35, 97);
-            String::push(__local_35, 116);
-            String::push(__local_35, 32);
-            String::push_str(__local_35, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
-            String::push(__local_35, 58);
-            __local_36 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_35 };
-            i32::fmt_decimal(32, __local_36);
-            String::push_str(__local_35, String { repr: array.new_data<u8>("
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_35 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(114), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_35, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push"(__local_35, 114);
+            "core:prelude/string.wado/String::push"(__local_35, 117);
+            "core:prelude/string.wado/String::push"(__local_35, 110);
+            "core:prelude/string.wado/String::push"(__local_35, 32);
+            "core:prelude/string.wado/String::push"(__local_35, 97);
+            "core:prelude/string.wado/String::push"(__local_35, 116);
+            "core:prelude/string.wado/String::push"(__local_35, 32);
+            "core:prelude/string.wado/String::push_str"(__local_35, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/base64_decode.wado"), used: 47 });
+            "core:prelude/string.wado/String::push"(__local_35, 58);
+            __local_36 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_35 };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(32, __local_36);
+            "core:prelude/string.wado/String::push_str"(__local_35, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: decode(\"A\") matches { None }
 "), used: 41 });
             break __tmpl: __local_35;
         });
         unreachable;
     }
-    "core:cli/println"(String { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
-fn __cm_binding__Stdout_write_via_stream(data) {
+fn "wado-compiler/tests/fixtures/base64_decode.wado/__cm_binding__Stdout_write_via_stream"(data) {  // from wado-compiler/tests/fixtures/base64_decode.wado
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn __cm_export__run() {
-    run();
+fn "wado-compiler/tests/fixtures/base64_decode.wado/__cm_export__run"() {  // from wado-compiler/tests/fixtures/base64_decode.wado
+    "wado-compiler/tests/fixtures/base64_decode.wado/run"();
     "wasi/task-return"(0);
 }
 
 fn "core:base64/build_decode_table"() {  // from core:base64
-    let table: ref Array<u8>;
+    let table: ref "core:prelude//Array<u8>";
     let i_1: i32;
     let i_2: i32;
     let i_3: i32;
-    let __local_6: ref array<u8>;
+    let __local_6: ref builtin::array<u8>;
     let index_8: i32;
     let value_9: u8;
     let index_11: i32;
@@ -543,15 +543,15 @@ fn "core:base64/build_decode_table"() {  // from core:base64
     let index_14: i32;
     let value_15: u8;
     let _licm_used_31: i32;
-    let _licm_repr_32: ref array<u8>;
+    let _licm_repr_32: ref builtin::array<u8>;
     let _licm_used_33: i32;
-    let _licm_repr_34: ref array<u8>;
+    let _licm_repr_34: ref builtin::array<u8>;
     let _licm_used_35: i32;
-    let _licm_repr_36: ref array<u8>;
-    table = __inline_Array_u8___filled_0: block -> ref Array<u8> {
+    let _licm_repr_36: ref builtin::array<u8>;
+    table = __inline_Array_u8___filled_0: block -> ref "core:prelude//Array<u8>" {
         __local_6 = builtin::array_new<u8>(256);
         builtin::array_fill<u8>(__local_6, 0, 255, 256);
-        break __inline_Array_u8___filled_0: Array<u8> { repr: __local_6, used: 256 };
+        break __inline_Array_u8___filled_0: "core:prelude//Array<u8>" { repr: __local_6, used: 256 };
     };
     __for_0: block {
         i_1 = 0;
@@ -565,7 +565,7 @@ fn "core:base64/build_decode_table"() {  // from core:base64
                 index_8 = 65 + i_1;
                 value_9 = i_1 & 255;
                 if index_8 >= _licm_used_31 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 builtin::array_set_u8(_licm_repr_32, index_8, value_9);
@@ -586,7 +586,7 @@ fn "core:base64/build_decode_table"() {  // from core:base64
                 index_11 = 97 + i_2;
                 value_12 = (26 + i_2) & 255;
                 if index_11 >= _licm_used_33 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 builtin::array_set_u8(_licm_repr_34, index_11, value_12);
@@ -607,7 +607,7 @@ fn "core:base64/build_decode_table"() {  // from core:base64
                 index_14 = 48 + i_3;
                 value_15 = (52 + i_3) & 255;
                 if index_14 >= _licm_used_35 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 builtin::array_set_u8(_licm_repr_36, index_14, value_15);
@@ -637,7 +637,7 @@ fn "core:base64/build_decode_table"() {  // from core:base64
 fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
     let len: i32;
     let remainder: i32;
-    let out: ref String;
+    let out: ref "core:prelude/string.wado//String";
     let i: i32;
     let b0_7: i32;
     let b1_8: i32;
@@ -659,17 +659,17 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
     let __local_44: i32;
     let __cse_45: i32;
     let _licm_used_46: i32;
-    let _licm_repr_47: ref array<u8>;
+    let _licm_repr_47: ref builtin::array<u8>;
     let _licm_used_48: i32;
-    let _licm_repr_49: ref array<u8>;
+    let _licm_repr_49: ref builtin::array<u8>;
     len = data.used;
     if len == 0 {
-        return String { repr: builtin::array_new<u8>(0), used: 0 };
+        return "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     }
     remainder = len % 3;
-    out = __inline_String__with_capacity_1: block -> ref String {
+    out = __inline_String__with_capacity_1: block -> ref "core:prelude/string.wado//String" {
         __local_14 = ((len + 2) / 3) * 4;
-        break __inline_String__with_capacity_1: String { repr: builtin::array_new<u8>(__local_14), used: 0 };
+        break __inline_String__with_capacity_1: "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(__local_14), used: 0 };
     };
     i = 0;
     _licm_used_46 = data.used;
@@ -684,7 +684,7 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
             }
             b0_7 = __inline_Array_u8__IndexValue__index_value_2: block -> u8 {
                 if i >= _licm_used_46 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_2: builtin::array_get<u8>(_licm_repr_47, i);
@@ -692,46 +692,46 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
             b1_8 = __inline_Array_u8__IndexValue__index_value_3: block -> u8 {
                 __local_18 = i + 1;
                 if __local_18 >= _licm_used_46 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_3: builtin::array_get<u8>(_licm_repr_47, __local_18);
             };
             b2 = __inline_Array_u8__IndexValue__index_value_4: block -> u8 {
                 if __cse_45 >= _licm_used_46 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_4: builtin::array_get<u8>(_licm_repr_47, __cse_45);
             };
-            String::push(out, __inline_Array_u8__IndexValue__index_value_5: block -> u8 {
+            "core:prelude/string.wado/String::push"(out, __inline_Array_u8__IndexValue__index_value_5: block -> u8 {
                 __local_22 = (b0_7 >> 2) & 63;
                 if __local_22 >= _licm_used_48 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_5: builtin::array_get<u8>(_licm_repr_49, __local_22);
             });
-            String::push(out, __inline_Array_u8__IndexValue__index_value_6: block -> u8 {
+            "core:prelude/string.wado/String::push"(out, __inline_Array_u8__IndexValue__index_value_6: block -> u8 {
                 __local_24 = ((b0_7 << 4) | (b1_8 >> 4)) & 63;
                 if __local_24 >= _licm_used_48 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_6: builtin::array_get<u8>(_licm_repr_49, __local_24);
             });
-            String::push(out, __inline_Array_u8__IndexValue__index_value_7: block -> u8 {
+            "core:prelude/string.wado/String::push"(out, __inline_Array_u8__IndexValue__index_value_7: block -> u8 {
                 __local_26 = ((b1_8 << 2) | (b2 >> 6)) & 63;
                 if __local_26 >= _licm_used_48 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_7: builtin::array_get<u8>(_licm_repr_49, __local_26);
             });
-            String::push(out, __inline_Array_u8__IndexValue__index_value_8: block -> u8 {
+            "core:prelude/string.wado/String::push"(out, __inline_Array_u8__IndexValue__index_value_8: block -> u8 {
                 __local_28 = b2 & 63;
                 if __local_28 >= _licm_used_48 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_8: builtin::array_get<u8>(_licm_repr_49, __local_28);
@@ -743,35 +743,35 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
     if remainder == 1 {
         b0_10 = __inline_Array_u8__IndexValue__index_value_9: block -> u8 {
             if i >= data.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_9: builtin::array_get<u8>(data.repr, i);
         };
-        String::push(out, __inline_Array_u8__IndexValue__index_value_10: block -> u8 {
+        "core:prelude/string.wado/String::push"(out, __inline_Array_u8__IndexValue__index_value_10: block -> u8 {
             __local_32 = (b0_10 >> 2) & 63;
             if __local_32 >= table.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_10: builtin::array_get<u8>(table.repr, __local_32);
         });
-        String::push(out, __inline_Array_u8__IndexValue__index_value_11: block -> u8 {
+        "core:prelude/string.wado/String::push"(out, __inline_Array_u8__IndexValue__index_value_11: block -> u8 {
             __local_34 = (b0_10 << 4) & 63;
             if __local_34 >= table.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_11: builtin::array_get<u8>(table.repr, __local_34);
         });
         if pad {
-            String::push(out, 61);
-            String::push(out, 61);
+            "core:prelude/string.wado/String::push"(out, 61);
+            "core:prelude/string.wado/String::push"(out, 61);
         }
     } else if remainder == 2 {
         b0_11 = __inline_Array_u8__IndexValue__index_value_12: block -> u8 {
             if i >= data.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_12: builtin::array_get<u8>(data.repr, i);
@@ -779,37 +779,37 @@ fn "core:base64/encode_impl"(data, table, pad) {  // from core:base64
         b1_12 = __inline_Array_u8__IndexValue__index_value_13: block -> u8 {
             __local_38 = i + 1;
             if __local_38 >= data.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_13: builtin::array_get<u8>(data.repr, __local_38);
         };
-        String::push(out, __inline_Array_u8__IndexValue__index_value_14: block -> u8 {
+        "core:prelude/string.wado/String::push"(out, __inline_Array_u8__IndexValue__index_value_14: block -> u8 {
             __local_40 = (b0_11 >> 2) & 63;
             if __local_40 >= table.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_14: builtin::array_get<u8>(table.repr, __local_40);
         });
-        String::push(out, __inline_Array_u8__IndexValue__index_value_15: block -> u8 {
+        "core:prelude/string.wado/String::push"(out, __inline_Array_u8__IndexValue__index_value_15: block -> u8 {
             __local_42 = ((b0_11 << 4) | (b1_12 >> 4)) & 63;
             if __local_42 >= table.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_15: builtin::array_get<u8>(table.repr, __local_42);
         });
-        String::push(out, __inline_Array_u8__IndexValue__index_value_16: block -> u8 {
+        "core:prelude/string.wado/String::push"(out, __inline_Array_u8__IndexValue__index_value_16: block -> u8 {
             __local_44 = (b1_12 << 2) & 63;
             if __local_44 >= table.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_16: builtin::array_get<u8>(table.repr, __local_44);
         });
         if pad {
-            String::push(out, 61);
+            "core:prelude/string.wado/String::push"(out, 61);
         }
     }
     return out;
@@ -820,8 +820,8 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     let full_groups: i32;
     let remainder: i32;
     let out_len: i32;
-    let out: ref Array<u8>;
-    let table: ref Array<u8>;
+    let out: ref "core:prelude//Array<u8>";
+    let table: ref "core:prelude//Array<u8>";
     let i: i32;
     let v0_9: i32;
     let v1_10: i32;
@@ -849,11 +849,11 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     let __local_56: i32;
     let __cse_57: i32;
     let _licm_used_58: i32;
-    let _licm_repr_59: ref array<u8>;
+    let _licm_repr_59: ref builtin::array<u8>;
     let _licm_used_60: i32;
-    let _licm_repr_61: ref array<u8>;
+    let _licm_repr_61: ref builtin::array<u8>;
     let _licm_used_62: i32;
-    let _licm_repr_63: ref array<u8>;
+    let _licm_repr_63: ref builtin::array<u8>;
     end = input_len;
     _licm_used_58 = input.used;
     _licm_repr_59 = input.repr;
@@ -863,7 +863,7 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                 __inline_Array_u8__IndexValue__index_value_0: block -> u8 {
                     __local_19 = end - 1;
                     if __local_19 >= _licm_used_58 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }
                     break __inline_Array_u8__IndexValue__index_value_0: builtin::array_get<u8>(_licm_repr_59, __local_19);
@@ -888,7 +888,7 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
     } else if remainder == 3 {
         out_len = out_len + 2;
     }
-    out = Array<u8> { repr: builtin::array_new<u8>(out_len), used: 0 };
+    out = "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(out_len), used: 0 };
     table = global:core::base64::DECODE_TABLE;
     i = 0;
     _licm_used_60 = input.used;
@@ -904,13 +904,13 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
             v0_9 = __inline_Array_u8__IndexValue__index_value_3: block -> u8 {
                 __local_24 = __inline_Array_u8__IndexValue__index_value_2: block -> u8 {
                     if i >= _licm_used_60 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }
                     break __inline_Array_u8__IndexValue__index_value_2: builtin::array_get<u8>(_licm_repr_61, i);
                 };
                 if __local_24 >= _licm_used_62 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_3: builtin::array_get<u8>(_licm_repr_63, __local_24);
@@ -919,13 +919,13 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                 __local_28 = __inline_Array_u8__IndexValue__index_value_4: block -> u8 {
                     __local_26 = i + 1;
                     if __local_26 >= _licm_used_60 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }
                     break __inline_Array_u8__IndexValue__index_value_4: builtin::array_get<u8>(_licm_repr_61, __local_26);
                 };
                 if __local_28 >= _licm_used_62 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_5: builtin::array_get<u8>(_licm_repr_63, __local_28);
@@ -934,13 +934,13 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
                 __local_32 = __inline_Array_u8__IndexValue__index_value_6: block -> u8 {
                     __local_30 = i + 2;
                     if __local_30 >= _licm_used_60 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }
                     break __inline_Array_u8__IndexValue__index_value_6: builtin::array_get<u8>(_licm_repr_61, __local_30);
                 };
                 if __local_32 >= _licm_used_62 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_7: builtin::array_get<u8>(_licm_repr_63, __local_32);
@@ -948,13 +948,13 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
             v3 = __inline_Array_u8__IndexValue__index_value_9: block -> u8 {
                 __local_36 = __inline_Array_u8__IndexValue__index_value_8: block -> u8 {
                     if __cse_57 >= _licm_used_60 {
-                        "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }
                     break __inline_Array_u8__IndexValue__index_value_8: builtin::array_get<u8>(_licm_repr_61, __cse_57);
                 };
                 if __local_36 >= _licm_used_62 {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_9: builtin::array_get<u8>(_licm_repr_63, __local_36);
@@ -985,13 +985,13 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
         v0_13 = __inline_Array_u8__IndexValue__index_value_11: block -> u8 {
             __local_40 = __inline_Array_u8__IndexValue__index_value_10: block -> u8 {
                 if i >= input.used {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_10: builtin::array_get<u8>(input.repr, i);
             };
             if __local_40 >= table.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_11: builtin::array_get<u8>(table.repr, __local_40);
@@ -1000,13 +1000,13 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
             __local_44 = __inline_Array_u8__IndexValue__index_value_12: block -> u8 {
                 __local_42 = i + 1;
                 if __local_42 >= input.used {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_12: builtin::array_get<u8>(input.repr, __local_42);
             };
             if __local_44 >= table.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_13: builtin::array_get<u8>(table.repr, __local_44);
@@ -1023,13 +1023,13 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
         v0_15 = __inline_Array_u8__IndexValue__index_value_15: block -> u8 {
             __local_48 = __inline_Array_u8__IndexValue__index_value_14: block -> u8 {
                 if i >= input.used {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_14: builtin::array_get<u8>(input.repr, i);
             };
             if __local_48 >= table.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_15: builtin::array_get<u8>(table.repr, __local_48);
@@ -1038,13 +1038,13 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
             __local_52 = __inline_Array_u8__IndexValue__index_value_16: block -> u8 {
                 __local_50 = i + 1;
                 if __local_50 >= input.used {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_16: builtin::array_get<u8>(input.repr, __local_50);
             };
             if __local_52 >= table.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_17: builtin::array_get<u8>(table.repr, __local_52);
@@ -1053,13 +1053,13 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
             __local_56 = __inline_Array_u8__IndexValue__index_value_18: block -> u8 {
                 __local_54 = i + 2;
                 if __local_54 >= input.used {
-                    "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }
                 break __inline_Array_u8__IndexValue__index_value_18: builtin::array_get<u8>(input.repr, __local_54);
             };
             if __local_56 >= table.used {
-                "core:internal/panic"(String { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                "core:internal/panic"("core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_u8__IndexValue__index_value_19: builtin::array_get<u8>(table.repr, __local_56);
@@ -1082,23 +1082,23 @@ fn "core:base64/decode_impl"(input, input_len) {  // from core:base64
 }
 
 fn "core:base64/__initialize_module"() {  // from core:base64
-    let __local_0: ref Array<u8>;
-    let __local_1: ref Array<u8>;
-    global:core::base64::STANDARD_TABLE = __seq_lit: block -> ref Array<u8> {
-        __local_0 = Array<u8> { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 43, 47), used: 64 };
+    let __local_0: ref "core:prelude//Array<u8>";
+    let __local_1: ref "core:prelude//Array<u8>";
+    global:core::base64::STANDARD_TABLE = __seq_lit: block -> ref "core:prelude//Array<u8>" {
+        __local_0 = "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 43, 47), used: 64 };
         break __seq_lit: __local_0;
     };
-    global:core::base64::URL_SAFE_TABLE = __seq_lit: block -> ref Array<u8> {
-        __local_1 = Array<u8> { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 45, 95), used: 64 };
+    global:core::base64::URL_SAFE_TABLE = __seq_lit: block -> ref "core:prelude//Array<u8>" {
+        __local_1 = "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 45, 95), used: 64 };
         break __seq_lit: __local_1;
     };
     global:core::base64::DECODE_TABLE = "core:base64/build_decode_table"();
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
-    let bytes: ref array<u8>;
+    let bytes: ref builtin::array<u8>;
     let len: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -1120,7 +1120,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = __cm_binding__Stdout_write_via_stream(rx);
+    handle = "wado-compiler/tests/fixtures/base64_decode.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -1143,9 +1143,9 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 }
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
-    let bytes: ref array<u8>;
+    let bytes: ref builtin::array<u8>;
     let len: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -1215,7 +1215,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn count_digits_i64(val) {
+fn "core:prelude/primitive.wado/count_digits_i64"(val) {  // from core:prelude/primitive.wado
     let n: i32;
     let t: i64;
     if val == 0_i64 {
@@ -1238,7 +1238,7 @@ fn count_digits_i64(val) {
     return n;
 }
 
-fn write_decimal_digits(arr, offset, abs_val, digit_count) {
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {  // from core:prelude/primitive.wado
     let pos: i32;
     let temp: i64;
     pos = offset + digit_count;
@@ -1275,8 +1275,8 @@ fn "core:base64/Array<u8>::push"(self, value) {  // from core:base64
 fn "core:base64/Array<u8>::grow"(self) {  // from core:base64
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<u8>;
-    let old_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
+    let old_repr: ref builtin::array<u8>;
     let used: i32;
     let i: i32;
     let __local_7: i32;
@@ -1304,30 +1304,30 @@ fn "core:base64/Array<u8>::grow"(self) {  // from core:base64
     self.repr = new_repr;
 }
 
-fn i32::fmt_decimal(self, f) {
+fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {  // from core:prelude/primitive.wado
     let is_negative: bool;
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref String;
+    let __local_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
     });
-    digit_count = count_digits_i64(abs_val);
-    offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
 }
 
-fn String::grow(self, min_capacity) {
+fn "core:prelude/string.wado/String::grow"(self, min_capacity) {  // from core:prelude/string.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     let __local_5: i32;
     let __local_7: i32;
     capacity = builtin::array_len(self.repr);
@@ -1346,19 +1346,19 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::internal_reserve_uninit(self, n) {
+fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {  // from core:prelude/string.wado
     let new_used: i32;
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
+        "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
     self.used = new_used;
     return start;
 }
 
-fn String::push_str(self, other) {
+fn "core:prelude/string.wado/String::push_str"(self, other) {  // from core:prelude/string.wado
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -1367,21 +1367,21 @@ fn String::push_str(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
+        "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
 
-fn StrUtf8ByteIter^Iterator::collect(self) {
-    let __local_1: ref Array<u8>;
-    let result: ref Array<u8>;
+fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {  // from core:prelude/string.wado
+    let __local_1: ref "core:prelude//Array<u8>";
+    let result: ref "core:prelude//Array<u8>";
     let byte: u8;
     let _licm_used_11: i32;
-    let _licm_repr_12: ref array<u8>;
+    let _licm_repr_12: ref builtin::array<u8>;
     let _hfs_index_13: i32;
-    result = __seq_lit: block -> ref Array<u8> {
-        __local_1 = Array<u8> { repr: builtin::array_new<u8>(0), used: 0 };
+    result = __seq_lit: block -> ref "core:prelude//Array<u8>" {
+        __local_1 = "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
     };
     _licm_used_11 = self.used;
@@ -1395,7 +1395,7 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
                 }
                 byte = builtin::array_get_u8(_licm_repr_12, _hfs_index_13);
                 _hfs_index_13 = _hfs_index_13 + 1;
-                Array<u8>::push(result, byte);
+                "core:prelude/string.wado/Array<u8>::push"(result, byte);
                 break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
             };
             continue l123;
@@ -1405,11 +1405,11 @@ fn StrUtf8ByteIter^Iterator::collect(self) {
     return result;
 }
 
-fn String::push(self, c) {
+fn "core:prelude/string.wado/String::push"(self, c) {  // from core:prelude/string.wado
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
-        String::grow(self, self.used + 4);
+        "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
@@ -1432,21 +1432,21 @@ fn String::push(self, c) {
     }
 }
 
-fn Array<u8>::push(self, value) {
+fn "core:prelude/string.wado/Array<u8>::push"(self, value) {  // from core:prelude/string.wado
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<u8>::grow(self);
+        "core:prelude/string.wado/Array<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<u8>::grow(self) {
+fn "core:prelude/string.wado/Array<u8>::grow"(self) {  // from core:prelude/string.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<u8>;
-    let old_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
+    let old_repr: ref builtin::array<u8>;
     let used: i32;
     let i: i32;
     let __local_7: i32;
@@ -1474,21 +1474,21 @@ fn Array<u8>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<u8>::push(self, value) {
+fn "wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>::push"(self, value) {  // from wado-compiler/tests/fixtures/base64_decode.wado
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<u8>::grow(self);
+        "wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<u8>::grow(self) {
+fn "wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>::grow"(self) {  // from wado-compiler/tests/fixtures/base64_decode.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<u8>;
-    let old_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
+    let old_repr: ref builtin::array<u8>;
     let used: i32;
     let i: i32;
     let __local_7: i32;
@@ -1516,11 +1516,11 @@ fn Array<u8>::grow(self) {
     self.repr = new_repr;
 }
 
-fn Array<u8>^Eq::eq(self, other) {
+fn "wado-compiler/tests/fixtures/base64_decode.wado/Array<u8>^Eq::eq"(self, other) {  // from wado-compiler/tests/fixtures/base64_decode.wado
     let i: i32;
     let _licm_used_3: i32;
-    let _licm_repr_4: ref array<u8>;
-    let _licm_repr_5: ref array<u8>;
+    let _licm_repr_4: ref builtin::array<u8>;
+    let _licm_repr_5: ref builtin::array<u8>;
     if self.used != other.used {
         return 0;
     }
@@ -1545,9 +1545,9 @@ fn Array<u8>^Eq::eq(self, other) {
     return 1;
 }
 
-fn Formatter::write_char_n(self, c, n) {
+fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {  // from core:prelude/format.wado
     let i: i32;
-    let _licm_buf_4: ref String;
+    let _licm_buf_4: ref "core:prelude/string.wado//String";
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -1556,7 +1556,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 }
-                String::push(_licm_buf_4, c);
+                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
                 continue l143;
             };
@@ -1564,22 +1564,22 @@ fn Formatter::write_char_n(self, c, n) {
     };
 }
 
-fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref String;
+fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, prefix, digit_count) {  // from core:prelude/format.wado
+    let sign: ref "core:prelude/string.wado//String";
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
     let padding: i32;
-    let align: enum:Alignment;
+    let align: "core:prelude/format.wado//enum:Alignment";
     let offset_10: i32;
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    sign = String { repr: builtin::array_new<u8>(0), used: 0 };
+    sign = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = String { repr: array.new_data<u8>("-"), used: 1 };
+        sign = "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = String { repr: array.new_data<u8>("+"), used: 1 };
+        sign = "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -1590,60 +1590,60 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     }) {
         if sign_len > 0 {
-            String::push_str(self.buf, sign);
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            String::push_str(self.buf, prefix);
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        return String::internal_reserve_uninit(self.buf, digit_count);
+        return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::push_str(self.buf, sign);
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            String::push_str(self.buf, prefix);
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        Formatter::write_char_n(self, 48, padding);
-        return String::internal_reserve_uninit(self.buf, digit_count);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, 48, padding);
+        return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     align = self.align;
-    let __match_scrut_0: enum:Alignment;
+    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::push_str(self.buf, sign);
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            String::push_str(self.buf, prefix);
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
-        Formatter::write_char_n(self, self.fill, padding);
+        offset_10 = "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
         return offset_10;
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
-        Formatter::write_char_n(self, self.fill, left_pad);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::push_str(self.buf, sign);
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            String::push_str(self.buf, prefix);
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
-        Formatter::write_char_n(self, self.fill, right_pad);
+        offset_13 = "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, right_pad);
         return offset_13;
     } else {
-        Formatter::write_char_n(self, self.fill, padding);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
         if sign_len > 0 {
-            String::push_str(self.buf, sign);
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            String::push_str(self.buf, prefix);
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        return String::internal_reserve_uninit(self.buf, digit_count);
+        return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
 }
 
-export fn __cm_export__run as "run"
+export fn "wado-compiler/tests/fixtures/base64_decode.wado/__cm_export__run" as "run"

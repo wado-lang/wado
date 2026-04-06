@@ -4,18 +4,18 @@
 
 array builtin::array<u8> (mut u8);
 
-struct core:prelude/string.wado//StrCharIter {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//StrCharIter {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
     mut byte_index: i32,
 }
 
-struct core:prelude/string.wado//String {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//String {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {
+struct core:prelude/format.wado//Formatter {  // from core:prelude/format.wado
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
@@ -23,103 +23,103 @@ struct core:prelude/format.wado//Formatter {
     mut width: i32,
     mut precision: i32,
     mut indent: i32,
-    mut buf: ref String,
+    mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner {
+struct wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
     mut value: i32,
 }
 
-struct wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container {
-    mut name: ref String,
-    mut data: ref Inner,
+struct wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    mut name: ref "core:prelude/string.wado//String",
+    mut data: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner",
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // from core:prelude/format.wado
 
-type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
-type "functype/wasi/task-return" = fn(i32);
+type "functype//wasi/task-return" = fn(i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
+type "functype//wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype//wasi/waitable-set-drop" = fn(i32);
 
-type "functype/wasi/waitable-set-new" = fn() -> i32;
+type "functype//wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
 
-type "functype/__test_0_struct_eq_with_same_ref_field" = fn();
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_0_struct_eq_with_same_ref_field" = fn();
 
-type "functype/__test_1_struct_neq_with_different_ref_field" = fn();
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_1_struct_neq_with_different_ref_field" = fn();
 
-type "functype/__test_2_struct_neq_with_different_name_same_ref" = fn();
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_2_struct_neq_with_different_name_same_ref" = fn();
 
-type "functype/__test_3_struct_with_mut_ref_field" = fn();
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_3_struct_with_mut_ref_field" = fn();
 
-type "functype/__cm_export____test_0_struct_eq_with_same_ref_field" = fn();
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_0_struct_eq_with_same_ref_field" = fn();
 
-type "functype/__cm_export____test_1_struct_neq_with_different_ref_field" = fn();
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_1_struct_neq_with_different_ref_field" = fn();
 
-type "functype/__cm_export____test_2_struct_neq_with_different_name_same_ref" = fn();
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_2_struct_neq_with_different_name_same_ref" = fn();
 
-type "functype/__cm_export____test_3_struct_with_mut_ref_field" = fn();
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_3_struct_with_mut_ref_field" = fn();
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);
 
-type "functype/core:internal/log_stderr" = fn(ref String);
+type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/panic" = fn(ref String);
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;
 
-type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;
 
-type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);
 
-type "functype/count_digits_i64" = fn(i64) -> i32;
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;
 
-type "functype/write_decimal_digits" = fn(ref array<u8>, i32, i64, i32);
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);
 
-type "functype/String::grow" = fn(ref String, i32);
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);
 
-type "functype/String::internal_reserve_uninit" = fn(ref String, i32) -> i32;
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;
 
-type "functype/String::push_str" = fn(ref String, ref String);
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");
 
-type "functype/String^Eq::eq" = fn(ref String, ref String) -> bool;
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;
 
-type "functype/String^Eq::eq_bytes" = fn(ref array<u8>, ref array<u8>, i32) -> bool;
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;
 
-type "functype/String::push" = fn(ref String, char);
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);
 
-type "functype/Container^Eq::eq" = fn(ref Container, ref Container) -> bool;
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container", ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container") -> bool;
 
-type "functype/Container^Inspect::inspect" = fn(ref Container, ref Formatter);
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect" = fn(ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container", ref "core:prelude/format.wado//Formatter");
 
-type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);
 
-type "functype/Formatter::prepare_int_write" = fn(ref Formatter, bool, ref String, i32) -> i32;
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;
 
-type "functype/String^Inspect::inspect" = fn(ref String, ref Formatter);
+type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");
 
-type "functype/wasi/stream-drop-writable" = fn(i32);
+type "functype//wasi/stream-drop-writable" = fn(i32);
 
-type "functype/wasi/stream-new" = fn() -> i64;
+type "functype//wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];
 
-type "functype/i32::fmt_decimal" = fn(i32, ref Formatter);
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");
 
-type "functype/Inner^Inspect::inspect" = fn(i32, ref Formatter);
+type "functype//wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Inner^Inspect::inspect" = fn(i32, ref "core:prelude/format.wado//Formatter");
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -134,237 +134,237 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn __test_0_struct_eq_with_same_ref_field() {
-    let inner: ref Inner;
-    let c1: ref Container;
-    let c2: ref Container;
-    let __v0: ref Container;
-    let __v1: ref Container;
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_0_struct_eq_with_same_ref_field"() {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    let inner: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
+    let c1: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let c2: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let __v0: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let __v1: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
     let __cond: bool;
-    let __local_6: ref String;
-    let __local_7: ref Formatter;
-    let __local_12: ref Formatter;
-    inner = Inner { value: 42 };
-    c1 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: inner };
-    c2 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: inner };
+    let __local_6: ref "core:prelude/string.wado//String";
+    let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_12: ref "core:prelude/format.wado//Formatter";
+    inner = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner" { value: 42 };
+    c1 = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container" { name: "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, data: inner };
+    c2 = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container" { name: "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, data: inner };
     __v0 = c1;
     __v1 = c2;
-    __cond = Container^Eq::eq(__v0, __v1);
+    __cond = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Eq::eq"(__v0, __v1);
     if __cond == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_6 = String { repr: builtin::array_new<u8>(136), used: 0 };
-            String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_6, String { repr: array.new_data<u8>("__test_0_struct_eq_with_same_ref_field"), used: 38 });
-            String::push(__local_6, 32);
-            String::push(__local_6, 97);
-            String::push(__local_6, 116);
-            String::push(__local_6, 32);
-            String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
-            String::push(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_6 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_struct_eq_with_same_ref_field"), used: 38 });
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            "core:prelude/string.wado/String::push"(__local_6, 97);
+            "core:prelude/string.wado/String::push"(__local_6, 116);
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
+            "core:prelude/string.wado/String::push"(__local_6, 58);
+            __local_7 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_12 = __local_7;
-            i32::fmt_decimal(15, __local_12);
-            String::push_str(__local_6, String { repr: array.new_data<u8>("
+            "core:prelude/primitive.wado/i32::fmt_decimal"(15, __local_12);
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: c1 == c2
 "), used: 21 });
-            String::push(__local_6, 99);
-            String::push(__local_6, 49);
-            String::push(__local_6, 58);
-            String::push(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-            Container^Inspect::inspect(__v0, __local_7);
-            String::push(__local_6, 10);
-            String::push(__local_6, 99);
-            String::push(__local_6, 50);
-            String::push(__local_6, 58);
-            String::push(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-            Container^Inspect::inspect(__v1, __local_7);
-            String::push(__local_6, 10);
+            "core:prelude/string.wado/String::push"(__local_6, 99);
+            "core:prelude/string.wado/String::push"(__local_6, 49);
+            "core:prelude/string.wado/String::push"(__local_6, 58);
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            __local_7 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect"(__v0, __local_7);
+            "core:prelude/string.wado/String::push"(__local_6, 10);
+            "core:prelude/string.wado/String::push"(__local_6, 99);
+            "core:prelude/string.wado/String::push"(__local_6, 50);
+            "core:prelude/string.wado/String::push"(__local_6, 58);
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            __local_7 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect"(__v1, __local_7);
+            "core:prelude/string.wado/String::push"(__local_6, 10);
             break __tmpl: __local_6;
         });
         unreachable;
     }
 }
 
-fn __test_1_struct_neq_with_different_ref_field() {
-    let inner1: ref Inner;
-    let inner2: ref Inner;
-    let c1: ref Container;
-    let c2: ref Container;
-    let __v0: ref Container;
-    let __v1: ref Container;
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_1_struct_neq_with_different_ref_field"() {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    let inner1: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
+    let inner2: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
+    let c1: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let c2: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let __v0: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let __v1: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
     let __cond: bool;
-    let __local_7: ref String;
-    let __local_8: ref Formatter;
-    let __local_13: ref Formatter;
-    inner1 = Inner { value: 42 };
-    inner2 = Inner { value: 42 };
-    c1 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: inner1 };
-    c2 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: inner2 };
+    let __local_7: ref "core:prelude/string.wado//String";
+    let __local_8: ref "core:prelude/format.wado//Formatter";
+    let __local_13: ref "core:prelude/format.wado//Formatter";
+    inner1 = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner" { value: 42 };
+    inner2 = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner" { value: 42 };
+    c1 = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container" { name: "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, data: inner1 };
+    c2 = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container" { name: "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, data: inner2 };
     __v0 = c1;
     __v1 = c2;
-    __cond = Container^Eq::eq(__v0, __v1) == 0;
+    __cond = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Eq::eq"(__v0, __v1) == 0;
     if __cond == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_7 = String { repr: builtin::array_new<u8>(136), used: 0 };
-            String::push_str(__local_7, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_7, String { repr: array.new_data<u8>("__test_1_struct_neq_with_different_ref_field"), used: 44 });
-            String::push(__local_7, 32);
-            String::push(__local_7, 97);
-            String::push(__local_7, 116);
-            String::push(__local_7, 32);
-            String::push_str(__local_7, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
-            String::push(__local_7, 58);
-            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_7 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_7, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push_str"(__local_7, "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_struct_neq_with_different_ref_field"), used: 44 });
+            "core:prelude/string.wado/String::push"(__local_7, 32);
+            "core:prelude/string.wado/String::push"(__local_7, 97);
+            "core:prelude/string.wado/String::push"(__local_7, 116);
+            "core:prelude/string.wado/String::push"(__local_7, 32);
+            "core:prelude/string.wado/String::push_str"(__local_7, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
+            "core:prelude/string.wado/String::push"(__local_7, 58);
+            __local_8 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
             __local_13 = __local_8;
-            i32::fmt_decimal(24, __local_13);
-            String::push_str(__local_7, String { repr: array.new_data<u8>("
+            "core:prelude/primitive.wado/i32::fmt_decimal"(24, __local_13);
+            "core:prelude/string.wado/String::push_str"(__local_7, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: c1 != c2
 "), used: 21 });
-            String::push(__local_7, 99);
-            String::push(__local_7, 49);
-            String::push(__local_7, 58);
-            String::push(__local_7, 32);
-            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
-            Container^Inspect::inspect(__v0, __local_8);
-            String::push(__local_7, 10);
-            String::push(__local_7, 99);
-            String::push(__local_7, 50);
-            String::push(__local_7, 58);
-            String::push(__local_7, 32);
-            __local_8 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
-            Container^Inspect::inspect(__v1, __local_8);
-            String::push(__local_7, 10);
+            "core:prelude/string.wado/String::push"(__local_7, 99);
+            "core:prelude/string.wado/String::push"(__local_7, 49);
+            "core:prelude/string.wado/String::push"(__local_7, 58);
+            "core:prelude/string.wado/String::push"(__local_7, 32);
+            __local_8 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+            "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect"(__v0, __local_8);
+            "core:prelude/string.wado/String::push"(__local_7, 10);
+            "core:prelude/string.wado/String::push"(__local_7, 99);
+            "core:prelude/string.wado/String::push"(__local_7, 50);
+            "core:prelude/string.wado/String::push"(__local_7, 58);
+            "core:prelude/string.wado/String::push"(__local_7, 32);
+            __local_8 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
+            "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect"(__v1, __local_8);
+            "core:prelude/string.wado/String::push"(__local_7, 10);
             break __tmpl: __local_7;
         });
         unreachable;
     }
 }
 
-fn __test_2_struct_neq_with_different_name_same_ref() {
-    let inner: ref Inner;
-    let c1: ref Container;
-    let c2: ref Container;
-    let __v0: ref Container;
-    let __v1: ref Container;
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_2_struct_neq_with_different_name_same_ref"() {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    let inner: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
+    let c1: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let c2: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let __v0: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let __v1: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
     let __cond: bool;
-    let __local_6: ref String;
-    let __local_7: ref Formatter;
-    let __local_12: ref Formatter;
-    inner = Inner { value: 42 };
-    c1 = Container { name: String { repr: array.new_data<u8>("a"), used: 1 }, data: inner };
-    c2 = Container { name: String { repr: array.new_data<u8>("b"), used: 1 }, data: inner };
+    let __local_6: ref "core:prelude/string.wado//String";
+    let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_12: ref "core:prelude/format.wado//Formatter";
+    inner = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner" { value: 42 };
+    c1 = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container" { name: "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, data: inner };
+    c2 = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container" { name: "core:prelude/string.wado//String" { repr: array.new_data<u8>("b"), used: 1 }, data: inner };
     __v0 = c1;
     __v1 = c2;
-    __cond = Container^Eq::eq(__v0, __v1) == 0;
+    __cond = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Eq::eq"(__v0, __v1) == 0;
     if __cond == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_6 = String { repr: builtin::array_new<u8>(136), used: 0 };
-            String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_6, String { repr: array.new_data<u8>("__test_2_struct_neq_with_different_name_same_ref"), used: 48 });
-            String::push(__local_6, 32);
-            String::push(__local_6, 97);
-            String::push(__local_6, 116);
-            String::push(__local_6, 32);
-            String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
-            String::push(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_6 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_struct_neq_with_different_name_same_ref"), used: 48 });
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            "core:prelude/string.wado/String::push"(__local_6, 97);
+            "core:prelude/string.wado/String::push"(__local_6, 116);
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
+            "core:prelude/string.wado/String::push"(__local_6, 58);
+            __local_7 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_12 = __local_7;
-            i32::fmt_decimal(31, __local_12);
-            String::push_str(__local_6, String { repr: array.new_data<u8>("
+            "core:prelude/primitive.wado/i32::fmt_decimal"(31, __local_12);
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: c1 != c2
 "), used: 21 });
-            String::push(__local_6, 99);
-            String::push(__local_6, 49);
-            String::push(__local_6, 58);
-            String::push(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-            Container^Inspect::inspect(__v0, __local_7);
-            String::push(__local_6, 10);
-            String::push(__local_6, 99);
-            String::push(__local_6, 50);
-            String::push(__local_6, 58);
-            String::push(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-            Container^Inspect::inspect(__v1, __local_7);
-            String::push(__local_6, 10);
+            "core:prelude/string.wado/String::push"(__local_6, 99);
+            "core:prelude/string.wado/String::push"(__local_6, 49);
+            "core:prelude/string.wado/String::push"(__local_6, 58);
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            __local_7 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect"(__v0, __local_7);
+            "core:prelude/string.wado/String::push"(__local_6, 10);
+            "core:prelude/string.wado/String::push"(__local_6, 99);
+            "core:prelude/string.wado/String::push"(__local_6, 50);
+            "core:prelude/string.wado/String::push"(__local_6, 58);
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            __local_7 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect"(__v1, __local_7);
+            "core:prelude/string.wado/String::push"(__local_6, 10);
             break __tmpl: __local_6;
         });
         unreachable;
     }
 }
 
-fn __test_3_struct_with_mut_ref_field() {
-    let inner: ref Inner;
-    let c1: ref Container;
-    let c2: ref Container;
-    let __v0: ref Container;
-    let __v1: ref Container;
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_3_struct_with_mut_ref_field"() {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    let inner: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
+    let c1: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let c2: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let __v0: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
+    let __v1: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container";
     let __cond: bool;
-    let __local_6: ref String;
-    let __local_7: ref Formatter;
-    let __local_12: ref Formatter;
-    inner = Inner { value: 42 };
-    c1 = Container { name: String { repr: array.new_data<u8>("x"), used: 1 }, data: inner };
-    c2 = Container { name: String { repr: array.new_data<u8>("x"), used: 1 }, data: inner };
+    let __local_6: ref "core:prelude/string.wado//String";
+    let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_12: ref "core:prelude/format.wado//Formatter";
+    inner = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner" { value: 42 };
+    c1 = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container" { name: "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 }, data: inner };
+    c2 = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Container" { name: "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 }, data: inner };
     __v0 = c1;
     __v1 = c2;
-    __cond = Container^Eq::eq(__v0, __v1);
+    __cond = "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Eq::eq"(__v0, __v1);
     if __cond == 0 {
-        "core:internal/panic"(__tmpl: block -> ref String {
-            __local_6 = String { repr: builtin::array_new<u8>(136), used: 0 };
-            String::push_str(__local_6, String { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
-            String::push_str(__local_6, String { repr: array.new_data<u8>("__test_3_struct_with_mut_ref_field"), used: 34 });
-            String::push(__local_6, 32);
-            String::push(__local_6, 97);
-            String::push(__local_6, 116);
-            String::push(__local_6, 32);
-            String::push_str(__local_6, String { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
-            String::push(__local_6, 58);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+        "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_6 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_struct_with_mut_ref_field"), used: 34 });
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            "core:prelude/string.wado/String::push"(__local_6, 97);
+            "core:prelude/string.wado/String::push"(__local_6, 116);
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado"), used: 62 });
+            "core:prelude/string.wado/String::push"(__local_6, 58);
+            __local_7 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
             __local_12 = __local_7;
-            i32::fmt_decimal(38, __local_12);
-            String::push_str(__local_6, String { repr: array.new_data<u8>("
+            "core:prelude/primitive.wado/i32::fmt_decimal"(38, __local_12);
+            "core:prelude/string.wado/String::push_str"(__local_6, "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: c1 == c2
 "), used: 21 });
-            String::push(__local_6, 99);
-            String::push(__local_6, 49);
-            String::push(__local_6, 58);
-            String::push(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-            Container^Inspect::inspect(__v0, __local_7);
-            String::push(__local_6, 10);
-            String::push(__local_6, 99);
-            String::push(__local_6, 50);
-            String::push(__local_6, 58);
-            String::push(__local_6, 32);
-            __local_7 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-            Container^Inspect::inspect(__v1, __local_7);
-            String::push(__local_6, 10);
+            "core:prelude/string.wado/String::push"(__local_6, 99);
+            "core:prelude/string.wado/String::push"(__local_6, 49);
+            "core:prelude/string.wado/String::push"(__local_6, 58);
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            __local_7 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect"(__v0, __local_7);
+            "core:prelude/string.wado/String::push"(__local_6, 10);
+            "core:prelude/string.wado/String::push"(__local_6, 99);
+            "core:prelude/string.wado/String::push"(__local_6, 50);
+            "core:prelude/string.wado/String::push"(__local_6, 58);
+            "core:prelude/string.wado/String::push"(__local_6, 32);
+            __local_7 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
+            "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect"(__v1, __local_7);
+            "core:prelude/string.wado/String::push"(__local_6, 10);
             break __tmpl: __local_6;
         });
         unreachable;
     }
 }
 
-fn __cm_export____test_0_struct_eq_with_same_ref_field() {
-    __test_0_struct_eq_with_same_ref_field();
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_0_struct_eq_with_same_ref_field"() {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_0_struct_eq_with_same_ref_field"();
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_1_struct_neq_with_different_ref_field() {
-    __test_1_struct_neq_with_different_ref_field();
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_1_struct_neq_with_different_ref_field"() {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_1_struct_neq_with_different_ref_field"();
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_2_struct_neq_with_different_name_same_ref() {
-    __test_2_struct_neq_with_different_name_same_ref();
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_2_struct_neq_with_different_name_same_ref"() {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_2_struct_neq_with_different_name_same_ref"();
     "wasi/task-return"(0);
 }
 
-fn __cm_export____test_3_struct_with_mut_ref_field() {
-    __test_3_struct_with_mut_ref_field();
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_3_struct_with_mut_ref_field"() {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__test_3_struct_with_mut_ref_field"();
     "wasi/task-return"(0);
 }
 
@@ -386,9 +386,9 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 }
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
-    let bytes: ref array<u8>;
+    let bytes: ref builtin::array<u8>;
     let len: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -458,7 +458,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn count_digits_i64(val) {
+fn "core:prelude/primitive.wado/count_digits_i64"(val) {  // from core:prelude/primitive.wado
     let n: i32;
     let t: i64;
     if val == 0_i64 {
@@ -481,7 +481,7 @@ fn count_digits_i64(val) {
     return n;
 }
 
-fn write_decimal_digits(arr, offset, abs_val, digit_count) {
+fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {  // from core:prelude/primitive.wado
     let pos: i32;
     let temp: i64;
     pos = offset + digit_count;
@@ -505,30 +505,30 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
     }
 }
 
-fn i32::fmt_decimal(self, f) {
+fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {  // from core:prelude/primitive.wado
     let is_negative: bool;
     let abs_val: i64;
     let digit_count: i32;
     let offset: i32;
-    let __local_6: ref String;
+    let __local_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     abs_val = (if is_negative -> i64 {
         0_i64 - builtin::i64_extend_i32_s(self);
     } else {
         builtin::i64_extend_i32_s(self);
     });
-    digit_count = count_digits_i64(abs_val);
-    offset = Formatter::prepare_int_write(f, is_negative, String { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
-    write_decimal_digits(__inline_String__internal_raw_bytes_0: block -> ref array<u8> {
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
+    offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
+    "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
 }
 
-fn String::grow(self, min_capacity) {
+fn "core:prelude/string.wado/String::grow"(self, min_capacity) {  // from core:prelude/string.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     let __local_5: i32;
     let __local_7: i32;
     capacity = builtin::array_len(self.repr);
@@ -547,19 +547,19 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::internal_reserve_uninit(self, n) {
+fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {  // from core:prelude/string.wado
     let new_used: i32;
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
+        "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
     self.used = new_used;
     return start;
 }
 
-fn String::push_str(self, other) {
+fn "core:prelude/string.wado/String::push_str"(self, other) {  // from core:prelude/string.wado
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -568,22 +568,22 @@ fn String::push_str(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
+        "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
 
-fn String^Eq::eq(self, other) {
+fn "core:prelude/string.wado/String^Eq::eq"(self, other) {  // from core:prelude/string.wado
     let len_a: i32;
     len_a = self.used;
     if len_a != other.used {
         return 0;
     }
-    return String^Eq::eq_bytes(self.repr, other.repr, len_a);
+    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
 }
 
-fn String^Eq::eq_bytes(a, b, len) {
+fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {  // from core:prelude/string.wado
     let i: i32;
     __for_1: block {
         i = 0;
@@ -603,7 +603,7 @@ fn String^Eq::eq_bytes(a, b, len) {
     return 1;
 }
 
-fn StrCharIter^Iterator::next(self) {
+fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {  // from core:prelude/string.wado
     let b0: u8;
     let b1_2: u32;
     let code_3: u32;
@@ -647,11 +647,11 @@ fn StrCharIter^Iterator::next(self) {
     return 0, code_10;
 }
 
-fn String::push(self, c) {
+fn "core:prelude/string.wado/String::push"(self, c) {  // from core:prelude/string.wado
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
-        String::grow(self, self.used + 4);
+        "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
@@ -674,10 +674,10 @@ fn String::push(self, c) {
     }
 }
 
-fn Container^Eq::eq(self, other) {
-    let __local_2: ref Inner;
-    let __local_3: ref Inner;
-    return (if String^Eq::eq(self.name, other.name) -> i32 {
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Eq::eq"(self, other) {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    let __local_2: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
+    let __local_3: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
+    return (if "core:prelude/string.wado/String^Eq::eq"(self.name, other.name) -> i32 {
         __inline___Inner__Eq__eq_0: block -> bool {
             __local_2 = self.data;
             __local_3 = other.data;
@@ -688,49 +688,49 @@ fn Container^Eq::eq(self, other) {
     });
 }
 
-fn Inner^Inspect::inspect(self, f) {
-    let s_3: ref String;
-    let s_5: ref String;
-    let s_11: ref String;
-    s_3 = String { repr: array.new_data<u8>("Inner { "), used: 8 };
-    String::push_str(f.buf, s_3);
-    s_5 = String { repr: array.new_data<u8>("value: "), used: 7 };
-    String::push_str(f.buf, s_5);
-    i32::fmt_decimal(self, f);
-    s_11 = String { repr: array.new_data<u8>(" }"), used: 2 };
-    String::push_str(f.buf, s_11);
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Inner^Inspect::inspect"(self, f) {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    let s_3: ref "core:prelude/string.wado//String";
+    let s_5: ref "core:prelude/string.wado//String";
+    let s_11: ref "core:prelude/string.wado//String";
+    s_3 = "core:prelude/string.wado//String" { repr: array.new_data<u8>("Inner { "), used: 8 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_3);
+    s_5 = "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self, f);
+    s_11 = "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_11);
 }
 
-fn Container^Inspect::inspect(self, f) {
-    let s_3: ref String;
-    let s_5: ref String;
-    let s_7: ref String;
-    let s_9: ref String;
-    let self_10: ref Inner;
-    let inner: ref Inner;
-    let s_14: ref String;
-    let s_16: ref String;
-    s_3 = String { repr: array.new_data<u8>("Container { "), used: 12 };
-    String::push_str(f.buf, s_3);
-    s_5 = String { repr: array.new_data<u8>("name: "), used: 6 };
-    String::push_str(f.buf, s_5);
-    String^Inspect::inspect(self.name, f);
-    s_7 = String { repr: array.new_data<u8>(", "), used: 2 };
-    String::push_str(f.buf, s_7);
-    s_9 = String { repr: array.new_data<u8>("data: "), used: 6 };
-    String::push_str(f.buf, s_9);
+fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Inspect::inspect"(self, f) {  // from wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado
+    let s_3: ref "core:prelude/string.wado//String";
+    let s_5: ref "core:prelude/string.wado//String";
+    let s_7: ref "core:prelude/string.wado//String";
+    let s_9: ref "core:prelude/string.wado//String";
+    let self_10: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
+    let inner: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
+    let s_14: ref "core:prelude/string.wado//String";
+    let s_16: ref "core:prelude/string.wado//String";
+    s_3 = "core:prelude/string.wado//String" { repr: array.new_data<u8>("Container { "), used: 12 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_3);
+    s_5 = "core:prelude/string.wado//String" { repr: array.new_data<u8>("name: "), used: 6 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+    "core:prelude/format.wado/String^Inspect::inspect"(self.name, f);
+    s_7 = "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_7);
+    s_9 = "core:prelude/string.wado//String" { repr: array.new_data<u8>("data: "), used: 6 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     self_10 = self.data;
-    s_14 = String { repr: array.new_data<u8>("&"), used: 1 };
-    String::push_str(f.buf, s_14);
+    s_14 = "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_14);
     inner = self_10;
-    Inner^Inspect::inspect(inner.value, f);
-    s_16 = String { repr: array.new_data<u8>(" }"), used: 2 };
-    String::push_str(f.buf, s_16);
+    "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Inner^Inspect::inspect"(inner.value, f);
+    s_16 = "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_16);
 }
 
-fn Formatter::write_char_n(self, c, n) {
+fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {  // from core:prelude/format.wado
     let i: i32;
-    let _licm_buf_4: ref String;
+    let _licm_buf_4: ref "core:prelude/string.wado//String";
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -739,7 +739,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 }
-                String::push(_licm_buf_4, c);
+                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
                 continue l37;
             };
@@ -747,22 +747,22 @@ fn Formatter::write_char_n(self, c, n) {
     };
 }
 
-fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
-    let sign: ref String;
+fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, prefix, digit_count) {  // from core:prelude/format.wado
+    let sign: ref "core:prelude/string.wado//String";
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
     let padding: i32;
-    let align: enum:Alignment;
+    let align: "core:prelude/format.wado//enum:Alignment";
     let offset_10: i32;
     let left_pad: i32;
     let right_pad: i32;
     let offset_13: i32;
-    sign = String { repr: builtin::array_new<u8>(0), used: 0 };
+    sign = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = String { repr: array.new_data<u8>("-"), used: 1 };
+        sign = "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = String { repr: array.new_data<u8>("+"), used: 1 };
+        sign = "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -773,73 +773,73 @@ fn Formatter::prepare_int_write(self, is_negative, prefix, digit_count) {
         content_len >= self.width;
     }) {
         if sign_len > 0 {
-            String::push_str(self.buf, sign);
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            String::push_str(self.buf, prefix);
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        return String::internal_reserve_uninit(self.buf, digit_count);
+        return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     padding = self.width - content_len;
     if self.zero_pad {
         if sign_len > 0 {
-            String::push_str(self.buf, sign);
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            String::push_str(self.buf, prefix);
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        Formatter::write_char_n(self, 48, padding);
-        return String::internal_reserve_uninit(self.buf, digit_count);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, 48, padding);
+        return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
     align = self.align;
-    let __match_scrut_0: enum:Alignment;
+    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
         if sign_len > 0 {
-            String::push_str(self.buf, sign);
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            String::push_str(self.buf, prefix);
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        offset_10 = String::internal_reserve_uninit(self.buf, digit_count);
-        Formatter::write_char_n(self, self.fill, padding);
+        offset_10 = "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
         return offset_10;
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
-        Formatter::write_char_n(self, self.fill, left_pad);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, left_pad);
         if sign_len > 0 {
-            String::push_str(self.buf, sign);
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            String::push_str(self.buf, prefix);
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        offset_13 = String::internal_reserve_uninit(self.buf, digit_count);
-        Formatter::write_char_n(self, self.fill, right_pad);
+        offset_13 = "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, right_pad);
         return offset_13;
     } else {
-        Formatter::write_char_n(self, self.fill, padding);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
         if sign_len > 0 {
-            String::push_str(self.buf, sign);
+            "core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
         if prefix_len > 0 {
-            String::push_str(self.buf, prefix);
+            "core:prelude/string.wado/String::push_str"(self.buf, prefix);
         }
-        return String::internal_reserve_uninit(self.buf, digit_count);
+        return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
 }
 
-fn String^Inspect::inspect(self, f) {
-    let __iter_2: ref StrCharIter;
+fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {  // from core:prelude/format.wado
+    let __iter_2: ref "core:prelude/string.wado//StrCharIter";
     let c: char;
-    let __local_7: ref StrCharIter;
-    let __local_8: ref String;
-    let _licm_buf_33: ref String;
-    String::push(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
-        __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
+    let __local_7: ref "core:prelude/string.wado//StrCharIter";
+    let __local_8: ref "core:prelude/string.wado//String";
+    let _licm_buf_33: ref "core:prelude/string.wado//String";
+    "core:prelude/string.wado/String::push"(f.buf, 34);
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+        __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
@@ -848,26 +848,26 @@ fn String^Inspect::inspect(self, f) {
         l57: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::push(_licm_buf_33, 92);
-                    String::push(_licm_buf_33, 34);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::push(_licm_buf_33, 92);
-                    String::push(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::push(_licm_buf_33, 92);
-                    String::push(_licm_buf_33, 110);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::push(_licm_buf_33, 92);
-                    String::push(_licm_buf_33, 114);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::push(_licm_buf_33, 92);
-                    String::push(_licm_buf_33, 116);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 116);
                 } else {
-                    String::push(_licm_buf_33, c);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, c);
                 }
             } else {
                 break b56;
@@ -875,10 +875,10 @@ fn String^Inspect::inspect(self, f) {
             continue l57;
         };
     };
-    String::push(f.buf, 34);
+    "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
-export fn __cm_export____test_0_struct_eq_with_same_ref_field as "__test_0_struct_eq_with_same_ref_field"
-export fn __cm_export____test_1_struct_neq_with_different_ref_field as "__test_1_struct_neq_with_different_ref_field"
-export fn __cm_export____test_2_struct_neq_with_different_name_same_ref as "__test_2_struct_neq_with_different_name_same_ref"
-export fn __cm_export____test_3_struct_with_mut_ref_field as "__test_3_struct_with_mut_ref_field"
+export fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_0_struct_eq_with_same_ref_field" as "__test_0_struct_eq_with_same_ref_field"
+export fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_1_struct_neq_with_different_ref_field" as "__test_1_struct_neq_with_different_ref_field"
+export fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_2_struct_neq_with_different_name_same_ref" as "__test_2_struct_neq_with_different_name_same_ref"
+export fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/__cm_export____test_3_struct_with_mut_ref_field" as "__test_3_struct_with_mut_ref_field"

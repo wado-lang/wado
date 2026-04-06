@@ -4,61 +4,61 @@
 
 array builtin::array<u8> (mut u8);
 
-struct core:prelude/string.wado//String {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//String {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
 array builtin::array<i32> (mut i32);
 
-struct core:prelude//Array<i32> {  // Array<T> with T=i32
-    mut repr: ref array<i32>,
+struct core:prelude//Array<i32> {  // from core:prelude  // Array<T> with T=i32
+    mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
-type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
-type "functype/wasi/task-return" = fn(i32);
+type "functype//wasi/task-return" = fn(i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
+type "functype//wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype//wasi/waitable-set-drop" = fn(i32);
 
-type "functype/wasi/waitable-set-new" = fn() -> i32;
+type "functype//wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
 
-type "functype/run" = fn();
+type "functype//wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run" = fn();
 
-type "functype/__cm_export__run" = fn();
+type "functype//wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run" = fn();
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);
 
-type "functype/core:internal/write_string_to_stream" = fn(i32, ref String, bool);
+type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);
 
-type "functype/core:internal/log_stderr" = fn(ref String);
+type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/panic" = fn(ref String);
+type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;
 
-type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;
 
-type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);
 
-type "functype/Array<i32>::push" = fn(ref Array<i32>, i32);
+type "functype//wado-compiler/tests/fixtures/array_bounds_check_negative.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);
 
-type "functype/Array<i32>::grow" = fn(ref Array<i32>);
+type "functype//wado-compiler/tests/fixtures/array_bounds_check_negative.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");
 
-type "functype/wasi/stream-drop-writable" = fn(i32);
+type "functype//wasi/stream-drop-writable" = fn(i32);
 
-type "functype/wasi/stream-new" = fn() -> i64;
+type "functype//wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -73,11 +73,11 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn run() {
-    let __local_0: ref Array<i32>;
-    let arr: ref Array<i32>;
-    arr = __seq_lit: block -> ref Array<i32> {
-        __local_0 = Array<i32> { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
+fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run"() {  // from wado-compiler/tests/fixtures/array_bounds_check_negative.wado
+    let __local_0: ref "core:prelude//Array<i32>";
+    let arr: ref "core:prelude//Array<i32>";
+    arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
+        __local_0 = "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
     };
     drop(__inline_Array_i32__IndexValue__index_value_8: block -> i32 {
@@ -87,8 +87,8 @@ fn run() {
     });
 }
 
-fn __cm_export__run() {
-    run();
+fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run"() {  // from wado-compiler/tests/fixtures/array_bounds_check_negative.wado
+    "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -110,9 +110,9 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
 }
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from core:internal
-    let bytes: ref array<u8>;
+    let bytes: ref builtin::array<u8>;
     let len: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -182,21 +182,21 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn Array<i32>::push(self, value) {
+fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/Array<i32>::push"(self, value) {  // from wado-compiler/tests/fixtures/array_bounds_check_negative.wado
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<i32>::grow(self);
+        "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/Array<i32>::grow"(self);
     }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<i32>::grow(self) {
+fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/Array<i32>::grow"(self) {  // from wado-compiler/tests/fixtures/array_bounds_check_negative.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<i32>;
-    let old_repr: ref array<i32>;
+    let new_repr: ref builtin::array<i32>;
+    let old_repr: ref builtin::array<i32>;
     let used: i32;
     let i: i32;
     let __local_7: i32;
@@ -224,4 +224,4 @@ fn Array<i32>::grow(self) {
     self.repr = new_repr;
 }
 
-export fn __cm_export__run as "run"
+export fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/__cm_export__run" as "run"

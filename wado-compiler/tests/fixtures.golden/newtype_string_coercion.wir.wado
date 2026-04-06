@@ -4,18 +4,18 @@
 
 array builtin::array<u8> (mut u8);
 
-struct core:prelude/string.wado//StrCharIter {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//StrCharIter {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
     mut byte_index: i32,
 }
 
-struct core:prelude/string.wado//String {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//String {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {
+struct core:prelude/format.wado//Formatter {  // from core:prelude/format.wado
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
@@ -23,66 +23,66 @@ struct core:prelude/format.wado//Formatter {
     mut width: i32,
     mut precision: i32,
     mut indent: i32,
-    mut buf: ref String,
+    mut buf: ref "core:prelude/string.wado//String",
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // from core:prelude/format.wado
 
-type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
-type "functype/wasi/task-return" = fn(i32);
+type "functype//wasi/task-return" = fn(i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
+type "functype//wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype//wasi/waitable-set-drop" = fn(i32);
 
-type "functype/wasi/waitable-set-new" = fn() -> i32;
+type "functype//wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
-type "functype/greet" = fn(ref String) -> ref String;
+type "functype//wado-compiler/tests/fixtures/newtype_string_coercion.wado/greet" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";
 
-type "functype/run" = fn();
+type "functype//wado-compiler/tests/fixtures/newtype_string_coercion.wado/run" = fn();
 
-type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype//wado-compiler/tests/fixtures/newtype_string_coercion.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_export__run" = fn();
+type "functype//wado-compiler/tests/fixtures/newtype_string_coercion.wado/__cm_export__run" = fn();
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);
 
-type "functype/core:cli/println" = fn(ref String);
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);
 
-type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;
 
-type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;
 
-type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);
 
-type "functype/String::grow" = fn(ref String, i32);
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);
 
-type "functype/String::push_str" = fn(ref String, ref String);
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");
 
-type "functype/String::push" = fn(ref String, char);
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);
 
-type "functype/Formatter::write_char_n" = fn(ref Formatter, char, i32);
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);
 
-type "functype/Formatter::pad" = fn(ref Formatter, ref String);
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");
 
-type "functype/String^Inspect::inspect" = fn(ref String, ref Formatter);
+type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");
 
-type "functype/wasi/stream-drop-writable" = fn(i32);
+type "functype//wasi/stream-drop-writable" = fn(i32);
 
-type "functype/wasi/stream-new" = fn() -> i64;
+type "functype//wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/StrCharIter^Iterator::next" = fn(ref StrCharIter) -> [i32, char];
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -97,50 +97,50 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn greet(name) {
-    let __local_1: ref String;
-    let __local_2: ref Formatter;
-    let __local_8: ref Formatter;
-    let __local_10: ref String;
-    return __tmpl: block -> ref String {
-        __local_1 = String { repr: builtin::array_new<u8>(24), used: 0 };
-        String::push(__local_1, 72);
-        String::push(__local_1, 101);
-        String::push(__local_1, 108);
-        String::push(__local_1, 108);
-        String::push(__local_1, 111);
-        String::push(__local_1, 44);
-        String::push(__local_1, 32);
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/greet"(name) {  // from wado-compiler/tests/fixtures/newtype_string_coercion.wado
+    let __local_1: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/format.wado//Formatter";
+    let __local_8: ref "core:prelude/format.wado//Formatter";
+    let __local_10: ref "core:prelude/string.wado//String";
+    return __tmpl: block -> ref "core:prelude/string.wado//String" {
+        __local_1 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
+        "core:prelude/string.wado/String::push"(__local_1, 72);
+        "core:prelude/string.wado/String::push"(__local_1, 101);
+        "core:prelude/string.wado/String::push"(__local_1, 108);
+        "core:prelude/string.wado/String::push"(__local_1, 108);
+        "core:prelude/string.wado/String::push"(__local_1, 111);
+        "core:prelude/string.wado/String::push"(__local_1, 44);
+        "core:prelude/string.wado/String::push"(__local_1, 32);
+        __local_2 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         __local_8 = __local_2;
-        String^Inspect::inspect(name, __local_8);
-        __local_10 = String { repr: array.new_data<u8>(" as Name"), used: 8 };
-        String::push_str(__local_8.buf, __local_10);
-        String::push(__local_1, 33);
+        "core:prelude/format.wado/String^Inspect::inspect"(name, __local_8);
+        __local_10 = "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as Name"), used: 8 };
+        "core:prelude/string.wado/String::push_str"(__local_8.buf, __local_10);
+        "core:prelude/string.wado/String::push"(__local_1, 33);
         break __tmpl: __local_1;
     };
 }
 
-fn run() with Stdout {
-    let label: ref String;
-    let greeting: ref String;
-    let x: ref String;
-    let label2: ref String;
-    let __local_4: ref String;
-    let __local_5: ref Formatter;
-    label = String { repr: array.new_data<u8>("hello"), used: 5 };
-    greeting = greet(String { repr: array.new_data<u8>("Alice"), used: 5 });
-    x = String { repr: array.new_data<u8>("world"), used: 5 };
-    label2 = __tmpl: block -> ref String {
-        __local_4 = String { repr: builtin::array_new<u8>(22), used: 0 };
-        String::push(__local_4, 104);
-        String::push(__local_4, 101);
-        String::push(__local_4, 108);
-        String::push(__local_4, 108);
-        String::push(__local_4, 111);
-        String::push(__local_4, 32);
-        __local_5 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        Formatter::pad(__local_5, x);
+fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/run"() with Stdout {  // from wado-compiler/tests/fixtures/newtype_string_coercion.wado
+    let label: ref "core:prelude/string.wado//String";
+    let greeting: ref "core:prelude/string.wado//String";
+    let x: ref "core:prelude/string.wado//String";
+    let label2: ref "core:prelude/string.wado//String";
+    let __local_4: ref "core:prelude/string.wado//String";
+    let __local_5: ref "core:prelude/format.wado//Formatter";
+    label = "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    greeting = "wado-compiler/tests/fixtures/newtype_string_coercion.wado/greet"("core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 });
+    x = "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
+    label2 = __tmpl: block -> ref "core:prelude/string.wado//String" {
+        __local_4 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
+        "core:prelude/string.wado/String::push"(__local_4, 104);
+        "core:prelude/string.wado/String::push"(__local_4, 101);
+        "core:prelude/string.wado/String::push"(__local_4, 108);
+        "core:prelude/string.wado/String::push"(__local_4, 108);
+        "core:prelude/string.wado/String::push"(__local_4, 111);
+        "core:prelude/string.wado/String::push"(__local_4, 32);
+        __local_5 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        "core:prelude/format.wado/Formatter::pad"(__local_5, x);
         break __tmpl: __local_4;
     };
     "core:cli/println"(label);
@@ -148,19 +148,19 @@ fn run() with Stdout {
     "core:cli/println"(label2);
 }
 
-fn __cm_binding__Stdout_write_via_stream(data) {
+fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/__cm_binding__Stdout_write_via_stream"(data) {  // from wado-compiler/tests/fixtures/newtype_string_coercion.wado
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn __cm_export__run() {
-    run();
+fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/__cm_export__run"() {  // from wado-compiler/tests/fixtures/newtype_string_coercion.wado
+    "wado-compiler/tests/fixtures/newtype_string_coercion.wado/run"();
     "wasi/task-return"(0);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
-    let bytes: ref array<u8>;
+    let bytes: ref builtin::array<u8>;
     let len: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -182,7 +182,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = __cm_binding__Stdout_write_via_stream(rx);
+    handle = "wado-compiler/tests/fixtures/newtype_string_coercion.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -240,10 +240,10 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn String::grow(self, min_capacity) {
+fn "core:prelude/string.wado/String::grow"(self, min_capacity) {  // from core:prelude/string.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     let __local_5: i32;
     let __local_7: i32;
     capacity = builtin::array_len(self.repr);
@@ -262,7 +262,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::push_str(self, other) {
+fn "core:prelude/string.wado/String::push_str"(self, other) {  // from core:prelude/string.wado
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -271,13 +271,13 @@ fn String::push_str(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
+        "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
 
-fn StrCharIter^Iterator::next(self) {
+fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {  // from core:prelude/string.wado
     let b0: u8;
     let b1_2: u32;
     let code_3: u32;
@@ -321,11 +321,11 @@ fn StrCharIter^Iterator::next(self) {
     return 0, code_10;
 }
 
-fn String::push(self, c) {
+fn "core:prelude/string.wado/String::push"(self, c) {  // from core:prelude/string.wado
     let code: u32;
     code = c;
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
-        String::grow(self, self.used + 4);
+        "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if code <u 128 {
         builtin::array_set_u8(self.repr, self.used, code & 255);
@@ -348,9 +348,9 @@ fn String::push(self, c) {
     }
 }
 
-fn Formatter::write_char_n(self, c, n) {
+fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {  // from core:prelude/format.wado
     let i: i32;
-    let _licm_buf_4: ref String;
+    let _licm_buf_4: ref "core:prelude/string.wado//String";
     __for_0: block {
         i = 0;
         _licm_buf_4 = self.buf;
@@ -359,7 +359,7 @@ fn Formatter::write_char_n(self, c, n) {
                 if (i < n) == 0 {
                     break __for_0;
                 }
-                String::push(_licm_buf_4, c);
+                "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
                 continue l17;
             };
@@ -367,10 +367,10 @@ fn Formatter::write_char_n(self, c, n) {
     };
 }
 
-fn Formatter::pad(self, content) {
+fn "core:prelude/format.wado/Formatter::pad"(self, content) {  // from core:prelude/format.wado
     let content_len: i32;
     let padding: i32;
-    let align: enum:Alignment;
+    let align: "core:prelude/format.wado//enum:Alignment";
     let left_pad: i32;
     let right_pad: i32;
     content_len = content.used;
@@ -379,39 +379,39 @@ fn Formatter::pad(self, content) {
     } else {
         content_len >= self.width;
     }) {
-        String::push_str(self.buf, content);
+        "core:prelude/string.wado/String::push_str"(self.buf, content);
         return;
     }
     padding = self.width - content_len;
     align = self.align;
-    let __match_scrut_0: enum:Alignment;
+    let __match_scrut_0: "core:prelude/format.wado//enum:Alignment";
     __match_scrut_0 = align;
     if __match_scrut_0 == 0 {
-        String::push_str(self.buf, content);
-        Formatter::write_char_n(self, self.fill, padding);
+        "core:prelude/string.wado/String::push_str"(self.buf, content);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
-        Formatter::write_char_n(self, self.fill, left_pad);
-        String::push_str(self.buf, content);
-        Formatter::write_char_n(self, self.fill, right_pad);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, left_pad);
+        "core:prelude/string.wado/String::push_str"(self.buf, content);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, right_pad);
     } else {
-        Formatter::write_char_n(self, self.fill, padding);
-        String::push_str(self.buf, content);
+        "core:prelude/format.wado/Formatter::write_char_n"(self, self.fill, padding);
+        "core:prelude/string.wado/String::push_str"(self.buf, content);
     }
 }
 
-fn String^Inspect::inspect(self, f) {
-    let __iter_2: ref StrCharIter;
+fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {  // from core:prelude/format.wado
+    let __iter_2: ref "core:prelude/string.wado//StrCharIter";
     let c: char;
-    let __local_7: ref StrCharIter;
-    let __local_8: ref String;
-    let _licm_buf_33: ref String;
-    String::push(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref StrCharIter {
-        __local_7 = __inline_String__chars_2: block -> ref StrCharIter {
+    let __local_7: ref "core:prelude/string.wado//StrCharIter";
+    let __local_8: ref "core:prelude/string.wado//String";
+    let _licm_buf_33: ref "core:prelude/string.wado//String";
+    "core:prelude/string.wado/String::push"(f.buf, 34);
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+        __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
-            break __inline_String__chars_2: StrCharIter { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            break __inline_String__chars_2: "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
@@ -420,26 +420,26 @@ fn String^Inspect::inspect(self, f) {
         l24: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 c = __sroa___pattern_temp_0_payload_0;
                 if c == 34 {
-                    String::push(_licm_buf_33, 92);
-                    String::push(_licm_buf_33, 34);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 34);
                 } else if c == 92 {
-                    String::push(_licm_buf_33, 92);
-                    String::push(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
                 } else if c == 10 {
-                    String::push(_licm_buf_33, 92);
-                    String::push(_licm_buf_33, 110);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 110);
                 } else if c == 13 {
-                    String::push(_licm_buf_33, 92);
-                    String::push(_licm_buf_33, 114);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 114);
                 } else if c == 9 {
-                    String::push(_licm_buf_33, 92);
-                    String::push(_licm_buf_33, 116);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, 116);
                 } else {
-                    String::push(_licm_buf_33, c);
+                    "core:prelude/string.wado/String::push"(_licm_buf_33, c);
                 }
             } else {
                 break b23;
@@ -447,7 +447,7 @@ fn String^Inspect::inspect(self, f) {
             continue l24;
         };
     };
-    String::push(f.buf, 34);
+    "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
-export fn __cm_export__run as "run"
+export fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/__cm_export__run" as "run"

@@ -4,52 +4,52 @@
 
 array builtin::array<u8> (mut u8);
 
-struct core:prelude/string.wado//String {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//String {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-enum wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction { Up = 0, Down = 1, Left = 2, Right = 3 };
+enum wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction { Up = 0, Down = 1, Left = 2, Right = 3 };  // from wado-compiler/tests/fixtures/enum-match-if-let.wado
 
-type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
-type "functype/wasi/task-return" = fn(i32);
+type "functype//wasi/task-return" = fn(i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
+type "functype//wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype//wasi/waitable-set-drop" = fn(i32);
 
-type "functype/wasi/waitable-set-new" = fn() -> i32;
+type "functype//wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
-type "functype/run" = fn();
+type "functype//wado-compiler/tests/fixtures/enum-match-if-let.wado/run" = fn();
 
-type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype//wado-compiler/tests/fixtures/enum-match-if-let.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_export__run" = fn();
+type "functype//wado-compiler/tests/fixtures/enum-match-if-let.wado/__cm_export__run" = fn();
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);
 
-type "functype/core:cli/println" = fn(ref String);
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);
 
-type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;
 
-type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;
 
-type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);
 
-type "functype/wasi/stream-drop-writable" = fn(i32);
+type "functype//wasi/stream-drop-writable" = fn(i32);
 
-type "functype/wasi/stream-new" = fn() -> i64;
+type "functype//wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -64,70 +64,70 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn run() with Stdout {
-    let d: enum:Direction;
-    let label: ref String;
-    let x: enum:Direction;
-    let msg: ref String;
+fn "wado-compiler/tests/fixtures/enum-match-if-let.wado/run"() with Stdout {  // from wado-compiler/tests/fixtures/enum-match-if-let.wado
+    let d: "wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction";
+    let label: ref "core:prelude/string.wado//String";
+    let x: "wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction";
+    let msg: ref "core:prelude/string.wado//String";
     d = 0;
     if d == 0 {
-        "core:cli/println"(String { repr: array.new_data<u8>("is up"), used: 5 });
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("is up"), used: 5 });
     } else {
-        "core:cli/println"(String { repr: array.new_data<u8>("not up"), used: 6 });
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("not up"), used: 6 });
     }
     if d == 1 {
-        "core:cli/println"(String { repr: array.new_data<u8>("is down"), used: 7 });
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("is down"), used: 7 });
     } else {
-        "core:cli/println"(String { repr: array.new_data<u8>("not down"), used: 8 });
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("not down"), used: 8 });
     }
-    let __match_scrut_0: enum:Direction;
+    let __match_scrut_0: "wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction";
     __match_scrut_0 = d;
     if __match_scrut_0 == 0 {
-        "core:cli/println"(String { repr: array.new_data<u8>("matches up"), used: 10 });
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("matches up"), used: 10 });
     }
     if d == 2 {
-        "core:cli/println"(String { repr: array.new_data<u8>("matches left"), used: 12 });
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("matches left"), used: 12 });
     } else {
-        "core:cli/println"(String { repr: array.new_data<u8>("not left"), used: 8 });
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("not left"), used: 8 });
     }
-    let __match_scrut_2: enum:Direction;
+    let __match_scrut_2: "wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction";
     __match_scrut_2 = d;
-    label = (if __match_scrut_2 == 0 -> ref String {
-        String { repr: array.new_data<u8>("up!"), used: 3 };
-    } else if __match_scrut_2 == 1 -> ref String {
-        String { repr: array.new_data<u8>("down!"), used: 5 };
+    label = (if __match_scrut_2 == 0 -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado//String" { repr: array.new_data<u8>("up!"), used: 3 };
+    } else if __match_scrut_2 == 1 -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado//String" { repr: array.new_data<u8>("down!"), used: 5 };
     } else {
-        String { repr: array.new_data<u8>("other"), used: 5 };
+        "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(label);
     x = 3;
-    let __match_scrut_3: enum:Direction;
+    let __match_scrut_3: "wado-compiler/tests/fixtures/enum-match-if-let.wado//enum:Direction";
     __match_scrut_3 = x;
-    msg = (if __match_scrut_3 == 3 -> ref String {
-        block -> ref String {
-            String { repr: array.new_data<u8>("right and big"), used: 13 };
+    msg = (if __match_scrut_3 == 3 -> ref "core:prelude/string.wado//String" {
+        block -> ref "core:prelude/string.wado//String" {
+            "core:prelude/string.wado//String" { repr: array.new_data<u8>("right and big"), used: 13 };
         };
-    } else if __match_scrut_3 == 3 -> ref String {
-        String { repr: array.new_data<u8>("right and small"), used: 15 };
+    } else if __match_scrut_3 == 3 -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado//String" { repr: array.new_data<u8>("right and small"), used: 15 };
     } else {
-        String { repr: array.new_data<u8>("other"), used: 5 };
+        "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(msg);
 }
 
-fn __cm_binding__Stdout_write_via_stream(data) {
+fn "wado-compiler/tests/fixtures/enum-match-if-let.wado/__cm_binding__Stdout_write_via_stream"(data) {  // from wado-compiler/tests/fixtures/enum-match-if-let.wado
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn __cm_export__run() {
-    run();
+fn "wado-compiler/tests/fixtures/enum-match-if-let.wado/__cm_export__run"() {  // from wado-compiler/tests/fixtures/enum-match-if-let.wado
+    "wado-compiler/tests/fixtures/enum-match-if-let.wado/run"();
     "wasi/task-return"(0);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
-    let bytes: ref array<u8>;
+    let bytes: ref builtin::array<u8>;
     let len: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -149,7 +149,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = __cm_binding__Stdout_write_via_stream(rx);
+    handle = "wado-compiler/tests/fixtures/enum-match-if-let.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -207,4 +207,4 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-export fn __cm_export__run as "run"
+export fn "wado-compiler/tests/fixtures/enum-match-if-let.wado/__cm_export__run" as "run"

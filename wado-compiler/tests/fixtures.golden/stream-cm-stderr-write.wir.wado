@@ -4,7 +4,7 @@
 
 array builtin::array<u8> (mut u8);
 
-variant core:prelude/types.wado//Result<unit,ErrorCode> {
+variant core:prelude/types.wado//Result<unit,ErrorCode> {  // from core:prelude/types.wado
     Ok,
     Err(i32),
 }
@@ -14,50 +14,50 @@ struct core:prelude/types.wado//Result<unit,ErrorCode>::Err {
     payload_0: i32,
 }
 
-struct core:prelude//Array<u8> {  // Array<T> with T=u8
-    mut repr: ref array<u8>,
+struct core:prelude//Array<u8> {  // from core:prelude  // Array<T> with T=u8
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
-type "functype/wasi/task-return" = fn(i32);
+type "functype//wasi/task-return" = fn(i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
+type "functype//wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype//wasi/waitable-set-drop" = fn(i32);
 
-type "functype/wasi/waitable-set-new" = fn() -> i32;
+type "functype//wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;
 
-type "functype/run" = fn();
+type "functype//wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/run" = fn();
 
-type "functype/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;
+type "functype//wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__cm_binding__Stderr_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_export__run" = fn();
+type "functype//wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__cm_export__run" = fn();
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);
 
-type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;
 
-type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;
 
-type "functype/core:internal/cm_stream_write_u8" = fn(i32, ref Array<u8>);
+type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");
 
-type "functype/Array<u8>::push" = fn(ref Array<u8>, u8);
+type "functype//wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);
 
-type "functype/Array<u8>::grow" = fn(ref Array<u8>);
+type "functype//wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");
 
-type "functype/wasi/stream-new" = fn() -> i64;
+type "functype//wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/stream-drop-writable" = fn(i32);
+type "functype//wasi/stream-drop-writable" = fn(i32);
 
-type "functype/wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;
+type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -72,19 +72,19 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-cli";
 
-fn run() with Stderr {
+fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/run"() with Stderr {  // from wado-compiler/tests/fixtures/stream-cm-stderr-write.wado
     let rx: i32;
     let tx: i32;
     let subtask: i32;
-    let __local_3: ref Array<u8>;
-    let data: ref Array<u8>;
+    let __local_3: ref "core:prelude//Array<u8>";
+    let data: ref "core:prelude//Array<u8>";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    subtask = __cm_binding__Stderr_write_via_stream(rx);
-    data = __seq_lit: block -> ref Array<u8> {
-        __local_3 = Array<u8> { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
+    subtask = "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__cm_binding__Stderr_write_via_stream"(rx);
+    data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
+        __local_3 = "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
         break __seq_lit: __local_3;
     };
     "core:internal/cm_stream_write_u8"(tx, data);
@@ -100,9 +100,9 @@ fn run() with Stderr {
         "wasi/waitable-join"(__fr_handle_2, 0);
         "wasi/waitable-set-drop"(__fr_ws_2);
         __fr_result_2 = 0;
-    }; let __fr_opt_3: ref null Result<unit,ErrorCode>; __fr_opt_3 = (if (__fr_result_2 & 15) == 0 -> ref null Result<unit,ErrorCode> {
-        ref.as_non_null((if builtin::load_i32(__fr_ptr_2) == 0 -> ref Result<unit,ErrorCode> {
-            Result<unit,ErrorCode> { 0 };
+    }; let __fr_opt_3: ref null "core:prelude/types.wado//Result<unit,ErrorCode>"; __fr_opt_3 = (if (__fr_result_2 & 15) == 0 -> ref null "core:prelude/types.wado//Result<unit,ErrorCode>" {
+        ref.as_non_null((if builtin::load_i32(__fr_ptr_2) == 0 -> ref "core:prelude/types.wado//Result<unit,ErrorCode>" {
+            "core:prelude/types.wado//Result<unit,ErrorCode>" { 0 };
         } else {
             unreachable;
         }));
@@ -111,12 +111,12 @@ fn run() with Stderr {
     }); drop("mem/realloc"(__fr_ptr_2, 40, 8, 0)); __fr_opt_3);
 }
 
-fn __cm_binding__Stderr_write_via_stream(data) {
+fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__cm_binding__Stderr_write_via_stream"(data) {  // from wado-compiler/tests/fixtures/stream-cm-stderr-write.wado
     return "wasi/wasi:cli/Stderr::write_via_stream"(data);
 }
 
-fn __cm_export__run() {
-    run();
+fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__cm_export__run"() {  // from wado-compiler/tests/fixtures/stream-cm-stderr-write.wado
+    "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -163,7 +163,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
     let ptr: i32;
     let len: i32;
     let result: i32;
-    let __local_9: ref array<u8>;
+    let __local_9: ref builtin::array<u8>;
     let __local_10: i32;
     packed = __inline_cm_lower_array_u8_0: block -> i64 {
         __local_9 = data.repr;
@@ -179,21 +179,21 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {  // from core:internal
     drop("mem/realloc"(ptr, len, 1, 0));
 }
 
-fn Array<u8>::push(self, value) {
+fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/Array<u8>::push"(self, value) {  // from wado-compiler/tests/fixtures/stream-cm-stderr-write.wado
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        Array<u8>::grow(self);
+        "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/Array<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn Array<u8>::grow(self) {
+fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/Array<u8>::grow"(self) {  // from wado-compiler/tests/fixtures/stream-cm-stderr-write.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<u8>;
-    let old_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
+    let old_repr: ref builtin::array<u8>;
     let used: i32;
     let i: i32;
     let __local_7: i32;
@@ -221,4 +221,4 @@ fn Array<u8>::grow(self) {
     self.repr = new_repr;
 }
 
-export fn __cm_export__run as "run"
+export fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__cm_export__run" as "run"

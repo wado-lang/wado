@@ -4,12 +4,12 @@
 
 array builtin::array<u8> (mut u8);
 
-struct core:prelude/string.wado//String {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//String {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-variant wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape {
+variant wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape {  // from wado-compiler/tests/fixtures/variant_eq_auto.wado
     Circle(f64),
     Rectangle(f64),
     Point,
@@ -25,47 +25,47 @@ struct wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle {
     payload_0: f64,
 }
 
-type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
-type "functype/wasi/task-return" = fn(i32);
+type "functype//wasi/task-return" = fn(i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
+type "functype//wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype//wasi/waitable-set-drop" = fn(i32);
 
-type "functype/wasi/waitable-set-new" = fn() -> i32;
+type "functype//wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
-type "functype/run" = fn();
+type "functype//wado-compiler/tests/fixtures/variant_eq_auto.wado/run" = fn();
 
-type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype//wado-compiler/tests/fixtures/variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_export__run" = fn();
+type "functype//wado-compiler/tests/fixtures/variant_eq_auto.wado/__cm_export__run" = fn();
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);
 
-type "functype/core:cli/println" = fn(ref String);
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);
 
-type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;
 
-type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;
 
-type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);
 
-type "functype/wasi/stream-drop-writable" = fn(i32);
+type "functype//wasi/stream-drop-writable" = fn(i32);
 
-type "functype/wasi/stream-new" = fn() -> i64;
+type "functype//wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);
 
-type "functype/Shape^Eq::eq" = fn(ref Shape, ref Shape) -> bool;
+type "functype//wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape", ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape") -> bool;
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -80,62 +80,62 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn run() with Stdout {
-    let s1: ref Shape;
-    let s2: ref Shape;
-    let s3: ref Shape;
-    let s4: ref Shape;
-    let s5: ref Shape;
-    let s6: ref Shape;
-    let s7: ref Shape;
-    let s8: ref Shape;
-    s1 = Shape::Circle { discriminant: 0, payload_0: 3.14 };
-    s2 = Shape::Circle { discriminant: 0, payload_0: 3.14 };
-    s3 = Shape::Circle { discriminant: 0, payload_0: 2 };
-    s4 = Shape::Rectangle { discriminant: 1, payload_0: 1 };
-    s5 = Shape::Rectangle { discriminant: 1, payload_0: 1 };
-    s6 = Shape::Rectangle { discriminant: 1, payload_0: 3 };
-    s7 = Shape { 2 };
-    s8 = Shape { 2 };
-    if Shape^Eq::eq(s1, s2) {
-        "core:cli/println"(String { repr: array.new_data<u8>("circle == circle"), used: 16 });
+fn "wado-compiler/tests/fixtures/variant_eq_auto.wado/run"() with Stdout {  // from wado-compiler/tests/fixtures/variant_eq_auto.wado
+    let s1: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+    let s2: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+    let s3: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+    let s4: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+    let s5: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+    let s6: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+    let s7: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+    let s8: ref "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape";
+    s1 = "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle" { discriminant: 0, payload_0: 3.14 };
+    s2 = "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle" { discriminant: 0, payload_0: 3.14 };
+    s3 = "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle" { discriminant: 0, payload_0: 2 };
+    s4 = "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle" { discriminant: 1, payload_0: 1 };
+    s5 = "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle" { discriminant: 1, payload_0: 1 };
+    s6 = "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle" { discriminant: 1, payload_0: 3 };
+    s7 = "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape" { 2 };
+    s8 = "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape" { 2 };
+    if "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(s1, s2) {
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("circle == circle"), used: 16 });
     }
-    if Shape^Eq::eq(s1, s3) == 0 {
-        "core:cli/println"(String { repr: array.new_data<u8>("circle(3.14) != circle(2.0)"), used: 27 });
+    if "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(s1, s3) == 0 {
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("circle(3.14) != circle(2.0)"), used: 27 });
     }
-    if Shape^Eq::eq(s1, s4) == 0 {
-        "core:cli/println"(String { repr: array.new_data<u8>("circle != rectangle"), used: 19 });
+    if "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(s1, s4) == 0 {
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("circle != rectangle"), used: 19 });
     }
-    if Shape^Eq::eq(s4, s5) {
-        "core:cli/println"(String { repr: array.new_data<u8>("rect == rect"), used: 12 });
+    if "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(s4, s5) {
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("rect == rect"), used: 12 });
     }
-    if Shape^Eq::eq(s4, s6) == 0 {
-        "core:cli/println"(String { repr: array.new_data<u8>("rect(1) != rect(3)"), used: 18 });
+    if "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(s4, s6) == 0 {
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("rect(1) != rect(3)"), used: 18 });
     }
-    if Shape^Eq::eq(s7, s8) {
-        "core:cli/println"(String { repr: array.new_data<u8>("point == point"), used: 14 });
+    if "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(s7, s8) {
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("point == point"), used: 14 });
     }
-    if Shape^Eq::eq(s7, s1) == 0 {
-        "core:cli/println"(String { repr: array.new_data<u8>("point != circle"), used: 15 });
+    if "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(s7, s1) == 0 {
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("point != circle"), used: 15 });
     }
-    if Shape^Eq::eq(s1, s3) == 0 {
-        "core:cli/println"(String { repr: array.new_data<u8>("!= works"), used: 8 });
+    if "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(s1, s3) == 0 {
+        "core:cli/println"("core:prelude/string.wado//String" { repr: array.new_data<u8>("!= works"), used: 8 });
     }
 }
 
-fn __cm_binding__Stdout_write_via_stream(data) {
+fn "wado-compiler/tests/fixtures/variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(data) {  // from wado-compiler/tests/fixtures/variant_eq_auto.wado
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn __cm_export__run() {
-    run();
+fn "wado-compiler/tests/fixtures/variant_eq_auto.wado/__cm_export__run"() {  // from wado-compiler/tests/fixtures/variant_eq_auto.wado
+    "wado-compiler/tests/fixtures/variant_eq_auto.wado/run"();
     "wasi/task-return"(0);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
-    let bytes: ref array<u8>;
+    let bytes: ref builtin::array<u8>;
     let len: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -157,7 +157,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = __cm_binding__Stdout_write_via_stream(rx);
+    handle = "wado-compiler/tests/fixtures/variant_eq_auto.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -215,27 +215,27 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn Shape^Eq::eq(self, other) {
+fn "wado-compiler/tests/fixtures/variant_eq_auto.wado/Shape^Eq::eq"(self, other) {  // from wado-compiler/tests/fixtures/variant_eq_auto.wado
     let __local_6: f64;
     let __local_7: f64;
     let __local_8: f64;
     let __local_9: f64;
-    if ref.test Shape::Circle(self) {
-        if ref.test Shape::Circle(other) {
+    if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(self) {
+        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(other) {
             return __inline_f64_Eq__eq_0: block -> bool {
-                __local_6 = ref.cast Shape::Circle(self).payload_0;
-                __local_7 = ref.cast Shape::Circle(other).payload_0;
+                __local_6 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(self).payload_0;
+                __local_7 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Circle"(other).payload_0;
                 break __inline_f64_Eq__eq_0: __local_6 == __local_7;
             };
         } else {
             return 0;
         }
     }
-    if ref.test Shape::Rectangle(self) {
-        if ref.test Shape::Rectangle(other) {
+    if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(self) {
+        if ref.test "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(other) {
             return __inline_f64_Eq__eq_1: block -> bool {
-                __local_8 = ref.cast Shape::Rectangle(self).payload_0;
-                __local_9 = ref.cast Shape::Rectangle(other).payload_0;
+                __local_8 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(self).payload_0;
+                __local_9 = ref.cast "wado-compiler/tests/fixtures/variant_eq_auto.wado//Shape::Rectangle"(other).payload_0;
                 break __inline_f64_Eq__eq_1: __local_8 == __local_9;
             };
         } else {
@@ -248,4 +248,4 @@ fn Shape^Eq::eq(self, other) {
     return 0;
 }
 
-export fn __cm_export__run as "run"
+export fn "wado-compiler/tests/fixtures/variant_eq_auto.wado/__cm_export__run" as "run"

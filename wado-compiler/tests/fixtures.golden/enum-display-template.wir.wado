@@ -4,12 +4,12 @@
 
 array builtin::array<u8> (mut u8);
 
-struct core:prelude/string.wado//String {
-    mut repr: ref array<u8>,
+struct core:prelude/string.wado//String {  // from core:prelude/string.wado
+    mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {
+struct core:prelude/format.wado//Formatter {  // from core:prelude/format.wado
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
@@ -17,58 +17,58 @@ struct core:prelude/format.wado//Formatter {
     mut width: i32,
     mut precision: i32,
     mut indent: i32,
-    mut buf: ref String,
+    mut buf: ref "core:prelude/string.wado//String",
 }
 
-enum wado-compiler/tests/fixtures/enum-display-template.wado//enum:Fruit { Apple = 0, Banana = 1, Cherry = 2 };
+enum wado-compiler/tests/fixtures/enum-display-template.wado//enum:Fruit { Apple = 0, Banana = 1, Cherry = 2 };  // from wado-compiler/tests/fixtures/enum-display-template.wado
 
-type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;
 
-type "functype/wasi/stream-write" = fn(i32, i32, i32) -> i32;
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;
 
-type "functype/wasi/task-return" = fn(i32);
+type "functype//wasi/task-return" = fn(i32);
 
-type "functype/wasi/waitable-join" = fn(i32, i32);
+type "functype//wasi/waitable-join" = fn(i32, i32);
 
-type "functype/wasi/waitable-set-drop" = fn(i32);
+type "functype//wasi/waitable-set-drop" = fn(i32);
 
-type "functype/wasi/waitable-set-new" = fn() -> i32;
+type "functype//wasi/waitable-set-new" = fn() -> i32;
 
-type "functype/wasi/waitable-set-wait" = fn(i32, i32) -> i32;
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;
 
-type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;
 
-type "functype/describe" = fn(enum:Fruit) -> ref String;
+type "functype//wado-compiler/tests/fixtures/enum-display-template.wado/describe" = fn("wado-compiler/tests/fixtures/enum-display-template.wado//enum:Fruit") -> ref "core:prelude/string.wado//String";
 
-type "functype/run" = fn();
+type "functype//wado-compiler/tests/fixtures/enum-display-template.wado/run" = fn();
 
-type "functype/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
+type "functype//wado-compiler/tests/fixtures/enum-display-template.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;
 
-type "functype/__cm_export__run" = fn();
+type "functype//wado-compiler/tests/fixtures/enum-display-template.wado/__cm_export__run" = fn();
 
-type "functype/core:cli/write_to_stream" = fn(i32, ref String, bool);
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);
 
-type "functype/core:cli/println" = fn(ref String);
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");
 
-type "functype/core:internal/gc_array_to_memory" = fn(ref array<u8>, i32, i32);
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);
 
-type "functype/core:internal/cm_lower_list_u8" = fn(ref array<u8>, i32) -> i64;
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;
 
-type "functype/core:internal/wait_for_blocked" = fn(i32) -> i32;
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;
 
-type "functype/core:internal/cm_stream_write_raw_u8" = fn(i32, ref array<u8>, i32);
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);
 
-type "functype/String::grow" = fn(ref String, i32);
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);
 
-type "functype/String::push_str" = fn(ref String, ref String);
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");
 
-type "functype/Fruit^Inspect::inspect" = fn(enum:Fruit, ref Formatter);
+type "functype//wado-compiler/tests/fixtures/enum-display-template.wado/Fruit^Inspect::inspect" = fn("wado-compiler/tests/fixtures/enum-display-template.wado//enum:Fruit", ref "core:prelude/format.wado//Formatter");
 
-type "functype/wasi/stream-drop-writable" = fn(i32);
+type "functype//wasi/stream-drop-writable" = fn(i32);
 
-type "functype/wasi/stream-new" = fn() -> i64;
+type "functype//wasi/stream-new" = fn() -> i64;
 
-type "functype/wasi/future-drop-readable:transmission-cli" = fn(i32);
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -83,35 +83,35 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn describe(f) {
-    let __local_1: ref String;
-    let __local_2: ref Formatter;
-    let __local_3: ref String;
-    let __local_4: ref Formatter;
-    let __local_5: ref String;
-    let __local_6: ref Formatter;
-    return let __match_scrut_0: enum:Fruit, __match_scrut_0 = f, (if __match_scrut_0 == 0 -> ref String {
-        __tmpl: block -> ref String {
-            __local_1 = String { repr: builtin::array_new<u8>(23), used: 0 };
-            String::push_str(__local_1, String { repr: array.new_data<u8>("I like "), used: 7 });
-            __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-            Fruit^Inspect::inspect(f, __local_2);
+fn "wado-compiler/tests/fixtures/enum-display-template.wado/describe"(f) {  // from wado-compiler/tests/fixtures/enum-display-template.wado
+    let __local_1: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/format.wado//Formatter";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4: ref "core:prelude/format.wado//Formatter";
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
+    return let __match_scrut_0: "wado-compiler/tests/fixtures/enum-display-template.wado//enum:Fruit", __match_scrut_0 = f, (if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
+        __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_1 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
+            "core:prelude/string.wado/String::push_str"(__local_1, "core:prelude/string.wado//String" { repr: array.new_data<u8>("I like "), used: 7 });
+            __local_2 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+            "wado-compiler/tests/fixtures/enum-display-template.wado/Fruit^Inspect::inspect"(f, __local_2);
             break __tmpl: __local_1;
         };
-    } else if __match_scrut_0 == 1 -> ref String {
-        __tmpl: block -> ref String {
-            __local_3 = String { repr: builtin::array_new<u8>(26), used: 0 };
-            __local_4 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-            Fruit^Inspect::inspect(f, __local_4);
-            String::push_str(__local_3, String { repr: array.new_data<u8>(" is yellow"), used: 10 });
+    } else if __match_scrut_0 == 1 -> ref "core:prelude/string.wado//String" {
+        __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_3 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
+            __local_4 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
+            "wado-compiler/tests/fixtures/enum-display-template.wado/Fruit^Inspect::inspect"(f, __local_4);
+            "core:prelude/string.wado/String::push_str"(__local_3, "core:prelude/string.wado//String" { repr: array.new_data<u8>(" is yellow"), used: 10 });
             break __tmpl: __local_3;
         };
-    } else if __match_scrut_0 == 2 -> ref String {
-        __tmpl: block -> ref String {
-            __local_5 = String { repr: builtin::array_new<u8>(25), used: 0 };
-            __local_6 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
-            Fruit^Inspect::inspect(f, __local_6);
-            String::push_str(__local_5, String { repr: array.new_data<u8>(" is small"), used: 9 });
+    } else if __match_scrut_0 == 2 -> ref "core:prelude/string.wado//String" {
+        __tmpl: block -> ref "core:prelude/string.wado//String" {
+            __local_5 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
+            __local_6 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
+            "wado-compiler/tests/fixtures/enum-display-template.wado/Fruit^Inspect::inspect"(f, __local_6);
+            "core:prelude/string.wado/String::push_str"(__local_5, "core:prelude/string.wado//String" { repr: array.new_data<u8>(" is small"), used: 9 });
             break __tmpl: __local_5;
         };
     } else {
@@ -119,36 +119,36 @@ fn describe(f) {
     });
 }
 
-fn run() with Stdout {
-    let f: enum:Fruit;
-    let __local_1: ref String;
-    let __local_2: ref Formatter;
+fn "wado-compiler/tests/fixtures/enum-display-template.wado/run"() with Stdout {  // from wado-compiler/tests/fixtures/enum-display-template.wado
+    let f: "wado-compiler/tests/fixtures/enum-display-template.wado//enum:Fruit";
+    let __local_1: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/format.wado//Formatter";
     f = 0;
-    "core:cli/println"(__tmpl: block -> ref String {
-        __local_1 = String { repr: builtin::array_new<u8>(23), used: 0 };
-        String::push_str(__local_1, String { repr: array.new_data<u8>("fruit: "), used: 7 });
-        __local_2 = Formatter { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        Fruit^Inspect::inspect(f, __local_2);
+    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+        __local_1 = "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
+        "core:prelude/string.wado/String::push_str"(__local_1, "core:prelude/string.wado//String" { repr: array.new_data<u8>("fruit: "), used: 7 });
+        __local_2 = "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        "wado-compiler/tests/fixtures/enum-display-template.wado/Fruit^Inspect::inspect"(f, __local_2);
         break __tmpl: __local_1;
     });
-    "core:cli/println"(describe(0));
-    "core:cli/println"(describe(1));
-    "core:cli/println"(describe(2));
+    "core:cli/println"("wado-compiler/tests/fixtures/enum-display-template.wado/describe"(0));
+    "core:cli/println"("wado-compiler/tests/fixtures/enum-display-template.wado/describe"(1));
+    "core:cli/println"("wado-compiler/tests/fixtures/enum-display-template.wado/describe"(2));
 }
 
-fn __cm_binding__Stdout_write_via_stream(data) {
+fn "wado-compiler/tests/fixtures/enum-display-template.wado/__cm_binding__Stdout_write_via_stream"(data) {  // from wado-compiler/tests/fixtures/enum-display-template.wado
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn __cm_export__run() {
-    run();
+fn "wado-compiler/tests/fixtures/enum-display-template.wado/__cm_export__run"() {  // from wado-compiler/tests/fixtures/enum-display-template.wado
+    "wado-compiler/tests/fixtures/enum-display-template.wado/run"();
     "wasi/task-return"(0);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
-    let bytes: ref array<u8>;
+    let bytes: ref builtin::array<u8>;
     let len: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -170,7 +170,7 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
     tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
-    handle = __cm_binding__Stdout_write_via_stream(rx);
+    handle = "wado-compiler/tests/fixtures/enum-display-template.wado/__cm_binding__Stdout_write_via_stream"(rx);
     "core:cli/write_to_stream"(tx, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
@@ -228,10 +228,10 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {  // from core:int
     drop("mem/realloc"(ptr, raw_len, 1, 0));
 }
 
-fn String::grow(self, min_capacity) {
+fn "core:prelude/string.wado/String::grow"(self, min_capacity) {  // from core:prelude/string.wado
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref array<u8>;
+    let new_repr: ref builtin::array<u8>;
     let __local_5: i32;
     let __local_7: i32;
     capacity = builtin::array_len(self.repr);
@@ -250,7 +250,7 @@ fn String::grow(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn String::push_str(self, other) {
+fn "core:prelude/string.wado/String::push_str"(self, other) {  // from core:prelude/string.wado
     let other_len: i32;
     let new_used: i32;
     other_len = other.used;
@@ -259,26 +259,26 @@ fn String::push_str(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
-        String::grow(self, new_used);
+        "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
 
-fn Fruit^Inspect::inspect(self, f) {
-    let __local_3: ref String;
-    let __local_5: ref String;
-    let __local_7: ref String;
+fn "wado-compiler/tests/fixtures/enum-display-template.wado/Fruit^Inspect::inspect"(self, f) {  // from wado-compiler/tests/fixtures/enum-display-template.wado
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_7: ref "core:prelude/string.wado//String";
     if self == 0 {
-        __local_3 = String { repr: array.new_data<u8>("Fruit::Apple"), used: 12 };
-        String::push_str(f.buf, __local_3);
+        __local_3 = "core:prelude/string.wado//String" { repr: array.new_data<u8>("Fruit::Apple"), used: 12 };
+        "core:prelude/string.wado/String::push_str"(f.buf, __local_3);
     } else if self == 1 {
-        __local_5 = String { repr: array.new_data<u8>("Fruit::Banana"), used: 13 };
-        String::push_str(f.buf, __local_5);
+        __local_5 = "core:prelude/string.wado//String" { repr: array.new_data<u8>("Fruit::Banana"), used: 13 };
+        "core:prelude/string.wado/String::push_str"(f.buf, __local_5);
     } else if self == 2 {
-        __local_7 = String { repr: array.new_data<u8>("Fruit::Cherry"), used: 13 };
-        String::push_str(f.buf, __local_7);
+        __local_7 = "core:prelude/string.wado//String" { repr: array.new_data<u8>("Fruit::Cherry"), used: 13 };
+        "core:prelude/string.wado/String::push_str"(f.buf, __local_7);
     }
 }
 
-export fn __cm_export__run as "run"
+export fn "wado-compiler/tests/fixtures/enum-display-template.wado/__cm_export__run" as "run"
