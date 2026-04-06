@@ -184,8 +184,8 @@ impl<'a> WirUnparser<'a> {
 
     fn unparse(&mut self, module: &WirModule) {
         // Type definitions
-        for type_def in &module.types {
-            self.unparse_type_def(type_def);
+        for (i, type_def) in module.types.iter().enumerate() {
+            self.unparse_type_def(i, type_def);
             self.newline();
         }
 
@@ -221,24 +221,24 @@ impl<'a> WirUnparser<'a> {
 
     // === Type Definitions ===
 
-    fn unparse_type_def(&mut self, type_def: &WirTypeDef) {
+    fn unparse_type_def(&mut self, type_idx: usize, type_def: &WirTypeDef) {
         match type_def {
-            WirTypeDef::Struct(s) => self.unparse_struct_type(s),
-            WirTypeDef::Variant(v) => self.unparse_variant_type(v),
-            WirTypeDef::Enum(e) => self.unparse_enum_type(e),
-            WirTypeDef::Flags(f) => self.unparse_flags_type(f),
-            WirTypeDef::Array(a) => self.unparse_array_type(a),
-            WirTypeDef::Func(f) => self.unparse_func_type(f),
+            WirTypeDef::Struct(s) => self.unparse_struct_type(type_idx, s),
+            WirTypeDef::Variant(v) => self.unparse_variant_type(type_idx, v),
+            WirTypeDef::Enum(e) => self.unparse_enum_type(type_idx, e),
+            WirTypeDef::Flags(f) => self.unparse_flags_type(type_idx, f),
+            WirTypeDef::Array(a) => self.unparse_array_type(type_idx, a),
+            WirTypeDef::Func(f) => self.unparse_func_type(type_idx, f),
         }
     }
 
-    fn unparse_struct_type(&mut self, s: &WirStructType) {
+    fn unparse_struct_type(&mut self, type_idx: usize, s: &WirStructType) {
         self.write_indent();
         self.write("struct ");
         self.write(&s.name.fq);
         self.write(" {");
 
-        self.unparse_source_comment(&s.meta);
+        self.unparse_type_comment(type_idx, &s.meta);
 
         if let Some(ref origin) = s.generic_origin {
             self.write(&format!(
@@ -283,12 +283,12 @@ impl<'a> WirUnparser<'a> {
         self.write(&self.fmt_type(&field.ty));
     }
 
-    fn unparse_variant_type(&mut self, v: &WirVariantType) {
+    fn unparse_variant_type(&mut self, type_idx: usize, v: &WirVariantType) {
         self.write_indent();
         self.write("variant ");
         self.write(&v.name.fq);
         self.write(" {");
-        self.unparse_source_comment(&v.meta);
+        self.unparse_type_comment(type_idx, &v.meta);
         self.newline();
 
         self.indent += 1;
@@ -315,7 +315,7 @@ impl<'a> WirUnparser<'a> {
         self.newline();
     }
 
-    fn unparse_enum_type(&mut self, e: &WirEnumType) {
+    fn unparse_enum_type(&mut self, type_idx: usize, e: &WirEnumType) {
         self.write_indent();
         self.write("enum ");
         self.write(&e.name.fq);
@@ -331,11 +331,11 @@ impl<'a> WirUnparser<'a> {
         }
 
         self.write(" };");
-        self.unparse_source_comment(&e.meta);
+        self.unparse_type_comment(type_idx, &e.meta);
         self.newline();
     }
 
-    fn unparse_flags_type(&mut self, f: &WirFlagsType) {
+    fn unparse_flags_type(&mut self, type_idx: usize, f: &WirFlagsType) {
         self.write_indent();
         self.write("flags ");
         self.write(&f.name.fq);
@@ -351,11 +351,11 @@ impl<'a> WirUnparser<'a> {
         }
 
         self.write(" };");
-        self.unparse_source_comment(&f.meta);
+        self.unparse_type_comment(type_idx, &f.meta);
         self.newline();
     }
 
-    fn unparse_array_type(&mut self, a: &WirArrayType) {
+    fn unparse_array_type(&mut self, type_idx: usize, a: &WirArrayType) {
         self.write_indent();
         self.write("array ");
         self.write(&a.name.fq);
@@ -366,11 +366,11 @@ impl<'a> WirUnparser<'a> {
         }
         self.write(&self.fmt_type(&a.element_type));
         self.write(");");
-        self.unparse_source_comment(&a.meta);
+        self.unparse_type_comment(type_idx, &a.meta);
         self.newline();
     }
 
-    fn unparse_func_type(&mut self, f: &WirFuncType) {
+    fn unparse_func_type(&mut self, type_idx: usize, f: &WirFuncType) {
         self.write_indent();
         self.write("type ");
         self.write_name(&f.name.fq);
@@ -397,7 +397,7 @@ impl<'a> WirUnparser<'a> {
                 self.write("]");
             }
         }
-        self.write(";");
+        self.write(&format!(";  // #{type_idx}"));
         self.newline();
     }
 
@@ -2033,6 +2033,14 @@ impl<'a> WirUnparser<'a> {
     fn unparse_source_comment(&mut self, meta: &crate::wir::WirMeta) {
         if let Some(ref source) = meta.module_source {
             self.write(&format!("  // from {source}"));
+        }
+    }
+
+    fn unparse_type_comment(&mut self, type_idx: usize, meta: &crate::wir::WirMeta) {
+        if let Some(ref source) = meta.module_source {
+            self.write(&format!("  // #{type_idx} from {source}"));
+        } else {
+            self.write(&format!("  // #{type_idx}"));
         }
     }
 
