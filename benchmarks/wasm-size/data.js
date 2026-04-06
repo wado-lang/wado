@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775434665175,
+  "lastUpdate": 1775490523398,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10553,6 +10553,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f448faa995a1e35e19e2b5451cd7a5f21cd3b8f0"
         },
         "date": 1775434664941,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b2dc6facd4af52c897ec065507208def9bf2488",
+          "message": "Merge pull request #781 from wado-lang/claude/fix-golden-fixtures-type-KFAM1\n\nFix empty WIR func type names and remove shorten_fq",
+          "timestamp": "2026-04-07T00:45:14+09:00",
+          "tree_id": "483cb00a5e6bb1195cf083d0e3a222dfb0ccde69",
+          "url": "https://github.com/wado-lang/wado/commit/1b2dc6facd4af52c897ec065507208def9bf2488"
+        },
+        "date": 1775490523110,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
