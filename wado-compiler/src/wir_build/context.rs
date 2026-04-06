@@ -220,11 +220,9 @@ impl<'a> WirContext<'a> {
             return existing.clone();
         }
         self.register_type(
-            fq,
+            fq.clone(),
             WirTypeDef::Func(WirFuncType {
-                name: WirName {
-                    fq: String::new(), // filled from register_type
-                },
+                name: WirName { fq },
                 params,
                 results,
             }),

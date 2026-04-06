@@ -13,13 +13,8 @@ use crate::wir::{
 /// Unparse a `WirModule` into pseudo-Wado source code.
 ///
 /// `cwd` is the current working directory used to shorten entry-point paths.
-pub fn unparse_wir(module: &WirModule, cwd: Option<&str>) -> String {
-    let mut unparser = WirUnparser::new(
-        module.entry_point_path.as_deref(),
-        cwd,
-        &module.types,
-        &module.data,
-    );
+pub fn unparse_wir(module: &WirModule, _cwd: Option<&str>) -> String {
+    let mut unparser = WirUnparser::new(&module.types, &module.data);
     unparser.unparse(module);
     unparser.output
 }
@@ -36,8 +31,6 @@ enum LabelBlockKind {
 struct WirUnparser<'a> {
     output: String,
     indent: usize,
-    /// Entry-point module path (to detect and shorten in FQ names).
-    entry_point_path: Option<String>,
     /// Type definitions for struct field name lookup.
     types: &'a [WirTypeDef],
     /// Data segments for inlining `array.new_data` contents.
@@ -49,16 +42,10 @@ struct WirUnparser<'a> {
 }
 
 impl<'a> WirUnparser<'a> {
-    fn new(
-        entry_point_path: Option<&str>,
-        _cwd: Option<&str>,
-        types: &'a [WirTypeDef],
-        data: &'a [WirData],
-    ) -> Self {
+    fn new(types: &'a [WirTypeDef], data: &'a [WirData]) -> Self {
         Self {
             output: String::new(),
             indent: 0,
-            entry_point_path: entry_point_path.map(String::from),
             types,
             data,
             label_stack: Vec::new(),
@@ -176,7 +163,7 @@ impl<'a> WirUnparser<'a> {
             self.fmt_type(&a.element_type)
         } else {
             // Fallback: strip "array<...>" wrapper from the display name.
-            let tid = self.shorten_fq(&type_id.to_string());
+            let tid = type_id.to_string();
             if let Some(inner) = tid.strip_prefix("array<").and_then(|s| s.strip_suffix('>')) {
                 inner.to_string()
             } else {
@@ -195,86 +182,10 @@ impl<'a> WirUnparser<'a> {
         }
     }
 
-    /// Shorten a fully-qualified WIR name for display.
-    ///
-    /// FQ names follow the format `"module_source//name"`.
-    /// - Entry-point items → just the name (e.g., `Point`, `run`)
-    /// - `core:prelude/string.wado//String` → `String`
-    /// - `core:cli//println` → `core:cli/println`
-    /// - `builtin::array<u8>` → `array<u8>`
-    fn shorten_fq(&self, fq: &str) -> String {
-        // Handle "builtin::" prefix
-        if let Some(rest) = fq.strip_prefix("builtin::") {
-            return rest.to_string();
-        }
-
-        // Split on "//" separator
-        if let Some((module, name)) = fq.split_once("//") {
-            let short_module = self.shorten_module_path(module);
-            // Also shorten the name part (it may contain module paths, e.g. functype names)
-            let short_name = self.shorten_nested_path(name);
-            if short_module.is_empty() {
-                short_name
-            } else {
-                format!("{short_module}/{short_name}")
-            }
-        } else {
-            // No "//" separator — check for entry-point path as prefix
-            self.shorten_nested_path(fq)
-        }
-    }
-
-    /// Shorten nested module paths within a name segment.
-    ///
-    /// E.g., `"wado-compiler/tests/fixtures/geometry.wado/run"` → `"run"`
-    /// E.g., `"core:prelude/string.wado/String::grow"` → `"String::grow"`
-    fn shorten_nested_path(&self, name: &str) -> String {
-        // Replace entry-point path prefix
-        if let Some(ref ep) = self.entry_point_path
-            && let Some(rest) = name.strip_prefix(ep.as_str())
-        {
-            if let Some(func) = rest.strip_prefix('/') {
-                return func.to_string();
-            }
-            // Exact match (no trailing /)
-            if rest.is_empty() {
-                return name.to_string();
-            }
-        }
-        // Replace core:prelude/* prefix
-        if name.starts_with("core:prelude") {
-            // Find the "//" or last "/" after the .wado extension
-            if let Some(pos) = name.find(".wado/") {
-                return name[pos + 6..].to_string();
-            }
-        }
-        name.to_string()
-    }
-
-    /// Shorten a module path for display.
-    fn shorten_module_path(&self, module: &str) -> String {
-        // Entry-point path → empty (items display as just name)
-        if let Some(ref ep) = self.entry_point_path
-            && module == ep
-        {
-            return String::new();
-        }
-        // Absolute paths → canonicalize to ./filename.wado
-        if module.starts_with('/') {
-            return crate::name::canonicalize_entry_point(module);
-        }
-        // core:prelude/* → omit for well-known prelude types
-        if module.starts_with("core:prelude") {
-            return String::new();
-        }
-        // Already short (core:cli, wasi:*, etc.)
-        module.to_string()
-    }
-
     fn unparse(&mut self, module: &WirModule) {
         // Type definitions
-        for type_def in &module.types {
-            self.unparse_type_def(type_def);
+        for (i, type_def) in module.types.iter().enumerate() {
+            self.unparse_type_def(i, type_def);
             self.newline();
         }
 
@@ -310,24 +221,24 @@ impl<'a> WirUnparser<'a> {
 
     // === Type Definitions ===
 
-    fn unparse_type_def(&mut self, type_def: &WirTypeDef) {
+    fn unparse_type_def(&mut self, type_idx: usize, type_def: &WirTypeDef) {
         match type_def {
-            WirTypeDef::Struct(s) => self.unparse_struct_type(s),
-            WirTypeDef::Variant(v) => self.unparse_variant_type(v),
-            WirTypeDef::Enum(e) => self.unparse_enum_type(e),
-            WirTypeDef::Flags(f) => self.unparse_flags_type(f),
-            WirTypeDef::Array(a) => self.unparse_array_type(a),
-            WirTypeDef::Func(f) => self.unparse_func_type(f),
+            WirTypeDef::Struct(s) => self.unparse_struct_type(type_idx, s),
+            WirTypeDef::Variant(v) => self.unparse_variant_type(type_idx, v),
+            WirTypeDef::Enum(e) => self.unparse_enum_type(type_idx, e),
+            WirTypeDef::Flags(f) => self.unparse_flags_type(type_idx, f),
+            WirTypeDef::Array(a) => self.unparse_array_type(type_idx, a),
+            WirTypeDef::Func(f) => self.unparse_func_type(type_idx, f),
         }
     }
 
-    fn unparse_struct_type(&mut self, s: &WirStructType) {
+    fn unparse_struct_type(&mut self, type_idx: usize, s: &WirStructType) {
         self.write_indent();
         self.write("struct ");
         self.write(&s.name.fq);
         self.write(" {");
 
-        self.unparse_source_comment(&s.meta);
+        self.unparse_type_comment(type_idx, &s.meta);
 
         if let Some(ref origin) = s.generic_origin {
             self.write(&format!(
@@ -372,12 +283,12 @@ impl<'a> WirUnparser<'a> {
         self.write(&self.fmt_type(&field.ty));
     }
 
-    fn unparse_variant_type(&mut self, v: &WirVariantType) {
+    fn unparse_variant_type(&mut self, type_idx: usize, v: &WirVariantType) {
         self.write_indent();
         self.write("variant ");
         self.write(&v.name.fq);
         self.write(" {");
-        self.unparse_source_comment(&v.meta);
+        self.unparse_type_comment(type_idx, &v.meta);
         self.newline();
 
         self.indent += 1;
@@ -404,7 +315,7 @@ impl<'a> WirUnparser<'a> {
         self.newline();
     }
 
-    fn unparse_enum_type(&mut self, e: &WirEnumType) {
+    fn unparse_enum_type(&mut self, type_idx: usize, e: &WirEnumType) {
         self.write_indent();
         self.write("enum ");
         self.write(&e.name.fq);
@@ -420,11 +331,11 @@ impl<'a> WirUnparser<'a> {
         }
 
         self.write(" };");
-        self.unparse_source_comment(&e.meta);
+        self.unparse_type_comment(type_idx, &e.meta);
         self.newline();
     }
 
-    fn unparse_flags_type(&mut self, f: &WirFlagsType) {
+    fn unparse_flags_type(&mut self, type_idx: usize, f: &WirFlagsType) {
         self.write_indent();
         self.write("flags ");
         self.write(&f.name.fq);
@@ -440,11 +351,11 @@ impl<'a> WirUnparser<'a> {
         }
 
         self.write(" };");
-        self.unparse_source_comment(&f.meta);
+        self.unparse_type_comment(type_idx, &f.meta);
         self.newline();
     }
 
-    fn unparse_array_type(&mut self, a: &WirArrayType) {
+    fn unparse_array_type(&mut self, type_idx: usize, a: &WirArrayType) {
         self.write_indent();
         self.write("array ");
         self.write(&a.name.fq);
@@ -455,15 +366,14 @@ impl<'a> WirUnparser<'a> {
         }
         self.write(&self.fmt_type(&a.element_type));
         self.write(");");
-        self.unparse_source_comment(&a.meta);
+        self.unparse_type_comment(type_idx, &a.meta);
         self.newline();
     }
 
-    fn unparse_func_type(&mut self, f: &WirFuncType) {
+    fn unparse_func_type(&mut self, type_idx: usize, f: &WirFuncType) {
         self.write_indent();
         self.write("type ");
-        let name = self.shorten_fq(&f.name.fq);
-        self.write_name(&name);
+        self.write_name(&f.name.fq);
         self.write(" = fn(");
         for (i, param) in f.params.iter().enumerate() {
             if i > 0 {
@@ -487,7 +397,7 @@ impl<'a> WirUnparser<'a> {
                 self.write("]");
             }
         }
-        self.write(";");
+        self.write(&format!(";  // #{type_idx}"));
         self.newline();
     }
 
@@ -551,8 +461,7 @@ impl<'a> WirUnparser<'a> {
     fn unparse_function(&mut self, func: &WirFunction) {
         self.write_indent();
         self.write("fn ");
-        let short_name = self.shorten_fq(&func.name.fq);
-        self.write_name(&short_name);
+        self.write_name(&func.name.fq);
         self.write("(");
 
         // We need the function type to get parameter types
@@ -1400,7 +1309,7 @@ impl<'a> WirUnparser<'a> {
 
             // GC: Struct
             WirInstr::StructNew { type_id, fields } => {
-                let tid = self.shorten_fq(&type_id.to_string());
+                let tid = type_id.to_string();
                 let field_names = self.struct_field_names(type_id);
                 self.write_name(&tid);
                 self.write(" { ");
@@ -1607,7 +1516,7 @@ impl<'a> WirUnparser<'a> {
                 expr,
             } => {
                 let null_str = if *nullable { " null" } else { "" };
-                let tid = self.shorten_fq(&type_id.to_string());
+                let tid = type_id.to_string();
                 self.write(&format!("ref.cast{null_str} "));
                 self.write_name(&tid);
                 self.write("(");
@@ -1620,7 +1529,7 @@ impl<'a> WirUnparser<'a> {
                 expr,
             } => {
                 let null_str = if *nullable { " null" } else { "" };
-                let tid = self.shorten_fq(&type_id.to_string());
+                let tid = type_id.to_string();
                 self.write(&format!("ref.test{null_str} "));
                 self.write_name(&tid);
                 self.write("(");
@@ -1808,7 +1717,7 @@ impl<'a> WirUnparser<'a> {
 
             // Calls
             WirInstr::Call { func_id, args } => {
-                let fid = self.shorten_fq(&func_id.to_string());
+                let fid = func_id.to_string();
                 self.write_name(&fid);
                 self.write("(");
                 for (i, a) in args.iter().enumerate() {
@@ -1825,7 +1734,7 @@ impl<'a> WirUnparser<'a> {
                 index,
                 args,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
+                let tid = type_id.to_string();
                 self.write("call_indirect ");
                 self.write_name(&tid);
                 self.write(&format!(" table={table}("));
@@ -1841,7 +1750,7 @@ impl<'a> WirUnparser<'a> {
                 func_ref,
                 args,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
+                let tid = type_id.to_string();
                 self.write("call_ref ");
                 self.write_name(&tid);
                 self.write("(");
@@ -1853,7 +1762,7 @@ impl<'a> WirUnparser<'a> {
                 self.write(")");
             }
             WirInstr::RefFunc { func_id } => {
-                let fid = self.shorten_fq(&func_id.to_string());
+                let fid = func_id.to_string();
                 self.write("ref.func ");
                 self.write_name(&fid);
             }
@@ -1941,7 +1850,7 @@ impl<'a> WirUnparser<'a> {
 
             // Compound
             WirInstr::ValueCopy { type_id, expr, .. } => {
-                let tid = self.shorten_fq(&type_id.to_string());
+                let tid = type_id.to_string();
                 self.write("value_copy ");
                 self.write_name(&tid);
                 self.write("(");
@@ -1949,7 +1858,7 @@ impl<'a> WirUnparser<'a> {
                 self.write(")");
             }
             WirInstr::MultiValueStructNew { type_id, instr } => {
-                let tid = self.shorten_fq(&type_id.to_string());
+                let tid = type_id.to_string();
                 self.write("multivalue_struct_new ");
                 self.write_name(&tid);
                 self.write("(");
@@ -1980,7 +1889,7 @@ impl<'a> WirUnparser<'a> {
         self.write("export ");
         match &export.desc {
             WirExportDesc::Func { func_id } => {
-                let fid = self.shorten_fq(&func_id.to_string());
+                let fid = func_id.to_string();
                 self.write("fn ");
                 self.write_name(&fid);
             }
@@ -2123,11 +2032,15 @@ impl<'a> WirUnparser<'a> {
 
     fn unparse_source_comment(&mut self, meta: &crate::wir::WirMeta) {
         if let Some(ref source) = meta.module_source {
-            let short = self.shorten_module_path(&source.to_string());
-            if !short.is_empty() {
-                self.write(&format!("  // from {short}"));
-            }
-            // Omit comment for entry-point module (empty short means entry point)
+            self.write(&format!("  // from {source}"));
+        }
+    }
+
+    fn unparse_type_comment(&mut self, type_idx: usize, meta: &crate::wir::WirMeta) {
+        if let Some(ref source) = meta.module_source {
+            self.write(&format!("  // #{type_idx} from {source}"));
+        } else {
+            self.write(&format!("  // #{type_idx}"));
         }
     }
 
@@ -2148,10 +2061,10 @@ impl<'a> WirUnparser<'a> {
             WirType::Bool => "bool".to_string(),
             WirType::Char => "char".to_string(),
             WirType::Unit => "()".to_string(),
-            WirType::Enum { type_id } => quote_if_needed(&self.shorten_fq(&type_id.to_string())),
-            WirType::Flags { type_id } => quote_if_needed(&self.shorten_fq(&type_id.to_string())),
+            WirType::Enum { type_id } => quote_if_needed(&type_id.to_string()),
+            WirType::Flags { type_id } => quote_if_needed(&type_id.to_string()),
             WirType::Ref { type_id, nullable } => {
-                let short = quote_if_needed(&self.shorten_fq(&type_id.to_string()));
+                let short = quote_if_needed(&type_id.to_string());
                 if *nullable {
                     format!("ref null {short}")
                 } else {

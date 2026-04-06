@@ -1500,66 +1500,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
         }
     }
 
-    // Phase 3: Fix function parameter/result types
-    // Function types are registered during translation, after type registration.
-    // Some param/result types may reference types that weren't available yet.
-    // Re-resolve by scanning TIR functions for matching signatures.
-    let mut func_fixups: Vec<(usize, Vec<WirType>, Vec<WirType>)> = Vec::new();
-    for (wir_idx, typedef) in ctx.types.iter().enumerate() {
-        if let WirTypeDef::Func(f) = typedef {
-            let has_abstract =
-                f.params.iter().any(is_abstract_ref) || f.results.iter().any(is_abstract_ref);
-            if !has_abstract {
-                continue;
-            }
-
-            // Find the TIR function that matches this func type
-            let fq = &f.name.fq;
-            let mut resolved_params = None;
-            let mut resolved_results = None;
-            for body in &ctx.pending_bodies {
-                let tir_func = body.tir_func.borrow();
-                let tt = body.type_table.borrow();
-                if fq.contains(&tir_func.name.clone()) {
-                    let params: Vec<WirType> = tir_func
-                        .params
-                        .iter()
-                        .map(|p| ctx.type_id_to_wir_type(&tt, p.type_id))
-                        .collect();
-                    let results: Vec<WirType> =
-                        if tt.get(tir_func.return_type) == &crate::tir::ResolvedType::Unit {
-                            Vec::new()
-                        } else {
-                            vec![ctx.type_id_to_wir_type(&tt, tir_func.return_type)]
-                        };
-                    // Only accept if it actually resolves more types
-                    let new_abstract_count = params.iter().filter(|t| is_abstract_ref(t)).count()
-                        + results.iter().filter(|t| is_abstract_ref(t)).count();
-                    let old_abstract_count = f.params.iter().filter(|t| is_abstract_ref(t)).count()
-                        + f.results.iter().filter(|t| is_abstract_ref(t)).count();
-                    if new_abstract_count < old_abstract_count {
-                        resolved_params = Some(params);
-                        resolved_results = Some(results);
-                        break;
-                    }
-                }
-            }
-
-            if resolved_params.is_some() || resolved_results.is_some() {
-                let params = resolved_params.unwrap_or_else(|| f.params.clone());
-                let results = resolved_results.unwrap_or_else(|| f.results.clone());
-                func_fixups.push((wir_idx, params, results));
-            }
-        }
-    }
-    for (type_idx, params, results) in func_fixups {
-        if let WirTypeDef::Func(f) = &mut ctx.types[type_idx] {
-            f.params = params;
-            f.results = results;
-        }
-    }
-
-    // Phase 4: Fix variant case payload types
+    // Phase 3: Fix variant case payload types
     let mut variant_fixups: Vec<(usize, usize, Vec<WirType>)> = Vec::new();
     for (wir_idx, typedef) in ctx.types.iter().enumerate() {
         if let WirTypeDef::Variant(v) = typedef {
