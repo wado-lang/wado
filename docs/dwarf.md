@@ -98,7 +98,7 @@ Emit one `DW_TAG_subprogram` DIE per function, with:
 
 **How to get function byte offsets**: after `emit_core_module()` returns the raw bytes,
 re-parse the code section with `wasmparser::CodeSectionReader` to find each function's
-byte range. Match against `WirModule.functions` by index.
+byte range. Match against `WirPackage.functions` by index.
 
 This phase does not require any changes to `WirInstr` or `WirMeta`.
 
@@ -122,7 +122,7 @@ Standard DWARF type DIEs do not apply. Skip unless a specific debugger integrati
 
 ```
 pub struct DwarfInput<'a> {
-    pub wir: &'a WirModule,
+    pub wir: &'a WirPackage,
     /// Function byte ranges: (start_offset, end_offset) in the code section.
     pub func_ranges: Vec<(u64, u64)>,
 }
@@ -135,7 +135,7 @@ Returns a list of `(section_name, bytes)` pairs to be added as custom sections.
 ### Integration Point: `wado-compiler/src/codegen/emit.rs`
 
 ```
-pub fn emit_core_module(wir: &WirModule, strip_names: bool, emit_dwarf: bool) -> Vec<u8>
+pub fn emit_core_module(wir: &WirPackage, strip_names: bool, emit_dwarf: bool) -> Vec<u8>
 ```
 
 After building the core module bytes:
@@ -144,7 +144,7 @@ After building the core module bytes:
 2. Call `build_dwarf_sections`
 3. Append each as `wasm_encoder::RawSection`
 
-### Control: `wado-compiler/src/project.rs`
+### Control: `wado-compiler/src/package.rs`
 
 Add `emit_dwarf: bool` to `CompileOptions` (or equivalent). Default: `true` for `-O0`/`-O1`,
 `false` for `-O2`/`-O3`/`-Os`.

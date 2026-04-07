@@ -19,12 +19,12 @@ Introduce **WIR (Wasm IR)** — a tree-structured intermediate representation be
 ### New Pipeline
 
 ```
-lower → optimize → wasm_plan → tir_to_wir → wir_emit → wasm binary
-                                    ↓
-                                WirModule (inspectable via dump --wir)
+lower → link → optimize → wasm_plan → tir_to_wir → wir_emit → wasm binary
+                                           ↓
+                                       WirPackage (inspectable via dump --wir)
 ```
 
-`tir_to_wir` translates the optimized Project into a `WirModule`. `wir_emit` translates `WirModule` into Wasm binary bytes. `wasm_plan` remains unchanged and provides `ComponentPlan` metadata consumed by `tir_to_wir`.
+`tir_to_wir` translates the optimized FlatPackage into a `WirPackage`. `wir_emit` translates `WirPackage` into Wasm binary bytes. `wasm_plan` remains unchanged and provides `ComponentPlan` metadata consumed by `tir_to_wir`.
 
 ### What WIR Is
 
@@ -48,17 +48,17 @@ WIR is a tree-structured IR that maps almost 1:1 to Wasm instructions, but with 
 
 ### Source Files
 
-| File                      | Description                                                                                                         |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `wir.rs`                  | WIR data structures: `WirModule`, `WirTypeDef`, `WirType`, `WirInstr`, `WirTypeId`, `WirFuncId`, `WirName`, etc.    |
-| `wir_unparse.rs`          | WIR → pseudo-Wado rendering for `wado dump --wir`                                                                   |
-| `tir_to_wir/mod.rs`       | Pipeline entry: `compile_with_wir(&Project) -> Vec<u8>` — orchestrates build → emit → validate → component wrapping |
-| `tir_to_wir/context.rs`   | `WirContext` — builder that accumulates types, functions, and module-level entries during translation               |
-| `tir_to_wir/types.rs`     | Type registration: translates TIR type definitions to `Vec<WirTypeDef>` with multi-phase topological sorting        |
-| `tir_to_wir/functions.rs` | Function collection: gathers imports, entry/library functions, methods, data segments, exports                      |
-| `tir_to_wir/translate.rs` | Function body translation: converts TIR expressions/statements to `WirInstr` trees                                  |
-| `tir_to_wir/emit.rs`      | `WirEmitter`: converts `WirModule` to core Wasm bytes via `wasm_encoder`                                            |
-| `tir_to_wir/component.rs` | Component Model wrapping: delegates to `Codegen::build_component_from_core_module()`                                |
+| File                     | Description                                                                                                             |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `wir.rs`                 | WIR data structures: `WirPackage`, `WirTypeDef`, `WirType`, `WirInstr`, `WirTypeId`, `WirFuncId`, `WirName`, etc.       |
+| `wir_unparse.rs`         | WIR → pseudo-Wado rendering for `wado dump --wir`                                                                       |
+| `wir_build.rs`           | Pipeline entry: `compile_with_wir(&FlatPackage) -> Vec<u8>` — orchestrates build → emit → validate → component wrapping |
+| `wir_build/context.rs`   | `WirContext` — builder that accumulates types, functions, and module-level entries during translation                   |
+| `wir_build/types.rs`     | Type registration: translates TIR type definitions to `Vec<WirTypeDef>` with multi-phase topological sorting            |
+| `wir_build/functions.rs` | Function collection: gathers imports, entry/library functions, methods, data segments, exports                          |
+| `wir_build/translate.rs` | Function body translation: converts TIR expressions/statements to `WirInstr` trees                                      |
+| `codegen/emit.rs`        | `WirEmitter`: converts `WirPackage` to core Wasm bytes via `wasm_encoder`                                               |
+| `codegen/component.rs`   | Component Model wrapping: builds component from core module                                                             |
 
 ### Key Design Decisions
 
@@ -112,7 +112,7 @@ Principles:
 
 ### Strategy: Strangler Fig Pattern
 
-The migration builds a complete WIR pipeline **alongside** the existing codegen, without modifying `codegen.rs`. Both pipelines consume the same `&Project` after `wasm_plan`. Once all tests pass, the old codegen is replaced and deleted.
+The migration builds a complete WIR pipeline **alongside** the existing codegen, without modifying `codegen.rs`. Both pipelines consume the same `&FlatPackage` after `wasm_plan`. Once all tests pass, the old codegen is replaced and deleted.
 
 ```
                                   ┌→ codegen → wasm binary (existing, untouched)
@@ -133,7 +133,7 @@ Created `wir.rs` (data structures), `wir_unparse.rs` (pseudo-Wado output), and `
 
 ### Phase 2: Parallel E2E Test Infrastructure (complete)
 
-Created `compile_with_wir(&Project) -> Vec<u8>` in `tir_to_wir/mod.rs`. Created parallel test harnesses (`wir_e2e.rs`, `wir_progress.rs`) gated by `WADO_WIR_TEST=1` to track incremental progress. Both harnesses were removed after cutover; `tests/e2e.rs` is now the sole E2E test.
+Created `compile_with_wir(&FlatPackage) -> Vec<u8>` in `wir_build.rs`. Created parallel test harnesses (`wir_e2e.rs`, `wir_progress.rs`) gated by `WADO_WIR_TEST=1` to track incremental progress. Both harnesses were removed after cutover; `tests/e2e.rs` is now the sole E2E test.
 
 ### Phase 3: Core Translation (complete)
 
@@ -192,7 +192,7 @@ WADO_WIR_TEST=1 cargo test -p wado-compiler --test wir_e2e -- hello_world
 cargo run --bin wado -- dump --wir file.wado
 ```
 
-This shows the full `WirModule` as pseudo-Wado, allowing inspection of the planned Wasm output before binary emission. Use this to diagnose type registration issues, incorrect instruction translation, or missing functions — rather than relying solely on E2E test pass/fail.
+This shows the full `WirPackage` as pseudo-Wado, allowing inspection of the planned Wasm output before binary emission. Use this to diagnose type registration issues, incorrect instruction translation, or missing functions — rather than relying solely on E2E test pass/fail.
 
 ## Consequences
 

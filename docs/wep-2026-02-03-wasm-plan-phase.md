@@ -7,19 +7,19 @@
 1. **Analysis**: Scanning type tables, querying WASI registries, topological sorting, dependency resolution — deciding _what_ to generate
 2. **Encoding**: Allocating Wasm indices, calling `wasm_encoder` APIs, emitting instructions — _how_ to generate it
 
-The compiler's principle states: "codegen.rs emits the Project as is, which does not have the knowledge of the previous phases." But in practice, codegen performs significant analysis before it can emit anything.
+The compiler's principle states: "codegen.rs emits the Package as is, which does not have the knowledge of the previous phases." But in practice, codegen performs significant analysis before it can emit anything.
 
 ## Decision
 
-Incrementally move analysis out of codegen into `wasm_plan`. The `wasm_plan` phase analyzes the Project and attaches metadata and plans that codegen consumes.
+Incrementally move analysis out of codegen into `wasm_plan`. The `wasm_plan` phase analyzes the Package and attaches metadata and plans that codegen consumes.
 
 ```
-lower → optimize → wasm_plan → codegen
-                       ↓
-                   Project {
-                       component_plan: ComponentPlan,
-                       // CmExportInfo attached to TirFunctions
-                   }
+lower → link → optimize → wasm_plan → codegen
+                              ↓
+                          FlatPackage {
+                              component_plan: ComponentPlan,
+                              // CmExportInfo attached to TirFunctions
+                          }
 ```
 
 ### What Lives in wasm_plan

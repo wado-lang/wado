@@ -162,7 +162,7 @@ Shared visitor infrastructure (`WirRefVisitor` / `WirMutVisitor`) for traversing
 
 **Module:** `wir_optimize.rs`
 
-WIR-level optimizations run after WIR build and before Wasm emission, operating on the `WirModule` in-place. They are organized into phases:
+WIR-level optimizations run after WIR build and before Wasm emission, operating on the `WirPackage` in-place. They are organized into phases:
 
 ### Phase 1: Type Representation
 

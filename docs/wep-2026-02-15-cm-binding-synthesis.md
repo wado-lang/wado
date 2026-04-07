@@ -25,7 +25,7 @@ inspect synthesis), after effect checking and before monomorphize. Adapter funct
 monomorphization, optimization, WIR translation, and codegen like user code.
 
 Note: `wasm_plan` (component planning) is now integrated into the `wir_build` phase as
-`wir_build::plan_project()`, not a standalone pipeline phase.
+`wir_build::component_plan::build_component_plan()`, not a standalone pipeline phase.
 
 ### Import Adapters
 

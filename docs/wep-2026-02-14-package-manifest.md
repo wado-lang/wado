@@ -101,7 +101,7 @@ The `export` keyword defines what is visible at the **Component Model boundary**
 | Modifier | Scope            | Use                                           |
 | -------- | ---------------- | --------------------------------------------- |
 | (none)   | Module-private   | Implementation details                        |
-| `pub`    | Project-internal | Shared across modules within the same project |
+| `pub`    | Package-internal | Shared across modules within the same project |
 | `export` | CM boundary      | Package's public API, visible to consumers    |
 
 ```wado
