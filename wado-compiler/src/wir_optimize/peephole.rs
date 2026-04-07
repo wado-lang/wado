@@ -7,7 +7,7 @@
 //! - Copy-used-only-for-field-reads elision
 //! - Multi-value struct elision (`MultiValueStructNew` + `StructGet` → `MultiValueLocalBind`)
 
-use crate::wir::{WirInstr, WirModule, WirTypeDef};
+use crate::wir::{WirInstr, WirPackage, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
 use indexmap::IndexMap;
 
@@ -15,7 +15,7 @@ use indexmap::IndexMap;
 /// with `source`, then removing the dead copy. This is a pre-SROA pass that
 /// simplifies pattern matching codegen so variant SROA can see direct
 /// RefTest/RefCast patterns on the original local.
-pub(super) fn propagate_trivial_copies(module: &mut WirModule) {
+pub(super) fn propagate_trivial_copies(module: &mut WirPackage) {
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
             propagate_copies_in_body(body);

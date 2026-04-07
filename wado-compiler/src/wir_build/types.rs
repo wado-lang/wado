@@ -6,7 +6,7 @@
 //! Also contains type-ordering utilities (topological sort) used during registration.
 
 use crate::name::{ModuleSource, StructName};
-use crate::tir::{ResolvedType, TirModule, TirStruct, TirVariantDecl, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirStruct, TirVariantDecl, TypeId, TypeTable};
 use crate::wir::{
     WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin, WirMeta, WirName,
     WirStructType, WirType, WirTypeDef, WirVariantCase, WirVariantRepr, WirVariantType,
@@ -22,11 +22,19 @@ pub enum TypeDecl<'a> {
     Variant(&'a TirVariantDecl),
 }
 
-/// Get type dependencies (struct and variant names) for a given type.
+/// Get type dependencies (FQ `"{module_source}//{name}"` keys) for a given type.
 fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
     match type_table.get(type_id) {
-        ResolvedType::Struct { name, .. } => vec![name.clone()],
-        ResolvedType::Variant { name, .. } => vec![name.clone()],
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => vec![format!("{module_source}//{name}")],
+        ResolvedType::Variant {
+            name,
+            module_source,
+            ..
+        } => vec![format!("{module_source}//{name}")],
         ResolvedType::GenericInstance { type_args, .. } => {
             // Skip unresolved generic instances (containing type params or projections)
             if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
@@ -59,62 +67,71 @@ fn sort_types_topologically<'a>(
     variants: &'a [TirVariantDecl],
     type_table: &TypeTable,
 ) -> Vec<TypeDecl<'a>> {
-    let struct_names: IndexSet<String> = structs.iter().map(|s| s.name.clone()).collect();
-    let variant_names: IndexSet<String> = variants.iter().map(|v| v.name.clone()).collect();
-    let all_names: IndexSet<String> = struct_names.union(&variant_names).cloned().collect();
+    // Use FQ keys ("{module_source}//{name}") to distinguish same-named types
+    // from different modules.
+    let fq_key = |ms: &ModuleSource, name: &str| format!("{ms}//{name}");
+
+    let struct_keys: IndexSet<String> = structs
+        .iter()
+        .map(|s| fq_key(&s.module_source, &s.name))
+        .collect();
+    let variant_keys: IndexSet<String> = variants
+        .iter()
+        .map(|v| fq_key(&v.module_source, &v.name))
+        .collect();
+    let all_keys: IndexSet<String> = struct_keys.union(&variant_keys).cloned().collect();
 
     let mut deps: IndexMap<String, Vec<String>> = IndexMap::default();
 
     for s in structs {
+        let key = fq_key(&s.module_source, &s.name);
         let mut type_deps = Vec::new();
         for field in &s.fields {
             for dep in get_type_dependencies(type_table, field.type_id) {
-                if all_names.contains(&dep) && dep != s.name {
+                if all_keys.contains(&dep) && dep != key {
                     type_deps.push(dep);
                 }
             }
         }
-        deps.insert(s.name.clone(), type_deps);
+        deps.insert(key, type_deps);
     }
 
     for v in variants {
+        let key = fq_key(&v.module_source, &v.name);
         let mut type_deps = Vec::new();
         for case in &v.cases {
             for dep in get_type_dependencies(type_table, case.payload) {
-                if all_names.contains(&dep) && dep != v.name {
+                if all_keys.contains(&dep) && dep != key {
                     type_deps.push(dep);
                 }
             }
         }
-        deps.insert(v.name.clone(), type_deps);
+        deps.insert(key, type_deps);
     }
 
     let mut in_degree: IndexMap<String, usize> = IndexMap::default();
-    for name in &all_names {
-        in_degree.insert(name.clone(), deps.get(name).map(Vec::len).unwrap_or(0));
+    for key in &all_keys {
+        in_degree.insert(key.clone(), deps.get(key).map(Vec::len).unwrap_or(0));
     }
 
     let mut dependents: IndexMap<String, Vec<String>> = IndexMap::default();
-    for (name, type_deps) in &deps {
+    for (key, type_deps) in &deps {
         for dep in type_deps {
-            dependents
-                .entry(dep.clone())
-                .or_default()
-                .push(name.clone());
+            dependents.entry(dep.clone()).or_default().push(key.clone());
         }
     }
 
     let mut queue: Vec<String> = in_degree
         .iter()
         .filter(|&(_, deg)| *deg == 0)
-        .map(|(name, _)| name.clone())
+        .map(|(key, _)| key.clone())
         .collect();
 
-    let mut sorted_names = Vec::new();
-    while let Some(name) = queue.pop() {
-        sorted_names.push(name.clone());
-        if let Some(deps_on_name) = dependents.get(&name) {
-            for dependent in deps_on_name {
+    let mut sorted_keys = Vec::new();
+    while let Some(key) = queue.pop() {
+        sorted_keys.push(key.clone());
+        if let Some(deps_on_key) = dependents.get(&key) {
+            for dependent in deps_on_key {
                 let deg = in_degree.get_mut(dependent).unwrap();
                 *deg -= 1;
                 if *deg == 0 {
@@ -127,38 +144,39 @@ fn sort_types_topologically<'a>(
     // Append types involved in cycles (in_degree > 0 after Kahn's algorithm).
     // Wasm GC supports mutually recursive types via rec groups, and
     // fixup_abstract_struct_fields resolves forward references afterward.
-    for (name, deg) in &in_degree {
+    for (key, deg) in &in_degree {
         if *deg > 0 {
-            sorted_names.push(name.clone());
+            sorted_keys.push(key.clone());
         }
     }
 
-    let name_to_struct: IndexMap<&str, &TirStruct> =
-        structs.iter().map(|s| (s.name.as_str(), s)).collect();
-    let name_to_variant: IndexMap<&str, &TirVariantDecl> =
-        variants.iter().map(|v| (v.name.as_str(), v)).collect();
-
-    sorted_names
+    let key_to_struct: IndexMap<String, &TirStruct> = structs
         .iter()
-        .filter_map(|name| {
-            if let Some(s) = name_to_struct.get(name.as_str()) {
+        .map(|s| (fq_key(&s.module_source, &s.name), s))
+        .collect();
+    let key_to_variant: IndexMap<String, &TirVariantDecl> = variants
+        .iter()
+        .map(|v| (fq_key(&v.module_source, &v.name), v))
+        .collect();
+
+    sorted_keys
+        .iter()
+        .filter_map(|key| {
+            if let Some(s) = key_to_struct.get(key) {
                 Some(TypeDecl::Struct(s))
             } else {
-                name_to_variant
-                    .get(name.as_str())
-                    .map(|v| TypeDecl::Variant(v))
+                key_to_variant.get(key).map(|v| TypeDecl::Variant(v))
             }
         })
         .collect()
 }
 
-/// Register all types from the Project into the `WirContext`.
+/// Register all types from the Package into the `WirContext`.
 ///
 /// This follows a multi-phase registration order to ensure type dependencies
 /// are satisfied.
 pub fn register_types(ctx: &mut WirContext<'_>) {
-    let entry_tir = ctx.project.entry_module();
-    let _type_table = &*entry_tir.type_table.borrow();
+    let _type_table = &*ctx.package.type_table.borrow();
 
     // Phase 0: Internal Box<T> structs
     register_box_structs(ctx);
@@ -474,15 +492,13 @@ fn register_raw_array_type(
 // === Phase implementations ===
 
 fn register_box_structs(ctx: &mut WirContext<'_>) {
-    for (_module_source, tir_mod) in &ctx.project.tir_modules {
-        let type_table = &*tir_mod.type_table.borrow();
-        for s in &tir_mod.structs {
-            if s.monomorph_info
-                .as_ref()
-                .is_some_and(|info| info.generic_name == "Box")
-            {
-                register_struct(ctx, s, type_table, &tir_mod.module_source);
-            }
+    let type_table = &*ctx.package.type_table.borrow();
+    for s in &ctx.package.structs {
+        if s.monomorph_info
+            .as_ref()
+            .is_some_and(|info| info.generic_name == "Box")
+        {
+            register_struct(ctx, s, type_table, &s.module_source);
         }
     }
 
@@ -526,41 +542,41 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
 }
 
 fn register_library_types(ctx: &mut WirContext<'_>) {
-    let entry_source = &ctx.project.entry_module_source;
-    for (module_source, tir_mod) in &ctx.project.tir_modules {
-        if module_source == entry_source {
-            continue;
-        }
-        let type_table = &*tir_mod.type_table.borrow();
+    let entry_source = &ctx.package.entry_module_source;
+    let type_table = &*ctx.package.type_table.borrow();
 
-        // Collect non-mono structs and variants for topological sorting
-        let structs: Vec<_> = tir_mod
-            .structs
-            .iter()
-            .filter(|s| s.monomorph_info.is_none() && s.type_params.is_empty())
-            .collect();
-        let variants: Vec<_> = tir_mod
-            .variants
-            .iter()
-            .filter(|v| v.type_params.is_empty())
-            .collect();
+    // Collect non-mono library structs and variants for topological sorting
+    let structs: Vec<_> = ctx
+        .package
+        .structs
+        .iter()
+        .filter(|s| {
+            s.module_source != *entry_source
+                && s.monomorph_info.is_none()
+                && s.type_params.is_empty()
+        })
+        .cloned()
+        .collect();
+    let variants: Vec<_> = ctx
+        .package
+        .variants
+        .iter()
+        .filter(|v| v.module_source != *entry_source && v.type_params.is_empty())
+        .cloned()
+        .collect();
 
-        let structs_slice: Vec<_> = structs.iter().map(|s| (*s).clone()).collect();
-        let variants_slice: Vec<_> = variants.iter().map(|v| (*v).clone()).collect();
-
-        let sorted = sort_types_topologically(&structs_slice, &variants_slice, type_table);
-        for decl in sorted {
-            match decl {
-                TypeDecl::Struct(s) => register_struct(ctx, s, type_table, module_source),
-                TypeDecl::Variant(v) => register_variant(ctx, v, type_table, module_source),
-            }
+    let sorted = sort_types_topologically(&structs, &variants, type_table);
+    for decl in sorted {
+        match decl {
+            TypeDecl::Struct(s) => register_struct(ctx, s, type_table, &s.module_source),
+            TypeDecl::Variant(v) => register_variant(ctx, v, type_table, &v.module_source),
         }
     }
 }
 
 fn register_tuple_types(ctx: &mut WirContext<'_>) {
-    for tir_mod in ctx.project.tir_modules.values() {
-        let type_table = &*tir_mod.type_table.borrow();
+    {
+        let type_table = &*ctx.package.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             let resolved = type_table.get(type_id);
             if let ResolvedType::GenericInstance {
@@ -651,80 +667,79 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
 }
 
 fn register_entry_types(ctx: &mut WirContext<'_>) {
-    let entry_tir = ctx.project.entry_module();
-    let type_table = &*entry_tir.type_table.borrow();
-    let module_source = &entry_tir.module_source;
+    let entry_source = &ctx.package.entry_module_source;
+    let type_table = &*ctx.package.type_table.borrow();
 
-    let structs: Vec<_> = entry_tir
+    let structs: Vec<_> = ctx
+        .package
         .structs
         .iter()
-        .filter(|s| s.monomorph_info.is_none() && s.type_params.is_empty())
+        .filter(|s| {
+            s.module_source == *entry_source
+                && s.monomorph_info.is_none()
+                && s.type_params.is_empty()
+        })
         .cloned()
         .collect();
-    let variants: Vec<_> = entry_tir
+    let variants: Vec<_> = ctx
+        .package
         .variants
         .iter()
-        .filter(|v| v.type_params.is_empty())
+        .filter(|v| v.module_source == *entry_source && v.type_params.is_empty())
         .cloned()
         .collect();
 
     let sorted = sort_types_topologically(&structs, &variants, type_table);
     for decl in sorted {
         match decl {
-            TypeDecl::Struct(s) => register_struct(ctx, s, type_table, module_source),
-            TypeDecl::Variant(v) => register_variant(ctx, v, type_table, module_source),
+            TypeDecl::Struct(s) => register_struct(ctx, s, type_table, &s.module_source),
+            TypeDecl::Variant(v) => register_variant(ctx, v, type_table, &v.module_source),
         }
     }
 }
 
 fn register_nonmono_arrays(ctx: &mut WirContext<'_>) {
-    for tir_mod in ctx.project.tir_modules.values() {
-        let type_table = &*tir_mod.type_table.borrow();
-        for type_id in type_table.iter_type_ids() {
-            if let ResolvedType::BuiltinArray(elem_type_id) = type_table.get(type_id) {
-                // Skip unresolved arrays (containing type params or projections)
-                if type_table.contains_type_param(*elem_type_id) {
-                    continue;
-                }
-                register_raw_array_type(ctx, *elem_type_id, type_table);
+    let type_table = &*ctx.package.type_table.borrow();
+    for type_id in type_table.iter_type_ids() {
+        if let ResolvedType::BuiltinArray(elem_type_id) = type_table.get(type_id) {
+            // Skip unresolved arrays (containing type params or projections)
+            if type_table.contains_type_param(*elem_type_id) {
+                continue;
             }
+            register_raw_array_type(ctx, *elem_type_id, type_table);
         }
     }
 }
 
 fn register_mono_library_types(ctx: &mut WirContext<'_>) {
-    let entry_source = &ctx.project.entry_module_source;
-    for (module_source, tir_mod) in &ctx.project.tir_modules {
-        if module_source == entry_source {
+    let entry_source = &ctx.package.entry_module_source;
+    let type_table = &*ctx.package.type_table.borrow();
+
+    for s in &ctx.package.structs {
+        if s.module_source == *entry_source {
             continue;
         }
-        let type_table = &*tir_mod.type_table.borrow();
-
-        for s in &tir_mod.structs {
-            if s.monomorph_info.is_some() {
-                // Skip Box<T> (already registered in Phase 0)
-                if s.monomorph_info
-                    .as_ref()
-                    .is_some_and(|info| info.generic_name == "Box")
-                {
-                    continue;
-                }
-                register_struct(ctx, s, type_table, module_source);
+        if s.monomorph_info.is_some() {
+            // Skip Box<T> (already registered in Phase 0)
+            if s.monomorph_info
+                .as_ref()
+                .is_some_and(|info| info.generic_name == "Box")
+            {
+                continue;
             }
+            register_struct(ctx, s, type_table, &s.module_source);
         }
     }
 }
 
 fn register_mono_field_arrays(ctx: &mut WirContext<'_>) {
     // Pre-scan monomorphized struct fields for array types
-    for tir_mod in ctx.project.tir_modules.values() {
-        let type_table = &*tir_mod.type_table.borrow();
-        for s in &tir_mod.structs {
-            if s.monomorph_info.is_some() {
-                for field in &s.fields {
-                    if let ResolvedType::BuiltinArray(elem) = type_table.get(field.type_id) {
-                        register_raw_array_type(ctx, *elem, type_table);
-                    }
+    let type_table = &*ctx.package.type_table.borrow();
+    for s in &ctx.package.structs {
+        if s.monomorph_info.is_some() {
+            for field in &s.fields {
+                if let ResolvedType::BuiltinArray(elem) = type_table.get(field.type_id) {
+                    register_raw_array_type(ctx, *elem, type_table);
                 }
             }
         }
@@ -732,11 +747,13 @@ fn register_mono_field_arrays(ctx: &mut WirContext<'_>) {
 }
 
 fn register_mono_entry_types(ctx: &mut WirContext<'_>) {
-    let entry_tir = ctx.project.entry_module();
-    let type_table = &*entry_tir.type_table.borrow();
-    let module_source = &entry_tir.module_source;
+    let entry_source = &ctx.package.entry_module_source;
+    let type_table = &*ctx.package.type_table.borrow();
 
-    for s in &entry_tir.structs {
+    for s in &ctx.package.structs {
+        if s.module_source != *entry_source {
+            continue;
+        }
         if s.monomorph_info.is_some() {
             if s.monomorph_info
                 .as_ref()
@@ -744,7 +761,7 @@ fn register_mono_entry_types(ctx: &mut WirContext<'_>) {
             {
                 continue;
             }
-            register_struct(ctx, s, type_table, module_source);
+            register_struct(ctx, s, type_table, &s.module_source);
         }
     }
 }
@@ -763,8 +780,8 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
             Vec<(String, Vec<crate::wir::WirType>)>, // cases: (name, payload types)
         )> = Vec::new();
 
-        for tir_mod in ctx.project.tir_modules.values() {
-            let type_table = &*tir_mod.type_table.borrow();
+        {
+            let type_table = &*ctx.package.type_table.borrow();
             for type_id in type_table.iter_type_ids() {
                 if let ResolvedType::GenericInstance {
                     name,
@@ -794,28 +811,27 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     if ctx.variant_type_map.contains_key(&fq) {
                         continue;
                     }
-                    // Find the module containing the base variant declaration.
-                    // First try the source module, then search all modules
+                    // Find the base variant declaration.
+                    // First try matching by module_source, then search all variants
                     // (handles module_source mismatch, e.g. core:prelude vs
                     // core:prelude/types.wado)
-                    let has_variant = |m: &TirModule| {
-                        m.variants
-                            .iter()
-                            .any(|v| v.name == *name && !v.type_params.is_empty())
-                    };
-                    let variant_mod = ctx
-                        .project
-                        .tir_modules
-                        .get(module_source)
-                        .filter(|m| has_variant(m))
-                        .or_else(|| ctx.project.tir_modules.values().find(|m| has_variant(m)));
-                    if let Some(variant_mod) = variant_mod {
-                        let variant_tt = &*variant_mod.type_table.borrow();
-                        let base = variant_mod
-                            .variants
-                            .iter()
-                            .find(|v| v.name == *name && !v.type_params.is_empty())
-                            .expect("variant module must contain the base variant");
+                    let base = ctx
+                        .package
+                        .variants
+                        .iter()
+                        .find(|v| {
+                            v.name == *name
+                                && !v.type_params.is_empty()
+                                && v.module_source == *module_source
+                        })
+                        .or_else(|| {
+                            ctx.package
+                                .variants
+                                .iter()
+                                .find(|v| v.name == *name && !v.type_params.is_empty())
+                        });
+                    if let Some(base) = base {
+                        let variant_tt = type_table;
                         let type_args = type_args.clone();
                         let cases: Vec<(String, Vec<crate::wir::WirType>)> = base
                             .cases
@@ -987,50 +1003,46 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
 }
 
 fn register_remaining_arrays(ctx: &mut WirContext<'_>) {
-    for tir_mod in ctx.project.tir_modules.values() {
-        let type_table = &*tir_mod.type_table.borrow();
-        for type_id in type_table.iter_type_ids() {
-            if let ResolvedType::BuiltinArray(elem_type_id) = type_table.get(type_id) {
-                if type_table.contains_type_param(*elem_type_id) {
-                    continue;
-                }
-                register_raw_array_type(ctx, *elem_type_id, type_table);
+    let type_table = &*ctx.package.type_table.borrow();
+    for type_id in type_table.iter_type_ids() {
+        if let ResolvedType::BuiltinArray(elem_type_id) = type_table.get(type_id) {
+            if type_table.contains_type_param(*elem_type_id) {
+                continue;
             }
+            register_raw_array_type(ctx, *elem_type_id, type_table);
         }
     }
 }
 
 fn register_enums(ctx: &mut WirContext<'_>) {
-    for (module_source, tir_mod) in &ctx.project.tir_modules {
-        for e in &tir_mod.enums {
-            let fq = format!("{module_source}//enum:{}", e.name);
-            if ctx.type_map.contains_key(&fq) {
-                continue;
-            }
-            let cases: Vec<WirEnumCase> = e
-                .cases
-                .iter()
-                .enumerate()
-                .map(|(i, case)| WirEnumCase {
-                    name: case.name.clone(),
-                    discriminant: i32::try_from(i).expect("too many enum cases"),
-                })
-                .collect();
-
-            ctx.register_type(
-                fq,
-                WirTypeDef::Enum(WirEnumType {
-                    name: WirName {
-                        fq: format!("{module_source}//enum:{}", e.name),
-                    },
-                    cases,
-                    meta: WirMeta {
-                        module_source: Some(module_source.clone()),
-                        ..WirMeta::default()
-                    },
-                }),
-            );
+    for e in &ctx.package.enums {
+        let fq = format!("{}//enum:{}", e.module_source, e.name);
+        if ctx.type_map.contains_key(&fq) {
+            continue;
         }
+        let cases: Vec<WirEnumCase> = e
+            .cases
+            .iter()
+            .enumerate()
+            .map(|(i, case)| WirEnumCase {
+                name: case.name.clone(),
+                discriminant: i32::try_from(i).expect("too many enum cases"),
+            })
+            .collect();
+
+        ctx.register_type(
+            fq,
+            WirTypeDef::Enum(WirEnumType {
+                name: WirName {
+                    fq: format!("{}//enum:{}", e.module_source, e.name),
+                },
+                cases,
+                meta: WirMeta {
+                    module_source: Some(e.module_source.clone()),
+                    ..WirMeta::default()
+                },
+            }),
+        );
     }
 }
 
@@ -1046,12 +1058,12 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     use crate::tir::{PrimitiveType, ResolvedType};
     use crate::wir::WirType;
 
-    // Collect all unique function signatures from all modules
+    // Collect all unique function signatures from the shared type table
     let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>)> = Vec::new();
     let mut seen_keys: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
 
-    for tir_mod in ctx.project.tir_modules.values() {
-        let type_table = &*tir_mod.type_table.borrow();
+    {
+        let type_table = &*ctx.package.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::Function {
                 params,
@@ -1119,17 +1131,11 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
 fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
     use crate::tir::ResolvedType;
 
-    // Collect unique Array<T> element types across all modules.
-    // Each entry is (element TypeId, element mangled name, a type_table ref index).
+    // Collect unique Array<T> element types from the shared type table.
     let mut array_elem_types: Vec<(crate::tir::TypeId, String)> = Vec::new();
-    // We need to borrow type tables, but can't hold refs across ctx mutation.
-    // Collect TypeIds and elem names, keeping the first module's type table for lookups.
-    let mut first_type_table: Option<std::rc::Rc<std::cell::RefCell<TypeTable>>> = None;
-    for tir_mod in ctx.project.tir_modules.values() {
-        let type_table = &*tir_mod.type_table.borrow();
-        if first_type_table.is_none() {
-            first_type_table = Some(tir_mod.type_table.clone());
-        }
+    let tt_rc = ctx.package.type_table.clone();
+    {
+        let type_table = &*tt_rc.borrow();
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -1150,10 +1156,6 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
             }
         }
     }
-
-    let Some(tt_rc) = first_type_table else {
-        return;
-    };
 
     // Topological sort: process leaf element types (non-Array) before nested ones.
     // Partition into non-array elements (leaf) and array elements (nested).
@@ -1282,9 +1284,9 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             let mut resolved = None;
 
             // Try resolving from TIR structs
-            for tir_mod in ctx.project.tir_modules.values() {
-                let type_table = &*tir_mod.type_table.borrow();
-                for tir_struct in &tir_mod.structs {
+            {
+                let type_table = &*ctx.package.type_table.borrow();
+                for tir_struct in &ctx.package.structs {
                     // Match by exact name, or by monomorphized name (base name matches TIR name)
                     let name_matches = tir_struct.name == *struct_name_str
                         || struct_name_str.starts_with(&format!("{}<", tir_struct.name));
@@ -1292,7 +1294,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         continue;
                     }
                     if let Some(ms) = module_source
-                        && &tir_mod.module_source != ms
+                        && &tir_struct.module_source != ms
                     {
                         continue;
                     }
@@ -1306,40 +1308,32 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         }
                     }
                 }
-                if resolved.is_some() {
-                    break;
-                }
             }
 
             // Try resolving from TIR tuple types (tuples have display names like "[T, U]")
             if resolved.is_none() && struct_name_str.starts_with('[') {
-                for tir_mod in ctx.project.tir_modules.values() {
-                    let type_table = &*tir_mod.type_table.borrow();
-                    for type_id in type_table.iter_type_ids() {
-                        if let ResolvedType::GenericInstance {
-                            name,
-                            type_args: elements,
-                            module_source,
-                        } = type_table.get(type_id)
-                            && TypeTable::is_tuple_type(name, module_source)
-                            && field_idx < elements.len()
+                let type_table = &*ctx.package.type_table.borrow();
+                for type_id in type_table.iter_type_ids() {
+                    if let ResolvedType::GenericInstance {
+                        name,
+                        type_args: elements,
+                        module_source,
+                    } = type_table.get(type_id)
+                        && TypeTable::is_tuple_type(name, module_source)
+                        && field_idx < elements.len()
+                    {
+                        // Check if this tuple maps to the same WIR type
+                        if let Some(wir_tid) = ctx.tuple_type_map.get(elements)
+                            && wir_tid.index() == u32::try_from(wir_idx).unwrap_or(u32::MAX)
                         {
-                            // Check if this tuple maps to the same WIR type
-                            if let Some(wir_tid) = ctx.tuple_type_map.get(elements)
-                                && wir_tid.index() == u32::try_from(wir_idx).unwrap_or(u32::MAX)
-                            {
-                                let elem_type_id = elements[field_idx];
-                                let wir_type = ctx.type_id_to_wir_type(type_table, elem_type_id);
-                                if !is_abstract_ref(&wir_type) {
-                                    // Make tuple fields non-nullable.
-                                    resolved = Some(wir_type.as_nonnull());
-                                    break;
-                                }
+                            let elem_type_id = elements[field_idx];
+                            let wir_type = ctx.type_id_to_wir_type(type_table, elem_type_id);
+                            if !is_abstract_ref(&wir_type) {
+                                // Make tuple fields non-nullable.
+                                resolved = Some(wir_type.as_nonnull());
+                                break;
                             }
                         }
-                    }
-                    if resolved.is_some() {
-                        break;
                     }
                 }
             }
@@ -1382,11 +1376,12 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 let Some(ms) = &variant_module_source else {
                     continue;
                 };
-                let Some(tir_mod) = ctx.project.tir_modules.get(ms) else {
-                    continue;
-                };
-                let type_table = &*tir_mod.type_table.borrow();
-                let Some(tir_variant) = tir_mod.variants.iter().find(|v| v.name == variant_display)
+                let type_table = &*ctx.package.type_table.borrow();
+                let Some(tir_variant) = ctx
+                    .package
+                    .variants
+                    .iter()
+                    .find(|v| v.module_source == *ms && v.name == variant_display)
                 else {
                     continue;
                 };
@@ -1476,8 +1471,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             && is_abstract_ref(&a.element_type)
         {
             // Try to resolve via TIR BuiltinArray types
-            for tir_mod in ctx.project.tir_modules.values() {
-                let type_table = &*tir_mod.type_table.borrow();
+            {
+                let type_table = &*ctx.package.type_table.borrow();
                 for type_id in type_table.iter_type_ids() {
                     if let crate::tir::ResolvedType::BuiltinArray(elem_tid) =
                         type_table.get(type_id)
@@ -1507,18 +1502,16 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             for (case_idx, case) in v.cases.iter().enumerate() {
                 if case.payload.iter().any(is_abstract_ref) {
                     // Try to resolve payload types through TIR variant decls
-                    for tir_mod in ctx.project.tir_modules.values() {
-                        let tt = tir_mod.type_table.borrow();
-                        for tir_variant in &tir_mod.variants {
-                            let v_base = v.name.fq.split("//").nth(1).unwrap_or(&v.name.fq);
-                            if tir_variant.name == v_base && case_idx < tir_variant.cases.len() {
-                                let payload_type_id = tir_variant.cases[case_idx].payload;
-                                if tt.get(payload_type_id) != &crate::tir::ResolvedType::Unit {
-                                    let wir_type = ctx.type_id_to_wir_type(&tt, payload_type_id);
-                                    if !is_abstract_ref(&wir_type) {
-                                        variant_fixups.push((wir_idx, case_idx, vec![wir_type]));
-                                        break;
-                                    }
+                    let tt = ctx.package.type_table.borrow();
+                    let v_base = v.name.fq.split("//").nth(1).unwrap_or(&v.name.fq);
+                    for tir_variant in &ctx.package.variants {
+                        if tir_variant.name == v_base && case_idx < tir_variant.cases.len() {
+                            let payload_type_id = tir_variant.cases[case_idx].payload;
+                            if tt.get(payload_type_id) != &crate::tir::ResolvedType::Unit {
+                                let wir_type = ctx.type_id_to_wir_type(&tt, payload_type_id);
+                                if !is_abstract_ref(&wir_type) {
+                                    variant_fixups.push((wir_idx, case_idx, vec![wir_type]));
+                                    break;
                                 }
                             }
                         }

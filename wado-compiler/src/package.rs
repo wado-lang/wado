@@ -1,29 +1,24 @@
-//! Project - Compilation context for Wado programs
+//! Package — per-module compilation context for Wado programs
 //!
-//! This module provides the `Project` struct which encapsulates all
-//! compilation context needed for code generation.
-//!
-//! The compilation flow is:
-//! 1. Parse/analyze -> Project (unoptimized)
-//! 2. Optimize -> Project (optimized, with usage analysis)
-//! 3. Codegen takes Project and generates Wasm
+//! `Package` flows through the early compilation phases (resolve → synthesis →
+//! monomorphize → lower → optimize). The link phase then consumes it and
+//! produces a [`crate::flat_package::FlatPackage`] for WIR building and codegen.
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{FunctionId, ModuleSource};
+use crate::name::ModuleSource;
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
-use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
 
-/// A Wado project ready for code generation.
+/// A Wado package in per-module form.
 ///
-/// A Project is a representation of a WebAssembly Component Model component.
-/// It contains all the information needed to compile a Wado program,
-/// including the results of optimization analysis.
+/// Contains TIR modules indexed by source, plus analysis metadata. Flows
+/// through resolve → synthesis → monomorphize → lower → optimize, then
+/// consumed by the link phase to produce a [`crate::flat_package::FlatPackage`].
 #[derive(Debug)]
-pub struct Project {
+pub struct Package {
     /// The entry module source
     pub entry_module_source: ModuleSource,
     /// All TIR modules indexed by module source
@@ -42,8 +37,6 @@ pub struct Project {
     /// Registry of builtin function signatures from lib/core/builtin.wado
     pub builtin_registry: BuiltinRegistry,
 
-    /// Set of reachable functions (from DCE analysis)
-    pub reachable_functions: IndexSet<FunctionId>,
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
@@ -54,10 +47,6 @@ pub struct Project {
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
     pub target_world: String,
 
-    /// When true, the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>).
-    /// This determines whether HTTP-related glue code is needed.
-    pub has_http_handler_export: bool,
-
     /// Maps world export name → adapter function name.
     /// Populated by `synthesis::cm_binding` when export adapters are synthesized.
     /// For example: `"run"` → `"__cm_export__run"`.
@@ -66,13 +55,10 @@ pub struct Project {
     /// Populated by `synthesis::cm_binding` when an export returns a Result type.
     /// Used by `optimize_dce` to override the builtin registry's single-`i32` signature.
     pub task_return_flat_params: Option<Vec<TypeId>>,
-
-    /// Component Model structure plan. Populated by `wir_build::plan_project`.
-    pub component_plan: Option<ComponentPlan>,
 }
 
-impl Project {
-    /// Create a new Project from compilation artifacts (before optimization).
+impl Package {
+    /// Create a new Package from compilation artifacts (before optimization).
     pub fn new(
         entry_module_source: ModuleSource,
         tir_modules: IndexMap<ModuleSource, TirModule>,
@@ -93,19 +79,14 @@ impl Project {
             world_registry,
             builtin_registry,
             // Usage analysis fields default to empty/false
-            reachable_functions: IndexSet::default(),
             used_wasi_functions: IndexSet::default(),
             // Codegen options
             strip_names: false,
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),
-            // CM export characteristics
-            has_http_handler_export: false,
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
             task_return_flat_params: None,
-            // Wasm plan
-            component_plan: None,
         }
     }
 
@@ -114,11 +95,6 @@ impl Project {
         self.tir_modules
             .get(&self.entry_module_source)
             .expect("entry module should exist in TIR modules")
-    }
-
-    /// Check if a function is reachable (should be included in the binary)
-    pub fn is_reachable(&self, func_id: &FunctionId) -> bool {
-        self.reachable_functions.contains(func_id)
     }
 
     /// Check if the project targets the synthetic test world.

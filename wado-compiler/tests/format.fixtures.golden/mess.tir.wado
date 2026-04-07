@@ -6,6 +6,8 @@
 // mem::realloc
 // wasi::task-return
 
+global mut heap_offset: i32 = 8;
+
 global mut __modules_initialized: bool = false;
 
 flags Access {
@@ -14,6 +16,61 @@ flags Access {
     Execute,  // 0x4
 }
 
+fn grow_memory(new_offset: i32) {
+    let current_bytes: i32 = (core::builtin::memory_size() * 65536);
+    let deficit: i32 = (new_offset - current_bytes);
+    let normal_grow: i32 = core::builtin::select::<i32>((current_bytes < 16777216), current_bytes, 16777216);
+    let grow_bytes: i32 = if (deficit > normal_grow) {
+        (1 << (32 - core::builtin::i32_clz((deficit - 1))));
+    } else {
+        normal_grow;
+    };
+    let grow_pages: i32 = ((grow_bytes + 65535) / 65536);
+    core::builtin::memory_grow(grow_pages);
+}
+
+export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    if (newsize == 0) {
+        if ((oldptr + oldsize) == core::allocator::heap_offset) {
+            core::allocator::heap_offset = oldptr;
+        }
+        return 0;
+    }
+    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
+    let new_offset: i32 = (aligned + newsize);
+    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+        core::allocator::grow_memory(new_offset);
+    }
+    core::allocator::heap_offset = new_offset;
+    return aligned;
+}
+
+export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    if (newsize == 0) {
+        if (oldsize > 0) {
+            core::builtin::memory_fill(oldptr, 0xFF, oldsize);
+        }
+        return 0;
+    }
+    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
+    let new_offset: i32 = (aligned + newsize);
+    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+        core::allocator::grow_memory(new_offset);
+    }
+    core::allocator::heap_offset = new_offset;
+    return aligned;
+}
+
+fn i32_and(a: i32, b: i32) -> i32;
+
+fn memory_grow(delta: i32) -> i32;
+
+fn memory_size() -> i32;
+
+fn memory_fill(dst: i32, value: u8, len: i32);
+
+fn i32_clz(x: i32) -> i32;
+
 export fn run() {
     __inline___initialize_modules_0: {
         if __modules_initialized {
@@ -21,84 +78,6 @@ export fn run() {
         }
         __modules_initialized = true;
     };
-}
-
-fn __cm_binding__Stdout_write_via_stream(data: i32) -> i32 {
-    return cm_raw_call wasi:cli/Stdout::write_via_stream(data);
-}
-
-fn __cm_binding__Stderr_write_via_stream(data: i32) -> i32 {
-    return cm_raw_call wasi:cli/Stderr::write_via_stream(data);
-}
-
-fn __cm_binding__Environment_get_environment() -> Array<[String, String]> {
-    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    cm_raw_call wasi:cli/Environment::get_environment(__outptr);
-    let __base: i32 = core::builtin::i32_load(__outptr);
-    let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: Array<[String, String]> = "Array<Tuple<String,String>>::with_capacity"(__count);
-    let mut __i: i32 = 0;
-    loop {
-        if (__i >= __count) {
-            break;
-        }
-        let __elem_addr: i32 = (__base + (__i * 16));
-        let __lifted_result_6: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)));
-        let __lifted_result_7: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)));
-        __result."Array<Tuple<String,String>>::push"([__lifted_result_6, __lifted_result_7]);
-        core::builtin::realloc(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)), 1, 0);
-        core::builtin::realloc(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)), 1, 0);
-        __i = (__i + 1);
-    }
-    if (__count > 0) {
-        core::builtin::realloc(__base, (__count * 16), 4, 0);
-    }
-    core::builtin::realloc(__outptr, 8, 4, 0);
-    return __result;
-}
-
-fn __cm_binding__Environment_get_arguments() -> Array<String> {
-    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    cm_raw_call wasi:cli/Environment::get_arguments(__outptr);
-    let __base: i32 = core::builtin::i32_load(__outptr);
-    let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: Array<String> = "Array<String>::with_capacity"(__count);
-    let mut __i: i32 = 0;
-    loop {
-        if (__i >= __count) {
-            break;
-        }
-        let __elem_addr: i32 = (__base + (__i * 8));
-        __result."Array<String>::push"(core::internal::memory_to_gc_string(core::builtin::i32_load(__elem_addr), core::builtin::i32_load((__elem_addr + 4))));
-        core::builtin::realloc(core::builtin::i32_load(__elem_addr), core::builtin::i32_load((__elem_addr + 4)), 1, 0);
-        __i = (__i + 1);
-    }
-    if (__count > 0) {
-        core::builtin::realloc(__base, (__count * 8), 4, 0);
-    }
-    core::builtin::realloc(__outptr, 8, 4, 0);
-    return __result;
-}
-
-fn __cm_binding__Environment_get_initial_cwd() -> Option<String> {
-    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 12);
-    cm_raw_call wasi:cli/Environment::get_initial_cwd(__outptr);
-    let __disc: i32 = core::builtin::i32_load8_u(__outptr);
-    let mut __option_result: Option<String> = Option<String>::None;
-    if (__disc != 0) {
-        __option_result = Option<String>::Some(core::internal::memory_to_gc_string(core::builtin::i32_load((__outptr + 4)), core::builtin::i32_load(((__outptr + 4) + 4))));
-        core::builtin::realloc(core::builtin::i32_load((__outptr + 4)), core::builtin::i32_load(((__outptr + 4) + 4)), 1, 0);
-    }
-    core::builtin::realloc(__outptr, 12, 4, 0);
-    return __option_result;
-}
-
-fn __cm_binding__Exit_exit(status: i32) {
-    cm_raw_call wasi:cli/Exit::exit(status);
-}
-
-fn __cm_binding__Exit_exit_with_code(status_code: i32) {
-    cm_raw_call wasi:cli/Exit::exit_with_code(status_code);
 }
 
 export fn __cm_export__run() {

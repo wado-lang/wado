@@ -105,133 +105,130 @@ fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
 pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
     use crate::wir::{WirFunction, WirName, WirType};
 
-    for tir_mod in ctx.project.tir_modules.values() {
-        let type_table = &*tir_mod.type_table.borrow();
-        let module_source = tir_mod.module_source.clone();
-        for functor in &tir_mod.closure_functors {
-            let functor_key = (module_source.clone(), functor.id);
-            if ctx.closure_wrapper_funcs.contains_key(&functor_key) {
-                continue;
-            }
-
-            // Look up the __call func_id, scoped to the correct module.
-            // If __call was removed by DCE (closure never used), skip this functor entirely.
-            // This check must come before type lookups since DCE may have removed the
-            // functor's types from the TypeTable.
-            let functor_name = &functor.struct_name;
-            let call_method_fq = format!("{module_source}/{functor_name}::__call");
-            let call_func_id = match ctx.func_map.get(&call_method_fq).cloned() {
-                Some(id) => id,
-                None => continue,
-            };
-
-            // Get the __call method's param/result types (excluding self)
-            let call_func = functor.call_method.borrow();
-            let user_param_count = call_func.params.len() - 1; // skip self
-            let user_params: Vec<WirType> = call_func
-                .params
-                .iter()
-                .skip(1) // skip self parameter
-                .map(|p| ctx.type_id_to_wir_type(type_table, p.type_id))
-                .collect();
-            let result_wirs: Vec<WirType> = if call_func.return_type == crate::tir::TypeTable::UNIT
-                || call_func.return_type == crate::tir::TypeTable::NEVER
-            {
-                vec![]
-            } else {
-                vec![ctx.type_id_to_wir_type(type_table, call_func.return_type)]
-            };
-            let has_result = !result_wirs.is_empty();
-
-            // Get canonical func type
-            let user_params_clone = user_params.clone();
-            let (fn_type_id, _) =
-                ctx.get_or_create_canonical_closure_type(user_params, result_wirs);
-
-            // Get functor struct type ID
-            let functor_wir_type = ctx.type_id_to_wir_type(type_table, functor.ref_type_id);
-            let functor_struct_type_id = match &functor_wir_type {
-                WirType::Ref { type_id, .. } => type_id.clone(),
-                _ => continue,
-            };
-
-            // Build wrapper function body
-            let env_local = "__env".to_string();
-            let typed_env_local = "__typed_env".to_string();
-
-            let mut body = vec![
-                WirInstr::DeclareLocal {
-                    name: typed_env_local.clone(),
-                    ty: WirType::Ref {
-                        type_id: functor_struct_type_id.clone(),
-                        nullable: false,
-                    },
-                },
-                WirInstr::LocalSet {
-                    name: typed_env_local.clone(),
-                    value: Box::new(WirInstr::RefCast {
-                        type_id: functor_struct_type_id,
-                        nullable: false,
-                        expr: Box::new(WirInstr::LocalGet {
-                            name: env_local.clone(),
-                            result_ty: WirType::AbstractRef {
-                                heap_type: crate::wir::WirAbstractHeapType::Struct,
-                                nullable: true,
-                            },
-                        }),
-                    }),
-                },
-            ];
-
-            let mut call_args = vec![WirInstr::LocalGet {
-                name: typed_env_local,
-                result_ty: functor_wir_type.clone(),
-            }];
-            for i in 0..user_param_count {
-                call_args.push(WirInstr::LocalGet {
-                    name: format!("__p{i}"),
-                    result_ty: user_params_clone[i].clone(),
-                });
-            }
-
-            let call_instr = WirInstr::Call {
-                func_id: call_func_id,
-                args: call_args,
-            };
-            if has_result {
-                body.push(WirInstr::Return {
-                    value: Some(Box::new(call_instr)),
-                });
-            } else {
-                body.push(call_instr);
-            }
-
-            let mut param_names = vec![env_local];
-            for i in 0..user_param_count {
-                param_names.push(format!("__p{i}"));
-            }
-
-            // Include module source in wrapper name for debuggability
-            let global_id = ctx.closure_wrapper_funcs.len();
-            let wrapper_name = format!("{module_source}/__closure_wrapper_{global_id}");
-            let wrapper_fq = format!("closure/{wrapper_name}");
-
-            let func = WirFunction {
-                name: WirName { fq: wrapper_fq },
-                type_id: fn_type_id,
-                param_names,
-                body: Some(body),
-                meta: crate::wir::WirMeta::default(),
-                generic_origin: None,
-                effects: Vec::new(),
-                stores: Vec::new(),
-                comp_features: 0,
-                export_name: None,
-            };
-
-            let func_id = ctx.register_function(func);
-            ctx.closure_wrapper_funcs.insert(functor_key, func_id);
+    let type_table = &*ctx.package.type_table.borrow();
+    for functor in &ctx.package.closure_functors {
+        let module_source = &functor.module_source;
+        let functor_key = (module_source.clone(), functor.id);
+        if ctx.closure_wrapper_funcs.contains_key(&functor_key) {
+            continue;
         }
+
+        // Look up the __call func_id, scoped to the correct module.
+        // If __call was removed by DCE (closure never used), skip this functor entirely.
+        // This check must come before type lookups since DCE may have removed the
+        // functor's types from the TypeTable.
+        let functor_name = &functor.struct_name;
+        let call_method_fq = format!("{module_source}/{functor_name}::__call");
+        let call_func_id = match ctx.func_map.get(&call_method_fq).cloned() {
+            Some(id) => id,
+            None => continue,
+        };
+
+        // Get the __call method's param/result types (excluding self)
+        let call_func = functor.call_method.borrow();
+        let user_param_count = call_func.params.len() - 1; // skip self
+        let user_params: Vec<WirType> = call_func
+            .params
+            .iter()
+            .skip(1) // skip self parameter
+            .map(|p| ctx.type_id_to_wir_type(type_table, p.type_id))
+            .collect();
+        let result_wirs: Vec<WirType> = if call_func.return_type == crate::tir::TypeTable::UNIT
+            || call_func.return_type == crate::tir::TypeTable::NEVER
+        {
+            vec![]
+        } else {
+            vec![ctx.type_id_to_wir_type(type_table, call_func.return_type)]
+        };
+        let has_result = !result_wirs.is_empty();
+
+        // Get canonical func type
+        let user_params_clone = user_params.clone();
+        let (fn_type_id, _) = ctx.get_or_create_canonical_closure_type(user_params, result_wirs);
+
+        // Get functor struct type ID
+        let functor_wir_type = ctx.type_id_to_wir_type(type_table, functor.ref_type_id);
+        let functor_struct_type_id = match &functor_wir_type {
+            WirType::Ref { type_id, .. } => type_id.clone(),
+            _ => continue,
+        };
+
+        // Build wrapper function body
+        let env_local = "__env".to_string();
+        let typed_env_local = "__typed_env".to_string();
+
+        let mut body = vec![
+            WirInstr::DeclareLocal {
+                name: typed_env_local.clone(),
+                ty: WirType::Ref {
+                    type_id: functor_struct_type_id.clone(),
+                    nullable: false,
+                },
+            },
+            WirInstr::LocalSet {
+                name: typed_env_local.clone(),
+                value: Box::new(WirInstr::RefCast {
+                    type_id: functor_struct_type_id,
+                    nullable: false,
+                    expr: Box::new(WirInstr::LocalGet {
+                        name: env_local.clone(),
+                        result_ty: WirType::AbstractRef {
+                            heap_type: crate::wir::WirAbstractHeapType::Struct,
+                            nullable: true,
+                        },
+                    }),
+                }),
+            },
+        ];
+
+        let mut call_args = vec![WirInstr::LocalGet {
+            name: typed_env_local,
+            result_ty: functor_wir_type.clone(),
+        }];
+        for i in 0..user_param_count {
+            call_args.push(WirInstr::LocalGet {
+                name: format!("__p{i}"),
+                result_ty: user_params_clone[i].clone(),
+            });
+        }
+
+        let call_instr = WirInstr::Call {
+            func_id: call_func_id,
+            args: call_args,
+        };
+        if has_result {
+            body.push(WirInstr::Return {
+                value: Some(Box::new(call_instr)),
+            });
+        } else {
+            body.push(call_instr);
+        }
+
+        let mut param_names = vec![env_local];
+        for i in 0..user_param_count {
+            param_names.push(format!("__p{i}"));
+        }
+
+        // Include module source in wrapper name for debuggability
+        let global_id = ctx.closure_wrapper_funcs.len();
+        let wrapper_name = format!("{module_source}/__closure_wrapper_{global_id}");
+        let wrapper_fq = format!("closure/{wrapper_name}");
+
+        let func = WirFunction {
+            name: WirName { fq: wrapper_fq },
+            type_id: fn_type_id,
+            param_names,
+            body: Some(body),
+            meta: crate::wir::WirMeta::default(),
+            generic_origin: None,
+            effects: Vec::new(),
+            stores: Vec::new(),
+            comp_features: 0,
+            export_name: None,
+        };
+
+        let func_id = ctx.register_function(func);
+        ctx.closure_wrapper_funcs.insert(functor_key, func_id);
     }
 }
 
@@ -4169,7 +4166,7 @@ impl FunctionTranslator<'_, '_> {
                     } else {
                         "Stdout::write_via_stream"
                     };
-                    let func_info = self.ctx.project.wasi_registry.get_function(effect_method);
+                    let func_info = self.ctx.package.wasi_registry.get_function(effect_method);
                     // Wado uses stackful async: canon lower without async flag.
                     // Sync lower returns the result directly (no subtask handle).
                     let needs_async = false;
@@ -6644,15 +6641,11 @@ impl FunctionTranslator<'_, '_> {
             ..
         } = self.type_table.get(struct_type)
         {
-            for module in self.ctx.project.tir_modules.values() {
-                if module.module_source == *module_source {
-                    for s in &module.structs {
-                        if s.name == *name {
-                            for f in &s.fields {
-                                if f.name == field_name {
-                                    return f.type_id;
-                                }
-                            }
+            for s in &self.ctx.package.structs {
+                if s.module_source == *module_source && s.name == *name {
+                    for f in &s.fields {
+                        if f.name == field_name {
+                            return f.type_id;
                         }
                     }
                 }

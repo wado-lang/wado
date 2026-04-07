@@ -6,7 +6,7 @@
 
 use crate::hashmap::IndexSet;
 use crate::wir::{
-    COMP_FEATURE_ARRAY_PUSH, WirData, WirInstr, WirModule, WirType, WirTypeDef, WirTypeId,
+    COMP_FEATURE_ARRAY_PUSH, WirData, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId,
 };
 use crate::wir_visitor::WirMutVisitor;
 
@@ -20,7 +20,7 @@ const ARRAY_NEW_DATA_THRESHOLD: usize = 128;
 /// primitive type, packs the values into a passive data segment and replaces
 /// the instruction with `ArrayNewData`. This reduces Wasm binary size and
 /// initialization overhead compared to pushing N constants + `array.new_fixed`.
-pub(super) fn promote_constant_arrays_to_data(module: &mut WirModule) {
+pub(super) fn promote_constant_arrays_to_data(module: &mut WirPackage) {
     // Collect element types for array type defs so we can look them up without
     // borrowing `module.types` while mutating other fields.
     let array_elem_types: Vec<Option<WirType>> = module
@@ -179,7 +179,7 @@ const ARRAY_NEW_FIXED_LIMIT: usize = 256;
 ///
 /// Walks all function bodies and rewrites any `ArrayNewFixed` with more than
 /// [`ARRAY_NEW_FIXED_LIMIT`] elements. Uses a module-level counter for unique local names.
-pub(super) fn split_large_array_literals(module: &mut WirModule) {
+pub(super) fn split_large_array_literals(module: &mut WirPackage) {
     let mut visitor = SplitLargeArrays { counter: 0 };
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
@@ -272,7 +272,7 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
 /// This pass recognizes that pattern and rewrites it to use `ArrayNewFixed`
 /// (replacing `ArrayNewDefault` and removing the push calls), which is then
 /// eligible for `promote_constant_arrays_to_data` and `split_large_array_literals`.
-pub(super) fn collapse_array_push_sequences(module: &mut WirModule) {
+pub(super) fn collapse_array_push_sequences(module: &mut WirPackage) {
     // Build set of function indices that have COMP_FEATURE_ARRAY_PUSH.
     let push_func_indices: IndexSet<u32> = module
         .functions

@@ -6,6 +6,63 @@
 // mem::realloc
 // wasi::task-return
 
+global mut heap_offset: i32 = 8;
+
+fn grow_memory(new_offset: i32) {
+    let current_bytes: i32 = (core::builtin::memory_size() * 65536);
+    let deficit: i32 = (new_offset - current_bytes);
+    let normal_grow: i32 = core::builtin::select::<i32>((current_bytes < 16777216), current_bytes, 16777216);
+    let grow_bytes: i32 = if (deficit > normal_grow) {
+        (1 << (32 - core::builtin::i32_clz((deficit - 1))));
+    } else {
+        normal_grow;
+    };
+    let grow_pages: i32 = ((grow_bytes + 65535) / 65536);
+    core::builtin::memory_grow(grow_pages);
+}
+
+export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    if (newsize == 0) {
+        if ((oldptr + oldsize) == core::allocator::heap_offset) {
+            core::allocator::heap_offset = oldptr;
+        }
+        return 0;
+    }
+    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
+    let new_offset: i32 = (aligned + newsize);
+    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+        core::allocator::grow_memory(new_offset);
+    }
+    core::allocator::heap_offset = new_offset;
+    return aligned;
+}
+
+export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    if (newsize == 0) {
+        if (oldsize > 0) {
+            core::builtin::memory_fill(oldptr, 0xFF, oldsize);
+        }
+        return 0;
+    }
+    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
+    let new_offset: i32 = (aligned + newsize);
+    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+        core::allocator::grow_memory(new_offset);
+    }
+    core::allocator::heap_offset = new_offset;
+    return aligned;
+}
+
+fn i32_and(a: i32, b: i32) -> i32;
+
+fn memory_grow(delta: i32) -> i32;
+
+fn memory_size() -> i32;
+
+fn memory_fill(dst: i32, value: u8, len: i32);
+
+fn i32_clz(x: i32) -> i32;
+
 export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }

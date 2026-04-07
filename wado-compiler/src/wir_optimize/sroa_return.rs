@@ -6,7 +6,7 @@
 
 use crate::hashmap::IndexSet;
 use crate::wir::{
-    WirFuncType, WirInstr, WirModule, WirType, WirTypeDef, WirTypeId, WirVariantType,
+    WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId, WirVariantType,
 };
 
 use super::util::collect_pinned_func_ids;
@@ -26,7 +26,7 @@ use super::util::collect_pinned_func_ids;
 /// - Every call site stores the result into a temp and reads only via `StructGet`.
 ///
 /// Note: 1-field structs are handled by `sroa_single_field_parameters` instead.
-pub(super) fn sroa_multi_value_returns(module: &mut WirModule) {
+pub(super) fn sroa_multi_value_returns(module: &mut WirPackage) {
     // Collect pinned func_ids (exported, in element tables, or RefFunc'd).
     let pinned = collect_pinned_func_ids(module);
 
@@ -140,7 +140,7 @@ fn wir_types_equal(a: &WirType, b: &WirType) -> bool {
 }
 
 /// Phase 1: find functions eligible for SROA.
-fn find_sroa_candidates(module: &WirModule, pinned: &IndexSet<u32>) -> Vec<(u32, SroaCandidate)> {
+fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32, SroaCandidate)> {
     let mut candidates = Vec::new();
 
     for (i, func) in module.functions.iter().enumerate() {
@@ -235,7 +235,7 @@ fn find_sroa_candidates(module: &WirModule, pinned: &IndexSet<u32>) -> Vec<(u32,
 /// - All returns are `StructNew` of the variant's case types
 /// - Case type indices can be resolved via `variant_case_info`
 fn try_variant_sroa_candidate(
-    module: &WirModule,
+    module: &WirPackage,
     func_array_idx: usize,
     variant_type_idx: u32,
     variant_type: &WirVariantType,
@@ -637,7 +637,7 @@ fn all_br_variant_values_are_struct_new(
 /// 2. Every use of that temp local is `StructGet { expr: LocalGet(temp) }`.
 /// 3. The temp local is not used in any other way (plain `LocalGet`, `LocalSet`, etc.).
 fn validate_call_sites(
-    module: &WirModule,
+    module: &WirPackage,
     candidates: &[(u32, SroaCandidate)],
 ) -> Vec<(u32, SroaCandidate)> {
     let candidate_ids: IndexSet<u32> = candidates.iter().map(|(id, _)| *id).collect();
@@ -1178,7 +1178,7 @@ fn check_uses_in_subtree(instr: &WirInstr, local_name: &str) -> bool {
 }
 
 /// Phase 3: apply SROA transformations to confirmed candidates.
-fn apply_sroa(module: &mut WirModule, confirmed: &[(u32, SroaCandidate)]) {
+fn apply_sroa(module: &mut WirPackage, confirmed: &[(u32, SroaCandidate)]) {
     // Build a lookup from func_id_index → candidate info
     let candidate_map: crate::hashmap::IndexMap<u32, &SroaCandidate> =
         confirmed.iter().map(|(id, c)| (*id, c)).collect();

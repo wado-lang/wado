@@ -7,10 +7,10 @@
 //! - **Flatten seq assignments**: canonicalizes `LocalSet(x, Seq([preamble, final]))`.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirInstr, WirModule, WirTypeDef};
+use crate::wir::{WirInstr, WirPackage, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
 
-pub(super) fn elide_single_field_struct_locals(module: &mut WirModule) {
+pub(super) fn elide_single_field_struct_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
         let Some(body) = &mut func.body else {
             continue;
@@ -25,7 +25,7 @@ pub(super) fn elide_single_field_struct_locals(module: &mut WirModule) {
 /// field is accessed exactly once via `StructGet`. Substitutes each field access
 /// with the corresponding initializer expression and nops the original assignment.
 /// This eliminates the struct type from the binary.
-pub(super) fn elide_multi_field_struct_locals(module: &mut WirModule) {
+pub(super) fn elide_multi_field_struct_locals(module: &mut WirPackage) {
     // Collect type info needed before mutably borrowing functions.
     let type_field_names: Vec<Option<Vec<String>>> = module
         .types
@@ -354,7 +354,7 @@ fn nop_local_set_of(instr: &mut WirInstr, name: &str) {
 ///
 /// This canonicalizes the pattern produced by the WIR builder for tuple destructuring,
 /// making it visible to downstream passes like multi-field struct local elision.
-pub(super) fn flatten_seq_assignments(module: &mut WirModule) {
+pub(super) fn flatten_seq_assignments(module: &mut WirPackage) {
     let mut visitor = FlattenSeqAssignments;
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {

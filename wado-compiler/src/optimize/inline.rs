@@ -3,13 +3,16 @@
 //! This module provides function inlining for small functions.
 //! It uses labeled block expressions for cleaner value handling.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
-use crate::project::Project;
 use crate::tir::{
     CallArg, FunctionRef, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::block_has_break_to;
 
@@ -200,20 +203,18 @@ fn is_inline_eligible(
 }
 
 /// Detect recursive functions using call graph analysis
-fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> IndexSet<String> {
+fn find_recursive_functions(functions: &[Rc<RefCell<TirFunction>>]) -> IndexSet<String> {
     // Phase 1: Build name→index mapping (one String allocation per function)
     let mut name_to_idx: IndexMap<String, usize> = IndexMap::default();
     let mut idx_to_name: Vec<String> = Vec::new();
 
-    for module in modules.values() {
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            let name = func.name.clone();
-            if !name_to_idx.contains_key(&name) {
-                let idx = idx_to_name.len();
-                idx_to_name.push(name.clone());
-                name_to_idx.insert(name, idx);
-            }
+    for func_rc in functions {
+        let func = func_rc.borrow();
+        let name = func.name.clone();
+        if !name_to_idx.contains_key(&name) {
+            let idx = idx_to_name.len();
+            idx_to_name.push(name.clone());
+            name_to_idx.insert(name, idx);
         }
     }
 
@@ -221,20 +222,18 @@ fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> Inde
     // Phase 2: Build call graph using indices (no String allocations in inner loop)
     let mut call_graph: Vec<Vec<usize>> = vec![Vec::new(); n];
 
-    for module in modules.values() {
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            if let Some(caller_idx) = name_to_idx.get(&func.name) {
-                let mut callee_names: IndexSet<String> = IndexSet::default();
-                if let Some(body) = &func.body {
-                    collect_callees_from_block(body, &mut callee_names);
-                }
-                let callees: Vec<usize> = callee_names
-                    .iter()
-                    .filter_map(|name| name_to_idx.get(name).copied())
-                    .collect();
-                call_graph[*caller_idx] = callees;
+    for func_rc in functions {
+        let func = func_rc.borrow();
+        if let Some(caller_idx) = name_to_idx.get(&func.name) {
+            let mut callee_names: IndexSet<String> = IndexSet::default();
+            if let Some(body) = &func.body {
+                collect_callees_from_block(body, &mut callee_names);
             }
+            let callees: Vec<usize> = callee_names
+                .iter()
+                .filter_map(|name| name_to_idx.get(name).copied())
+                .collect();
+            call_graph[*caller_idx] = callees;
         }
     }
 
@@ -481,8 +480,8 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
 ///
 /// The `inline_threshold` parameter controls the maximum number of statements
 /// a function can have to be considered for inlining.
-pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool {
-    let recursive_functions = find_recursive_functions(&project.tir_modules);
+pub fn inline_functions(project: &mut FlatPackage, inline_threshold: usize) -> bool {
+    let recursive_functions = find_recursive_functions(&project.functions);
 
     // Collect inline candidates from all modules
     // Key: (module_source, func_name), Value: cloned function
@@ -491,25 +490,26 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
     // Also collect function_strings for each candidate (to update caller's strings after inlining)
     let mut candidate_strings: IndexMap<(ModuleSource, String), Vec<String>> = IndexMap::default();
 
-    for (module_source, module) in &project.tir_modules {
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            let key = (module_source.clone(), func.name.clone());
-            if is_inline_eligible(
-                &func,
-                &recursive_functions,
-                module_source,
-                &module.type_table.borrow(),
-                inline_threshold,
-            ) {
-                inline_candidates.insert(key.clone(), func.clone());
-                // Get the strings used by this function
-                if let Some(strings) = module.function_strings.get(&func.name) {
-                    candidate_strings.insert(key, strings.clone());
-                }
+    let type_table = project.type_table.borrow();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let module_source = &func.module_source;
+        let key = (module_source.clone(), func.name.clone());
+        if is_inline_eligible(
+            &func,
+            &recursive_functions,
+            module_source,
+            &type_table,
+            inline_threshold,
+        ) {
+            inline_candidates.insert(key.clone(), func.clone());
+            // Get the strings used by this function
+            if let Some(strings) = project.function_strings.get(&key) {
+                candidate_strings.insert(key, strings.clone());
             }
         }
     }
+    drop(type_table);
 
     if inline_candidates.is_empty() {
         return false;
@@ -517,70 +517,70 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
 
     let mut changed = false;
 
-    // Inline at call sites in each module
-    for module in project.tir_modules.values_mut() {
-        let caller_module_source = module.module_source.clone();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            let func_name = func.name.clone();
-            if let Some(mut body) = func.body.take() {
-                // Track which functions were inlined into this function
-                let mut inlined_funcs: Vec<(ModuleSource, String)> = Vec::new();
-                // Take ownership of local_count and local_types to avoid borrow conflicts
-                let mut local_count = func.local_count;
-                let mut local_types = std::mem::take(&mut func.local_types);
-                // Counter for generating unique inline labels
-                let mut inline_counter: u32 = 0;
-                inline_calls_in_block(
-                    &mut body,
-                    &inline_candidates,
-                    &caller_module_source,
-                    &mut local_count,
-                    &mut local_types,
-                    &module.type_table.borrow(),
-                    &mut inlined_funcs,
-                    &mut inline_counter,
-                );
-                func.local_count = local_count;
-                func.local_types = local_types;
-                func.body = Some(body);
+    // Inline at call sites
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        let caller_module_source = func.module_source.clone();
+        let func_name = func.name.clone();
+        if let Some(mut body) = func.body.take() {
+            // Track which functions were inlined into this function
+            let mut inlined_funcs: Vec<(ModuleSource, String)> = Vec::new();
+            // Take ownership of local_count and local_types to avoid borrow conflicts
+            let mut local_count = func.local_count;
+            let mut local_types = std::mem::take(&mut func.local_types);
+            // Counter for generating unique inline labels
+            let mut inline_counter: u32 = 0;
+            inline_calls_in_block(
+                &mut body,
+                &inline_candidates,
+                &caller_module_source,
+                &mut local_count,
+                &mut local_types,
+                &project.type_table.borrow(),
+                &mut inlined_funcs,
+                &mut inline_counter,
+            );
+            func.local_count = local_count;
+            func.local_types = local_types;
+            func.body = Some(body);
 
-                if !inlined_funcs.is_empty() {
-                    changed = true;
-                }
+            if !inlined_funcs.is_empty() {
+                changed = true;
+            }
 
-                // Update function_strings: add strings from inlined functions to the caller
-                let mut all_inlined_strings: IndexSet<String> = IndexSet::default();
-                for inlined_key in inlined_funcs {
-                    if let Some(inlined_strings) = candidate_strings.get(&inlined_key) {
-                        all_inlined_strings.extend(inlined_strings.iter().cloned());
-                    }
+            // Update function_strings: add strings from inlined functions to the caller
+            let mut all_inlined_strings: IndexSet<String> = IndexSet::default();
+            for inlined_key in inlined_funcs {
+                if let Some(inlined_strings) = candidate_strings.get(&inlined_key) {
+                    all_inlined_strings.extend(inlined_strings.iter().cloned());
                 }
-                if !all_inlined_strings.is_empty() {
-                    {
-                        let caller_strings = module
-                            .function_strings
-                            .entry(func_name.clone())
-                            .or_default();
-                        let existing: IndexSet<&str> =
-                            caller_strings.iter().map(String::as_str).collect();
-                        let to_add: Vec<String> = all_inlined_strings
-                            .iter()
-                            .filter(|s| !existing.contains(s.as_str()))
-                            .cloned()
-                            .collect();
-                        caller_strings.extend(to_add);
-                    }
-                    let to_add: Vec<String> = {
-                        let existing_literals: IndexSet<&str> =
-                            module.string_literals.iter().map(String::as_str).collect();
-                        all_inlined_strings
-                            .into_iter()
-                            .filter(|s| !existing_literals.contains(s.as_str()))
-                            .collect()
-                    };
-                    module.string_literals.extend(to_add);
+            }
+            if !all_inlined_strings.is_empty() {
+                // Need to drop func borrow before borrowing project.function_strings mutably
+                drop(func);
+                {
+                    let caller_strings = project
+                        .function_strings
+                        .entry((caller_module_source.clone(), func_name.clone()))
+                        .or_default();
+                    let existing: IndexSet<&str> =
+                        caller_strings.iter().map(String::as_str).collect();
+                    let to_add: Vec<String> = all_inlined_strings
+                        .iter()
+                        .filter(|s| !existing.contains(s.as_str()))
+                        .cloned()
+                        .collect();
+                    caller_strings.extend(to_add);
                 }
+                let to_add: Vec<String> = {
+                    let existing_literals: IndexSet<&str> =
+                        project.string_literals.iter().map(String::as_str).collect();
+                    all_inlined_strings
+                        .into_iter()
+                        .filter(|s| !existing_literals.contains(s.as_str()))
+                        .collect()
+                };
+                project.string_literals.extend(to_add);
             }
         }
     }

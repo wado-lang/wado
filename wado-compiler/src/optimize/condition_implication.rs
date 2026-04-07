@@ -11,8 +11,8 @@
 //! This subsumes the WIR-level `bounds_check` pass, handling both strict `<`
 //! and inclusive `<=` guard patterns.
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-use crate::project::Project;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
 };
@@ -63,13 +63,11 @@ enum FieldSource {
 
 type DefMap = IndexMap<u32, Def>;
 
-pub fn eliminate_implied_conditions(project: &mut Project) -> bool {
+pub fn eliminate_implied_conditions(project: &mut FlatPackage) -> bool {
     let mut changed = false;
-    for module in project.tir_modules.values_mut() {
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            changed |= process_function(&mut func);
-        }
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        changed |= process_function(&mut func);
     }
     changed
 }

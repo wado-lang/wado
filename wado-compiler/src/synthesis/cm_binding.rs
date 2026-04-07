@@ -20,7 +20,7 @@ use crate::cm_abi;
 use crate::component_model::{CmVariantCase, WasiFunctionInfo, WasiRegistry};
 use crate::name::LocalMethodName;
 use crate::name::ModuleSource;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
@@ -2338,6 +2338,7 @@ fn make_binding_function(
     local_types: Vec<TypeId>,
 ) -> Rc<RefCell<TirFunction>> {
     Rc::new(RefCell::new(TirFunction {
+        module_source: ModuleSource::default(),
         name,
         is_pub: false,
         is_export: false,
@@ -5576,7 +5577,7 @@ fn generate_inline_task_return(
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
-pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
+pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     let entry_source = project.entry_module_source.clone();
 
     // ---- Import adapters ----
@@ -5823,7 +5824,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
         // Compute the correct task-return params from the export's flat return types.
         // The builtin registry defines task_return with a single i32 param, but for
         // Result-returning exports the task-return call passes the full flattened type.
-        // Store on Project so optimize_dce can use it when creating the import.
+        // Store on Package so optimize_dce can use it when creating the import.
         for export in &world_info.exports {
             if let Some(return_type) = &export.return_type {
                 let tt = entry_type_table.borrow();
@@ -5920,7 +5921,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
 ///
 /// The generated functions are added to the entry module so they can be called
 /// by the CM resource method rewriter.
-fn synthesize_record_stream_reads(project: &mut Project) {
+fn synthesize_record_stream_reads(project: &mut Package) {
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -6382,6 +6383,7 @@ fn synthesize_stream_read_func(
     stmts.push(return_stmt(Some(local_ref(arr_idx, "arr", array_type_id))));
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: func_name,
         is_pub: false,
         is_export: false,
@@ -6467,7 +6469,7 @@ fn cm_binding_function(cm_name: &str) -> Option<(&'static str, &'static str)> {
 }
 
 /// Rewrite all #[cm("...")] resource method calls in the project.
-fn rewrite_cm_resource_methods(project: &mut Project) {
+fn rewrite_cm_resource_methods(project: &mut Package) {
     for module in project.tir_modules.values() {
         let type_table = module.type_table.clone();
         for func_rc in &module.functions {

@@ -80,17 +80,16 @@ array builtin::array<LitToken> (mut ref "wado-compiler/tests/fixtures/treeset_mu
 
 array builtin::array<TreeMapEntry<String,unit>> (mut ref "core:collections//TreeMapEntry<String,unit>");  // TypeId(16)
 
-struct core:collections//TreeMapNode<String> {  // TypeId(17)
-    mut key: ref "core:prelude/string.wado//String",
+struct core:prelude/array.wado//ArrayRefIter<Elem> {  // TypeId(17)
+    mut repr: ref builtin::array<Elem>,
+    mut used: i32,
     mut index: i32,
-    mut level: i32,
-    mut left: ref null "core:collections//TreeMapNode<String>",
-    mut right: ref null "core:collections//TreeMapNode<String>",
 }
 
-struct core:collections//TreeMapEntry<String,unit> {  // TypeId(18)
-    mut key: ref "core:prelude/string.wado//String",
-    mut deleted: bool,
+struct core:prelude/array.wado//ArrayRefIter<Array<Elem>> {  // TypeId(18)
+    mut repr: ref builtin::array<Array<Elem>>,
+    mut used: i32,
+    mut index: i32,
 }
 
 struct core:collections//TreeMap<String,unit> {  // TypeId(19)
@@ -100,16 +99,17 @@ struct core:collections//TreeMap<String,unit> {  // TypeId(19)
     mut deleted_count: i32,
 }
 
-struct core:prelude/array.wado//ArrayRefIter<Elem> {  // TypeId(20)
-    mut repr: ref builtin::array<Elem>,
-    mut used: i32,
-    mut index: i32,
+struct core:collections//TreeMapEntry<String,unit> {  // TypeId(20)
+    mut key: ref "core:prelude/string.wado//String",
+    mut deleted: bool,
 }
 
-struct core:prelude/array.wado//ArrayRefIter<Array<Elem>> {  // TypeId(21)
-    mut repr: ref builtin::array<Array<Elem>>,
-    mut used: i32,
+struct core:collections//TreeMapNode<String> {  // TypeId(21)
+    mut key: ref "core:prelude/string.wado//String",
     mut index: i32,
+    mut level: i32,
+    mut left: ref null "core:collections//TreeMapNode<String>",
+    mut right: ref null "core:collections//TreeMapNode<String>",
 }
 
 variant core:prelude/types.wado//Option<TreeMapNode<String>> {  // TypeId(22)

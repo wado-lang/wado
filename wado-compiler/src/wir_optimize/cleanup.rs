@@ -5,10 +5,10 @@
 //! utility rather than a standalone optimization.
 
 use crate::hashmap::IndexSet;
-use crate::wir::{WirInstr, WirModule};
+use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 
-pub(super) fn cleanup(module: &mut WirModule) {
+pub(super) fn cleanup(module: &mut WirPackage) {
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
             // Remove DeclareLocal for locals that are never used (no LocalGet/LocalSet/LocalTee).

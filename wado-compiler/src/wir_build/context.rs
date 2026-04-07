@@ -1,17 +1,17 @@
 //! WIR builder context — accumulates types, functions, and other module-level
-//! entries during the `tir_to_wir` translation, then produces a final `WirModule`.
+//! entries during the `tir_to_wir` translation, then produces a final `WirPackage`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::flat_package::FlatPackage;
 use crate::name::{ModuleSource, StructName};
-use crate::project::Project;
 use crate::tir::{TirFunction, TypeId, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
-    WirGlobal, WirImport, WirImportDesc, WirModule, WirName, WirNames, WirRecGroup, WirType,
+    WirGlobal, WirImport, WirImportDesc, WirName, WirNames, WirPackage, WirRecGroup, WirType,
     WirTypeDef, WirTypeId,
 };
 
@@ -26,8 +26,8 @@ pub const DEFINED_FUNC_BASE: u32 = 0x8000_0000;
 /// Accumulates all WIR entities and provides lookup maps for resolving
 /// type and function references during translation.
 pub struct WirContext<'a> {
-    /// Reference to the immutable project data.
-    pub project: &'a Project,
+    /// Reference to the linked package data.
+    pub package: &'a FlatPackage,
 
     // === Type Registry ===
     /// All type definitions in registration order.
@@ -101,9 +101,9 @@ pub struct WirContext<'a> {
     pub available_wasi_funcs: IndexSet<String>,
 
     // === Wasm module tracking ===
-    /// Map from `ModuleSource` prefix (e.g., "core/allocator") to wasm module name (e.g., "mem").
+    /// Map from `ModuleSource` to wasm module name (e.g., "mem").
     /// Functions/globals from these modules are extracted into separate wasm core modules.
-    pub wasm_module_sources: IndexMap<String, String>,
+    pub wasm_module_sources: IndexMap<ModuleSource, String>,
 
     // === Function body translation helpers ===
     /// Pending function bodies: (function index in self.functions, `TirFunction` ref, `TypeTable` ref)
@@ -129,32 +129,28 @@ pub struct PendingFunctionBody {
 }
 
 impl<'a> WirContext<'a> {
-    /// Create a new `WirContext` from a Project.
-    pub fn new(project: &'a Project) -> Self {
-        // Collect string literals from all TIR modules (deduped)
+    /// Create a new `WirContext` from a Package.
+    pub fn new(package: &'a FlatPackage) -> Self {
+        // Collect string literals (deduped)
         let mut seen: IndexSet<&str> = IndexSet::default();
         let mut string_literals = Vec::new();
-        for tir_module in project.tir_modules.values() {
-            for s in &tir_module.string_literals {
-                if seen.insert(s.as_str()) {
-                    string_literals.push(s.clone());
-                }
+        for s in &package.string_literals {
+            if seen.insert(s.as_str()) {
+                string_literals.push(s.clone());
             }
         }
 
-        // Collect bytes literals from all TIR modules (deduped)
+        // Collect bytes literals (deduped)
         let mut seen_bytes: IndexSet<&[u8]> = IndexSet::default();
         let mut bytes_literals = Vec::new();
-        for tir_module in project.tir_modules.values() {
-            for b in &tir_module.bytes_literals {
-                if seen_bytes.insert(b.as_slice()) {
-                    bytes_literals.push(b.clone());
-                }
+        for b in &package.bytes_literals {
+            if seen_bytes.insert(b.as_slice()) {
+                bytes_literals.push(b.clone());
             }
         }
 
         Self {
-            project,
+            package,
             types: Vec::new(),
             type_map: IndexMap::default(),
             rec_groups: Vec::new(),
@@ -176,13 +172,16 @@ impl<'a> WirContext<'a> {
             data: Vec::new(),
             string_literal_map: IndexMap::default(),
             bytes_literal_map: IndexMap::default(),
-            names: WirNames::default(),
+            names: WirNames {
+                module_name: Some(package.module_name.clone()),
+                ..WirNames::default()
+            },
             canonical_closure_types: IndexMap::default(),
             closure_wrapper_funcs: IndexMap::default(),
             canonical_closure_counter: 0,
             string_literals,
             bytes_literals,
-            wasm_module_sources: IndexMap::default(),
+            wasm_module_sources: IndexMap::<ModuleSource, String>::default(),
             available_wasi_funcs: IndexSet::default(),
             pending_bodies: Vec::new(),
             needed_canonicals: IndexMap::default(),
@@ -852,10 +851,10 @@ impl<'a> WirContext<'a> {
         Some(type_id)
     }
 
-    // === Build Final WirModule ===
+    // === Build Final WirPackage ===
 
-    /// Consume this context and produce the final `WirModule`.
-    pub fn into_wir_module(self) -> WirModule {
+    /// Consume this context and produce the final `WirPackage`.
+    pub fn into_wir_package(self) -> WirPackage {
         let functions = self.functions;
         let globals = self.globals;
         let global_map = &self.global_map;
@@ -867,14 +866,15 @@ impl<'a> WirContext<'a> {
         let mut dead_func_indices: IndexSet<u32> = IndexSet::default();
         let mut dead_global_indices: IndexSet<u32> = IndexSet::default();
 
-        for (source_prefix, wasm_mod_name) in &self.wasm_module_sources {
+        for (source_ms, wasm_mod_name) in &self.wasm_module_sources {
+            let source_prefix = source_ms.to_string();
             let mut mod_functions = Vec::new();
             let mut mod_globals = Vec::new();
             let mut mod_global_name_to_index = IndexMap::default();
 
             // Find functions belonging to this wasm module (keep in list, mark as dead)
             for (i, func) in functions.iter().enumerate() {
-                if !func.name.fq.starts_with(source_prefix) {
+                if !func.name.fq.starts_with(&source_prefix) {
                     continue;
                 }
                 let func_idx = u32::try_from(i).unwrap();
@@ -884,7 +884,7 @@ impl<'a> WirContext<'a> {
                 let export_name = func.export_name.clone().unwrap_or_else(|| {
                     func.name
                         .fq
-                        .strip_prefix(source_prefix)
+                        .strip_prefix(&source_prefix)
                         .and_then(|s| s.strip_prefix('/'))
                         .unwrap_or(&func.name.fq)
                         .to_string()
@@ -957,7 +957,7 @@ impl<'a> WirContext<'a> {
             })
             .collect();
 
-        WirModule {
+        WirPackage {
             types: self.types,
             rec_groups: self.rec_groups,
             imports: self.imports,
@@ -971,7 +971,7 @@ impl<'a> WirContext<'a> {
             names: self.names,
             component: WirComponent::default(),
             variant_case_info: self.variant_case_info,
-            entry_point_path: Some(self.project.entry_module_source.to_string()),
+            entry_point_path: Some(self.package.entry_module_source.to_string()),
             wasm_modules,
             dead_type_indices,
             dead_func_indices,

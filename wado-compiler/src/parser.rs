@@ -157,7 +157,7 @@ impl Parser {
         // Parse inner attributes at the start of the module.
         // Store them so has_todo() works even if item parsing fails later.
         let inner_attributes = self.parse_inner_attributes()?;
-        self.parsed_inner_attributes = inner_attributes.clone();
+        self.parsed_inner_attributes.clone_from(&inner_attributes);
 
         let mut items = Vec::new();
 

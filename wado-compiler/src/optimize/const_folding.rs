@@ -26,7 +26,7 @@
 //! Integer division/modulo by zero and signed MIN / -1 are not folded —
 //! they must remain runtime traps.
 
-use crate::project::Project;
+use crate::flat_package::FlatPackage;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
 };
@@ -53,18 +53,16 @@ impl FoldedExpr {
 }
 
 /// Apply constant folding to all functions in the project.
-pub fn fold_constants(project: &mut Project) -> bool {
+pub fn fold_constants(project: &mut FlatPackage) -> bool {
     let mut changed = false;
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.borrow();
-        let mut visitor = ConstFoldVisitor {
-            type_table: &type_table,
-        };
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if let Some(ref mut body) = func.body {
-                changed |= visitor.visit_block(body);
-            }
+    let type_table = project.type_table.borrow();
+    let mut visitor = ConstFoldVisitor {
+        type_table: &type_table,
+    };
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(ref mut body) = func.body {
+            changed |= visitor.visit_block(body);
         }
     }
     changed

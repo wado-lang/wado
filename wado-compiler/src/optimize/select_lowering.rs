@@ -5,8 +5,8 @@
 //! Both branches must be pure (no side effects, no traps) since `select` evaluates both
 //! operands eagerly.
 
+use crate::flat_package::FlatPackage;
 use crate::name::ModuleSource;
-use crate::project::Project;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExpr, TirExprKind, TirStmtKind, TypeId,
     TypeTable,
@@ -15,14 +15,12 @@ use crate::tir::{
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 
 /// Run select lowering on all functions.
-pub fn select_lowering(project: &mut Project) {
+pub fn select_lowering(project: &mut FlatPackage) {
     let mut visitor = SelectLoweringVisitor;
-    for module in project.tir_modules.values_mut() {
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if let Some(ref mut body) = func.body {
-                visitor.visit_block(body);
-            }
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(ref mut body) = func.body {
+            visitor.visit_block(body);
         }
     }
 }

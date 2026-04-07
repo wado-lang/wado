@@ -86,6 +86,7 @@ impl Monomorphizer {
         // Create the monomorphized struct
         let concrete = TirStruct {
             name: mangled_name,
+            module_source: key.module_source.clone(),
             is_pub: generic.is_pub,
             type_params: vec![], // Concrete struct has no type params
             monomorph_info: Some(MonomorphInfo {

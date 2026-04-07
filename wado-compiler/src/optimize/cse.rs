@@ -23,20 +23,18 @@
 //! }
 //! ```
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
-use crate::project::Project;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId,
 };
 use crate::token::Span;
 
-pub fn eliminate_common_subexprs(project: &mut Project) -> bool {
+pub fn eliminate_common_subexprs(project: &mut FlatPackage) -> bool {
     let mut changed = false;
-    for module in project.tir_modules.values_mut() {
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            changed |= cse_function(&mut func);
-        }
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        changed |= cse_function(&mut func);
     }
     changed
 }

@@ -28,12 +28,11 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
 
 array builtin::array<TreeMapEntry<String,String>> (mut ref "core:collections//TreeMapEntry<String,String>");  // TypeId(4)
 
-struct core:collections//TreeMapNode<String> {  // TypeId(5)
-    mut key: ref "core:prelude/string.wado//String",
-    mut index: i32,
-    mut level: i32,
-    mut left: ref null "core:collections//TreeMapNode<String>",
-    mut right: ref null "core:collections//TreeMapNode<String>",
+struct core:collections//TreeMap<String,String> {  // TypeId(5)
+    mut root: ref null "core:collections//TreeMapNode<String>",
+    mut entries: ref "core:prelude//Array<TreeMapEntry<String,String>>",
+    mut size: i32,
+    mut deleted_count: i32,
 }
 
 struct core:collections//TreeMapEntry<String,String> {  // TypeId(6)
@@ -42,11 +41,12 @@ struct core:collections//TreeMapEntry<String,String> {  // TypeId(6)
     mut deleted: bool,
 }
 
-struct core:collections//TreeMap<String,String> {  // TypeId(7)
-    mut root: ref null "core:collections//TreeMapNode<String>",
-    mut entries: ref "core:prelude//Array<TreeMapEntry<String,String>>",
-    mut size: i32,
-    mut deleted_count: i32,
+struct core:collections//TreeMapNode<String> {  // TypeId(7)
+    mut key: ref "core:prelude/string.wado//String",
+    mut index: i32,
+    mut level: i32,
+    mut left: ref null "core:collections//TreeMapNode<String>",
+    mut right: ref null "core:collections//TreeMapNode<String>",
 }
 
 variant core:prelude/types.wado//Option<TreeMapNode<String>> {  // TypeId(8)

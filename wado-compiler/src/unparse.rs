@@ -4696,6 +4696,64 @@ pub fn unparse_tir(module: &TirModule) -> String {
     unparser.unparse(module)
 }
 
+/// Unparse a `FlatPackage` (flat TIR lists) to pseudo-Wado source
+pub fn unparse_flat_package(package: &crate::flat_package::FlatPackage) -> String {
+    let type_table_ref = package.type_table.borrow();
+    let mut unparser = TirUnparser::new(&type_table_ref);
+
+    // Imports
+    if !package.imports.is_empty() {
+        unparser.output.push_str("// Imports\n");
+        for import in &package.imports {
+            unparser.output.push_str("// ");
+            unparser.output.push_str(&import.namespace);
+            unparser.output.push_str("::");
+            unparser.output.push_str(&import.canonical_name);
+            unparser.output.push('\n');
+        }
+        unparser.output.push('\n');
+    }
+
+    // Globals
+    for g in &package.globals {
+        unparser.unparse_tir_global(g);
+        unparser.output.push('\n');
+    }
+
+    // Structs
+    for s in &package.structs {
+        unparser.unparse_struct(s);
+        unparser.output.push('\n');
+    }
+
+    // Enums
+    for e in &package.enums {
+        unparser.unparse_enum(e);
+        unparser.output.push('\n');
+    }
+
+    // Flags
+    for f in &package.flags {
+        unparser.unparse_flags_tir(f);
+        unparser.output.push('\n');
+    }
+
+    // Functions
+    for f_rc in &package.functions {
+        let f = f_rc.borrow();
+        unparser.unparse_function(&f);
+        unparser.output.push('\n');
+    }
+
+    // Data section
+    if let Some(data) = &package.data_section {
+        unparser.output.push_str("__DATA__\n");
+        unparser.output.push_str(data);
+    }
+
+    unparser.output
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

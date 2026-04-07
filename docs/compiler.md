@@ -7,7 +7,7 @@ This document describes the Wado compiler architecture and implementation status
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Synthesis → Effect Check → Stores Check → Erase Newtypes/Flags → Monomorphize → Lower → Optimize → WIR Build → WIR Optimize → Codegen
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Synthesis → Effect Check → Stores Check → Erase Newtypes/Flags → Monomorphize → Lower → Link → Optimize → WIR Build → WIR Optimize → Codegen
 ```
 
 ### Compilation Pipeline
@@ -19,17 +19,18 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Bind         | AST           | AST (validated) | Local name resolution, scope/mutability checking          |
 | Load         | AST           | All modules     | Load dependencies; each module: parse → bind → desugar    |
 | Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
-| Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
-| Synthesis    | Project       | Project         | Eq/Ord/serde/CM binding/template/inspect synthesis        |
-| Effect Check | Project       | Project         | Validate function effect requirements                     |
-| Stores Check | Project       | Project         | Validate reference storage declarations                   |
-| Erase Types  | Project       | Project         | Erase newtypes and flags to base types                    |
-| Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
-| Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
-| Optimize     | Project       | Project         | Inlining, copy-prop, LICM, DCE, post-opt rewrite          |
-| WIR Build    | Project       | WirModule       | Planning + TIR → WIR (Wasm IR) translation                |
-| WIR Optimize | WirModule     | WirModule       | Multi-value SROA, array data promotion, peephole          |
-| Codegen      | WirModule     | Wasm bytes      | WIR emission to core Wasm + Component Model wrapping      |
+| Resolve      | AST + Symbols | Package         | Type resolution, produce Package                          |
+| Synthesis    | Package       | Package         | Eq/Ord/serde/CM binding/template/inspect synthesis        |
+| Effect Check | Package       | Package         | Validate function effect requirements                     |
+| Stores Check | Package       | Package         | Validate reference storage declarations                   |
+| Erase Types  | Package       | Package         | Erase newtypes and flags to base types                    |
+| Monomorphize | Package       | Package         | Instantiate generics with concrete types                  |
+| Lower        | Package       | Package         | Closure, i128 match, global init, string literal lowering |
+| Link         | Package       | FlatPackage     | Merge per-module TIR into flat lists                      |
+| Optimize     | FlatPackage   | FlatPackage     | Inlining, copy-prop, LICM, DCE, post-opt rewrite          |
+| WIR Build    | FlatPackage   | WirPackage      | Planning + TIR → WIR (Wasm IR) translation                |
+| WIR Optimize | WirPackage    | WirPackage      | Multi-value SROA, array data promotion, peephole          |
+| Codegen      | WirPackage    | Wasm bytes      | WIR emission to core Wasm + Component Model wrapping      |
 
 **Note:** The Desugar phase is integrated into the Load phase. Each module goes through the same frontend pipeline: `lexer → parser → bind → desugar`.
 
@@ -51,7 +52,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Analyzer        | `analyze.rs`                         | Semantic analysis, symbol table construction                                     |
 | Symbol          | `symbol.rs`                          | Symbol table data structures                                                     |
 | Name            | `name.rs`                            | Name mangling utilities for methods and symbols                                  |
-| Resolver        | `resolver.rs`                        | Type resolution, AST to TIR, produces Project (`resolver/`)                      |
+| Resolver        | `resolver.rs`                        | Type resolution, AST to TIR, produces Package (`resolver/`)                      |
 | TIR             | `tir.rs`                             | Typed Intermediate Representation                                                |
 | Synthesis       | `synthesis.rs`                       | Unified synthesis phase (`synthesis/`)                                           |
 | SynthCommon     | `synthesis/common.rs`                | Shared TIR builders for synthesis phases                                         |
@@ -61,7 +62,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | SynthFrom       | `synthesis/from_synth.rs`            | From trait synthesis                                                             |
 | SynthCmBinding  | `synthesis/cm_binding.rs`            | CM boundary adapter synthesis (TIR functions)                                    |
 | CmAbi           | `cm_abi.rs`                          | Canonical ABI layout computation                                                 |
-| Monomorphize    | `monomorphize.rs`                    | Generic type/function instantiation (Project→Project)                            |
+| Monomorphize    | `monomorphize.rs`                    | Generic type/function instantiation (Package→Package)                            |
 | Lower           | `lower.rs`                           | Lowering coordinator (`lower/`)                                                  |
 | LowerWideInt    | `lower/wide_int.rs`                  | i128/u128 match pattern → if-else chains                                         |
 | LowerPattern    | `lower/pattern.rs`                   | LetPattern/IfPattern → explicit statements + switch                              |
@@ -69,7 +70,9 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | LowerBoxing     | `lower/boxing.rs`                    | `&primitive` → `Box<T>` struct lowering                                          |
 | LowerClosure    | `lower/closure.rs`                   | Closure → functor struct with `__call` methods                                   |
 | LowerString     | `lower/string.rs`                    | String/bytes literal collection for data section                                 |
-| Project         | `project.rs`                         | Project: compilation context passed through pipeline                             |
+| Package         | `package.rs`                         | Package: per-module compilation context (resolve → lower)                        |
+| FlatPackage     | `flat_package.rs`                    | FlatPackage: flat compilation context (link → codegen)                           |
+| Link            | `link.rs`                            | Merges per-module Package into flat FlatPackage                                  |
 | Optimize        | `optimize.rs`                        | Optimization coordinator (`optimize/`)                                           |
 | ConstFolding    | `optimize/const_folding.rs`          | Constant folding for integer/float arithmetic                                    |
 | ConstProp       | `optimize/const_propagation.rs`      | Constant propagation for immutable globals                                       |

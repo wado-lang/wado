@@ -4,11 +4,11 @@
 //! folds constant comparisons, and eliminates dead branches.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirFunction, WirInstr, WirModule, WirTypeDef, WirTypeId};
+use crate::wir::{WirFunction, WirInstr, WirPackage, WirTypeDef, WirTypeId};
 
 use super::util::collect_local_gets_deep;
 
-pub(super) fn forward_struct_field_constants(module: &mut WirModule) {
+pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
     let types = &module.types;
     for func_idx in 0..module.functions.len() {
         let Some(body) = module.functions[func_idx].body.take() else {

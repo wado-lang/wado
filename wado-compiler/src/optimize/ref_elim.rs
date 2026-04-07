@@ -23,8 +23,8 @@
 //! Pass 2 (transform): Single traversal to replace eliminable field accesses
 //!   and remove dead let statements.
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-use crate::project::Project;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
@@ -1004,15 +1004,13 @@ fn eliminate_refs_in_function(func: &mut TirFunction, _type_table: &TypeTable) -
 /// Eliminate unnecessary reference bindings in all functions.
 ///
 /// Main entry point for reference elimination optimization.
-pub fn eliminate_unnecessary_refs(project: &mut Project) -> bool {
+pub fn eliminate_unnecessary_refs(project: &mut FlatPackage) -> bool {
     let mut changed = false;
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            changed |= eliminate_refs_in_function(&mut func, &type_table);
-            changed |= eliminate_deref_ref_pairs_in_function(&mut func);
-        }
+    let type_table = project.type_table.borrow();
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        changed |= eliminate_refs_in_function(&mut func, &type_table);
+        changed |= eliminate_deref_ref_pairs_in_function(&mut func);
     }
     changed
 }

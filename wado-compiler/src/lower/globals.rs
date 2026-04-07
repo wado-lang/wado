@@ -192,6 +192,7 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
     };
 
     let init_func = TirFunction {
+        module_source: ModuleSource::default(),
         is_async: false,
         name: "__initialize_module".to_string(),
         is_pub: true, // pub so it can be called from entry module's __initialize_modules
@@ -724,6 +725,7 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
     };
 
     let init_modules_func = TirFunction {
+        module_source: ModuleSource::default(),
         is_async: false,
         name: "__initialize_modules".to_string(),
         is_pub: false,    // Not pub - internal to entry module

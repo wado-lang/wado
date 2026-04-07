@@ -1,19 +1,19 @@
 //! WIR → pseudo-Wado unparser for `wado dump --wir --unparse`.
 //!
-//! Renders a `WirModule` as readable pseudo-Wado source code for debugging.
+//! Renders a `WirPackage` as readable pseudo-Wado source code for debugging.
 //! The output uses Wado syntax for type definitions (struct, variant, enum)
 //! and WAT-style mnemonics for arithmetic instructions (i32.add, f64.mul, etc.).
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirData, WirEnumType, WirExport, WirExportDesc, WirField,
     WirFlagsType, WirFuncType, WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr,
-    WirModule, WirStructType, WirType, WirTypeDef, WirVariantType,
+    WirPackage, WirStructType, WirType, WirTypeDef, WirVariantType,
 };
 
-/// Unparse a `WirModule` into pseudo-Wado source code.
+/// Unparse a `WirPackage` into pseudo-Wado source code.
 ///
 /// `cwd` is the current working directory used to shorten entry-point paths.
-pub fn unparse_wir(module: &WirModule, _cwd: Option<&str>) -> String {
+pub fn unparse_wir(module: &WirPackage, _cwd: Option<&str>) -> String {
     let mut unparser = WirUnparser::new(&module.types, &module.data);
     unparser.unparse(module);
     unparser.output
@@ -182,7 +182,7 @@ impl<'a> WirUnparser<'a> {
         }
     }
 
-    fn unparse(&mut self, module: &WirModule) {
+    fn unparse(&mut self, module: &WirPackage) {
         // Type definitions
         for (i, type_def) in module.types.iter().enumerate() {
             self.unparse_type_def(i, type_def);

@@ -64,25 +64,25 @@ struct wado-compiler/tests/fixtures/closure_3.wado//__Closure_0 {  // TypeId(17)
 
 array builtin::array<i32> (mut i32);  // TypeId(18)
 
-struct core:prelude/traits.wado//IterFilter<ArrayIter<i32>> {  // TypeId(19)
+struct core:prelude/traits.wado//IterMap<ArrayIter<i32>,i32> {  // TypeId(19)
+    mut inner: ref "core:prelude/array.wado//ArrayIter<i32>",
+    mut f: ref struct,
+}
+
+struct core:prelude/traits.wado//IterMap<IterFilter<ArrayIter<i32>>,i32> {  // TypeId(20)
+    mut inner: ref "core:prelude/traits.wado//IterFilter<ArrayIter<i32>>",
+    mut f: ref struct,
+}
+
+struct core:prelude/traits.wado//IterFilter<ArrayIter<i32>> {  // TypeId(21)
     mut inner: ref "core:prelude/array.wado//ArrayIter<i32>",
     mut pred: ref struct,
 }
 
-struct core:prelude/array.wado//ArrayIter<i32> {  // TypeId(20)
+struct core:prelude/array.wado//ArrayIter<i32> {  // TypeId(22)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
     mut index: i32,
-}
-
-struct core:prelude/traits.wado//IterMap<ArrayIter<i32>,i32> {  // TypeId(21)
-    mut inner: ref "core:prelude/array.wado//ArrayIter<i32>",
-    mut f: ref struct,
-}
-
-struct core:prelude/traits.wado//IterMap<IterFilter<ArrayIter<i32>>,i32> {  // TypeId(22)
-    mut inner: ref "core:prelude/traits.wado//IterFilter<ArrayIter<i32>>",
-    mut f: ref struct,
 }
 
 struct core:prelude//Array<i32> {  // TypeId(23)

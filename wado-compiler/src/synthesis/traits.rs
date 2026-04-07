@@ -15,7 +15,7 @@ use std::rc::Rc;
 use crate::hashmap::IndexSet;
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirTypeParam, TirUnaryOp,
@@ -31,7 +31,7 @@ use super::common::{
 ///
 /// For each module, generates Eq/Ord, Inspect, `InspectAlt`, Display, and `DisplayAlt`
 /// implementations for types that don't already have user-provided implementations.
-pub fn synthesize_traits(project: Project) -> Project {
+pub fn synthesize_traits(project: Package) -> Package {
     let mut project = project;
     for module in project.tir_modules.values_mut() {
         generate_enum_trait_impls(module);
@@ -1091,6 +1091,7 @@ fn generate_generic_struct_inspect_fn(
 
     let local_count = 2;
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -1405,6 +1406,7 @@ fn generate_generic_variant_inspect_fn(
     let body = TirBlock::new(stmts, span);
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -2211,6 +2213,7 @@ fn generate_generic_struct_inspect_alt_fn(
     let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -2405,6 +2408,7 @@ fn generate_generic_variant_inspect_alt_fn(
 
     let body = TirBlock::new(stmts, span);
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -2974,6 +2978,7 @@ fn generate_display_fallback(
     );
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -4422,6 +4427,7 @@ fn generate_generic_struct_eq_fn(
     let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -4599,6 +4605,7 @@ fn generate_generic_variant_eq_fn(
     let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -4938,6 +4945,7 @@ fn generate_generic_struct_ord_fn(
     let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,

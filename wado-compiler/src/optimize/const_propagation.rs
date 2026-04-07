@@ -4,9 +4,9 @@
 //! When a global variable is not mutable and initialized with a scalar constant,
 //! all `GlobalVarGet` references are replaced with the constant value.
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
-use crate::project::Project;
 use crate::tir::{TirExpr, TirExprKind};
 
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, visit_project_functions};
@@ -55,16 +55,14 @@ fn extract_const_value(expr: &TirExpr) -> Option<ConstValue> {
 type GlobalKey = (ModuleSource, String);
 
 /// Apply constant propagation to all functions in the project.
-pub fn propagate_constants(project: &mut Project) -> bool {
+pub fn propagate_constants(project: &mut FlatPackage) -> bool {
     let mut constants: IndexMap<GlobalKey, ConstValue> = IndexMap::default();
-    for module in project.tir_modules.values() {
-        for global in &module.globals {
-            if global.mutable {
-                continue;
-            }
-            if let Some(value) = extract_const_value(&global.initializer) {
-                constants.insert((global.module_source.clone(), global.name.clone()), value);
-            }
+    for global in &project.globals {
+        if global.mutable {
+            continue;
+        }
+        if let Some(value) = extract_const_value(&global.initializer) {
+            constants.insert((global.module_source.clone(), global.name.clone()), value);
         }
     }
     if constants.is_empty() {

@@ -24,12 +24,11 @@ array builtin::array<String> (mut ref "core:prelude/string.wado//String");  // T
 
 array builtin::array<TreeMapEntry<String,i32>> (mut ref "core:collections//TreeMapEntry<String,i32>");  // TypeId(4)
 
-struct core:collections//TreeMapNode<String> {  // TypeId(5)
-    mut key: ref "core:prelude/string.wado//String",
-    mut index: i32,
-    mut level: i32,
-    mut left: ref null "core:collections//TreeMapNode<String>",
-    mut right: ref null "core:collections//TreeMapNode<String>",
+struct core:collections//TreeMap<String,i32> {  // TypeId(5)
+    mut root: ref null "core:collections//TreeMapNode<String>",
+    mut entries: ref "core:prelude//Array<TreeMapEntry<String,i32>>",
+    mut size: i32,
+    mut deleted_count: i32,
 }
 
 struct core:collections//TreeMapEntry<String,i32> {  // TypeId(6)
@@ -38,14 +37,15 @@ struct core:collections//TreeMapEntry<String,i32> {  // TypeId(6)
     mut deleted: bool,
 }
 
-struct core:collections//TreeMap<String,i32> {  // TypeId(7)
-    mut root: ref null "core:collections//TreeMapNode<String>",
-    mut entries: ref "core:prelude//Array<TreeMapEntry<String,i32>>",
-    mut size: i32,
-    mut deleted_count: i32,
+struct core:collections//TreeMapNode<String> {  // TypeId(7)
+    mut key: ref "core:prelude/string.wado//String",
+    mut index: i32,
+    mut level: i32,
+    mut left: ref null "core:collections//TreeMapNode<String>",
+    mut right: ref null "core:collections//TreeMapNode<String>",
 }
 
-struct wasi:cli//ArrayIter<TreeMapEntry<String,i32>> {  // TypeId(8)
+struct core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>> {  // TypeId(8)
     mut repr: ref builtin::array<TreeMapEntry<String,i32>>,
     mut used: i32,
     mut index: i32,
@@ -138,7 +138,7 @@ type "functype//wado-compiler/tests/fixtures/from-literal-return.wado/Array<Stri
 
 type "functype//wado-compiler/tests/fixtures/from-literal-return.wado/TreeMap<String,i32>::keys" = fn(ref "core:collections//TreeMap<String,i32>") -> ref "core:prelude//Array<String>";  // TypeId(47)
 
-type "functype//wado-compiler/tests/fixtures/from-literal-return.wado/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "wasi:cli//ArrayIter<TreeMapEntry<String,i32>>") -> ref null "core:collections//TreeMapEntry<String,i32>";  // TypeId(48)
+type "functype//wado-compiler/tests/fixtures/from-literal-return.wado/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>>") -> ref null "core:collections//TreeMapEntry<String,i32>";  // TypeId(48)
 
 type "functype//wado-compiler/tests/fixtures/from-literal-return.wado/TreeMap<String,i32>::insert" = fn(ref "core:collections//TreeMap<String,i32>", ref "core:prelude/string.wado//String", i32);  // TypeId(49)
 
@@ -631,7 +631,7 @@ fn "wado-compiler/tests/fixtures/from-literal-return.wado/Array<String>::grow"(s
 fn "wado-compiler/tests/fixtures/from-literal-return.wado/TreeMap<String,i32>::keys"(self) {
     let __local_1: ref "core:prelude//Array<String>";
     let result: ref "core:prelude//Array<String>";
-    let __iter_3: ref "wasi:cli//ArrayIter<TreeMapEntry<String,i32>>";
+    let __iter_3: ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>>";
     let entry: ref "core:collections//TreeMapEntry<String,i32>";
     let __pattern_temp_0: ref null "core:collections//TreeMapEntry<String,i32>";
     let __local_9: ref "core:prelude//Array<TreeMapEntry<String,i32>>";
@@ -639,9 +639,9 @@ fn "wado-compiler/tests/fixtures/from-literal-return.wado/TreeMap<String,i32>::k
         __local_1 = struct.new "core:prelude//Array<String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_3 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "wasi:cli//ArrayIter<TreeMapEntry<String,i32>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>>" {
         __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: struct.new "wasi:cli//ArrayIter<TreeMapEntry<String,i32>>" { repr: __local_9.repr, used: __local_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: struct.new "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>>" { repr: __local_9.repr, used: __local_9.used, index: 0 };
     };
     b40: block {
         l41: loop {

@@ -4,12 +4,12 @@
 //! read, cleaning up temporaries left by other passes.
 
 use crate::hashmap::IndexSet;
-use crate::wir::{WirInstr, WirModule};
+use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
 use super::util::{collect_local_gets_deep, is_side_effect_free};
 
-pub(super) fn elide_write_only_locals(module: &mut WirModule) {
+pub(super) fn elide_write_only_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
             loop {

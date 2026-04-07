@@ -12,9 +12,9 @@
 //! - For value types: the source is dead after the binding (`read_count` is 1)
 //! - For ref/mut-ref copies: the target is single-use and the source is not reassigned
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::project::Project;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
@@ -860,14 +860,12 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
 }
 
 /// Apply copy propagation to all functions in the project.
-pub fn propagate_copies(project: &mut Project) -> bool {
+pub fn propagate_copies(project: &mut FlatPackage) -> bool {
     let mut changed = false;
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            changed |= propagate_copies_in_function(&mut func, &type_table);
-        }
+    let type_table = project.type_table.borrow();
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        changed |= propagate_copies_in_function(&mut func, &type_table);
     }
     changed
 }

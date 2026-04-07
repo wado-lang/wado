@@ -9,18 +9,7 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(2)
-    mut fill: char,
-    mut align: i32,
-    mut sign_plus: bool,
-    mut zero_pad: bool,
-    mut width: i32,
-    mut precision: i32,
-    mut indent: i32,
-    mut buf: ref "core:prelude/string.wado//String",
-}
-
-variant wasi:filesystem/types.wado//ErrorCode {  // TypeId(3)
+variant wasi:filesystem/types.wado//ErrorCode {  // TypeId(2)
     Access,
     Already,
     BadDescriptor,
@@ -60,12 +49,12 @@ variant wasi:filesystem/types.wado//ErrorCode {  // TypeId(3)
     Other(ref null "core:prelude/string.wado//String"),
 }
 
-struct wasi:filesystem/types.wado//ErrorCode::Other {  // TypeId(4)
+struct wasi:filesystem/types.wado//ErrorCode::Other {  // TypeId(3)
     discriminant: i32,
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-variant wasi:filesystem/types.wado//DescriptorType {  // TypeId(5)
+variant wasi:filesystem/types.wado//DescriptorType {  // TypeId(4)
     BlockDevice,
     CharacterDevice,
     Directory,
@@ -76,14 +65,25 @@ variant wasi:filesystem/types.wado//DescriptorType {  // TypeId(5)
     Other(ref null "core:prelude/string.wado//String"),
 }
 
-struct wasi:filesystem/types.wado//DescriptorType::Other {  // TypeId(6)
+struct wasi:filesystem/types.wado//DescriptorType::Other {  // TypeId(5)
     discriminant: i32,
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct wasi:filesystem/types.wado//DirectoryEntry {  // TypeId(7)
+struct wasi:filesystem/types.wado//DirectoryEntry {  // TypeId(6)
     mut type: ref "wasi:filesystem/types.wado//DescriptorType",
     mut name: ref "core:prelude/string.wado//String",
+}
+
+struct core:prelude/format.wado//Formatter {  // TypeId(7)
+    mut fill: char,
+    mut align: i32,
+    mut sign_plus: bool,
+    mut zero_pad: bool,
+    mut width: i32,
+    mut precision: i32,
+    mut indent: i32,
+    mut buf: ref "core:prelude/string.wado//String",
 }
 
 struct tuple//[Descriptor, String] {  // TypeId(8)

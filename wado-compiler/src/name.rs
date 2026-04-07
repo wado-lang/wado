@@ -116,6 +116,15 @@ impl std::hash::Hash for ModuleSource {
     }
 }
 
+impl Default for ModuleSource {
+    /// Placeholder value — replaced by the link phase with the real module source.
+    fn default() -> Self {
+        Self::Core {
+            name: String::new(),
+        }
+    }
+}
+
 impl ModuleSource {
     /// Create a core module source.
     #[must_use]

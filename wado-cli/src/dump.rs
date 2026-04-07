@@ -731,12 +731,8 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 println!("{project:#?}");
             } else {
                 println!("=== TIR ===");
-                for (module_source, module) in &project.tir_modules {
-                    let path_str = module_source.to_string();
-                    println!("// --- Module: {path_str} ---");
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    println!("{unparsed}");
-                }
+                let unparsed = wado_compiler::unparse::unparse_flat_package(project);
+                println!("{unparsed}");
             }
             println!();
         } else {
@@ -748,12 +744,12 @@ async fn run_single(opts: &DumpOptions, input: &str) {
 
     // Final WIR section (after optimization)
     if opts.show_wir {
-        if let Some(ref wir_module) = result.wir_module {
+        if let Some(ref wir_package) = result.wir_package {
             if opts.inspect {
                 println!("=== WIR (inspect) ===");
-                println!("{wir_module:#?}");
+                println!("{wir_package:#?}");
             } else {
-                let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_module, None);
+                let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_package, None);
                 if unparsed.is_empty() {
                     println!("(empty module)");
                 } else {

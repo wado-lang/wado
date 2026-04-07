@@ -1,34 +1,34 @@
 //! Wasm code generation — emits a WIR module as a Wasm component binary.
 //!
-//! Takes a planned `Project` and a `WirModule` and produces the final
+//! Takes a linked `FlatPackage` and a `WirPackage` and produces the final
 //! Wasm component bytes.
 //!
-//! Pipeline: `WirModule` → `emit` (core bytes) → `component` (wrapped) → `Vec<u8>`
+//! Pipeline: `WirPackage` → `emit` (core bytes) → `component` (wrapped) → `Vec<u8>`
 
-use crate::project::Project;
-use crate::wir::WirModule;
+use crate::flat_package::FlatPackage;
+use crate::wir::WirPackage;
 
 mod component;
 mod component_context;
 mod emit;
 mod postprocess;
 
-/// Emit a Wasm component binary from a planned project and its WIR module.
-pub fn emit_wasm(project: &Project, wir_module: &WirModule) -> Vec<u8> {
-    // Step 1: Emit core module bytes from WirModule
-    let core_module = emit::emit_core_module(wir_module, project.strip_names);
+/// Emit a Wasm component binary from a linked package and its WIR module.
+pub fn emit_wasm(package: &FlatPackage, wir_package: &WirPackage) -> Vec<u8> {
+    // Step 1: Emit core module bytes from WirPackage
+    let core_module = emit::emit_core_module(wir_package, package.strip_names);
 
     // Step 2: Validate core module (catch errors before component wrapping)
-    if !project.skip_validation {
-        validate_core_module(&core_module, &project.entry_module_source);
+    if !package.skip_validation {
+        validate_core_module(&core_module, &package.entry_module_source);
     }
 
     // Step 3: Wrap in Component Model
-    let wasm = component::build_component(project, &core_module, wir_module);
+    let wasm = component::build_component(package, &core_module, wir_package);
 
     // Step 4: Validate
-    if !project.skip_validation {
-        validate_wasm(&wasm, &project.entry_module_source);
+    if !package.skip_validation {
+        validate_wasm(&wasm, &package.entry_module_source);
     }
 
     wasm

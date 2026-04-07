@@ -15,10 +15,10 @@
 //! pipeline see the already-optimized types.
 
 use crate::hashmap::IndexMap;
-use crate::wir::{WirAbstractHeapType, WirInstr, WirModule, WirType, WirTypeDef, WirVariantRepr};
+use crate::wir::{WirAbstractHeapType, WirInstr, WirPackage, WirType, WirTypeDef, WirVariantRepr};
 
 /// Run the `NullableRef` optimization on the module.
-pub(super) fn optimize_nullable_refs(module: &mut WirModule) {
+pub(super) fn optimize_nullable_refs(module: &mut WirPackage) {
     // Phase 1: Identify eligible variants.
     // nullable_map: variant_base_type_idx -> (payload_case_idx, nullable_payload_WirType)
     let nullable_map = collect_nullable_variants(&module.types);
@@ -136,7 +136,7 @@ fn substitute_type(ty: &mut WirType, nullable_map: &IndexMap<u32, (u32, WirType)
 }
 
 /// Apply type substitution across all type definitions and global variable types.
-fn update_type_definitions(module: &mut WirModule, nullable_map: &IndexMap<u32, (u32, WirType)>) {
+fn update_type_definitions(module: &mut WirPackage, nullable_map: &IndexMap<u32, (u32, WirType)>) {
     for i in 0..module.types.len() {
         match &module.types[i] {
             WirTypeDef::Struct(_) => {

@@ -11,16 +11,18 @@ pub mod component_model;
 pub mod desugar;
 pub mod doc;
 pub mod effect_check;
+pub mod flat_package;
 pub mod hashmap;
 pub mod lexer;
+pub mod link;
 pub mod loader;
 pub mod logger;
 pub mod lower;
 pub mod monomorphize;
 pub mod name;
 pub mod optimize;
+pub mod package;
 pub mod parser;
-pub mod project;
 pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
@@ -47,14 +49,15 @@ pub use logger::{Bail, Logger};
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{EffectError, check_effects, check_stores};
+pub use flat_package::FlatPackage;
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::{lower, lower_modules_indexed, lower_project};
 pub use monomorphize::{monomorphize_module, monomorphize_modules_indexed, monomorphize_project};
 pub use name::ModuleSource;
 pub use optimize::{OptLevel, optimize};
+pub use package::Package;
 pub use parser::{ParseError, Parser};
-pub use project::Project;
 pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
 
@@ -71,7 +74,7 @@ pub struct CompileResult {
     /// Parsed module AST (includes data section if present)
     pub module: ast::Module,
     /// WIR module (retained when `CompilerOptions::retain_wir` is true)
-    pub wir_module: Option<wir::WirModule>,
+    pub wir_package: Option<wir::WirPackage>,
     /// Whether the entry module has `#![TODO]`
     pub is_todo_module: bool,
 }
@@ -120,10 +123,10 @@ pub struct DumpResult {
     pub monomorphized_tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
     /// All lowered TIR modules (in topological order)
     pub lowered_tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
-    /// Optimized project (contains usage analysis results)
-    pub optimized_project: Option<Project>,
+    /// Linked package after optimization (contains usage analysis results)
+    pub optimized_project: Option<FlatPackage>,
     /// WIR module (after `tir_to_wir` translation)
-    pub wir_module: Option<wir::WirModule>,
+    pub wir_package: Option<wir::WirPackage>,
     /// Comments for unparsing
     pub comments: comment::CommentMap,
 }
@@ -139,7 +142,7 @@ pub struct CompilerOptions {
     /// When true, the compiler returns raw Wasm bytes even if they fail validation.
     /// Useful for debugging the code generator.
     pub skip_validation: bool,
-    /// When true, retain the WIR module in [`CompileResult::wir_module`].
+    /// When true, retain the WIR module in [`CompileResult::wir_package`].
     /// Used by test infrastructure to inspect WIR without a second compilation pass.
     pub retain_wir: bool,
     /// Override the inline threshold for the optimization pass.
@@ -233,10 +236,10 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Wrap all subsequent Bail errors with is_todo_module
     let result = compile_after_load(load_result, options, &logger, filename);
     match result {
-        Ok((wasm, module, wir_module)) => Ok(CompileResult {
+        Ok((wasm, module, wir_package)) => Ok(CompileResult {
             wasm,
             module,
-            wir_module,
+            wir_package,
             is_todo_module,
         }),
         Err(Bail) => Err(CompileFailure { is_todo_module }),
@@ -249,7 +252,7 @@ fn compile_after_load<H: CompilerHost>(
     options: CompilerOptions,
     logger: &Logger<'_, H>,
     filename: Option<String>,
-) -> Result<(Vec<u8>, ast::Module, Option<wir::WirModule>), Bail> {
+) -> Result<(Vec<u8>, ast::Module, Option<wir::WirPackage>), Bail> {
     // === Phase 2: Analyze all modules ===
     let symbols = {
         let _span = logger.span("analyze");
@@ -264,7 +267,7 @@ fn compile_after_load<H: CompilerHost>(
 
     let module_name = filename.unwrap_or_else(|| "module".to_string());
 
-    // === Phase 6: Resolve all modules to Project ===
+    // === Phase 6: Resolve all modules to Package ===
     let project = {
         let _span = logger.span("resolve");
         resolve_to_project(
@@ -329,7 +332,7 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
-    // === Phase 8: Synthesis (Project -> Project) ===
+    // === Phase 8: Synthesis (Package -> Package) ===
     let project = {
         let _span = logger.span("synthesis");
         synthesis::synthesize(project).map_err(|message| {
@@ -360,7 +363,7 @@ fn compile_after_load<H: CompilerHost>(
         check_stores(&project.tir_modules, logger)?;
     }
 
-    // === Phase 8b: Erase Newtypes and Flags (Project -> Project) ===
+    // === Phase 8b: Erase Newtypes and Flags (Package -> Package) ===
     // After synthesis (which needs full type info) and before monomorphize
     // (which must not see Newtype/Flags). Newtypes → ultimate base; Flags → u32.
     let project = {
@@ -370,23 +373,29 @@ fn compile_after_load<H: CompilerHost>(
         project
     };
 
-    // === Phase 8c: Monomorphize (Project -> Project) ===
+    // === Phase 8c: Monomorphize (Package -> Package) ===
     let project = {
         let _span = logger.span("monomorphize");
         monomorphize_project(project)
     };
 
-    // === Phase 9: Lower (Project -> Project) ===
+    // === Phase 9: Lower (Package -> Package) ===
     let project = {
         let _span = logger.span("lower");
         lower_project(project)
     };
 
-    // === Phase 10: Optimize (Project -> Project) ===
-    let project = {
+    // === Phase 10: Link (Package → FlatPackage) ===
+    let flat = {
+        let _span = logger.span("link");
+        link::link(project)
+    };
+
+    // === Phase 11: Optimize (FlatPackage → FlatPackage) ===
+    let flat = {
         let _span = logger.span("optimize");
         optimize(
-            project,
+            flat,
             options.opt_level,
             options.inline_threshold,
             options.opt_iterations,
@@ -394,24 +403,22 @@ fn compile_after_load<H: CompilerHost>(
         )
     };
 
-    // === Phase 11: Build WIR (planning + TIR → WirModule) ===
-    let (project, mut wir_module) = {
+    // === Phase 12: Build WIR (FlatPackage → WirPackage) ===
+    let mut wir_package = {
         let _span = logger.span("wir_build");
-        let project = wir_build::plan_project(project);
-        let wir_module = wir_build::build_wir_module(&project);
-        (project, wir_module)
+        wir_build::build_wir_package(&flat)
     };
 
-    // === Phase 11.5: Optimize WIR ===
+    // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(&mut wir_module, options.opt_level, logger);
+        wir_optimize::optimize_wir(&mut wir_package, options.opt_level, logger);
     }
 
-    // === Phase 12: Emit Wasm (WirModule → Wasm component bytes) ===
+    // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
     let wasm = {
         let _span = logger.span("codegen");
-        codegen::emit_wasm(&project, &wir_module)
+        codegen::emit_wasm(&flat, &wir_package)
     };
 
     // Return the original (non-desugared) entry AST for tooling
@@ -419,7 +426,7 @@ fn compile_after_load<H: CompilerHost>(
         wasm,
         load_result.entry_ast,
         if options.retain_wir {
-            Some(wir_module)
+            Some(wir_package)
         } else {
             None
         },
@@ -458,7 +465,7 @@ fn snapshot_tir_modules(
 /// This runs the compilation pipeline up through optimization (without code generation)
 /// and returns diagnostic information about the internal state.
 ///
-/// Pipeline: lexer -> parser -> bind -> desugar -> load -> analyze -> resolve -> lower -> optimize
+/// Pipeline: lexer -> parser -> bind -> desugar -> load -> analyze -> resolve -> lower -> link -> optimize
 pub async fn dump_with_host<H: CompilerHost>(
     source: &str,
     host: &H,
@@ -568,14 +575,14 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
         tir_modules.as_ref().map(snapshot_tir_modules);
 
-    // === Phase 7b+8+9+10: Build Project and run remaining phases ===
-    // Create Project early so CM binding synthesis runs before monomorphize,
+    // === Phase 7b+8+9+10: Build Package and run remaining phases ===
+    // Create Package early so CM binding synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
     let (
         monomorphized_tir_modules_by_source,
         lowered_tir_modules_by_source,
         optimized_project,
-        wir_module,
+        wir_package,
     ) = if let Some(resolved_modules) = tir_modules_by_source.clone() {
         let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
@@ -585,7 +592,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         let builtin_registry =
             builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
-        let project = Project::new(
+        let project = Package::new(
             load_result.entry_module_source.clone(),
             resolved_modules,
             symbols.clone(),
@@ -647,28 +654,24 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         };
         let lower_snapshot = Some(snapshot_tir_modules(&project.tir_modules));
 
-        // Optimize
-        let project = {
-            let _span = logger.span("optimize");
-            optimize(
-                project,
-                opt_level,
-                inline_threshold,
-                opt_iterations,
-                &logger,
-            )
-        };
-        let project = wir_build::plan_project(project);
+        // Link
+        let flat = link::link(project);
 
-        // WIR: Translate optimized Project to WirModule for inspection.
-        let wir_module = Some({
-            let mut wir = wir_build::build_wir_module(&project);
+        // Optimize
+        let flat = {
+            let _span = logger.span("optimize");
+            optimize(flat, opt_level, inline_threshold, opt_iterations, &logger)
+        };
+
+        // WIR: Translate optimized Package to WirPackage for inspection.
+        let wir_package = Some({
+            let mut wir = wir_build::build_wir_package(&flat);
             wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
             wir
         });
-        let optimized = Some(project);
+        let optimized = Some(flat);
 
-        (mono_snapshot, lower_snapshot, optimized, wir_module)
+        (mono_snapshot, lower_snapshot, optimized, wir_package)
     } else {
         (None, None, None, None)
     };
@@ -686,7 +689,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         monomorphized_tir_modules: monomorphized_tir_modules_by_source,
         lowered_tir_modules: lowered_tir_modules_by_source,
         optimized_project,
-        wir_module,
+        wir_package,
         comments: comment_map,
     })
 }

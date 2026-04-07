@@ -11,31 +11,20 @@
 //! 2. Updates the global's initializer and marks it immutable
 //! 3. Removes all `GlobalVarSet` to promoted globals from all functions
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
-use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmtKind};
 
 use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_expr};
 
 type GlobalKey = (ModuleSource, String);
 
-/// Try to promote constant globals in all modules.
-pub fn promote_constant_globals(project: &mut Project) -> bool {
-    let mut changed = false;
-    let module_sources: Vec<_> = project.tir_modules.keys().cloned().collect();
-    for module_source in module_sources {
-        changed |= promote_in_module(project, &module_source);
-    }
-    changed
-}
-
-fn promote_in_module(project: &mut Project, module_source: &ModuleSource) -> bool {
-    let module = &project.tir_modules[module_source];
-
+/// Try to promote constant globals in the project.
+pub fn promote_constant_globals(project: &mut FlatPackage) -> bool {
     // Build a lookup of promotable globals: currently Wasm-mutable but user-declared immutable
     let mut promotable: IndexMap<GlobalKey, usize> = IndexMap::default();
-    for (idx, global) in module.globals.iter().enumerate() {
+    for (idx, global) in project.globals.iter().enumerate() {
         if global.mutable && !global.wado_mutable {
             promotable.insert((global.module_source.clone(), global.name.clone()), idx);
         }
@@ -49,7 +38,7 @@ fn promote_in_module(project: &mut Project, module_source: &ModuleSource) -> boo
         promotable: &promotable,
         promotions: IndexMap::default(),
     };
-    for func_rc in &module.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(ref mut body) = func.body {
             collector.visit_block(body);
@@ -61,10 +50,9 @@ fn promote_in_module(project: &mut Project, module_source: &ModuleSource) -> boo
     }
 
     // Phase 2: apply promotions — update global initializers and mark immutable
-    let module = project.tir_modules.get_mut(module_source).unwrap();
     for (key, init_kind) in &promotions {
         if let Some(&idx) = promotable.get(key) {
-            let global = &mut module.globals[idx];
+            let global = &mut project.globals[idx];
             global.initializer.kind = init_kind.clone();
             global.mutable = false;
         }
@@ -74,7 +62,7 @@ fn promote_in_module(project: &mut Project, module_source: &ModuleSource) -> boo
     let mut remover = PromotionRemover {
         promotions: &promotions,
     };
-    for func_rc in &module.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(ref mut body) = func.body {
             remover.visit_block(body);

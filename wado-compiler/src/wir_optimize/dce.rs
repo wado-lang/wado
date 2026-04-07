@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{
-    WirExportDesc, WirFuncId, WirImportDesc, WirInstr, WirModule, WirType, WirTypeDef, WirTypeId,
+    WirExportDesc, WirFuncId, WirImportDesc, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId,
 };
 
 /// Remove functions unreachable from exports via call-graph analysis.
@@ -17,11 +17,11 @@ use crate::wir::{
 /// removing any function not transitively called. Remaps all `WirFuncId`
 /// indices so the surviving functions are contiguously numbered.
 ///
-/// This is a standalone pass that works on any `WirModule` (GC module or
+/// This is a standalone pass that works on any `WirPackage` (GC module or
 /// memory module). It is separate from `optimize_wir` because it should
 /// also run on modules that skip the main optimization pipeline (e.g.,
-/// the linear-memory module built by `WasmModuleInfo::to_wir_module`).
-pub fn dce_unreachable_functions(module: &mut WirModule) {
+/// the linear-memory module built by `WasmModuleInfo::to_wir_package`).
+pub fn dce_unreachable_functions(module: &mut WirPackage) {
     let num_funcs = module.functions.len();
     if num_funcs == 0 {
         return;
@@ -221,7 +221,7 @@ fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
 ///
 /// This is a standalone pass, separate from `optimize_wir`, so it can also run
 /// at O0 if needed. Currently called at the end of `optimize_wir`.
-pub fn dce_unreachable_types(module: &mut WirModule) {
+pub fn dce_unreachable_types(module: &mut WirPackage) {
     let num_types = module.types.len();
     if num_types == 0 {
         return;
@@ -401,7 +401,7 @@ fn collect_instr_type_refs(instr: &WirInstr, out: &mut IndexSet<u32>) {
 ///   and `variant_case_info` are remapped.
 /// - **Globals** (`dead_global_indices`): removed from the globals array.
 ///   GlobalGet/GlobalSet use string names so no instruction patching is needed.
-pub fn compact_dead_items(module: &mut WirModule) {
+pub fn compact_dead_items(module: &mut WirPackage) {
     if module.dead_func_indices.is_empty()
         && module.dead_type_indices.is_empty()
         && module.dead_global_indices.is_empty()
@@ -418,7 +418,7 @@ pub fn compact_dead_items(module: &mut WirModule) {
     module.dead_global_indices.clear();
 }
 
-fn compact_funcs(module: &mut WirModule) {
+fn compact_funcs(module: &mut WirPackage) {
     if module.dead_func_indices.is_empty() {
         return;
     }
@@ -477,7 +477,7 @@ fn compact_funcs(module: &mut WirModule) {
     }
 }
 
-fn compact_types(module: &mut WirModule) {
+fn compact_types(module: &mut WirPackage) {
     if module.dead_type_indices.is_empty() {
         return;
     }
@@ -548,7 +548,7 @@ fn compact_types(module: &mut WirModule) {
     }
 }
 
-fn compact_globals(module: &mut WirModule) {
+fn compact_globals(module: &mut WirPackage) {
     if module.dead_global_indices.is_empty() {
         return;
     }

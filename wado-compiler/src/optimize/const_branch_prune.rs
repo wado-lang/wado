@@ -8,8 +8,8 @@
 //! - `label: { let x = y; ... }` → substitute x with y in remaining stmts
 //! - Empty blocks → `()`
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-use crate::project::Project;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 
 use crate::tir_visitor::{
@@ -18,7 +18,7 @@ use crate::tir_visitor::{
 };
 
 /// Prune constant branches and simplify trivial blocks in all functions.
-pub fn prune_constant_branches(project: &mut Project) -> bool {
+pub fn prune_constant_branches(project: &mut FlatPackage) -> bool {
     let mut visitor = BranchPruner;
     visit_project_functions(project, &mut visitor)
 }
@@ -370,7 +370,7 @@ impl TirMutVisitor for LocalSubstituter {
             && let Some((src_idx, src_name)) = self.subs.get(index)
         {
             *index = *src_idx;
-            *name = src_name.clone();
+            name.clone_from(src_name);
             return;
         }
         self.walk_expr(expr);

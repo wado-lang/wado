@@ -1,4 +1,4 @@
-//! WIR optimization — structural and peephole optimizations on `WirModule`.
+//! WIR optimization — structural and peephole optimizations on `WirPackage`.
 //!
 //! Runs after `wir_build` and before `codegen::emit`.
 //!
@@ -39,7 +39,7 @@ mod util;
 
 use crate::compiler_host::SpanEmitter;
 use crate::optimize::OptLevel;
-use crate::wir::WirModule;
+use crate::wir::WirPackage;
 
 pub use dce::{dce_unreachable_functions, dce_unreachable_types};
 
@@ -64,9 +64,9 @@ use string::simplify_short_string_pushes;
 /// Run a single WIR optimization pass with profiling.
 fn wir_pass(
     name: &str,
-    module: &mut WirModule,
+    module: &mut WirPackage,
     profiler: &dyn SpanEmitter,
-    f: impl FnOnce(&mut WirModule),
+    f: impl FnOnce(&mut WirPackage),
 ) {
     profiler.span_start(name);
     f(module);
@@ -77,7 +77,7 @@ fn wir_pass(
 ///
 /// Optimization passes are skipped at `-O0`, but dead-item compaction always runs
 /// so the emitter receives a clean module with no dead_*_indices to filter.
-pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
+pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
     if opt_level == OptLevel::O0 {
         dce::compact_dead_items(module);
         return;
