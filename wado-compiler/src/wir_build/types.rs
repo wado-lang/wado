@@ -171,7 +171,7 @@ fn sort_types_topologically<'a>(
         .collect()
 }
 
-/// Register all types from the Package into the `WirContext`.
+/// Register all types from the `FlatPackage` into the `WirContext`.
 ///
 /// This follows a multi-phase registration order to ensure type dependencies
 /// are satisfied.
@@ -280,7 +280,7 @@ fn register_struct(
                 .or_else(|| ctx.lookup_struct_by_name(&resolved_name))
                 .cloned()
             {
-                ctx.struct_type_map.insert(struct_name, existing);
+                ctx.insert_struct_type(struct_name, existing);
                 return;
             }
         }
@@ -343,7 +343,7 @@ fn register_struct(
         }),
     );
 
-    ctx.struct_type_map.insert(struct_name, type_id);
+    ctx.insert_struct_type(struct_name, type_id);
 }
 
 /// Register a single variant type.
@@ -538,7 +538,7 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
             newtype_origin: None,
         }),
     );
-    ctx.struct_type_map.insert(struct_name, type_id);
+    ctx.insert_struct_type(struct_name, type_id);
 }
 
 fn register_library_types(ctx: &mut WirContext<'_>) {
@@ -815,21 +815,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     // First try matching by module_source, then search all variants
                     // (handles module_source mismatch, e.g. core:prelude vs
                     // core:prelude/types.wado)
-                    let base = ctx
-                        .package
-                        .variants
-                        .iter()
-                        .find(|v| {
-                            v.name == *name
-                                && !v.type_params.is_empty()
-                                && v.module_source == *module_source
-                        })
-                        .or_else(|| {
-                            ctx.package
-                                .variants
-                                .iter()
-                                .find(|v| v.name == *name && !v.type_params.is_empty())
-                        });
+                    let base = ctx.package.find_generic_variant(module_source, name);
                     if let Some(base) = base {
                         let variant_tt = type_table;
                         let type_args = type_args.clone();
@@ -1241,7 +1227,7 @@ fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
             newtype_origin: None,
         }),
     );
-    ctx.struct_type_map.insert(struct_name, type_id);
+    ctx.insert_struct_type(struct_name, type_id);
 }
 
 /// Check if a `WirType` is an unresolved abstract struct/array reference.
@@ -1377,12 +1363,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                     continue;
                 };
                 let type_table = &*ctx.package.type_table.borrow();
-                let Some(tir_variant) = ctx
-                    .package
-                    .variants
-                    .iter()
-                    .find(|v| v.module_source == *ms && v.name == variant_display)
-                else {
+                let Some(tir_variant) = ctx.package.find_variant(ms, &variant_display) else {
                     continue;
                 };
                 let Some(tir_case) = tir_variant.cases.get(case_idx) else {

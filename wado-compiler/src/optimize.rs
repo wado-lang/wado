@@ -179,6 +179,7 @@ fn run_dce(project: &mut FlatPackage, profiler: &dyn SpanEmitter) {
     remove_unreachable_functions(project, &reachable);
     remove_unreachable_globals(project);
     remove_unreachable_types(project);
+    project.rebuild_variant_indices();
     profiler.span_end("tir/dce");
 }
 

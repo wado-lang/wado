@@ -1,4 +1,4 @@
-//! Function collection — gathers all reachable functions from the Package,
+//! Function collection — gathers all reachable functions from the `FlatPackage`,
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
 use crate::name::ModuleSource;
@@ -9,7 +9,7 @@ use crate::wir::{
 
 use super::context::{PendingFunctionBody, WirContext};
 
-/// Collect all functions from the Package, register imports, and create function stubs.
+/// Collect all functions from the `FlatPackage`, register imports, and create function stubs.
 pub fn collect_functions(ctx: &mut WirContext<'_>) {
     // Step 1: Register builtin + bundled imports
     register_imports(ctx);

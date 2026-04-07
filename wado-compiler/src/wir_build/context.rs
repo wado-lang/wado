@@ -38,6 +38,10 @@ pub struct WirContext<'a> {
     pub rec_groups: Vec<WirRecGroup>,
     /// Map from `StructName` to `WirTypeId` (for struct lookup by qualified name).
     pub struct_type_map: IndexMap<StructName, WirTypeId>,
+    /// Secondary index: struct name (without `module_source`) → `WirTypeId`.
+    /// Used as fallback when `module_source` doesn't match (e.g., monomorphized
+    /// structs where the type's `module_source` is the use site, not the definition site).
+    pub struct_name_index: IndexMap<String, WirTypeId>,
     /// Map from element `TypeId` to `WirTypeId` for raw GC array types.
     pub array_type_map: IndexMap<TypeId, WirTypeId>,
     /// Map from element type name to `WirTypeId` (dedup for arrays).
@@ -129,7 +133,7 @@ pub struct PendingFunctionBody {
 }
 
 impl<'a> WirContext<'a> {
-    /// Create a new `WirContext` from a Package.
+    /// Create a new `WirContext` from a `FlatPackage`.
     pub fn new(package: &'a FlatPackage) -> Self {
         // Collect string literals (deduped)
         let mut seen: IndexSet<&str> = IndexSet::default();
@@ -155,6 +159,7 @@ impl<'a> WirContext<'a> {
             type_map: IndexMap::default(),
             rec_groups: Vec::new(),
             struct_type_map: IndexMap::default(),
+            struct_name_index: IndexMap::default(),
             array_type_map: IndexMap::default(),
             array_type_by_name: IndexMap::default(),
             tuple_type_map: IndexMap::default(),
@@ -228,14 +233,19 @@ impl<'a> WirContext<'a> {
         )
     }
 
+    /// Register a struct type in both the primary and name-only indices.
+    pub fn insert_struct_type(&mut self, struct_name: StructName, type_id: WirTypeId) {
+        self.struct_name_index
+            .entry(struct_name.name.clone())
+            .or_insert_with(|| type_id.clone());
+        self.struct_type_map.insert(struct_name, type_id);
+    }
+
     /// Look up a struct type by name only (ignoring `module_source`).
     /// Used as fallback when `module_source` doesn't match (e.g., monomorphized
     /// structs where the type's `module_source` is the use site, not the definition site).
     pub fn lookup_struct_by_name(&self, name: &str) -> Option<&WirTypeId> {
-        self.struct_type_map
-            .iter()
-            .find(|(k, _)| k.name == name)
-            .map(|(_, v)| v)
+        self.struct_name_index.get(name)
     }
 
     // === Function Registration ===

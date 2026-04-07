@@ -44,7 +44,15 @@ pub fn link(package: Package) -> FlatPackage {
         .unwrap_or(false);
 
     // Build the component plan before consuming tir_modules.
-    let component_plan = component_plan::build_component_plan(&package);
+    let is_test_world = package.target_world == super::world_registry::TEST_WORLD;
+    let entry_tests = &package.entry_module().tests;
+    let component_plan = component_plan::build_component_plan(
+        is_test_world,
+        &package.target_world,
+        entry_tests,
+        &package.export_binding_names,
+        package.world_registry,
+    );
 
     // Flatten all per-module TIR into flat lists.
     let mut functions = Vec::new();
@@ -61,7 +69,6 @@ pub fn link(package: Package) -> FlatPackage {
     let mut string_literals = Vec::new();
     let mut bytes_literals = Vec::new();
     let mut closure_functors = Vec::new();
-    let mut data_section = None;
     let mut function_strings = IndexMap::default();
     let mut function_method_info = IndexMap::default();
     let mut wasm_module_sources: IndexMap<ModuleSource, String> = IndexMap::default();
@@ -120,11 +127,22 @@ pub fn link(package: Package) -> FlatPackage {
         if is_entry {
             imports = tir_mod.imports;
             tests = tir_mod.tests;
-            data_section = tir_mod.data_section;
         }
 
         if let Some(wm) = tir_mod.wasm_module {
             wasm_module_sources.insert(ms.clone(), wm);
+        }
+    }
+
+    // Build variant lookup indices.
+    let mut variant_index = IndexMap::default();
+    let mut generic_variant_by_name = IndexMap::default();
+    for (i, v) in variants.iter().enumerate() {
+        variant_index
+            .entry((v.module_source.clone(), v.name.clone()))
+            .or_insert(i);
+        if !v.type_params.is_empty() {
+            generic_variant_by_name.entry(v.name.clone()).or_insert(i);
         }
     }
 
@@ -135,6 +153,8 @@ pub fn link(package: Package) -> FlatPackage {
         structs,
         enums,
         variants,
+        variant_index,
+        generic_variant_by_name,
         flags,
         newtypes,
         globals,
@@ -145,7 +165,6 @@ pub fn link(package: Package) -> FlatPackage {
         string_literals,
         bytes_literals,
         closure_functors,
-        data_section,
         function_strings,
         function_method_info,
         wasm_module_sources,
