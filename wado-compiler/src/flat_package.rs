@@ -1,4 +1,4 @@
-//! FlatPackage — linked compilation context for WIR building and code generation
+//! `FlatPackage` — linked compilation context for WIR building and code generation
 //!
 //! `FlatPackage` is produced by the link phase from a `Package`. It carries
 //! the TIR modules and metadata needed by `wir_build` and `codegen`.

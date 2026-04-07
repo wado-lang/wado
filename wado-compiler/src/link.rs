@@ -43,7 +43,7 @@ pub fn link(package: Package) -> FlatPackage {
     let has_http_handler_export = package
         .world_registry
         .get(&package.target_world)
-        .map(|w| w.has_http_handler_export())
+        .map(super::world_registry::WorldInfo::has_http_handler_export)
         .unwrap_or(false);
 
     // Build the component plan (world exports, test exports, bundled functions).
