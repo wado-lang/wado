@@ -22,8 +22,8 @@
 //! invalidated (selective invalidation), allowing known values for unmodified
 //! locals to survive through assert branches and similar patterns.
 
-use crate::hashmap::{IndexMap, IndexSet};
 use crate::flat_package::FlatPackage;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };

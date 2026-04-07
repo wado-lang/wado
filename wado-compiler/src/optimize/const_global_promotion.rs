@@ -11,9 +11,9 @@
 //! 2. Updates the global's initializer and marks it immutable
 //! 3. Removes all `GlobalVarSet` to promoted globals from all functions
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
-use crate::flat_package::FlatPackage;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmtKind};
 
 use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_expr};

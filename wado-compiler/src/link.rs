@@ -84,12 +84,11 @@ pub fn link(package: Package) -> FlatPackage {
         // instantiated in the module that owns the generic definition).
         for s in tir_mod.structs {
             if s.monomorph_info.is_some()
-                && let Some(pos) =
-                    structs.iter().position(|existing: &crate::tir::TirStruct| {
-                        existing.name == s.name
-                            && existing.module_source == s.module_source
-                            && existing.monomorph_info.is_some()
-                    })
+                && let Some(pos) = structs.iter().position(|existing: &crate::tir::TirStruct| {
+                    existing.name == s.name
+                        && existing.module_source == s.module_source
+                        && existing.monomorph_info.is_some()
+                })
             {
                 // Prefer the struct from the defining module
                 if s.module_source == ms {

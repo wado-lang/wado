@@ -9,18 +9,7 @@ struct core:prelude/string.wado//String {  // #1 from core:prelude/string.wado
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // #2 from core:prelude/format.wado
-    mut fill: char,
-    mut align: i32,
-    mut sign_plus: bool,
-    mut zero_pad: bool,
-    mut width: i32,
-    mut precision: i32,
-    mut indent: i32,
-    mut buf: ref "core:prelude/string.wado//String",
-}
-
-variant wasi:filesystem/types.wado//ErrorCode {  // #3 from wasi:filesystem/types.wado
+variant wasi:filesystem/types.wado//ErrorCode {  // #2 from wasi:filesystem/types.wado
     Access,
     Already,
     BadDescriptor,
@@ -60,12 +49,12 @@ variant wasi:filesystem/types.wado//ErrorCode {  // #3 from wasi:filesystem/type
     Other(ref null "core:prelude/string.wado//String"),
 }
 
-struct wasi:filesystem/types.wado//ErrorCode::Other {  // #4
+struct wasi:filesystem/types.wado//ErrorCode::Other {  // #3
     discriminant: i32,
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-variant wasi:filesystem/types.wado//DescriptorType {  // #5 from wasi:filesystem/types.wado
+variant wasi:filesystem/types.wado//DescriptorType {  // #4 from wasi:filesystem/types.wado
     BlockDevice,
     CharacterDevice,
     Directory,
@@ -76,14 +65,25 @@ variant wasi:filesystem/types.wado//DescriptorType {  // #5 from wasi:filesystem
     Other(ref null "core:prelude/string.wado//String"),
 }
 
-struct wasi:filesystem/types.wado//DescriptorType::Other {  // #6
+struct wasi:filesystem/types.wado//DescriptorType::Other {  // #5
     discriminant: i32,
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct wasi:filesystem/types.wado//DirectoryEntry {  // #7 from wasi:filesystem/types.wado
+struct wasi:filesystem/types.wado//DirectoryEntry {  // #6 from wasi:filesystem/types.wado
     mut type: ref "wasi:filesystem/types.wado//DescriptorType",
     mut name: ref "core:prelude/string.wado//String",
+}
+
+struct core:prelude/format.wado//Formatter {  // #7 from core:prelude/format.wado
+    mut fill: char,
+    mut align: i32,
+    mut sign_plus: bool,
+    mut zero_pad: bool,
+    mut width: i32,
+    mut precision: i32,
+    mut indent: i32,
+    mut buf: ref "core:prelude/string.wado//String",
 }
 
 struct tuple//[Descriptor, String] {  // #8

@@ -23,8 +23,8 @@
 //! Pass 2 (transform): Single traversal to replace eliminable field accesses
 //!   and remove dead let statements.
 
-use crate::hashmap::IndexMap;
 use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexMap;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };

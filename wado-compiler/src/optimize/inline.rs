@@ -203,9 +203,7 @@ fn is_inline_eligible(
 }
 
 /// Detect recursive functions using call graph analysis
-fn find_recursive_functions(
-    functions: &[Rc<RefCell<TirFunction>>],
-) -> IndexSet<String> {
+fn find_recursive_functions(functions: &[Rc<RefCell<TirFunction>>]) -> IndexSet<String> {
     // Phase 1: Build name→index mapping (one String allocation per function)
     let mut name_to_idx: IndexMap<String, usize> = IndexMap::default();
     let mut idx_to_name: Vec<String> = Vec::new();

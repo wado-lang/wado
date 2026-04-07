@@ -4,9 +4,9 @@
 //! It identifies field accesses on variables that don't change within a loop and moves
 //! those accesses before the loop.
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::flat_package::FlatPackage;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,

@@ -731,7 +731,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 println!("{project:#?}");
             } else {
                 println!("=== TIR ===");
-                let unparsed = wado_compiler::unparse::unparse_flat_package(&project);
+                let unparsed = wado_compiler::unparse::unparse_flat_package(project);
                 println!("{unparsed}");
             }
             println!();

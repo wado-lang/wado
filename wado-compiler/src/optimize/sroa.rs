@@ -23,10 +23,10 @@
 //! This is the single most impactful optimization for WasmGC-targeting compilers,
 //! as struct allocations are GC-managed heap objects.
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
-use crate::flat_package::FlatPackage;
 use crate::tir::{
     FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField,
     TirUnaryOp, TypeId, TypeTable,
@@ -68,7 +68,10 @@ fn build_stores_lookup(project: &FlatPackage) -> StoresLookup {
             .map(|(i, _)| i)
             .collect();
         if !stored_indices.is_empty() {
-            lookup.insert((func.module_source.clone(), func.name.clone()), stored_indices);
+            lookup.insert(
+                (func.module_source.clone(), func.name.clone()),
+                stored_indices,
+            );
         }
     }
     lookup

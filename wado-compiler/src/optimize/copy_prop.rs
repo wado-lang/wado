@@ -12,9 +12,9 @@
 //! - For value types: the source is dead after the binding (`read_count` is 1)
 //! - For ref/mut-ref copies: the target is single-use and the source is not reassigned
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::flat_package::FlatPackage;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,

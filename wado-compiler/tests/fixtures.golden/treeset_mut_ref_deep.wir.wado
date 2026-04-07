@@ -80,17 +80,16 @@ array builtin::array<LitToken> (mut ref "wado-compiler/tests/fixtures/treeset_mu
 
 array builtin::array<TreeMapEntry<String,unit>> (mut ref "core:collections//TreeMapEntry<String,unit>");  // #16
 
-struct core:collections//TreeMapNode<String> {  // #17 from core:collections  // TreeMapNode<T> with T=String
-    mut key: ref "core:prelude/string.wado//String",
+struct core:prelude/array.wado//ArrayRefIter<Elem> {  // #17 from core:prelude/array.wado  // ArrayRefIter<T> with T=Elem
+    mut repr: ref builtin::array<Elem>,
+    mut used: i32,
     mut index: i32,
-    mut level: i32,
-    mut left: ref null "core:collections//TreeMapNode<String>",
-    mut right: ref null "core:collections//TreeMapNode<String>",
 }
 
-struct core:collections//TreeMapEntry<String,unit> {  // #18 from core:collections  // TreeMapEntry<T> with T=String, unit
-    mut key: ref "core:prelude/string.wado//String",
-    mut deleted: bool,
+struct core:prelude/array.wado//ArrayRefIter<Array<Elem>> {  // #18 from core:prelude/array.wado  // ArrayRefIter<T> with T=Array<Elem>
+    mut repr: ref builtin::array<Array<Elem>>,
+    mut used: i32,
+    mut index: i32,
 }
 
 struct core:collections//TreeMap<String,unit> {  // #19 from core:collections  // TreeMap<T> with T=String, unit
@@ -100,16 +99,17 @@ struct core:collections//TreeMap<String,unit> {  // #19 from core:collections  /
     mut deleted_count: i32,
 }
 
-struct core:prelude/array.wado//ArrayRefIter<Elem> {  // #20 from core:prelude/array.wado  // ArrayRefIter<T> with T=Elem
-    mut repr: ref builtin::array<Elem>,
-    mut used: i32,
-    mut index: i32,
+struct core:collections//TreeMapEntry<String,unit> {  // #20 from core:collections  // TreeMapEntry<T> with T=String, unit
+    mut key: ref "core:prelude/string.wado//String",
+    mut deleted: bool,
 }
 
-struct core:prelude/array.wado//ArrayRefIter<Array<Elem>> {  // #21 from core:prelude/array.wado  // ArrayRefIter<T> with T=Array<Elem>
-    mut repr: ref builtin::array<Array<Elem>>,
-    mut used: i32,
+struct core:collections//TreeMapNode<String> {  // #21 from core:collections  // TreeMapNode<T> with T=String
+    mut key: ref "core:prelude/string.wado//String",
     mut index: i32,
+    mut level: i32,
+    mut left: ref null "core:collections//TreeMapNode<String>",
+    mut right: ref null "core:collections//TreeMapNode<String>",
 }
 
 variant core:prelude/types.wado//Option<TreeMapNode<String>> {  // #22 from core:prelude/types.wado

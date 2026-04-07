@@ -4,9 +4,9 @@
 //! When a global variable is not mutable and initialized with a scalar constant,
 //! all `GlobalVarGet` references are replaced with the constant value.
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
-use crate::flat_package::FlatPackage;
 use crate::tir::{TirExpr, TirExprKind};
 
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, visit_project_functions};

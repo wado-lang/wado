@@ -19,69 +19,7 @@ struct core:prelude/string.wado//String {  // #3 from core:prelude/string.wado
     mut used: i32,
 }
 
-struct core:serde//DeserializeError {  // #4 from core:serde
-    mut kind: i32,
-    mut message: ref "core:prelude/string.wado//String",
-    mut offset: i64,
-}
-
-struct core:serde//SerializeError {  // #5 from core:serde
-    mut kind: i32,
-    mut message: ref "core:prelude/string.wado//String",
-}
-
-struct core:json//JsonDeserializer {  // #6 from core:json
-    mut input: ref "core:prelude/string.wado//String",
-    mut pos: i32,
-}
-
-struct core:json//JsonVariantAccess {  // #7 from core:json
-    mut de: ref "core:json//JsonDeserializer",
-    mut variant: ref "core:prelude/string.wado//String",
-    mut is_object: bool,
-}
-
-struct core:json//JsonStructAccess {  // #8 from core:json
-    mut de: ref "core:json//JsonDeserializer",
-    mut lookup: ref struct,
-    mut first: bool,
-}
-
-struct core:json//JsonMapAccess {  // #9 from core:json
-    mut de: ref "core:json//JsonDeserializer",
-    mut first: bool,
-}
-
-struct core:json//JsonSeqAccess {  // #10 from core:json
-    mut de: ref "core:json//JsonDeserializer",
-    mut first: bool,
-}
-
-struct core:json//JsonSerializer {  // #11 from core:json
-    mut buf: ref "core:prelude/string.wado//String",
-}
-
-struct core:json//JsonVariantSerializer {  // #12 from core:json
-    mut buf: ref "core:prelude/string.wado//String",
-}
-
-struct core:json//JsonStructSerializer {  // #13 from core:json
-    mut buf: ref "core:prelude/string.wado//String",
-    mut count: i32,
-}
-
-struct core:json//JsonMapSerializer {  // #14 from core:json
-    mut buf: ref "core:prelude/string.wado//String",
-    mut count: i32,
-    mut need_value: bool,
-}
-
-struct core:json//JsonSeqSerializer {  // #15 from core:json
-    mut buf: ref "core:prelude/string.wado//String",
-    mut count: i32,
-}
-
-struct core:prelude/format.wado//Formatter {  // #16 from core:prelude/format.wado
+struct core:prelude/format.wado//Formatter {  // #4 from core:prelude/format.wado
     mut fill: char,
     mut align: i32,
     mut sign_plus: bool,
@@ -90,6 +28,68 @@ struct core:prelude/format.wado//Formatter {  // #16 from core:prelude/format.wa
     mut precision: i32,
     mut indent: i32,
     mut buf: ref "core:prelude/string.wado//String",
+}
+
+struct core:json//JsonDeserializer {  // #5 from core:json
+    mut input: ref "core:prelude/string.wado//String",
+    mut pos: i32,
+}
+
+struct core:json//JsonVariantAccess {  // #6 from core:json
+    mut de: ref "core:json//JsonDeserializer",
+    mut variant: ref "core:prelude/string.wado//String",
+    mut is_object: bool,
+}
+
+struct core:json//JsonStructAccess {  // #7 from core:json
+    mut de: ref "core:json//JsonDeserializer",
+    mut lookup: ref struct,
+    mut first: bool,
+}
+
+struct core:json//JsonMapAccess {  // #8 from core:json
+    mut de: ref "core:json//JsonDeserializer",
+    mut first: bool,
+}
+
+struct core:json//JsonSeqAccess {  // #9 from core:json
+    mut de: ref "core:json//JsonDeserializer",
+    mut first: bool,
+}
+
+struct core:json//JsonSerializer {  // #10 from core:json
+    mut buf: ref "core:prelude/string.wado//String",
+}
+
+struct core:json//JsonVariantSerializer {  // #11 from core:json
+    mut buf: ref "core:prelude/string.wado//String",
+}
+
+struct core:json//JsonStructSerializer {  // #12 from core:json
+    mut buf: ref "core:prelude/string.wado//String",
+    mut count: i32,
+}
+
+struct core:json//JsonMapSerializer {  // #13 from core:json
+    mut buf: ref "core:prelude/string.wado//String",
+    mut count: i32,
+    mut need_value: bool,
+}
+
+struct core:json//JsonSeqSerializer {  // #14 from core:json
+    mut buf: ref "core:prelude/string.wado//String",
+    mut count: i32,
+}
+
+struct core:serde//DeserializeError {  // #15 from core:serde
+    mut kind: i32,
+    mut message: ref "core:prelude/string.wado//String",
+    mut offset: i64,
+}
+
+struct core:serde//SerializeError {  // #16 from core:serde
+    mut kind: i32,
+    mut message: ref "core:prelude/string.wado//String",
 }
 
 struct tuple//[String, i32] {  // #17
@@ -184,7 +184,19 @@ struct core:collections//TreeMap<String,i32> {  // #41 from core:collections  //
     mut deleted_count: i32,
 }
 
-struct core:collections//TreeMapNode<String> {  // #42 from core:collections  // TreeMapNode<T> with T=String
+struct core:collections//TreeMapEntry<String,i32> {  // #42 from core:collections  // TreeMapEntry<T> with T=String, i32
+    mut key: ref "core:prelude/string.wado//String",
+    mut value: i32,
+    mut deleted: bool,
+}
+
+struct core:collections//TreeMapEntry<String,String> {  // #43 from core:collections  // TreeMapEntry<T> with T=String, String
+    mut key: ref "core:prelude/string.wado//String",
+    mut value: ref "core:prelude/string.wado//String",
+    mut deleted: bool,
+}
+
+struct core:collections//TreeMapNode<String> {  // #44 from core:collections  // TreeMapNode<T> with T=String
     mut key: ref "core:prelude/string.wado//String",
     mut index: i32,
     mut level: i32,
@@ -192,61 +204,49 @@ struct core:collections//TreeMapNode<String> {  // #42 from core:collections  //
     mut right: ref null "core:collections//TreeMapNode<String>",
 }
 
-struct core:collections//TreeMapEntry<String,i32> {  // #43 from core:collections  // TreeMapEntry<T> with T=String, i32
-    mut key: ref "core:prelude/string.wado//String",
-    mut value: i32,
-    mut deleted: bool,
-}
-
-struct core:collections//TreeMapEntry<String,String> {  // #44 from core:collections  // TreeMapEntry<T> with T=String, String
-    mut key: ref "core:prelude/string.wado//String",
-    mut value: ref "core:prelude/string.wado//String",
-    mut deleted: bool,
-}
-
-struct core:serde//ArrayIter<String> {  // #45 from core:serde  // ArrayIter<T> with T=String
+struct core:prelude/array.wado//ArrayIter<String> {  // #45 from core:prelude/array.wado  // ArrayIter<T> with T=String
     mut repr: ref builtin::array<String>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:serde//ArrayIter<Inner> {  // #46 from core:serde  // ArrayIter<T> with T=Inner
+struct core:prelude/array.wado//ArrayIter<Inner> {  // #46 from core:prelude/array.wado  // ArrayIter<T> with T=Inner
     mut repr: ref builtin::array<Inner>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:serde//ArrayIter<TreeMapEntry<String,String>> {  // #47 from core:serde  // ArrayIter<T> with T=TreeMapEntry<String,String>
+struct core:prelude/array.wado//ArrayIter<TreeMapEntry<String,String>> {  // #47 from core:prelude/array.wado  // ArrayIter<T> with T=TreeMapEntry<String,String>
     mut repr: ref builtin::array<TreeMapEntry<String,String>>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:serde//ArrayIter<Tuple<String,String>> {  // #48 from core:serde  // ArrayIter<T> with T=Tuple<String,String>
+struct core:prelude/array.wado//ArrayIter<Tuple<String,String>> {  // #48 from core:prelude/array.wado  // ArrayIter<T> with T=Tuple<String,String>
     mut repr: ref builtin::array<Tuple<String,String>>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:serde//ArrayIter<Tuple<String,i32>> {  // #49 from core:serde  // ArrayIter<T> with T=Tuple<String,i32>
+struct core:prelude/array.wado//ArrayIter<Tuple<String,i32>> {  // #49 from core:prelude/array.wado  // ArrayIter<T> with T=Tuple<String,i32>
     mut repr: ref builtin::array<Tuple<String,i32>>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:serde//ArrayIter<i32> {  // #50 from core:serde  // ArrayIter<T> with T=i32
+struct core:prelude/array.wado//ArrayIter<i32> {  // #50 from core:prelude/array.wado  // ArrayIter<T> with T=i32
     mut repr: ref builtin::array<i32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:serde//ArrayIter<Option<i32>> {  // #51 from core:serde  // ArrayIter<T> with T=Option<i32>
+struct core:prelude/array.wado//ArrayIter<Option<i32>> {  // #51 from core:prelude/array.wado  // ArrayIter<T> with T=Option<i32>
     mut repr: ref builtin::array<Option<i32>>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:serde//ArrayIter<TreeMapEntry<String,i32>> {  // #52 from core:serde  // ArrayIter<T> with T=TreeMapEntry<String,i32>
+struct core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>> {  // #52 from core:prelude/array.wado  // ArrayIter<T> with T=TreeMapEntry<String,i32>
     mut repr: ref builtin::array<TreeMapEntry<String,i32>>,
     mut used: i32,
     mut index: i32,
@@ -719,7 +719,7 @@ type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // #203
 
-type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:serde//ArrayIter<TreeMapEntry<String,i32>>") -> ref null "core:collections//TreeMapEntry<String,i32>";  // #204
+type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<TreeMapEntry<String,i32>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>>") -> ref null "core:collections//TreeMapEntry<String,i32>";  // #204
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<Option<i32>>::push" = fn(ref "core:prelude//Array<Option<i32>>", ref "core:prelude/types.wado//Option<i32>");  // #205
 
@@ -727,7 +727,7 @@ type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/A
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Option<i32>^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<Option<i32>,DeserializeError>";  // #207
 
-type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Option<i32>>^Iterator::next" = fn(ref "core:serde//ArrayIter<Option<i32>>") -> ref null "core:prelude/types.wado//Option<i32>";  // #208
+type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Option<i32>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Option<i32>>") -> ref null "core:prelude/types.wado//Option<i32>";  // #208
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // #209
 
@@ -749,7 +749,7 @@ type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/J
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/JsonMapSerializer^SerializeMap::key<String>" = fn(ref "core:json//JsonMapSerializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // #218
 
-type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:serde//ArrayIter<Tuple<String,i32>>") -> ref null "tuple//[String, i32]";  // #219
+type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Tuple<String,i32>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tuple<String,i32>>") -> ref null "tuple//[String, i32]";  // #219
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/TreeMap<String,i32>::entries" = fn(ref "core:collections//TreeMap<String,i32>") -> ref "core:prelude//Array<Tuple<String,i32>>";  // #220
 
@@ -783,7 +783,7 @@ type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/A
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/JsonMapSerializer^SerializeMap::value<String>" = fn(ref "core:json//JsonMapSerializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // #235
 
-type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Tuple<String,String>>^Iterator::next" = fn(ref "core:serde//ArrayIter<Tuple<String,String>>") -> ref null "tuple//[String, String]";  // #236
+type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Tuple<String,String>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tuple<String,String>>") -> ref null "tuple//[String, String]";  // #236
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/TreeMap<String,String>::entries" = fn(ref "core:collections//TreeMap<String,String>") -> ref "core:prelude//Array<Tuple<String,String>>";  // #237
 
@@ -791,7 +791,7 @@ type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/A
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<Tuple<String,String>>::grow" = fn(ref "core:prelude//Array<Tuple<String,String>>");  // #239
 
-type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<TreeMapEntry<String,String>>^Iterator::next" = fn(ref "core:serde//ArrayIter<TreeMapEntry<String,String>>") -> ref null "core:collections//TreeMapEntry<String,String>";  // #240
+type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<TreeMapEntry<String,String>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,String>>") -> ref null "core:collections//TreeMapEntry<String,String>";  // #240
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/JsonVariantSerializer^SerializeVariant::payload<String>" = fn(ref "core:json//JsonVariantSerializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // #241
 
@@ -801,7 +801,7 @@ type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/A
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/JsonSeqSerializer^SerializeSeq::element<Inner>" = fn(ref "core:json//JsonSeqSerializer", ref "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado//Inner") -> ref null "core:serde//SerializeError";  // #244
 
-type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Inner>^Iterator::next" = fn(ref "core:serde//ArrayIter<Inner>") -> ref null "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado//Inner";  // #245
+type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Inner>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Inner>") -> ref null "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado//Inner";  // #245
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/JsonStructSerializer^SerializeStruct::field<Inner>" = fn(ref "core:json//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado//Inner") -> ref null "core:serde//SerializeError";  // #246
 
@@ -817,7 +817,7 @@ type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/J
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/JsonSeqSerializer^SerializeSeq::element<String>" = fn(ref "core:json//JsonSeqSerializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // #252
 
-type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<String>^Iterator::next" = fn(ref "core:serde//ArrayIter<String>") -> ref null "core:prelude/string.wado//String";  // #253
+type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<String>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<String>") -> ref null "core:prelude/string.wado//String";  // #253
 
 type "functype//core:json/JsonDeserializer::skip_whitespace" = fn(ref "core:json//JsonDeserializer");  // #254
 
@@ -925,7 +925,7 @@ type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/A
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/JsonSeqAccess^DeserializeSeq::next_element<i32>" = fn(ref "core:json//JsonSeqAccess") -> [i32, ref null "core:prelude/types.wado//Option<i32>", ref null "core:serde//DeserializeError"];  // #306
 
-type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:serde//ArrayIter<i32>") -> [i32, i32];  // #307
+type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // #307
 
 type "functype//wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Config^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado//Config", ref null "core:serde//DeserializeError"];  // #308
 
@@ -6906,7 +6906,7 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Option<i32>^D
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<Option<i32>>^Serialize::serialize<JsonSerializer>"(self, s) {  // from wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado
     let seq_2: ref "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>";
     let seq_3: ref "core:json//JsonSeqSerializer";
-    let __iter_4: ref "core:serde//ArrayIter<Option<i32>>";
+    let __iter_4: ref "core:prelude/array.wado//ArrayIter<Option<i32>>";
     let r: ref null "core:serde//SerializeError";
     let e_7: ref "core:serde//SerializeError";
     let e_8: ref "core:serde//SerializeError";
@@ -6920,9 +6920,9 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<Option<
     };
     if ref.test "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>::Ok"(seq_2) {
         seq_3 = value_copy "core:json//JsonSeqSerializer"(ref.cast "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>::Ok"(seq_2).payload_0);
-        __iter_4 = __inline_Array_Option_i32___IntoIterator__into_iter_2: block -> ref "core:serde//ArrayIter<Option<i32>>" {
+        __iter_4 = __inline_Array_Option_i32___IntoIterator__into_iter_2: block -> ref "core:prelude/array.wado//ArrayIter<Option<i32>>" {
             __local_16 = self;
-            break __inline_Array_Option_i32___IntoIterator__into_iter_2: "core:serde//ArrayIter<Option<i32>>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
+            break __inline_Array_Option_i32___IntoIterator__into_iter_2: "core:prelude/array.wado//ArrayIter<Option<i32>>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
         };
         b503: block {
             l504: loop {
@@ -7209,7 +7209,7 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/JsonSeqAccess
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<i32>^Serialize::serialize<JsonSerializer>"(self, s) {  // from wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado
     let seq_2: ref "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>";
     let seq_3: ref "core:json//JsonSeqSerializer";
-    let __iter_4: ref "core:serde//ArrayIter<i32>";
+    let __iter_4: ref "core:prelude/array.wado//ArrayIter<i32>";
     let r: ref null "core:serde//SerializeError";
     let e_7: ref "core:serde//SerializeError";
     let e_8: ref "core:serde//SerializeError";
@@ -7222,9 +7222,9 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<i32>^Se
     };
     if ref.test "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>::Ok"(seq_2) {
         seq_3 = value_copy "core:json//JsonSeqSerializer"(ref.cast "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>::Ok"(seq_2).payload_0);
-        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:serde//ArrayIter<i32>" {
+        __iter_4 = __inline_Array_i32__IntoIterator__into_iter_2: block -> ref "core:prelude/array.wado//ArrayIter<i32>" {
             __local_16 = self;
-            break __inline_Array_i32__IntoIterator__into_iter_2: "core:serde//ArrayIter<i32>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
+            break __inline_Array_i32__IntoIterator__into_iter_2: "core:prelude/array.wado//ArrayIter<i32>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
         };
         b539: block {
             l540: loop {
@@ -7627,7 +7627,7 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/TreeMap<Strin
     let entries: ref "core:prelude//Array<Tuple<String,i32>>";
     let map_r: ref "core:prelude/types.wado//Result<JsonMapSerializer,SerializeError>";
     let m: ref "core:json//JsonMapSerializer";
-    let __iter_5: ref "core:serde//ArrayIter<Tuple<String,i32>>";
+    let __iter_5: ref "core:prelude/array.wado//ArrayIter<Tuple<String,i32>>";
     let entry: ref "tuple//[String, i32]";
     let k: ref "core:prelude/string.wado//String";
     let kr: ref null "core:serde//SerializeError";
@@ -7645,7 +7645,7 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/TreeMap<Strin
     };
     if ref.test "core:prelude/types.wado//Result<JsonMapSerializer,SerializeError>::Ok"(map_r) {
         m = value_copy "core:json//JsonMapSerializer"(ref.cast "core:prelude/types.wado//Result<JsonMapSerializer,SerializeError>::Ok"(map_r).payload_0);
-        __iter_5 = "core:serde//ArrayIter<Tuple<String,i32>>" { repr: entries.repr, used: entries.used, index: 0 };
+        __iter_5 = "core:prelude/array.wado//ArrayIter<Tuple<String,i32>>" { repr: entries.repr, used: entries.used, index: 0 };
         b589: block {
             l590: loop {
                 __pattern_temp_1 = "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Tuple<String,i32>>^Iterator::next"(__iter_5);
@@ -7722,7 +7722,7 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Tup
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/TreeMap<String,i32>::entries"(self) {  // from wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado
     let __local_1: ref "core:prelude//Array<Tuple<String,i32>>";
     let result: ref "core:prelude//Array<Tuple<String,i32>>";
-    let __iter_3: ref "core:serde//ArrayIter<TreeMapEntry<String,i32>>";
+    let __iter_3: ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>>";
     let entry: ref "core:collections//TreeMapEntry<String,i32>";
     let __pattern_temp_0: ref null "core:collections//TreeMapEntry<String,i32>";
     let __local_9: ref "core:prelude//Array<TreeMapEntry<String,i32>>";
@@ -7730,9 +7730,9 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/TreeMap<Strin
         __local_1 = "core:prelude//Array<Tuple<String,i32>>" { repr: builtin::array_new<ref "tuple//[String, i32]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_3 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "core:serde//ArrayIter<TreeMapEntry<String,i32>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>>" {
         __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: "core:serde//ArrayIter<TreeMapEntry<String,i32>>" { repr: __local_9.repr, used: __local_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_i32___IntoIterator__into_iter_3: "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,i32>>" { repr: __local_9.repr, used: __local_9.used, index: 0 };
     };
     b597: block {
         l598: loop {
@@ -8629,7 +8629,7 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/TreeMap<Strin
     let entries: ref "core:prelude//Array<Tuple<String,String>>";
     let map_r: ref "core:prelude/types.wado//Result<JsonMapSerializer,SerializeError>";
     let m: ref "core:json//JsonMapSerializer";
-    let __iter_5: ref "core:serde//ArrayIter<Tuple<String,String>>";
+    let __iter_5: ref "core:prelude/array.wado//ArrayIter<Tuple<String,String>>";
     let entry: ref "tuple//[String, String]";
     let k: ref "core:prelude/string.wado//String";
     let v: ref "core:prelude/string.wado//String";
@@ -8648,7 +8648,7 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/TreeMap<Strin
     };
     if ref.test "core:prelude/types.wado//Result<JsonMapSerializer,SerializeError>::Ok"(map_r) {
         m = value_copy "core:json//JsonMapSerializer"(ref.cast "core:prelude/types.wado//Result<JsonMapSerializer,SerializeError>::Ok"(map_r).payload_0);
-        __iter_5 = "core:serde//ArrayIter<Tuple<String,String>>" { repr: entries.repr, used: entries.used, index: 0 };
+        __iter_5 = "core:prelude/array.wado//ArrayIter<Tuple<String,String>>" { repr: entries.repr, used: entries.used, index: 0 };
         b706: block {
             l707: loop {
                 __pattern_temp_1 = "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Tuple<String,String>>^Iterator::next"(__iter_5);
@@ -8712,7 +8712,7 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/ArrayIter<Tup
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/TreeMap<String,String>::entries"(self) {  // from wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado
     let __local_1: ref "core:prelude//Array<Tuple<String,String>>";
     let result: ref "core:prelude//Array<Tuple<String,String>>";
-    let __iter_3: ref "core:serde//ArrayIter<TreeMapEntry<String,String>>";
+    let __iter_3: ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,String>>";
     let entry: ref "core:collections//TreeMapEntry<String,String>";
     let __pattern_temp_0: ref null "core:collections//TreeMapEntry<String,String>";
     let __local_9: ref "core:prelude//Array<TreeMapEntry<String,String>>";
@@ -8720,9 +8720,9 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/TreeMap<Strin
         __local_1 = "core:prelude//Array<Tuple<String,String>>" { repr: builtin::array_new<ref "tuple//[String, String]">(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    __iter_3 = __inline_Array_TreeMapEntry_String_String___IntoIterator__into_iter_3: block -> ref "core:serde//ArrayIter<TreeMapEntry<String,String>>" {
+    __iter_3 = __inline_Array_TreeMapEntry_String_String___IntoIterator__into_iter_3: block -> ref "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,String>>" {
         __local_9 = self.entries;
-        break __inline_Array_TreeMapEntry_String_String___IntoIterator__into_iter_3: "core:serde//ArrayIter<TreeMapEntry<String,String>>" { repr: __local_9.repr, used: __local_9.used, index: 0 };
+        break __inline_Array_TreeMapEntry_String_String___IntoIterator__into_iter_3: "core:prelude/array.wado//ArrayIter<TreeMapEntry<String,String>>" { repr: __local_9.repr, used: __local_9.used, index: 0 };
     };
     b713: block {
         l714: loop {
@@ -9149,7 +9149,7 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/JsonSeqAccess
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<Inner>^Serialize::serialize<JsonSerializer>"(self, s) {  // from wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado
     let seq_2: ref "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>";
     let seq_3: ref "core:json//JsonSeqSerializer";
-    let __iter_4: ref "core:serde//ArrayIter<Inner>";
+    let __iter_4: ref "core:prelude/array.wado//ArrayIter<Inner>";
     let item: ref "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado//Inner";
     let r: ref null "core:serde//SerializeError";
     let e_7: ref "core:serde//SerializeError";
@@ -9164,9 +9164,9 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<Inner>^
     };
     if ref.test "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>::Ok"(seq_2) {
         seq_3 = value_copy "core:json//JsonSeqSerializer"(ref.cast "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>::Ok"(seq_2).payload_0);
-        __iter_4 = __inline_Array_Inner__IntoIterator__into_iter_2: block -> ref "core:serde//ArrayIter<Inner>" {
+        __iter_4 = __inline_Array_Inner__IntoIterator__into_iter_2: block -> ref "core:prelude/array.wado//ArrayIter<Inner>" {
             __local_16 = self;
-            break __inline_Array_Inner__IntoIterator__into_iter_2: "core:serde//ArrayIter<Inner>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
+            break __inline_Array_Inner__IntoIterator__into_iter_2: "core:prelude/array.wado//ArrayIter<Inner>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
         };
         b767: block {
             l768: loop {
@@ -9808,7 +9808,7 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/JsonStructSer
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<String>^Serialize::serialize<JsonSerializer>"(self, s) {  // from wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado
     let seq_2: ref "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>";
     let seq_3: ref "core:json//JsonSeqSerializer";
-    let __iter_4: ref "core:serde//ArrayIter<String>";
+    let __iter_4: ref "core:prelude/array.wado//ArrayIter<String>";
     let item: ref "core:prelude/string.wado//String";
     let r: ref null "core:serde//SerializeError";
     let e_7: ref "core:serde//SerializeError";
@@ -9823,9 +9823,9 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Array<String>
     };
     if ref.test "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>::Ok"(seq_2) {
         seq_3 = value_copy "core:json//JsonSeqSerializer"(ref.cast "core:prelude/types.wado//Result<JsonSeqSerializer,SerializeError>::Ok"(seq_2).payload_0);
-        __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref "core:serde//ArrayIter<String>" {
+        __iter_4 = __inline_Array_String__IntoIterator__into_iter_2: block -> ref "core:prelude/array.wado//ArrayIter<String>" {
             __local_16 = self;
-            break __inline_Array_String__IntoIterator__into_iter_2: "core:serde//ArrayIter<String>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
+            break __inline_Array_String__IntoIterator__into_iter_2: "core:prelude/array.wado//ArrayIter<String>" { repr: __local_16.repr, used: __local_16.used, index: 0 };
         };
         b838: block {
             l839: loop {

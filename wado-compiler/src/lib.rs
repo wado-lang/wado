@@ -21,8 +21,8 @@ pub mod lower;
 pub mod monomorphize;
 pub mod name;
 pub mod optimize;
-pub mod parser;
 pub mod package;
+pub mod parser;
 pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
@@ -49,15 +49,15 @@ pub use logger::{Bail, Logger};
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{EffectError, check_effects, check_stores};
+pub use flat_package::FlatPackage;
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::{lower, lower_modules_indexed, lower_project};
 pub use monomorphize::{monomorphize_module, monomorphize_modules_indexed, monomorphize_project};
 pub use name::ModuleSource;
 pub use optimize::{OptLevel, optimize};
-pub use parser::{ParseError, Parser};
-pub use flat_package::FlatPackage;
 pub use package::Package;
+pub use parser::{ParseError, Parser};
 pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
 
@@ -660,13 +660,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         // Optimize
         let flat = {
             let _span = logger.span("optimize");
-            optimize(
-                flat,
-                opt_level,
-                inline_threshold,
-                opt_iterations,
-                &logger,
-            )
+            optimize(flat, opt_level, inline_threshold, opt_iterations, &logger)
         };
 
         // WIR: Translate optimized Package to WirPackage for inspection.

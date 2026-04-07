@@ -10,12 +10,12 @@
 
 use crate::hashmap::IndexSet;
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
     mangle_local_method, mangle_local_trait_method, mangle_method_generic,
 };
-use crate::flat_package::FlatPackage;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirStmt, TirStmtKind,
     TypeId, TypeTable,
@@ -93,7 +93,9 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     // These are compiled into separate wasm modules and must not be eliminated.
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if project.wasm_module_sources.contains_key(&func.module_source)
+        if project
+            .wasm_module_sources
+            .contains_key(&func.module_source)
             && func.is_export
         {
             let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
@@ -256,30 +258,32 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     let mut reachable_strings: IndexSet<String> = IndexSet::default();
 
     for ((module_source, func_name), strings) in &project.function_strings {
-        let is_reachable =
-            if let Some(Some(method_info)) = project.function_method_info.get(&(module_source.clone(), func_name.clone())) {
-                let method_id = FunctionId::Method(MethodName::new(
-                    module_source.clone(),
-                    method_info.struct_name.clone(),
-                    method_info.trait_name.clone(),
-                    method_info.method_name.clone(),
-                ));
-                if reachable.contains(&method_id) {
-                    true
-                } else {
-                    let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                        module_source,
-                        func_name,
-                    ));
-                    reachable.contains(&free_id)
-                }
+        let is_reachable = if let Some(Some(method_info)) = project
+            .function_method_info
+            .get(&(module_source.clone(), func_name.clone()))
+        {
+            let method_id = FunctionId::Method(MethodName::new(
+                module_source.clone(),
+                method_info.struct_name.clone(),
+                method_info.trait_name.clone(),
+                method_info.method_name.clone(),
+            ));
+            if reachable.contains(&method_id) {
+                true
             } else {
-                let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
                     module_source,
                     func_name,
                 ));
-                reachable.contains(&func_id)
-            };
+                reachable.contains(&free_id)
+            }
+        } else {
+            let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                module_source,
+                func_name,
+            ));
+            reachable.contains(&func_id)
+        };
 
         if is_reachable {
             reachable_strings.extend(strings.iter().cloned());
@@ -349,7 +353,11 @@ fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
     // with mangled names like "Point::sum". This loop is kept for future compatibility.
     for impl_block in &project.impls {
         let (struct_name, module_source) = match type_table.get(impl_block.target_type) {
-            ResolvedType::Struct { name, module_source, .. } => (name.clone(), module_source.clone()),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.clone()),
             _ => continue,
         };
         for method in &impl_block.methods {
@@ -1830,11 +1838,15 @@ pub fn remove_unreachable_types(project: &mut FlatPackage) {
         drop(type_table);
 
         // Remove unreachable definitions
-        project.structs.retain(|s| keep_structs.contains(&(s.name.clone(), s.module_source.clone())));
+        project
+            .structs
+            .retain(|s| keep_structs.contains(&(s.name.clone(), s.module_source.clone())));
         project
             .variants
             .retain(|v| keep_variants.contains(&(v.name.clone(), v.module_source.clone())));
-        project.enums.retain(|e| keep_enums.contains(&(e.name.clone(), e.module_source.clone())));
+        project
+            .enums
+            .retain(|e| keep_enums.contains(&(e.name.clone(), e.module_source.clone())));
     }
 
     // Remove unreachable entries from the shared TypeTable.

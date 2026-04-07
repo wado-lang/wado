@@ -71,10 +71,14 @@ fn sort_types_topologically<'a>(
     // from different modules.
     let fq_key = |ms: &ModuleSource, name: &str| format!("{ms}//{name}");
 
-    let struct_keys: IndexSet<String> =
-        structs.iter().map(|s| fq_key(&s.module_source, &s.name)).collect();
-    let variant_keys: IndexSet<String> =
-        variants.iter().map(|v| fq_key(&v.module_source, &v.name)).collect();
+    let struct_keys: IndexSet<String> = structs
+        .iter()
+        .map(|s| fq_key(&s.module_source, &s.name))
+        .collect();
+    let variant_keys: IndexSet<String> = variants
+        .iter()
+        .map(|v| fq_key(&v.module_source, &v.name))
+        .collect();
     let all_keys: IndexSet<String> = struct_keys.union(&variant_keys).cloned().collect();
 
     let mut deps: IndexMap<String, Vec<String>> = IndexMap::default();
@@ -113,10 +117,7 @@ fn sort_types_topologically<'a>(
     let mut dependents: IndexMap<String, Vec<String>> = IndexMap::default();
     for (key, type_deps) in &deps {
         for dep in type_deps {
-            dependents
-                .entry(dep.clone())
-                .or_default()
-                .push(key.clone());
+            dependents.entry(dep.clone()).or_default().push(key.clone());
         }
     }
 
@@ -824,9 +825,10 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                                 && v.module_source == *module_source
                         })
                         .or_else(|| {
-                            ctx.package.variants.iter().find(|v| {
-                                v.name == *name && !v.type_params.is_empty()
-                            })
+                            ctx.package
+                                .variants
+                                .iter()
+                                .find(|v| v.name == *name && !v.type_params.is_empty())
                         });
                     if let Some(base) = base {
                         let variant_tt = type_table;

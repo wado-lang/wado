@@ -144,8 +144,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
 
         // Get canonical func type
         let user_params_clone = user_params.clone();
-        let (fn_type_id, _) =
-            ctx.get_or_create_canonical_closure_type(user_params, result_wirs);
+        let (fn_type_id, _) = ctx.get_or_create_canonical_closure_type(user_params, result_wirs);
 
         // Get functor struct type ID
         let functor_wir_type = ctx.type_id_to_wir_type(type_table, functor.ref_type_id);

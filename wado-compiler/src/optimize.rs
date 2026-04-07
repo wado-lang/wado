@@ -210,7 +210,11 @@ fn run_pass(
 ///
 /// Hot Field Scalarization (HFS) runs once after the loop converges; see
 /// `optimize` for the rationale.
-fn run_optimization_passes(project: &mut FlatPackage, config: &OptConfig, profiler: &dyn SpanEmitter) {
+fn run_optimization_passes(
+    project: &mut FlatPackage,
+    config: &OptConfig,
+    profiler: &dyn SpanEmitter,
+) {
     let threshold = config.inline_threshold;
     for i in 0..config.iterations {
         profiler.span_start(&format!("tir/iteration {}", i + 1));

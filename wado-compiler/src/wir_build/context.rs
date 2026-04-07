@@ -6,12 +6,12 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::{ModuleSource, StructName};
 use crate::flat_package::FlatPackage;
+use crate::name::{ModuleSource, StructName};
 use crate::tir::{TirFunction, TypeId, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
-    WirGlobal, WirImport, WirImportDesc, WirPackage, WirName, WirNames, WirRecGroup, WirType,
+    WirGlobal, WirImport, WirImportDesc, WirName, WirNames, WirPackage, WirRecGroup, WirType,
     WirTypeDef, WirTypeId,
 };
 

@@ -8,8 +8,8 @@
 //! - `label: { let x = y; ... }` → substitute x with y in remaining stmts
 //! - Empty blocks → `()`
 
-use crate::hashmap::IndexMap;
 use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexMap;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 
 use crate::tir_visitor::{

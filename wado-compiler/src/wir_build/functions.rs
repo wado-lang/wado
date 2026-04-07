@@ -630,7 +630,10 @@ fn build_mangled_name(tir_func: &TirFunction, _module_source: &ModuleSource) -> 
 }
 
 /// Check if a function has unsupported effects.
-fn has_unsupported_effects(tir_func: &TirFunction, project: &crate::flat_package::FlatPackage) -> bool {
+fn has_unsupported_effects(
+    tir_func: &TirFunction,
+    project: &crate::flat_package::FlatPackage,
+) -> bool {
     if tir_func.effects.is_empty() {
         return false;
     }

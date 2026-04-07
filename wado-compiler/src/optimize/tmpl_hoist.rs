@@ -34,8 +34,8 @@
 //! the result must be bound to a Let variable that is only used as a method
 //! receiver (`self`), never passed as a regular function argument.
 
-use crate::hashmap::IndexSet;
 use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexSet;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
     TypeTable,

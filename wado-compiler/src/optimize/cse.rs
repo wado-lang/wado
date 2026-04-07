@@ -23,8 +23,8 @@
 //! }
 //! ```
 
-use crate::hashmap::IndexSet;
 use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexSet;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId,
 };

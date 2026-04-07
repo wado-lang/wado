@@ -15,8 +15,8 @@ use super::postprocess;
 use crate::ast::Type;
 use crate::bundled::wado_bundled_libm_wasm;
 use crate::component_model::{CmInstanceTypeGen, CmVariantCase, WasiFunctionInfo};
-use crate::hashmap::{IndexMap, IndexSet};
 use crate::flat_package::FlatPackage;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirPackage};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
@@ -24,7 +24,11 @@ use wasm_encoder::{
 };
 
 /// Build a complete Wasm Component from a pre-built core module and project metadata.
-pub fn build_component(project: &FlatPackage, core_module: &[u8], wir_package: &WirPackage) -> Vec<u8> {
+pub fn build_component(
+    project: &FlatPackage,
+    core_module: &[u8],
+    wir_package: &WirPackage,
+) -> Vec<u8> {
     let wasm_modules = &wir_package.wasm_modules;
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();

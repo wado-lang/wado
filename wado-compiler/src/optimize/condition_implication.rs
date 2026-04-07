@@ -11,8 +11,8 @@
 //! This subsumes the WIR-level `bounds_check` pass, handling both strict `<`
 //! and inclusive `<=` guard patterns.
 
-use crate::hashmap::IndexMap;
 use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexMap;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
 };

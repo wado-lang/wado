@@ -5,8 +5,8 @@
 //! Both branches must be pure (no side effects, no traps) since `select` evaluates both
 //! operands eagerly.
 
-use crate::name::ModuleSource;
 use crate::flat_package::FlatPackage;
+use crate::name::ModuleSource;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExpr, TirExprKind, TirStmtKind, TypeId,
     TypeTable,
