@@ -109,7 +109,15 @@ pub fn link(package: Package) -> FlatPackage {
         string_literals.extend(tir_mod.string_literals);
         bytes_literals.extend(tir_mod.bytes_literals);
         closure_functors.extend(tir_mod.closure_functors);
-        function_strings.extend(tir_mod.function_strings);
+        // Merge function_strings: closure functions from different modules can share
+        // names (e.g., `__Closure_0::__call`), so we must append string lists rather
+        // than overwriting to avoid losing string associations.
+        for (func_name, strings) in tir_mod.function_strings {
+            function_strings
+                .entry(func_name)
+                .or_insert_with(Vec::new)
+                .extend(strings);
+        }
         function_method_info.extend(tir_mod.function_method_info);
 
         if is_entry {
@@ -155,5 +163,7 @@ pub fn link(package: Package) -> FlatPackage {
         has_http_handler_export,
         export_binding_names: package.export_binding_names,
         component_plan,
+        builtin_registry: package.builtin_registry,
+        task_return_flat_params: package.task_return_flat_params,
     }
 }

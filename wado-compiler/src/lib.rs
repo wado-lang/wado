@@ -385,22 +385,22 @@ fn compile_after_load<H: CompilerHost>(
         lower_project(project)
     };
 
-    // === Phase 10: Optimize (Package -> Package) ===
-    let project = {
+    // === Phase 10: Link (Package → FlatPackage) ===
+    let flat = {
+        let _span = logger.span("link");
+        link::link(project)
+    };
+
+    // === Phase 10.5: Optimize (FlatPackage -> FlatPackage) ===
+    let flat = {
         let _span = logger.span("optimize");
         optimize(
-            project,
+            flat,
             options.opt_level,
             options.inline_threshold,
             options.opt_iterations,
             logger,
         )
-    };
-
-    // === Phase 10.5: Link (Package → FlatPackage) ===
-    let flat = {
-        let _span = logger.span("link");
-        link::link(project)
     };
 
     // === Phase 11: Build WIR (FlatPackage → WirPackage) ===
@@ -465,7 +465,7 @@ fn snapshot_tir_modules(
 /// This runs the compilation pipeline up through optimization (without code generation)
 /// and returns diagnostic information about the internal state.
 ///
-/// Pipeline: lexer -> parser -> bind -> desugar -> load -> analyze -> resolve -> lower -> optimize
+/// Pipeline: lexer -> parser -> bind -> desugar -> load -> analyze -> resolve -> lower -> link -> optimize
 pub async fn dump_with_host<H: CompilerHost>(
     source: &str,
     host: &H,
@@ -654,18 +654,20 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         };
         let lower_snapshot = Some(snapshot_tir_modules(&project.tir_modules));
 
+        // Link
+        let flat = link::link(project);
+
         // Optimize
-        let project = {
+        let flat = {
             let _span = logger.span("optimize");
             optimize(
-                project,
+                flat,
                 opt_level,
                 inline_threshold,
                 opt_iterations,
                 &logger,
             )
         };
-        let flat = link::link(project);
 
         // WIR: Translate optimized Package to WirPackage for inspection.
         let wir_package = Some({

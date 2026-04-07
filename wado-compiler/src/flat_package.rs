@@ -8,12 +8,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{FunctionId, LocalMethodName, ModuleSource};
 use crate::tir::{
     ClosureFunctor, TirEnum, TirFlags, TirFunction, TirGlobal, TirImpl, TirImport, TirNewtype,
-    TirStruct, TirTest, TirTrait, TirVariantDecl, TypeTable,
+    TirStruct, TirTest, TirTrait, TirVariantDecl, TypeId, TypeTable,
 };
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
@@ -94,6 +95,11 @@ pub struct FlatPackage {
 
     /// Component Model structure plan.
     pub component_plan: ComponentPlan,
+
+    /// Registry of builtin functions (used by optimizer DCE)
+    pub builtin_registry: BuiltinRegistry,
+    /// Flat params for task-return type (used by DCE for async exports)
+    pub task_return_flat_params: Option<Vec<TypeId>>,
 }
 
 impl FlatPackage {

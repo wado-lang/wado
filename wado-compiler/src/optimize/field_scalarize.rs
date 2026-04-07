@@ -27,7 +27,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
-use crate::package::Package;
+use crate::flat_package::FlatPackage;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
@@ -42,34 +42,28 @@ type ParamFieldUsage = Option<IndexSet<u32>>;
 /// Maps each function (by module + name) to its per-parameter field usage.
 type FieldUsageCache = IndexMap<(ModuleSource, String), IndexMap<u32, ParamFieldUsage>>;
 
-pub fn scalarize_hot_fields(project: &mut Package) -> bool {
+pub fn scalarize_hot_fields(project: &mut FlatPackage) -> bool {
     // Phase 1: Build field usage cache (immutable access to all functions)
-    let cache = build_field_usage_cache(&project.tir_modules);
+    let cache = build_field_usage_cache(project);
 
     // Phase 2: Run scalarization (mutable access)
+    let type_table = project.type_table.borrow();
     let mut changed = false;
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            changed |= scalarize_function(&mut func, &type_table, &cache);
-        }
+    for (_module_source, func_rc) in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        changed |= scalarize_function(&mut func, &type_table, &cache);
     }
     changed
 }
 
-fn build_field_usage_cache(
-    modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
-) -> FieldUsageCache {
+fn build_field_usage_cache(project: &FlatPackage) -> FieldUsageCache {
     let mut cache = FieldUsageCache::default();
-    for (module_source, module) in modules {
-        let type_table = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            let usage = analyze_function_field_usage(&func, &type_table);
-            if !usage.is_empty() {
-                cache.insert((module_source.clone(), func.name.clone()), usage);
-            }
+    let type_table = project.type_table.borrow();
+    for (module_source, func_rc) in &project.functions {
+        let func = func_rc.borrow();
+        let usage = analyze_function_field_usage(&func, &type_table);
+        if !usage.is_empty() {
+            cache.insert((module_source.clone(), func.name.clone()), usage);
         }
     }
     cache

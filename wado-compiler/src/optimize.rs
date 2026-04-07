@@ -49,7 +49,7 @@ use store_load_forward::forward_stores_to_loads;
 use tmpl_hoist::hoist_template_buffers;
 
 use crate::compiler_host::SpanEmitter;
-use crate::package::Package;
+use crate::flat_package::FlatPackage;
 
 /// Configuration for optimization passes
 struct OptConfig {
@@ -118,12 +118,12 @@ pub enum OptLevel {
 /// The `inline_threshold` and `opt_iterations` parameters override the
 /// defaults for the given `opt_level` when provided.
 pub fn optimize(
-    mut project: Package,
+    mut project: FlatPackage,
     opt_level: OptLevel,
     inline_threshold: Option<usize>,
     opt_iterations: Option<u32>,
     profiler: &dyn SpanEmitter,
-) -> Package {
+) -> FlatPackage {
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
@@ -173,7 +173,7 @@ pub fn optimize(
     project
 }
 
-fn run_dce(project: &mut Package, profiler: &dyn SpanEmitter) {
+fn run_dce(project: &mut FlatPackage, profiler: &dyn SpanEmitter) {
     profiler.span_start("tir/dce");
     analyze_project(project);
     remove_unreachable_functions(project);
@@ -185,9 +185,9 @@ fn run_dce(project: &mut Package, profiler: &dyn SpanEmitter) {
 /// Run a single optimization pass with profiling, returning whether it changed anything.
 fn run_pass(
     name: &str,
-    project: &mut Package,
+    project: &mut FlatPackage,
     profiler: &dyn SpanEmitter,
-    f: impl FnOnce(&mut Package) -> bool,
+    f: impl FnOnce(&mut FlatPackage) -> bool,
 ) -> bool {
     profiler.span_start(name);
     let changed = f(project);
@@ -210,7 +210,7 @@ fn run_pass(
 ///
 /// Hot Field Scalarization (HFS) runs once after the loop converges; see
 /// `optimize` for the rationale.
-fn run_optimization_passes(project: &mut Package, config: &OptConfig, profiler: &dyn SpanEmitter) {
+fn run_optimization_passes(project: &mut FlatPackage, config: &OptConfig, profiler: &dyn SpanEmitter) {
     let threshold = config.inline_threshold;
     for i in 0..config.iterations {
         profiler.span_start(&format!("tir/iteration {}", i + 1));

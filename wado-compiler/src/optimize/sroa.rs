@@ -26,7 +26,7 @@
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
-use crate::package::Package;
+use crate::flat_package::FlatPackage;
 use crate::tir::{
     FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField,
     TirUnaryOp, TypeId, TypeTable,
@@ -53,39 +53,35 @@ struct SroaCandidate {
 }
 
 /// Build a lookup table mapping (`module_source`, `func_name`) → set of stored param indices.
-fn build_stores_lookup(project: &Package) -> StoresLookup {
+fn build_stores_lookup(project: &FlatPackage) -> StoresLookup {
     let mut lookup = StoresLookup::default();
-    for (module_source, module) in &project.tir_modules {
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            if func.stores.is_empty() {
-                continue;
-            }
-            let stored_indices: IndexSet<usize> = func
-                .params
-                .iter()
-                .enumerate()
-                .filter(|(_, param)| func.stores.iter().any(|s| s == &param.name))
-                .map(|(i, _)| i)
-                .collect();
-            if !stored_indices.is_empty() {
-                lookup.insert((module_source.clone(), func.name.clone()), stored_indices);
-            }
+    for (module_source, func_rc) in &project.functions {
+        let func = func_rc.borrow();
+        if func.stores.is_empty() {
+            continue;
+        }
+        let stored_indices: IndexSet<usize> = func
+            .params
+            .iter()
+            .enumerate()
+            .filter(|(_, param)| func.stores.iter().any(|s| s == &param.name))
+            .map(|(i, _)| i)
+            .collect();
+        if !stored_indices.is_empty() {
+            lookup.insert((module_source.clone(), func.name.clone()), stored_indices);
         }
     }
     lookup
 }
 
 /// Apply SROA to all functions in the project.
-pub fn scalar_replace_aggregates(project: &mut Package) -> bool {
+pub fn scalar_replace_aggregates(project: &mut FlatPackage) -> bool {
     let stores_lookup = build_stores_lookup(project);
+    let type_table = project.type_table.borrow();
     let mut changed = false;
-    for (module_source, module) in &mut project.tir_modules {
-        let type_table = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            changed |= sroa_in_function(&mut func, &type_table, &stores_lookup, module_source);
-        }
+    for (module_source, func_rc) in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        changed |= sroa_in_function(&mut func, &type_table, &stores_lookup, module_source);
     }
     changed
 }

@@ -23,7 +23,7 @@
 //! locals to survive through assert branches and similar patterns.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::package::Package;
+use crate::flat_package::FlatPackage;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
@@ -727,14 +727,12 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
 }
 
 /// Apply store-to-load forwarding to all functions in the project.
-pub fn forward_stores_to_loads(project: &mut Package) -> bool {
+pub fn forward_stores_to_loads(project: &mut FlatPackage) -> bool {
     let mut changed = false;
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            changed |= forward_in_function(&mut func, &type_table);
-        }
+    let type_table = project.type_table.borrow();
+    for (_ms, func_rc) in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        changed |= forward_in_function(&mut func, &type_table);
     }
     changed
 }

@@ -15,10 +15,10 @@ use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
     mangle_local_method, mangle_local_trait_method, mangle_method_generic,
 };
-use crate::package::Package;
+use crate::flat_package::FlatPackage;
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule, TirStmt,
-    TirStmtKind, TypeId, TypeTable,
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirStmt, TirStmtKind,
+    TypeId, TypeTable,
 };
 
 /// Call graph: function ID -> set of called function IDs
@@ -41,9 +41,9 @@ struct FunctionAnalysis {
 /// This performs dead code elimination analysis starting from the entry point
 /// and populates the project's `reachable_functions`, `used_wasi_functions`
 /// fields, and the entry module's `imports` list.
-pub fn analyze_project(project: &mut Package) {
-    // Build call graph and effect usage from all modules
-    let (call_graph, effect_usage) = build_analysis_graph(&project.tir_modules);
+pub fn analyze_project(project: &mut FlatPackage) {
+    // Build call graph and effect usage from all functions
+    let (call_graph, effect_usage) = build_analysis_graph(project);
 
     // Determine entry functions from world exports.
     // For the test world, test functions are the sole entry points; world exports
@@ -77,10 +77,8 @@ pub fn analyze_project(project: &mut Package) {
 
     // Add test functions as entry points only when targeting the test world.
     // For non-test worlds (command, service, …), tests are dead code.
-    if project.is_test_world()
-        && let Some(entry_module) = project.tir_modules.get(&project.entry_module_source)
-    {
-        for test in &entry_module.tests {
+    if project.is_test_world() {
+        for test in &project.tests {
             let test_func = FunctionId::Free(FreeFunctionName::from_module_source(
                 &project.entry_module_source,
                 &test.function_name,
@@ -92,18 +90,16 @@ pub fn analyze_project(project: &mut Package) {
 
     // Mark exported functions from #![wasm_module] sources as reachable.
     // These are compiled into separate wasm modules and must not be eliminated.
-    for (module_source, tir_mod) in &project.tir_modules {
-        if tir_mod.wasm_module.is_some() {
-            for func_rc in &tir_mod.functions {
-                let func = func_rc.borrow();
-                if func.is_export {
-                    let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                        module_source,
-                        &func.name,
-                    ));
-                    let wasm_mod_reachable = compute_reachable(&call_graph, &func_id);
-                    reachable.extend(wasm_mod_reachable);
-                }
+    for (module_source, func_rc) in &project.functions {
+        if project.wasm_module_sources.contains_key(&module_source.to_string()) {
+            let func = func_rc.borrow();
+            if func.is_export {
+                let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                    module_source,
+                    &func.name,
+                ));
+                let wasm_mod_reachable = compute_reachable(&call_graph, &func_id);
+                reachable.extend(wasm_mod_reachable);
             }
         }
     }
@@ -244,143 +240,145 @@ pub fn analyze_project(project: &mut Package) {
         // are called. No DCE injection needed — they are discovered through normal reachability.
     }
 
-    // Store imports in the entry module
-    if let Some(entry_module) = project.tir_modules.get_mut(&project.entry_module_source) {
-        entry_module.imports = imports.into_iter().collect();
-        // Sort imports for deterministic output
-        entry_module
-            .imports
-            .sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
-    }
+    // Store imports in the project
+    project.imports = imports.into_iter().collect();
+    // Sort imports for deterministic output
+    project
+        .imports
+        .sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
 
     // Apply results to project
     project.reachable_functions.clone_from(&reachable);
     project.used_wasi_functions = used_wasi_functions;
 
-    // Filter string literals in each module to only include strings from reachable functions
-    for module in project.tir_modules.values_mut() {
-        let module_source = &module.module_source;
-        let mut reachable_strings: IndexSet<String> = IndexSet::default();
+    // Filter string literals to only include strings from reachable functions.
+    // Build a func_name → [module_source] mapping so we construct the correct FunctionId
+    // for reachability checks. Multiple functions can share the same name across modules
+    // (e.g., `__Closure_0::__call`), so we collect ALL module sources per name.
+    let mut func_module_sources: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
+    for (ms, frc) in &project.functions {
+        func_module_sources
+            .entry(frc.borrow().name.clone())
+            .or_default()
+            .push(ms.clone());
+    }
 
-        for (func_name, strings) in &module.function_strings {
-            // Build function ID(s) to check if it's reachable
-            // Note: monomorphized methods are tracked as FunctionId::Free in the call graph
-            // but their names look like methods (e.g., "TreeMap<String,i32>^Index::index")
-            let is_reachable =
-                if let Some(Some(method_info)) = module.function_method_info.get(func_name) {
-                    // Method with method_info
-                    // Check as MethodName first (for non-monomorphized methods)
-                    let method_id = FunctionId::Method(MethodName::new(
-                        module_source.clone(),
-                        method_info.struct_name.clone(),
-                        method_info.trait_name.clone(),
-                        method_info.method_name.clone(),
-                    ));
-                    if reachable.contains(&method_id) {
-                        true
-                    } else {
-                        // For monomorphized methods, also check as FreeFunctionName
-                        // Monomorphized methods have type args in the struct name (e.g., "TreeMap<String,i32>")
-                        let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                            module_source,
-                            func_name,
-                        ));
-                        reachable.contains(&free_id)
-                    }
+    let mut reachable_strings: IndexSet<String> = IndexSet::default();
+
+    for (func_name, strings) in &project.function_strings {
+        let Some(module_sources) = func_module_sources.get(func_name) else {
+            // Function not in the flat functions list (e.g., closure functors).
+            // Conservatively keep its strings.
+            reachable_strings.extend(strings.iter().cloned());
+            continue;
+        };
+        // Check reachability against ALL module sources for this function name.
+        // If ANY instance is reachable, keep the strings.
+        let is_reachable = module_sources.iter().any(|module_source| {
+            if let Some(Some(method_info)) = project.function_method_info.get(func_name) {
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source.clone(),
+                    method_info.struct_name.clone(),
+                    method_info.trait_name.clone(),
+                    method_info.method_name.clone(),
+                ));
+                if reachable.contains(&method_id) {
+                    true
                 } else {
-                    // Regular function (no method_info)
-                    let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                    let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
                         module_source,
                         func_name,
                     ));
-                    reachable.contains(&func_id)
-                };
-
-            if is_reachable {
-                reachable_strings.extend(strings.iter().cloned());
+                    reachable.contains(&free_id)
+                }
+            } else {
+                let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                    module_source,
+                    func_name,
+                ));
+                reachable.contains(&func_id)
             }
-        }
+        });
 
-        module.string_literals = reachable_strings.into_iter().collect();
+        if is_reachable {
+            reachable_strings.extend(strings.iter().cloned());
+        }
     }
+
+    project.string_literals = reachable_strings.into_iter().collect();
 }
 
-/// Build call graph and effect usage from all TIR modules
-fn build_analysis_graph(
-    modules: &IndexMap<ModuleSource, TirModule>,
-) -> (CallGraph, EffectUsageMap) {
+/// Build call graph and effect usage from all TIR functions
+fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
     let mut call_graph: CallGraph = IndexMap::default();
     let mut effect_usage: EffectUsageMap = IndexMap::default();
 
-    for (module_source, module) in modules {
-        let type_table = &*module.type_table.borrow();
+    let type_table = &*project.type_table.borrow();
 
-        // Analyze functions (including methods stored as functions)
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            // Use the TirFunction's is_method() to determine if this is a method
-            let func_id = if let Some(ref info) = func.method_info {
-                // This is a method - use MethodName or FreeFunctionName with monomorph info
-                if let Some(monomorph_info) = &func.monomorph_info {
-                    // Monomorphized method - use FreeFunctionName with metadata.
-                    // Use the actual module_source where the function lives.
-                    FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                        module_source.clone(),
-                        func.name.clone(),
-                        monomorph_info.generic_name.clone(),
-                    ))
-                } else {
-                    // Non-monomorphized method - use method_info
-                    FunctionId::Method(MethodName::new(
-                        module_source.clone(),
-                        info.struct_name.clone(),
-                        info.trait_name.clone(),
-                        info.method_name.clone(),
-                    ))
-                }
-            } else {
-                // Regular function - use FreeFunctionName
-                if let Some(monomorph_info) = &func.monomorph_info {
-                    // Monomorphized function - use actual module_source
-                    FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                        module_source.clone(),
-                        func.name.clone(),
-                        monomorph_info.generic_name.clone(),
-                    ))
-                } else {
-                    FunctionId::Free(FreeFunctionName::from_module_source(
-                        module_source,
-                        &func.name,
-                    ))
-                }
-            };
-            let analysis = analyze_function(&func, module_source, type_table);
-            call_graph.insert(func_id.clone(), analysis.callees);
-            if !analysis.effect_calls.is_empty() {
-                effect_usage.insert(func_id.clone(), analysis.effect_calls);
-            }
-        }
-
-        // Note: impl_block.methods is empty because resolver adds methods to functions
-        // with mangled names like "Point::sum". This loop is kept for future compatibility.
-        for impl_block in &module.impls {
-            let struct_name = match type_table.get(impl_block.target_type) {
-                ResolvedType::Struct { name, .. } => name.clone(),
-                _ => continue,
-            };
-
-            for method in &impl_block.methods {
-                let method_id = FunctionId::Method(MethodName::new(
+    // Analyze functions (including methods stored as functions)
+    for (module_source, func_rc) in &project.functions {
+        let func = func_rc.borrow();
+        // Use the TirFunction's is_method() to determine if this is a method
+        let func_id = if let Some(ref info) = func.method_info {
+            // This is a method - use MethodName or FreeFunctionName with monomorph info
+            if let Some(monomorph_info) = &func.monomorph_info {
+                // Monomorphized method - use FreeFunctionName with metadata.
+                // Use the actual module_source where the function lives.
+                FunctionId::Free(FreeFunctionName::with_monomorph_info(
                     module_source.clone(),
-                    struct_name.clone(),
-                    None,
-                    method.name.clone(),
-                ));
-                let analysis = analyze_function(method, module_source, type_table);
-                call_graph.insert(method_id.clone(), analysis.callees);
-                if !analysis.effect_calls.is_empty() {
-                    effect_usage.insert(method_id.clone(), analysis.effect_calls);
-                }
+                    func.name.clone(),
+                    monomorph_info.generic_name.clone(),
+                ))
+            } else {
+                // Non-monomorphized method - use method_info
+                FunctionId::Method(MethodName::new(
+                    module_source.clone(),
+                    info.struct_name.clone(),
+                    info.trait_name.clone(),
+                    info.method_name.clone(),
+                ))
+            }
+        } else {
+            // Regular function - use FreeFunctionName
+            if let Some(monomorph_info) = &func.monomorph_info {
+                // Monomorphized function - use actual module_source
+                FunctionId::Free(FreeFunctionName::with_monomorph_info(
+                    module_source.clone(),
+                    func.name.clone(),
+                    monomorph_info.generic_name.clone(),
+                ))
+            } else {
+                FunctionId::Free(FreeFunctionName::from_module_source(
+                    module_source,
+                    &func.name,
+                ))
+            }
+        };
+        let analysis = analyze_function(&func, module_source, type_table);
+        call_graph.insert(func_id.clone(), analysis.callees);
+        if !analysis.effect_calls.is_empty() {
+            effect_usage.insert(func_id.clone(), analysis.effect_calls);
+        }
+    }
+
+    // Note: impl_block.methods is empty because resolver adds methods to functions
+    // with mangled names like "Point::sum". This loop is kept for future compatibility.
+    for impl_block in &project.impls {
+        let (struct_name, module_source) = match type_table.get(impl_block.target_type) {
+            ResolvedType::Struct { name, module_source, .. } => (name.clone(), module_source.clone()),
+            _ => continue,
+        };
+        for method in &impl_block.methods {
+            let method_id = FunctionId::Method(MethodName::new(
+                module_source.clone(),
+                struct_name.clone(),
+                None,
+                method.name.clone(),
+            ));
+            let analysis = analyze_function(method, &module_source, type_table);
+            call_graph.insert(method_id.clone(), analysis.callees);
+            if !analysis.effect_calls.is_empty() {
+                effect_usage.insert(method_id.clone(), analysis.effect_calls);
             }
         }
     }
@@ -1069,59 +1067,57 @@ fn compute_reachable(
 ///
 /// This physically removes functions that are not in `reachable_functions`
 /// from the TIR, so codegen doesn't need to filter them.
-pub fn remove_unreachable_functions(project: &mut Package) {
-    for (module_source, module) in &mut project.tir_modules {
-        // Retain only reachable functions
-        module.functions.retain(|func_rc| {
-            let func = func_rc.borrow();
+pub fn remove_unreachable_functions(project: &mut FlatPackage) {
+    let reachable_functions = project.reachable_functions.clone();
+    project.functions.retain(|(module_source, func_rc)| {
+        let func = func_rc.borrow();
 
-            // CM binding functions are referenced during WIR translation (not TIR
-            // call graph), so they must survive function DCE. Their return types
-            // may include synthesized TypeIds that must also survive type DCE.
-            if func.is_cm_binding {
+        // CM binding functions are referenced during WIR translation (not TIR
+        // call graph), so they must survive function DCE. Their return types
+        // may include synthesized TypeIds that must also survive type DCE.
+        if func.is_cm_binding {
+            return true;
+        }
+
+        // Use TirFunction's method_info to check if this is a method
+        if let Some(ref info) = func.method_info {
+            // Could be either:
+            // - Instance method tracked as FunctionId::Method
+            // - Static method tracked as FunctionId::Free with mangled name
+            // Use method_info to build the method ID
+            // Try as instance method (FunctionId::Method)
+            let method_id = FunctionId::Method(MethodName::new(
+                module_source.clone(),
+                info.struct_name.clone(),
+                info.trait_name.clone(),
+                info.method_name.clone(),
+            ));
+            if reachable_functions.contains(&method_id) {
                 return true;
             }
 
-            // Use TirFunction's method_info to check if this is a method
-            if let Some(ref info) = func.method_info {
-                // Could be either:
-                // - Instance method tracked as FunctionId::Method
-                // - Static method tracked as FunctionId::Free with mangled name
-                // Use method_info to build the method ID
-                // Try as instance method (FunctionId::Method)
-                let method_id = FunctionId::Method(MethodName::new(
-                    module_source.clone(),
-                    info.struct_name.clone(),
-                    info.trait_name.clone(),
-                    info.method_name.clone(),
-                ));
-                if project.reachable_functions.contains(&method_id) {
-                    return true;
-                }
-
-                // Try as static method (FunctionId::Free with mangled name)
-                let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                    module_source,
-                    &func.name,
-                ));
-                if project.reachable_functions.contains(&free_id) {
-                    return true;
-                }
-
-                // For generic methods/static methods, check if any monomorphized version is reachable
-                // Generic functions are named "Array::with_capacity" but calls use "Array<i32>::with_capacity"
-                // Check if any function ID in reachable_functions matches this base name
-                is_generic_func_reachable(&project.reachable_functions, module_source, &func.name)
-            } else {
-                // Regular function
-                let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                    module_source,
-                    &func.name,
-                ));
-                project.reachable_functions.contains(&func_id)
+            // Try as static method (FunctionId::Free with mangled name)
+            let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                module_source,
+                &func.name,
+            ));
+            if reachable_functions.contains(&free_id) {
+                return true;
             }
-        });
-    }
+
+            // For generic methods/static methods, check if any monomorphized version is reachable
+            // Generic functions are named "Array::with_capacity" but calls use "Array<i32>::with_capacity"
+            // Check if any function ID in reachable_functions matches this base name
+            is_generic_func_reachable(&reachable_functions, module_source, &func.name)
+        } else {
+            // Regular function
+            let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                module_source,
+                &func.name,
+            ));
+            reachable_functions.contains(&func_id)
+        }
+    });
 }
 
 /// Check if a generic function has any monomorphized version that is reachable.
@@ -1183,7 +1179,7 @@ fn is_generic_func_reachable(
 /// Compute the set of reachable types from reachable functions.
 /// A type is reachable if it's used in any reachable function's signature,
 /// locals, or expressions.
-fn compute_reachable_types(project: &Package) -> IndexSet<TypeId> {
+fn compute_reachable_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let mut reachable_types: IndexSet<TypeId> = IndexSet::default();
 
     // Always include primitive types (TypeId 0-17)
@@ -1194,8 +1190,8 @@ fn compute_reachable_types(project: &Package) -> IndexSet<TypeId> {
     // Always include BuiltinArray(U8) as it's fundamental for String operations
     // and used by codegen for internal operations (assert statements, etc.)
     // Find the TypeId for BuiltinArray(U8) in the type table
-    if let Some(module) = project.tir_modules.values().next() {
-        let type_table = module.type_table.borrow();
+    {
+        let type_table = project.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::BuiltinArray(elem) = type_table.get(type_id)
                 && *elem == TypeTable::U8
@@ -1210,16 +1206,16 @@ fn compute_reachable_types(project: &Package) -> IndexSet<TypeId> {
     // Note: We collect from ALL functions that exist after function DCE,
     // because function DCE has already removed unreachable functions.
     // This is more conservative but ensures we don't miss any types.
-    for (_module_source, module) in &project.tir_modules {
-        let type_table = module.type_table.borrow();
+    {
+        let type_table = project.type_table.borrow();
 
-        for func_rc in &module.functions {
+        for (_ms, func_rc) in &project.functions {
             let func = func_rc.borrow();
             collect_types_from_function(&func, &type_table, &mut reachable_types);
         }
 
         // Also collect types from impl blocks
-        for impl_block in &module.impls {
+        for impl_block in &project.impls {
             reachable_types.insert(impl_block.target_type);
             for method in &impl_block.methods {
                 collect_types_from_function(method, &type_table, &mut reachable_types);
@@ -1227,7 +1223,7 @@ fn compute_reachable_types(project: &Package) -> IndexSet<TypeId> {
         }
 
         // Collect types from global variables
-        for global in &module.globals {
+        for global in &project.globals {
             collect_types_from_expr(&global.initializer, &type_table, &mut reachable_types);
         }
 
@@ -1242,94 +1238,95 @@ fn compute_reachable_types(project: &Package) -> IndexSet<TypeId> {
         changed = false;
         let before_len = reachable_types.len();
 
-        for (module_source, module) in &project.tir_modules {
-            let type_table = module.type_table.borrow();
+        let type_table = project.type_table.borrow();
 
-            // Collect struct field types for reachable structs
-            // A struct's fields should be collected if:
-            // 1. The Struct type itself is reachable, OR
-            // 2. Any GenericInstance with this struct name is reachable, OR
-            // 3. Any monomorphized version with this base name is reachable
-            for tir_struct in &module.structs {
-                let struct_reachable = if tir_struct.monomorph_info.is_none() {
-                    // Non-monomorphized struct
-                    let direct_reachable = type_table
-                        .find_struct_type(&tir_struct.name, module_source)
-                        .map(|id| reachable_types.contains(&id))
-                        .unwrap_or(false);
-
-                    let instance_reachable = reachable_types.iter().any(|&id| {
-                        matches!(
-                            type_table.get(id),
-                            ResolvedType::GenericInstance { name, .. } if name == &tir_struct.name
-                        )
-                    });
-
-                    let monomorph_reachable = reachable_types.iter().any(|&id| {
-                        matches!(
-                            type_table.get(id),
-                            ResolvedType::Struct { base_name: Some(base), is_monomorphized: true, .. } if base == &tir_struct.name
-                        )
-                    });
-
-                    direct_reachable || instance_reachable || monomorph_reachable
-                } else {
-                    // Monomorphized struct - check by exact name match
-                    reachable_types.iter().any(|&id| {
-                        matches!(
-                            type_table.get(id),
-                            ResolvedType::Struct { name, is_monomorphized: true, .. } if name == &tir_struct.name
-                        )
-                    })
-                };
-
-                if struct_reachable {
-                    for field in &tir_struct.fields {
-                        collect_type_transitive(field.type_id, &type_table, &mut reachable_types);
-                    }
-                    // Monomorphization type args are used by WIR for name mangling
-                    if let Some(info) = &tir_struct.monomorph_info {
-                        for &ta in &info.impl_type_args {
-                            collect_type_transitive(ta, &type_table, &mut reachable_types);
-                        }
-                        for &ta in &info.method_type_args {
-                            collect_type_transitive(ta, &type_table, &mut reachable_types);
-                        }
-                    }
-                }
-            }
-
-            // Collect variant payload types for reachable variants
-            // A variant's payloads should be collected if:
-            // 1. The base Variant type is reachable, OR
-            // 2. Any GenericInstance with this variant name is reachable
-            for variant in &module.variants {
-                let base_reachable = type_table
-                    .iter_type_ids()
-                    .find(|&id| matches!(type_table.get(id), ResolvedType::Variant { name, .. } if name == &variant.name))
+        // Collect struct field types for reachable structs
+        // A struct's fields should be collected if:
+        // 1. The Struct type itself is reachable, OR
+        // 2. Any GenericInstance with this struct name is reachable, OR
+        // 3. Any monomorphized version with this base name is reachable
+        for tir_struct in &project.structs {
+            let module_source = &tir_struct.module_source;
+            let struct_reachable = if tir_struct.monomorph_info.is_none() {
+                // Non-monomorphized struct
+                let direct_reachable = type_table
+                    .find_struct_type(&tir_struct.name, module_source)
                     .map(|id| reachable_types.contains(&id))
                     .unwrap_or(false);
 
                 let instance_reachable = reachable_types.iter().any(|&id| {
                     matches!(
                         type_table.get(id),
-                        ResolvedType::GenericInstance { name, .. } if name == &variant.name
+                        ResolvedType::GenericInstance { name, .. } if name == &tir_struct.name
                     )
                 });
 
-                if base_reachable || instance_reachable {
-                    for case in &variant.cases {
-                        collect_type_transitive(case.payload, &type_table, &mut reachable_types);
+                let monomorph_reachable = reachable_types.iter().any(|&id| {
+                    matches!(
+                        type_table.get(id),
+                        ResolvedType::Struct { base_name: Some(base), is_monomorphized: true, .. } if base == &tir_struct.name
+                    )
+                });
+
+                direct_reachable || instance_reachable || monomorph_reachable
+            } else {
+                // Monomorphized struct - check by exact name match
+                reachable_types.iter().any(|&id| {
+                    matches!(
+                        type_table.get(id),
+                        ResolvedType::Struct { name, is_monomorphized: true, .. } if name == &tir_struct.name
+                    )
+                })
+            };
+
+            if struct_reachable {
+                for field in &tir_struct.fields {
+                    collect_type_transitive(field.type_id, &type_table, &mut reachable_types);
+                }
+                // Monomorphization type args are used by WIR for name mangling
+                if let Some(info) = &tir_struct.monomorph_info {
+                    for &ta in &info.impl_type_args {
+                        collect_type_transitive(ta, &type_table, &mut reachable_types);
+                    }
+                    for &ta in &info.method_type_args {
+                        collect_type_transitive(ta, &type_table, &mut reachable_types);
                     }
                 }
             }
+        }
 
-            // Collect type dependencies (array elements, option inner, etc.)
-            let current_types: Vec<TypeId> = reachable_types.iter().copied().collect();
-            for type_id in current_types {
-                collect_type_dependencies(type_id, &type_table, &mut reachable_types);
+        // Collect variant payload types for reachable variants
+        // A variant's payloads should be collected if:
+        // 1. The base Variant type is reachable, OR
+        // 2. Any GenericInstance with this variant name is reachable
+        for variant in &project.variants {
+            let base_reachable = type_table
+                .iter_type_ids()
+                .find(|&id| matches!(type_table.get(id), ResolvedType::Variant { name, .. } if name == &variant.name))
+                .map(|id| reachable_types.contains(&id))
+                .unwrap_or(false);
+
+            let instance_reachable = reachable_types.iter().any(|&id| {
+                matches!(
+                    type_table.get(id),
+                    ResolvedType::GenericInstance { name, .. } if name == &variant.name
+                )
+            });
+
+            if base_reachable || instance_reachable {
+                for case in &variant.cases {
+                    collect_type_transitive(case.payload, &type_table, &mut reachable_types);
+                }
             }
         }
+
+        // Collect type dependencies (array elements, option inner, etc.)
+        let current_types: Vec<TypeId> = reachable_types.iter().copied().collect();
+        for type_id in current_types {
+            collect_type_dependencies(type_id, &type_table, &mut reachable_types);
+        }
+
+        drop(type_table);
 
         if reachable_types.len() > before_len {
             changed = true;
@@ -1749,20 +1746,18 @@ fn collect_type_dependencies(
 
 /// Remove unreachable types from the project's `TypeTable` and module definitions.
 /// This should be called after function DCE.
-pub fn remove_unreachable_types(project: &mut Package) {
+pub fn remove_unreachable_types(project: &mut FlatPackage) {
     let reachable_types = compute_reachable_types(project);
 
-    // Remove unreachable struct/variant/enum definitions from each module
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.borrow();
-        let module_source = module.module_source.clone();
+    // Collect names of structs to keep
+    // A struct is kept if:
+    // 1. Its Struct type is reachable, OR
+    // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
+    // 3. Any monomorphized Struct with its base name is reachable
+    {
+        let type_table = project.type_table.borrow();
 
-        // Collect names of structs to keep
-        // A struct is kept if:
-        // 1. Its Struct type is reachable, OR
-        // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
-        // 3. Any monomorphized Struct with its base name is reachable
-        let keep_structs: IndexSet<String> = module
+        let keep_structs: IndexSet<(String, ModuleSource)> = project
             .structs
             .iter()
             .filter(|s| {
@@ -1770,7 +1765,7 @@ pub fn remove_unreachable_types(project: &mut Package) {
                 if s.monomorph_info.is_none() {
                     // Check if the struct type itself is reachable
                     let struct_reachable = type_table
-                        .find_struct_type(&s.name, &module_source)
+                        .find_struct_type(&s.name, &s.module_source)
                         .map(|id| reachable_types.contains(&id))
                         .unwrap_or(false);
 
@@ -1801,14 +1796,14 @@ pub fn remove_unreachable_types(project: &mut Package) {
                     })
                 }
             })
-            .map(|s| s.name.clone())
+            .map(|s| (s.name.clone(), s.module_source.clone()))
             .collect();
 
         // Collect names of variants to keep
         // A variant is kept if:
         // 1. Its base Variant type is reachable, OR
         // 2. Any GenericInstance with its name is reachable (e.g., Result<i32, String>)
-        let keep_variants: IndexSet<String> = module
+        let keep_variants: IndexSet<(String, ModuleSource)> = project
             .variants
             .iter()
             .filter(|v| {
@@ -1816,7 +1811,8 @@ pub fn remove_unreachable_types(project: &mut Package) {
                 let base_reachable = type_table
                     .iter_type_ids()
                     .find(|&id| {
-                        matches!(type_table.get(id), ResolvedType::Variant { name, .. } if name == &v.name)
+                        matches!(type_table.get(id), ResolvedType::Variant { name, module_source, .. }
+                            if name == &v.name && module_source == &v.module_source)
                     })
                     .map(|id| reachable_types.contains(&id))
                     .unwrap_or(false);
@@ -1831,39 +1827,40 @@ pub fn remove_unreachable_types(project: &mut Package) {
 
                 base_reachable || instance_reachable
             })
-            .map(|v| v.name.clone())
+            .map(|v| (v.name.clone(), v.module_source.clone()))
             .collect();
 
         // Collect names of enums to keep
-        let keep_enums: IndexSet<String> = module
+        let keep_enums: IndexSet<(String, ModuleSource)> = project
             .enums
             .iter()
             .filter(|e| {
                 type_table
                     .iter_type_ids()
                     .find(|&id| {
-                        matches!(type_table.get(id), ResolvedType::Enum { name, .. } if name == &e.name)
+                        matches!(type_table.get(id), ResolvedType::Enum { name, module_source, .. }
+                            if name == &e.name && module_source == &e.module_source)
                     })
                     .map(|id| reachable_types.contains(&id))
                     .unwrap_or(false)
             })
-            .map(|e| e.name.clone())
+            .map(|e| (e.name.clone(), e.module_source.clone()))
             .collect();
 
         drop(type_table);
 
         // Remove unreachable definitions
-        module.structs.retain(|s| keep_structs.contains(&s.name));
-        module.variants.retain(|v| keep_variants.contains(&v.name));
-        module.enums.retain(|e| keep_enums.contains(&e.name));
+        project.structs.retain(|s| keep_structs.contains(&(s.name.clone(), s.module_source.clone())));
+        project
+            .variants
+            .retain(|v| keep_variants.contains(&(v.name.clone(), v.module_source.clone())));
+        project.enums.retain(|e| keep_enums.contains(&(e.name.clone(), e.module_source.clone())));
     }
 
     // Remove unreachable entries from the shared TypeTable.
     // This ensures that subsequent phases (WIR type registration, codegen) do not
     // emit types that are no longer referenced by any surviving function.
-    if let Some(module) = project.tir_modules.values().next() {
-        module.type_table.borrow_mut().retain(&reachable_types);
-    }
+    project.type_table.borrow_mut().retain(&reachable_types);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1880,37 +1877,29 @@ pub fn remove_unreachable_types(project: &mut Package) {
 /// 1. Its declaration is removed from `module.globals`
 /// 2. Any `GlobalVarSet` statements for it are removed from function bodies
 ///    (this covers both the original `__initialize_module` and inlined copies)
-pub fn remove_unreachable_globals(project: &mut Package) {
+pub fn remove_unreachable_globals(project: &mut FlatPackage) {
     // Phase 1: Collect all GlobalVarGet references from surviving functions.
     // Key: (module_source path as string, global name)
     let mut used_globals: IndexSet<(String, String)> = IndexSet::default();
 
-    for module in project.tir_modules.values() {
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            if let Some(body) = &func.body {
-                collect_global_reads_block(body, &mut used_globals);
-            }
+    for (_ms, func_rc) in &project.functions {
+        let func = func_rc.borrow();
+        if let Some(body) = &func.body {
+            collect_global_reads_block(body, &mut used_globals);
         }
     }
 
-    // Phase 2: Remove unused globals from module.globals
-    for module in project.tir_modules.values_mut() {
-        let module_key = module.module_source.to_path().join("::");
-        module.globals.retain(|global| {
-            let global_module_key = global.module_source.to_path().join("::");
-            used_globals.contains(&(global_module_key, global.name.clone()))
-                || used_globals.contains(&(module_key.clone(), global.name.clone()))
-        });
-    }
+    // Phase 2: Remove unused globals
+    project.globals.retain(|global| {
+        let global_module_key = global.module_source.to_path().join("::");
+        used_globals.contains(&(global_module_key, global.name.clone()))
+    });
 
     // Phase 3: Remove GlobalVarSet statements for dead globals from function bodies
-    for module in project.tir_modules.values_mut() {
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if let Some(body) = &mut func.body {
-                remove_dead_global_sets_block(body, &used_globals);
-            }
+    for (_ms, func_rc) in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(body) = &mut func.body {
+            remove_dead_global_sets_block(body, &used_globals);
         }
     }
 }
