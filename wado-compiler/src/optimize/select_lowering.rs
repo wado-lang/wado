@@ -6,7 +6,7 @@
 //! operands eagerly.
 
 use crate::name::ModuleSource;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExpr, TirExprKind, TirStmtKind, TypeId,
     TypeTable,
@@ -15,7 +15,7 @@ use crate::tir::{
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 
 /// Run select lowering on all functions.
-pub fn select_lowering(project: &mut Project) {
+pub fn select_lowering(project: &mut Package) {
     let mut visitor = SelectLoweringVisitor;
     for module in project.tir_modules.values_mut() {
         for func_rc in &module.functions {

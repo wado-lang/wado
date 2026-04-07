@@ -4,7 +4,7 @@
 
 use crate::wir::{
     COMP_FEATURE_STRING_PUSH_CHAR, COMP_FEATURE_STRING_PUSH_STR, WirData, WirFuncId, WirInstr,
-    WirModule,
+    WirPackage,
 };
 use crate::wir_visitor::WirMutVisitor;
 
@@ -28,7 +28,7 @@ use crate::wir_visitor::WirMutVisitor;
 /// Call { func_id: <push_char>, args: [receiver, I32Const(byte1)] }
 /// ...
 /// ```
-pub(super) fn simplify_short_string_pushes(module: &mut WirModule) {
+pub(super) fn simplify_short_string_pushes(module: &mut WirPackage) {
     // Find push_str and push_char function indices.
     let mut push_str_func_id: Option<WirFuncId> = None;
     let mut push_char_func_id: Option<WirFuncId> = None;

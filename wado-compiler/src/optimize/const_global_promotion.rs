@@ -13,7 +13,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmtKind};
 
 use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_expr};
@@ -21,7 +21,7 @@ use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_expr};
 type GlobalKey = (ModuleSource, String);
 
 /// Try to promote constant globals in all modules.
-pub fn promote_constant_globals(project: &mut Project) -> bool {
+pub fn promote_constant_globals(project: &mut Package) -> bool {
     let mut changed = false;
     let module_sources: Vec<_> = project.tir_modules.keys().cloned().collect();
     for module_source in module_sources {
@@ -30,7 +30,7 @@ pub fn promote_constant_globals(project: &mut Project) -> bool {
     changed
 }
 
-fn promote_in_module(project: &mut Project, module_source: &ModuleSource) -> bool {
+fn promote_in_module(project: &mut Package, module_source: &ModuleSource) -> bool {
     let module = &project.tir_modules[module_source];
 
     // Build a lookup of promotable globals: currently Wasm-mutable but user-declared immutable

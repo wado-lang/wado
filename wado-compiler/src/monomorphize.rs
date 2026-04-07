@@ -36,7 +36,7 @@ fn generic_function_key(is_method: bool, module_source: &ModuleSource, name: &st
     }
 }
 
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{ResolvedType, TirFunction, TirModule, TirStruct, TypeId, TypeTable};
 
 use state::Monomorphizer;
@@ -56,11 +56,11 @@ pub fn monomorphize_module(module: TirModule) -> TirModule {
     )
 }
 
-/// Monomorphize a Project (Project -> Project)
+/// Monomorphize a Package (Package -> Package)
 ///
 /// This is the main entry point for the monomorphize phase. It monomorphizes all TIR modules
 /// in the project with cross-module generic function support.
-pub fn monomorphize_project(mut project: Project) -> Project {
+pub fn monomorphize_project(mut project: Package) -> Package {
     project.tir_modules = monomorphize_modules_indexed(project.tir_modules);
 
     // Strip effect params from all functions. Effect params have been validated by the

@@ -39,7 +39,7 @@ use crate::compiler_host::CompilerHost;
 use crate::component_model::WasiRegistry;
 use crate::logger::{Bail, Logger};
 use crate::name::{self as name, MethodName, ModuleSource};
-use crate::project::Project;
+use crate::package::Package;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TirNewtype, TypeId,
@@ -792,10 +792,10 @@ pub fn resolve_module<H: CompilerHost>(
     resolver.resolve_module(module, module_source)
 }
 
-/// Resolve all modules and return a Project ready for lowering.
+/// Resolve all modules and return a Package ready for lowering.
 ///
 /// This is the main entry point for the resolve phase. It resolves all modules
-/// to TIR and packages them into a Project struct.
+/// to TIR and packages them into a Package struct.
 pub fn resolve_to_project<H: CompilerHost>(
     symbols: SymbolTable,
     modules: &IndexMap<ModuleSource, Module>,
@@ -804,7 +804,7 @@ pub fn resolve_to_project<H: CompilerHost>(
     module_name: String,
     logger: &Logger<H>,
     included_files: &IndexMap<[String; 2], Vec<u8>>,
-) -> Result<Project, Bail> {
+) -> Result<Package, Bail> {
     let tir_modules = Resolver::resolve_all_modules(
         &symbols,
         modules,
@@ -820,7 +820,7 @@ pub fn resolve_to_project<H: CompilerHost>(
     let builtin_registry =
         crate::builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
-    Ok(Project::new(
+    Ok(Package::new(
         entry_module_source,
         tir_modules,
         symbols,

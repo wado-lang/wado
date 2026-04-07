@@ -5,7 +5,7 @@
 //! eliminating GC struct allocation at every call site.
 
 use crate::hashmap::IndexSet;
-use crate::wir::{WirFuncType, WirInstr, WirModule, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 
 use super::sroa_return::is_eligible_field_type;
 use super::util::collect_pinned_func_ids;
@@ -23,7 +23,7 @@ use super::util::collect_pinned_func_ids;
 ///   a. `StructGet { field_name: "value", expr: LocalGet(param) }` — scalar read
 ///   b. As an argument to another function at a position that is also being SROA'd
 /// - The function is not exported, not in an element table, and not `RefFunc`'d
-pub(super) fn sroa_single_field_parameters(module: &mut WirModule) {
+pub(super) fn sroa_single_field_parameters(module: &mut WirPackage) {
     let pinned = collect_pinned_func_ids(module);
 
     // Phase 1: identify candidate (func_id, param_index) pairs.

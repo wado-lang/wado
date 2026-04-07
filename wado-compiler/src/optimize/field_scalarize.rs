@@ -27,7 +27,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::ModuleSource;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
@@ -42,7 +42,7 @@ type ParamFieldUsage = Option<IndexSet<u32>>;
 /// Maps each function (by module + name) to its per-parameter field usage.
 type FieldUsageCache = IndexMap<(ModuleSource, String), IndexMap<u32, ParamFieldUsage>>;
 
-pub fn scalarize_hot_fields(project: &mut Project) -> bool {
+pub fn scalarize_hot_fields(project: &mut Package) -> bool {
     // Phase 1: Build field usage cache (immutable access to all functions)
     let cache = build_field_usage_cache(&project.tir_modules);
 

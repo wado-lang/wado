@@ -24,7 +24,7 @@
 //!   and remove dead let statements.
 
 use crate::hashmap::IndexMap;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
@@ -1004,7 +1004,7 @@ fn eliminate_refs_in_function(func: &mut TirFunction, _type_table: &TypeTable) -
 /// Eliminate unnecessary reference bindings in all functions.
 ///
 /// Main entry point for reference elimination optimization.
-pub fn eliminate_unnecessary_refs(project: &mut Project) -> bool {
+pub fn eliminate_unnecessary_refs(project: &mut Package) -> bool {
     let mut changed = false;
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.borrow();

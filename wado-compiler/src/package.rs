@@ -1,12 +1,12 @@
-//! Project - Compilation context for Wado programs
+//! Package - Compilation context for Wado programs
 //!
-//! This module provides the `Project` struct which encapsulates all
+//! This module provides the `Package` struct which encapsulates all
 //! compilation context needed for code generation.
 //!
 //! The compilation flow is:
-//! 1. Parse/analyze -> Project (unoptimized)
-//! 2. Optimize -> Project (optimized, with usage analysis)
-//! 3. Codegen takes Project and generates Wasm
+//! 1. Parse/analyze -> Package (unoptimized)
+//! 2. Optimize -> Package (optimized, with usage analysis)
+//! 3. Codegen takes Package and generates Wasm
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
@@ -19,11 +19,11 @@ use crate::world_registry::{self, WorldRegistry};
 
 /// A Wado project ready for code generation.
 ///
-/// A Project is a representation of a WebAssembly Component Model component.
+/// A Package is a representation of a WebAssembly Component Model component.
 /// It contains all the information needed to compile a Wado program,
 /// including the results of optimization analysis.
 #[derive(Debug)]
-pub struct Project {
+pub struct Package {
     /// The entry module source
     pub entry_module_source: ModuleSource,
     /// All TIR modules indexed by module source
@@ -71,8 +71,8 @@ pub struct Project {
     pub component_plan: Option<ComponentPlan>,
 }
 
-impl Project {
-    /// Create a new Project from compilation artifacts (before optimization).
+impl Package {
+    /// Create a new Package from compilation artifacts (before optimization).
     pub fn new(
         entry_module_source: ModuleSource,
         tir_modules: IndexMap<ModuleSource, TirModule>,

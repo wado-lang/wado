@@ -152,7 +152,7 @@ fn sort_types_topologically<'a>(
         .collect()
 }
 
-/// Register all types from the Project into the `WirContext`.
+/// Register all types from the Package into the `WirContext`.
 ///
 /// This follows a multi-phase registration order to ensure type dependencies
 /// are satisfied.

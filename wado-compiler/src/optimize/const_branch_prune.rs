@@ -9,7 +9,7 @@
 //! - Empty blocks → `()`
 
 use crate::hashmap::IndexMap;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 
 use crate::tir_visitor::{
@@ -18,7 +18,7 @@ use crate::tir_visitor::{
 };
 
 /// Prune constant branches and simplify trivial blocks in all functions.
-pub fn prune_constant_branches(project: &mut Project) -> bool {
+pub fn prune_constant_branches(project: &mut Package) -> bool {
     let mut visitor = BranchPruner;
     visit_project_functions(project, &mut visitor)
 }

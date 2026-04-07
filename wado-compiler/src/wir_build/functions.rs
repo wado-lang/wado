@@ -1,4 +1,4 @@
-//! Function collection — gathers all reachable functions from the Project,
+//! Function collection — gathers all reachable functions from the Package,
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
 use crate::name::{FreeFunctionName, FunctionId, MethodName, ModuleSource};
@@ -9,7 +9,7 @@ use crate::wir::{
 
 use super::context::{PendingFunctionBody, WirContext};
 
-/// Collect all functions from the Project, register imports, and create function stubs.
+/// Collect all functions from the Package, register imports, and create function stubs.
 pub fn collect_functions(ctx: &mut WirContext<'_>) {
     // Step 1: Register builtin + bundled imports
     register_imports(ctx);
@@ -74,7 +74,7 @@ fn register_imports(ctx: &mut WirContext<'_>) {
         );
 
         // Track "wasi" namespace imports as needed canonical intrinsics.
-        // This ensures they appear in WirModule::needed_canonicals, which is
+        // This ensures they appear in WirPackage::needed_canonicals, which is
         // the single source of truth for component codegen.
         if import.namespace == "wasi"
             && let Some(intrinsic) = CanonicalIntrinsic::from_import_name(&import.canonical_name)
@@ -672,7 +672,7 @@ fn build_mangled_name(tir_func: &TirFunction, _module_source: &ModuleSource) -> 
 }
 
 /// Check if a function has unsupported effects.
-fn has_unsupported_effects(tir_func: &TirFunction, project: &crate::project::Project) -> bool {
+fn has_unsupported_effects(tir_func: &TirFunction, project: &crate::package::Package) -> bool {
     if tir_func.effects.is_empty() {
         return false;
     }

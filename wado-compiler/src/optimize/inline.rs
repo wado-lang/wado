@@ -6,7 +6,7 @@
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionRef, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
@@ -481,7 +481,7 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
 ///
 /// The `inline_threshold` parameter controls the maximum number of statements
 /// a function can have to be considered for inlining.
-pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool {
+pub fn inline_functions(project: &mut Package, inline_threshold: usize) -> bool {
     let recursive_functions = find_recursive_functions(&project.tir_modules);
 
     // Collect inline candidates from all modules

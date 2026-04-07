@@ -1,4 +1,4 @@
-//! WIR emission — converts a `WirModule` into core Wasm module binary bytes.
+//! WIR emission — converts a `WirPackage` into core Wasm module binary bytes.
 //!
 //! This module handles the mechanical translation from WIR's tree-structured
 //! representation to flat Wasm instructions and binary encoding.
@@ -7,7 +7,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirCopyType, WirExportDesc, WirFuncType, WirFunction,
-    WirImportDesc, WirInstr, WirModule, WirStructType, WirType, WirTypeDef, WirTypeId,
+    WirImportDesc, WirInstr, WirPackage, WirStructType, WirType, WirTypeDef, WirTypeId,
     WirVariantType,
 };
 
@@ -19,15 +19,15 @@ use wasm_encoder::{
     RefType, StorageType, StructType, SubType, TypeSection, ValType,
 };
 
-/// Emit a core Wasm module from a `WirModule`.
-pub fn emit_core_module(wir: &WirModule, strip_names: bool) -> Vec<u8> {
+/// Emit a core Wasm module from a `WirPackage`.
+pub fn emit_core_module(wir: &WirPackage, strip_names: bool) -> Vec<u8> {
     let mut emitter = WirEmitter::new(wir, strip_names);
     emitter.emit()
 }
 
-/// Emitter state for converting `WirModule` to Wasm binary.
+/// Emitter state for converting `WirPackage` to Wasm binary.
 struct WirEmitter<'a> {
-    wir: &'a WirModule,
+    wir: &'a WirPackage,
     /// Map from `WirTypeDef` index → Wasm type section index.
     /// For structs: maps to the single struct type index.
     /// For variants: maps to the base type index (case subtypes follow immediately).
@@ -64,7 +64,7 @@ struct WirEmitter<'a> {
 }
 
 impl<'a> WirEmitter<'a> {
-    fn new(wir: &'a WirModule, strip_names: bool) -> Self {
+    fn new(wir: &'a WirPackage, strip_names: bool) -> Self {
         Self {
             wir,
             type_index_map: IndexMap::default(),

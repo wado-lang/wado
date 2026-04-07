@@ -21,7 +21,7 @@ mod wide_int;
 use crate::hashmap::IndexMap;
 
 use crate::name::ModuleSource;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::TirModule;
 
 use boxing::BoxLowerer;
@@ -78,11 +78,11 @@ fn lower_post_boxing(module: &mut TirModule) {
     module.function_method_info = function_method_info;
 }
 
-/// Lower a Project (Project -> Project)
+/// Lower a Package (Package -> Package)
 ///
 /// This is the main entry point for the lower phase. It lowers all TIR modules
 /// in the project.
-pub fn lower_project(mut project: Project) -> Project {
+pub fn lower_project(mut project: Package) -> Package {
     project.tir_modules = lower_modules_indexed(project.tir_modules);
 
     // Post-processing: generate __initialize_modules in entry module

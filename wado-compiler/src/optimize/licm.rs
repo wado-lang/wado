@@ -6,7 +6,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
@@ -82,7 +82,7 @@ impl ModifiedVars {
 }
 
 /// Apply Loop-Invariant Code Motion to all functions in the project.
-pub fn apply_licm(project: &mut Project) -> bool {
+pub fn apply_licm(project: &mut Package) -> bool {
     let mut changed = false;
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.borrow();

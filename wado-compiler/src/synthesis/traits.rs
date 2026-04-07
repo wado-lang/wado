@@ -15,7 +15,7 @@ use std::rc::Rc;
 use crate::hashmap::IndexSet;
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirTypeParam, TirUnaryOp,
@@ -31,7 +31,7 @@ use super::common::{
 ///
 /// For each module, generates Eq/Ord, Inspect, `InspectAlt`, Display, and `DisplayAlt`
 /// implementations for types that don't already have user-provided implementations.
-pub fn synthesize_traits(project: Project) -> Project {
+pub fn synthesize_traits(project: Package) -> Package {
     let mut project = project;
     for module in project.tir_modules.values_mut() {
         generate_enum_trait_impls(module);

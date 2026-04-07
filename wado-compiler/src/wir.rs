@@ -25,7 +25,7 @@ use crate::token::Span;
 /// A complete Wasm module in WIR form.
 /// Contains all information needed to emit a valid Wasm binary.
 #[derive(Debug)]
-pub struct WirModule {
+pub struct WirPackage {
     /// Type definitions: Wado-level types (struct, variant, enum, flags, array, func).
     /// Not a 1:1 mapping to the Wasm type section — the emit phase expands these.
     pub types: Vec<WirTypeDef>,
@@ -105,10 +105,10 @@ pub struct WasmModuleFunc {
 }
 
 impl WasmModuleInfo {
-    /// Convert this extracted module info into a standalone `WirModule`
+    /// Convert this extracted module info into a standalone `WirPackage`
     /// that can be emitted via `emit_core_module`.
-    pub fn to_wir_module(&self, strip_names: bool, memory: WirMemory) -> WirModule {
-        let mut wir = WirModule::empty();
+    pub fn to_wir_package(&self, strip_names: bool, memory: WirMemory) -> WirPackage {
+        let mut wir = WirPackage::empty();
 
         // Build func index remap: original global index → local module index
         let func_index_remap: IndexMap<u32, u32> = self
@@ -221,8 +221,8 @@ fn remap_func_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
     }
 }
 
-impl WirModule {
-    /// Create an empty `WirModule` with no types, functions, or other content.
+impl WirPackage {
+    /// Create an empty `WirPackage` with no types, functions, or other content.
     pub fn empty() -> Self {
         Self {
             types: Vec::new(),
@@ -508,9 +508,9 @@ impl fmt::Display for WirName {
     }
 }
 
-/// Lightweight reference to a type definition in `WirModule.types`.
+/// Lightweight reference to a type definition in `WirPackage.types`.
 ///
-/// - `index`: indexes into `WirModule.types` (not the Wasm type section)
+/// - `index`: indexes into `WirPackage.types` (not the Wasm type section)
 /// - `fq`: fully-qualified name shared via `Rc<str>` for Debug output
 ///
 /// `Eq` and `Hash` use `index` only (O(1) integer operations).
@@ -528,7 +528,7 @@ impl WirTypeId {
         Self { index, fq }
     }
 
-    /// Get the index into `WirModule.types`.
+    /// Get the index into `WirPackage.types`.
     pub fn index(&self) -> u32 {
         self.index
     }
@@ -579,7 +579,7 @@ impl WirFuncId {
         Self { index, fq }
     }
 
-    /// Get the index into `WirModule.functions`.
+    /// Get the index into `WirPackage.functions`.
     pub fn index(&self) -> u32 {
         self.index
     }
@@ -969,7 +969,7 @@ pub const COMP_FEATURE_TUPLE: u32 = 1 << 7;
 pub struct WirFunction {
     /// Function name (fq: "./`geometry.wado//Point::sum`").
     pub name: WirName,
-    /// Function type ID (references a `WirTypeDef::Func` in `WirModule.types`).
+    /// Function type ID (references a `WirTypeDef::Func` in `WirPackage.types`).
     pub type_id: WirTypeId,
     /// Parameter names (types come from the referenced `WirFuncType`).
     pub param_names: Vec<String>,
@@ -2956,7 +2956,7 @@ pub struct WirCopyCase {
 /// Rec group: a set of mutually-recursive type definitions.
 #[derive(Debug)]
 pub struct WirRecGroup {
-    /// Indices into `WirModule.types`.
+    /// Indices into `WirPackage.types`.
     pub type_indices: Vec<u32>,
 }
 

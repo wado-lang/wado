@@ -12,7 +12,7 @@
 //! and inclusive `<=` guard patterns.
 
 use crate::hashmap::IndexMap;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
 };
@@ -63,7 +63,7 @@ enum FieldSource {
 
 type DefMap = IndexMap<u32, Def>;
 
-pub fn eliminate_implied_conditions(project: &mut Project) -> bool {
+pub fn eliminate_implied_conditions(project: &mut Package) -> bool {
     let mut changed = false;
     for module in project.tir_modules.values_mut() {
         for func_rc in &module.functions {

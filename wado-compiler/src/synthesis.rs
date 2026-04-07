@@ -17,7 +17,7 @@ pub mod serde_synth;
 pub mod template;
 pub mod traits;
 
-use crate::project::Project;
+use crate::package::Package;
 
 /// Run pre-monomorphize synthesis phases on the project.
 ///
@@ -25,7 +25,7 @@ use crate::project::Project;
 /// 1. Traits — generates `Eq`/`Ord` for enums, `Inspect`/`Display` for all types
 /// 2. Template expansion — expands `TemplateString` nodes into trait method calls
 /// 3. CM bindings — generates Component Model boundary adapters
-pub fn synthesize(project: Project) -> Result<Project, String> {
+pub fn synthesize(project: Package) -> Result<Package, String> {
     let project = traits::synthesize_traits(project);
 
     // Generate From impls from `impl From<T> for Type;` requests.

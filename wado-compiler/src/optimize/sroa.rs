@@ -26,7 +26,7 @@
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField,
     TirUnaryOp, TypeId, TypeTable,
@@ -53,7 +53,7 @@ struct SroaCandidate {
 }
 
 /// Build a lookup table mapping (`module_source`, `func_name`) → set of stored param indices.
-fn build_stores_lookup(project: &Project) -> StoresLookup {
+fn build_stores_lookup(project: &Package) -> StoresLookup {
     let mut lookup = StoresLookup::default();
     for (module_source, module) in &project.tir_modules {
         for func_rc in &module.functions {
@@ -77,7 +77,7 @@ fn build_stores_lookup(project: &Project) -> StoresLookup {
 }
 
 /// Apply SROA to all functions in the project.
-pub fn scalar_replace_aggregates(project: &mut Project) -> bool {
+pub fn scalar_replace_aggregates(project: &mut Package) -> bool {
     let stores_lookup = build_stores_lookup(project);
     let mut changed = false;
     for (module_source, module) in &mut project.tir_modules {

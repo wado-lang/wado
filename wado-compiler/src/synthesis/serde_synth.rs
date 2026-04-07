@@ -9,7 +9,7 @@ use std::rc::Rc;
 use crate::hashmap::IndexSet;
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_local_trait_method};
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
@@ -69,7 +69,7 @@ fn snake_to_camel(s: &str) -> String {
     result
 }
 
-pub fn synthesize_serde(project: &mut Project) {
+pub fn synthesize_serde(project: &mut Package) {
     for module in project.tir_modules.values_mut() {
         let requests: Vec<_> = module.synthesis_requests.drain(..).collect();
         if requests.is_empty() {

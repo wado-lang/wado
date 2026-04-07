@@ -35,7 +35,7 @@
 //! receiver (`self`), never passed as a regular function argument.
 
 use crate::hashmap::IndexSet;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
     TypeTable,
@@ -43,7 +43,7 @@ use crate::tir::{
 use crate::token::Span;
 
 /// Apply template string buffer hoisting to all functions in the project.
-pub fn hoist_template_buffers(project: &mut Project) -> bool {
+pub fn hoist_template_buffers(project: &mut Package) -> bool {
     let mut changed = false;
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.clone();

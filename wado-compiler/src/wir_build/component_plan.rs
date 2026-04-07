@@ -4,7 +4,7 @@
 //! structure. Built by `wir_build::plan_project`, consumed by `codegen`.
 
 use crate::ast::Type;
-use crate::project::Project;
+use crate::package::Package;
 use crate::world_registry::WorldExportInfo;
 
 /// Plan for the Component Model structure.
@@ -14,7 +14,7 @@ use crate::world_registry::WorldExportInfo;
 ///
 /// Canonical intrinsics (e.g., "stream-read", "task-return") are NOT stored here.
 /// They are discovered lazily during WIR translation via `WirContext::ensure_canonical`
-/// and stored in `WirModule::needed_canonicals`.
+/// and stored in `WirPackage::needed_canonicals`.
 #[derive(Debug, Clone, Default)]
 pub struct ComponentPlan {
     /// Bundled module function names (e.g., "`libm_sin`").
@@ -69,7 +69,7 @@ pub struct TestExportPlan {
 ///
 /// Canonical intrinsics are NOT collected here — they are discovered lazily
 /// during WIR translation via `WirContext::ensure_canonical`.
-pub fn build_component_plan(project: &Project) -> ComponentPlan {
+pub fn build_component_plan(project: &Package) -> ComponentPlan {
     let entry_tir = project.entry_module();
 
     // Collect bundled module functions from TIR imports with namespace "bundled"
@@ -122,7 +122,7 @@ pub fn build_component_plan(project: &Project) -> ComponentPlan {
 }
 
 /// Build world export plans from the world registry.
-fn build_world_export_plans(project: &Project) -> Vec<WorldExportPlan> {
+fn build_world_export_plans(project: &Package) -> Vec<WorldExportPlan> {
     let exports: Vec<WorldExportInfo> = project
         .world_registry
         .get(&project.target_world)

@@ -12,7 +12,7 @@
 //!   observable behavior.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirFuncType, WirInstr, WirModule, WirTypeDef, WirTypeId};
+use crate::wir::{WirFuncType, WirInstr, WirPackage, WirTypeDef, WirTypeId};
 
 use super::util::{collect_pinned_func_ids, is_side_effect_free};
 
@@ -21,7 +21,7 @@ use super::util::{collect_pinned_func_ids, is_side_effect_free};
 /// Finds non-pinned functions with unused parameters, verifies all call sites
 /// pass side-effect-free arguments at those positions, then removes the dead
 /// parameters and arguments.
-pub(super) fn eliminate_dead_arguments(module: &mut WirModule) {
+pub(super) fn eliminate_dead_arguments(module: &mut WirPackage) {
     let pinned = collect_pinned_func_ids(module);
 
     let candidates = find_dae_candidates(module, &pinned);
@@ -45,7 +45,7 @@ struct DaeCandidate {
 }
 
 /// Scan all defined functions for unused parameters.
-fn find_dae_candidates(module: &WirModule, pinned: &IndexSet<u32>) -> Vec<(u32, DaeCandidate)> {
+fn find_dae_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32, DaeCandidate)> {
     let mut candidates = Vec::new();
 
     for (i, func) in module.functions.iter().enumerate() {
@@ -121,7 +121,7 @@ fn collect_referenced_locals_instr(instr: &WirInstr, names: &mut IndexSet<String
 /// Validate that every call site to each candidate passes side-effect-free
 /// arguments at dead parameter positions.
 fn validate_dae_call_sites(
-    module: &WirModule,
+    module: &WirPackage,
     candidates: &[(u32, DaeCandidate)],
 ) -> Vec<(u32, DaeCandidate)> {
     let candidate_map: IndexMap<u32, &DaeCandidate> =
@@ -189,7 +189,7 @@ fn check_dae_call_sites_instr(
 
 /// Apply DAE: remove dead parameters from function types and `param_names`,
 /// and remove corresponding arguments from all call sites.
-fn apply_dae(module: &mut WirModule, confirmed: &[(u32, DaeCandidate)]) {
+fn apply_dae(module: &mut WirPackage, confirmed: &[(u32, DaeCandidate)]) {
     // Build a map from func_id → dead_params for efficient lookup during rewriting.
     let dae_map: IndexMap<u32, &Vec<bool>> = confirmed
         .iter()

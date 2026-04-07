@@ -7,7 +7,7 @@
 //!
 //! Also provides utility functions for common TIR queries like `block_has_break_to`.
 
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirPattern, TirStmt, TirStmtKind, TirTemplatePart,
 };
@@ -843,7 +843,7 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
 }
 
 /// Apply a visitor to all function bodies in a project.
-pub fn visit_project_functions(project: &mut Project, visitor: &mut impl TirOptVisitor) -> bool {
+pub fn visit_project_functions(project: &mut Package, visitor: &mut impl TirOptVisitor) -> bool {
     let mut changed = false;
     for module in project.tir_modules.values_mut() {
         for func_rc in &module.functions {

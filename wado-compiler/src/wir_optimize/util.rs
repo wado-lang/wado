@@ -1,11 +1,11 @@
 //! Shared utility functions for WIR optimization passes.
 
 use crate::hashmap::IndexSet;
-use crate::wir::{WirExportDesc, WirInstr, WirModule};
+use crate::wir::{WirExportDesc, WirInstr, WirPackage};
 
 /// Collect all `func_ids` that must NOT be SROA'd or otherwise transformed
 /// (exports, element tables, `RefFunc` references).
-pub(super) fn collect_pinned_func_ids(module: &WirModule) -> IndexSet<u32> {
+pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
     let mut pinned = IndexSet::default();
 
     // Exported functions

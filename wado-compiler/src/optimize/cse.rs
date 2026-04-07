@@ -24,13 +24,13 @@
 //! ```
 
 use crate::hashmap::IndexSet;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId,
 };
 use crate::token::Span;
 
-pub fn eliminate_common_subexprs(project: &mut Project) -> bool {
+pub fn eliminate_common_subexprs(project: &mut Package) -> bool {
     let mut changed = false;
     for module in project.tir_modules.values_mut() {
         for func_rc in &module.functions {

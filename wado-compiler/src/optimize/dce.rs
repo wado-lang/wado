@@ -15,7 +15,7 @@ use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
     mangle_local_method, mangle_local_trait_method, mangle_method_generic,
 };
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule, TirStmt,
     TirStmtKind, TypeId, TypeTable,
@@ -41,7 +41,7 @@ struct FunctionAnalysis {
 /// This performs dead code elimination analysis starting from the entry point
 /// and populates the project's `reachable_functions`, `used_wasi_functions`
 /// fields, and the entry module's `imports` list.
-pub fn analyze_project(project: &mut Project) {
+pub fn analyze_project(project: &mut Package) {
     // Build call graph and effect usage from all modules
     let (call_graph, effect_usage) = build_analysis_graph(&project.tir_modules);
 
@@ -1069,7 +1069,7 @@ fn compute_reachable(
 ///
 /// This physically removes functions that are not in `reachable_functions`
 /// from the TIR, so codegen doesn't need to filter them.
-pub fn remove_unreachable_functions(project: &mut Project) {
+pub fn remove_unreachable_functions(project: &mut Package) {
     for (module_source, module) in &mut project.tir_modules {
         // Retain only reachable functions
         module.functions.retain(|func_rc| {
@@ -1183,7 +1183,7 @@ fn is_generic_func_reachable(
 /// Compute the set of reachable types from reachable functions.
 /// A type is reachable if it's used in any reachable function's signature,
 /// locals, or expressions.
-fn compute_reachable_types(project: &Project) -> IndexSet<TypeId> {
+fn compute_reachable_types(project: &Package) -> IndexSet<TypeId> {
     let mut reachable_types: IndexSet<TypeId> = IndexSet::default();
 
     // Always include primitive types (TypeId 0-17)
@@ -1749,7 +1749,7 @@ fn collect_type_dependencies(
 
 /// Remove unreachable types from the project's `TypeTable` and module definitions.
 /// This should be called after function DCE.
-pub fn remove_unreachable_types(project: &mut Project) {
+pub fn remove_unreachable_types(project: &mut Package) {
     let reachable_types = compute_reachable_types(project);
 
     // Remove unreachable struct/variant/enum definitions from each module
@@ -1880,7 +1880,7 @@ pub fn remove_unreachable_types(project: &mut Project) {
 /// 1. Its declaration is removed from `module.globals`
 /// 2. Any `GlobalVarSet` statements for it are removed from function bodies
 ///    (this covers both the original `__initialize_module` and inlined copies)
-pub fn remove_unreachable_globals(project: &mut Project) {
+pub fn remove_unreachable_globals(project: &mut Package) {
     // Phase 1: Collect all GlobalVarGet references from surviving functions.
     // Key: (module_source path as string, global name)
     let mut used_globals: IndexSet<(String, String)> = IndexSet::default();

@@ -14,7 +14,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
@@ -860,7 +860,7 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
 }
 
 /// Apply copy propagation to all functions in the project.
-pub fn propagate_copies(project: &mut Project) -> bool {
+pub fn propagate_copies(project: &mut Package) -> bool {
     let mut changed = false;
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.borrow();

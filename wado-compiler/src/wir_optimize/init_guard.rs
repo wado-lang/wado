@@ -4,9 +4,9 @@
 //! (`if global { break; }; global = 1;`) with no actual init work.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirExportDesc, WirInstr, WirModule};
+use crate::wir::{WirExportDesc, WirInstr, WirPackage};
 
-pub(super) fn remove_trivial_init_globals(module: &mut WirModule) {
+pub(super) fn remove_trivial_init_globals(module: &mut WirPackage) {
     // Collect globals that appear only in the trivial-init pattern.
     // First, find all globals that appear in ANY non-trivial-guard context.
     let num_globals = module.globals.len();

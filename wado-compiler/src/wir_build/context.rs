@@ -1,5 +1,5 @@
 //! WIR builder context — accumulates types, functions, and other module-level
-//! entries during the `tir_to_wir` translation, then produces a final `WirModule`.
+//! entries during the `tir_to_wir` translation, then produces a final `WirPackage`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -7,11 +7,11 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{ModuleSource, StructName};
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{TirFunction, TypeId, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
-    WirGlobal, WirImport, WirImportDesc, WirModule, WirName, WirNames, WirRecGroup, WirType,
+    WirGlobal, WirImport, WirImportDesc, WirPackage, WirName, WirNames, WirRecGroup, WirType,
     WirTypeDef, WirTypeId,
 };
 
@@ -27,7 +27,7 @@ pub const DEFINED_FUNC_BASE: u32 = 0x8000_0000;
 /// type and function references during translation.
 pub struct WirContext<'a> {
     /// Reference to the immutable project data.
-    pub project: &'a Project,
+    pub project: &'a Package,
 
     // === Type Registry ===
     /// All type definitions in registration order.
@@ -129,8 +129,8 @@ pub struct PendingFunctionBody {
 }
 
 impl<'a> WirContext<'a> {
-    /// Create a new `WirContext` from a Project.
-    pub fn new(project: &'a Project) -> Self {
+    /// Create a new `WirContext` from a Package.
+    pub fn new(project: &'a Package) -> Self {
         // Collect string literals from all TIR modules (deduped)
         let mut seen: IndexSet<&str> = IndexSet::default();
         let mut string_literals = Vec::new();
@@ -852,10 +852,10 @@ impl<'a> WirContext<'a> {
         Some(type_id)
     }
 
-    // === Build Final WirModule ===
+    // === Build Final WirPackage ===
 
-    /// Consume this context and produce the final `WirModule`.
-    pub fn into_wir_module(self) -> WirModule {
+    /// Consume this context and produce the final `WirPackage`.
+    pub fn into_wir_package(self) -> WirPackage {
         let functions = self.functions;
         let globals = self.globals;
         let global_map = &self.global_map;
@@ -957,7 +957,7 @@ impl<'a> WirContext<'a> {
             })
             .collect();
 
-        WirModule {
+        WirPackage {
             types: self.types,
             rec_groups: self.rec_groups,
             imports: self.imports,

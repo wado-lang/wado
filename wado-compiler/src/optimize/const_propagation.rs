@@ -6,7 +6,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
-use crate::project::Project;
+use crate::package::Package;
 use crate::tir::{TirExpr, TirExprKind};
 
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, visit_project_functions};
@@ -55,7 +55,7 @@ fn extract_const_value(expr: &TirExpr) -> Option<ConstValue> {
 type GlobalKey = (ModuleSource, String);
 
 /// Apply constant propagation to all functions in the project.
-pub fn propagate_constants(project: &mut Project) -> bool {
+pub fn propagate_constants(project: &mut Package) -> bool {
     let mut constants: IndexMap<GlobalKey, ConstValue> = IndexMap::default();
     for module in project.tir_modules.values() {
         for global in &module.globals {

@@ -5,7 +5,7 @@
 //! and the `drop` at call sites.
 
 use crate::hashmap::IndexSet;
-use crate::wir::{WirFuncType, WirInstr, WirModule, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 
 use super::util::{collect_pinned_func_ids, is_side_effect_free};
@@ -18,7 +18,7 @@ use super::util::{collect_pinned_func_ids, is_side_effect_free};
 ///
 /// Those functions are converted to void return, the `StructNew` is removed from
 /// returns, and the Drop wrapper is removed at each call site.
-pub(super) fn eliminate_dead_return_values(module: &mut WirModule) {
+pub(super) fn eliminate_dead_return_values(module: &mut WirPackage) {
     let pinned = collect_pinned_func_ids(module);
 
     let candidates = find_drve_candidates(module, &pinned);
@@ -38,7 +38,7 @@ struct DrveCandidate {
     func_array_idx: usize,
 }
 
-fn find_drve_candidates(module: &WirModule, pinned: &IndexSet<u32>) -> Vec<(u32, DrveCandidate)> {
+fn find_drve_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32, DrveCandidate)> {
     let mut candidates = Vec::new();
 
     for (i, func) in module.functions.iter().enumerate() {
@@ -115,7 +115,7 @@ impl WirRefVisitor for AllReturnsPureStructNew {
 }
 
 fn validate_drve_call_sites(
-    module: &WirModule,
+    module: &WirPackage,
     candidates: &[(u32, DrveCandidate)],
 ) -> Vec<(u32, DrveCandidate)> {
     let candidate_ids: IndexSet<u32> = candidates.iter().map(|(id, _)| *id).collect();
@@ -192,7 +192,7 @@ fn find_drve_candidate_calls(
     });
 }
 
-fn apply_drve(module: &mut WirModule, confirmed: &[(u32, DrveCandidate)]) {
+fn apply_drve(module: &mut WirPackage, confirmed: &[(u32, DrveCandidate)]) {
     let candidate_set: IndexSet<u32> = confirmed.iter().map(|(id, _)| *id).collect();
 
     // Step A: Change function return types to void and rewrite returns.
