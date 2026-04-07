@@ -444,7 +444,6 @@ impl<'a> WirUnparser<'a> {
         self.write(" = ");
         self.unparse_instr_inline(&global.init);
         self.write(";");
-        self.unparse_source_comment(&global.meta);
         self.newline();
     }
 
@@ -477,7 +476,6 @@ impl<'a> WirUnparser<'a> {
         }
 
         self.write(" {");
-        self.unparse_source_comment(&func.meta);
         self.newline();
 
         if let Some(ref body) = func.body {
@@ -2021,10 +2019,6 @@ impl<'a> WirUnparser<'a> {
         // Close the if/else block
         self.write_indent();
         self.write("}");
-    }
-
-    fn unparse_source_comment(&mut self, _meta: &crate::wir::WirMeta) {
-        // Intentionally omitted: "// from ..." comments add noise without value.
     }
 
     fn unparse_type_comment(&mut self, type_idx: usize, _meta: &crate::wir::WirMeta) {
