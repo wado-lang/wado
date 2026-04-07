@@ -60,14 +60,15 @@ pub struct FlatPackage {
     pub bytes_literals: Vec<Vec<u8>>,
     /// Closure functor metadata (each carries its own `module_source`)
     pub closure_functors: Vec<ClosureFunctor>,
-    /// Data section content (from entry module)
+    /// Data section content (from entry module).
+    /// Only used by the `wado dump` unparser; not part of the compilation pipeline.
     pub data_section: Option<String>,
     /// Map of (`ModuleSource`, function name) to string literals it contains (for DCE)
     pub function_strings: IndexMap<(ModuleSource, String), Vec<String>>,
     /// Map of (`ModuleSource`, function name) to method info (for DCE)
     pub function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
-    /// Map of module source prefix to wasm module name (from `#![wasm_module("name")]`)
-    pub wasm_module_sources: IndexMap<String, String>,
+    /// Map of module source to wasm module name (from `#![wasm_module("name")]`)
+    pub wasm_module_sources: IndexMap<ModuleSource, String>,
 
     /// Module name for the output (derived from filename)
     pub module_name: String,

@@ -101,9 +101,9 @@ pub struct WirContext<'a> {
     pub available_wasi_funcs: IndexSet<String>,
 
     // === Wasm module tracking ===
-    /// Map from `ModuleSource` prefix (e.g., "core/allocator") to wasm module name (e.g., "mem").
+    /// Map from `ModuleSource` to wasm module name (e.g., "mem").
     /// Functions/globals from these modules are extracted into separate wasm core modules.
-    pub wasm_module_sources: IndexMap<String, String>,
+    pub wasm_module_sources: IndexMap<ModuleSource, String>,
 
     // === Function body translation helpers ===
     /// Pending function bodies: (function index in self.functions, `TirFunction` ref, `TypeTable` ref)
@@ -172,13 +172,16 @@ impl<'a> WirContext<'a> {
             data: Vec::new(),
             string_literal_map: IndexMap::default(),
             bytes_literal_map: IndexMap::default(),
-            names: WirNames::default(),
+            names: WirNames {
+                module_name: Some(package.module_name.clone()),
+                ..WirNames::default()
+            },
             canonical_closure_types: IndexMap::default(),
             closure_wrapper_funcs: IndexMap::default(),
             canonical_closure_counter: 0,
             string_literals,
             bytes_literals,
-            wasm_module_sources: IndexMap::default(),
+            wasm_module_sources: IndexMap::<ModuleSource, String>::default(),
             available_wasi_funcs: IndexSet::default(),
             pending_bodies: Vec::new(),
             needed_canonicals: IndexMap::default(),
@@ -863,14 +866,15 @@ impl<'a> WirContext<'a> {
         let mut dead_func_indices: IndexSet<u32> = IndexSet::default();
         let mut dead_global_indices: IndexSet<u32> = IndexSet::default();
 
-        for (source_prefix, wasm_mod_name) in &self.wasm_module_sources {
+        for (source_ms, wasm_mod_name) in &self.wasm_module_sources {
+            let source_prefix = source_ms.to_string();
             let mut mod_functions = Vec::new();
             let mut mod_globals = Vec::new();
             let mut mod_global_name_to_index = IndexMap::default();
 
             // Find functions belonging to this wasm module (keep in list, mark as dead)
             for (i, func) in functions.iter().enumerate() {
-                if !func.name.fq.starts_with(source_prefix) {
+                if !func.name.fq.starts_with(&source_prefix) {
                     continue;
                 }
                 let func_idx = u32::try_from(i).unwrap();
@@ -880,7 +884,7 @@ impl<'a> WirContext<'a> {
                 let export_name = func.export_name.clone().unwrap_or_else(|| {
                     func.name
                         .fq
-                        .strip_prefix(source_prefix)
+                        .strip_prefix(&source_prefix)
                         .and_then(|s| s.strip_prefix('/'))
                         .unwrap_or(&func.name.fq)
                         .to_string()

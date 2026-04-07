@@ -1,13 +1,12 @@
 //! Link phase — transforms a per-module `Package` into a linked `FlatPackage`.
 //!
-//! The link phase sits between optimization and WIR building in the pipeline:
+//! The link phase sits between lowering and optimization in the pipeline:
 //!
 //! ```text
 //! Package (per-module TIR)
 //!   → link
 //! FlatPackage (flat TIR)
-//!   → wir_build
-//! WirPackage (Wasm IR)
+//!   → optimize → wir_build → codegen
 //! ```
 //!
 //! The link phase flattens all per-module TIR data into flat lists and
@@ -65,7 +64,7 @@ pub fn link(package: Package) -> FlatPackage {
     let mut data_section = None;
     let mut function_strings = IndexMap::default();
     let mut function_method_info = IndexMap::default();
-    let mut wasm_module_sources: IndexMap<String, String> = IndexMap::default();
+    let mut wasm_module_sources: IndexMap<ModuleSource, String> = IndexMap::default();
 
     for (_ms, tir_mod) in package.tir_modules {
         let ms: ModuleSource = tir_mod.module_source.clone();
@@ -126,7 +125,7 @@ pub fn link(package: Package) -> FlatPackage {
         }
 
         if let Some(wm) = tir_mod.wasm_module {
-            wasm_module_sources.insert(ms.to_string(), wm);
+            wasm_module_sources.insert(ms.clone(), wm);
         }
     }
 

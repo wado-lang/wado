@@ -92,7 +92,7 @@ pub fn analyze_project(project: &mut FlatPackage) {
     // These are compiled into separate wasm modules and must not be eliminated.
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if project.wasm_module_sources.contains_key(&func.module_source.to_string())
+        if project.wasm_module_sources.contains_key(&func.module_source)
             && func.is_export
         {
             let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
