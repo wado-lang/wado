@@ -370,7 +370,7 @@ impl TirMutVisitor for LocalSubstituter {
             && let Some((src_idx, src_name)) = self.subs.get(index)
         {
             *index = *src_idx;
-            *name = src_name.clone();
+            name.clone_from(src_name);
             return;
         }
         self.walk_expr(expr);
