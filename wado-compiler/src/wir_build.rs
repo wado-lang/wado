@@ -1,10 +1,10 @@
-//! WIR build — translates optimized TIR (Package) into a `WirPackage`.
+//! WIR build — translates linked TIR (`FlatPackage`) into a `WirPackage`.
 //!
-//! Pipeline: `Package` → planning → `build_wir_package` → `WirPackage`
+//! Pipeline: `FlatPackage` → `build_wir_package` → `WirPackage`
 //!
 //! Emission (`WirPackage` → Wasm bytes) is handled by `codegen`.
 
-use crate::package::Package;
+use crate::flat_package::FlatPackage;
 use crate::wir::WirPackage;
 
 pub mod component_plan;
@@ -15,25 +15,12 @@ mod types;
 
 pub use context::DEFINED_FUNC_BASE;
 
-/// Run the planning phase.
-///
-/// Sets `project.has_http_handler_export` from world analysis and
-/// populates `project.component_plan` for use by `build_wir_package`.
-pub fn plan_project(mut project: Package) -> Package {
-    let world_info = project.world_registry.get(&project.target_world).cloned();
-    if let Some(world_info) = world_info {
-        project.has_http_handler_export = world_info.has_http_handler_export();
-    }
-    project.component_plan = Some(component_plan::build_component_plan(&project));
-    project
-}
-
-/// Build a `WirPackage` from a planned Package.
-pub fn build_wir_package(project: &Package) -> WirPackage {
-    let mut ctx = context::WirContext::new(project);
+/// Build a `WirPackage` from a linked `FlatPackage`.
+pub fn build_wir_package(package: &FlatPackage) -> WirPackage {
+    let mut ctx = context::WirContext::new(package);
 
     // Collect wasm_module attributes from TIR modules
-    for (module_source, tir_mod) in &project.tir_modules {
+    for (module_source, tir_mod) in &package.tir_modules {
         if let Some(wasm_mod_name) = &tir_mod.wasm_module {
             let prefix = module_source.to_string();
             ctx.wasm_module_sources

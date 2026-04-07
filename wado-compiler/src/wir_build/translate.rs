@@ -105,7 +105,7 @@ fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
 pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
     use crate::wir::{WirFunction, WirName, WirType};
 
-    for tir_mod in ctx.project.tir_modules.values() {
+    for tir_mod in ctx.package.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();
         let module_source = tir_mod.module_source.clone();
         for functor in &tir_mod.closure_functors {
@@ -4169,7 +4169,7 @@ impl FunctionTranslator<'_, '_> {
                     } else {
                         "Stdout::write_via_stream"
                     };
-                    let func_info = self.ctx.project.wasi_registry.get_function(effect_method);
+                    let func_info = self.ctx.package.wasi_registry.get_function(effect_method);
                     // Wado uses stackful async: canon lower without async flag.
                     // Sync lower returns the result directly (no subtask handle).
                     let needs_async = false;
@@ -6644,7 +6644,7 @@ impl FunctionTranslator<'_, '_> {
             ..
         } = self.type_table.get(struct_type)
         {
-            for module in self.ctx.project.tir_modules.values() {
+            for module in self.ctx.package.tir_modules.values() {
                 if module.module_source == *module_source {
                     for s in &module.structs {
                         if s.name == *name {

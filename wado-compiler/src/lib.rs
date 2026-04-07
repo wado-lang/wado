@@ -11,8 +11,10 @@ pub mod component_model;
 pub mod desugar;
 pub mod doc;
 pub mod effect_check;
+pub mod flat_package;
 pub mod hashmap;
 pub mod lexer;
+pub mod link;
 pub mod loader;
 pub mod logger;
 pub mod lower;
@@ -54,6 +56,7 @@ pub use monomorphize::{monomorphize_module, monomorphize_modules_indexed, monomo
 pub use name::ModuleSource;
 pub use optimize::{OptLevel, optimize};
 pub use parser::{ParseError, Parser};
+pub use flat_package::FlatPackage;
 pub use package::Package;
 pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
@@ -120,8 +123,8 @@ pub struct DumpResult {
     pub monomorphized_tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
     /// All lowered TIR modules (in topological order)
     pub lowered_tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
-    /// Optimized project (contains usage analysis results)
-    pub optimized_project: Option<Package>,
+    /// Linked package after optimization (contains usage analysis results)
+    pub optimized_project: Option<FlatPackage>,
     /// WIR module (after `tir_to_wir` translation)
     pub wir_package: Option<wir::WirPackage>,
     /// Comments for unparsing
@@ -394,12 +397,16 @@ fn compile_after_load<H: CompilerHost>(
         )
     };
 
-    // === Phase 11: Build WIR (planning + TIR → WirPackage) ===
-    let (project, mut wir_package) = {
+    // === Phase 10.5: Link (Package → FlatPackage) ===
+    let flat = {
+        let _span = logger.span("link");
+        link::link(project)
+    };
+
+    // === Phase 11: Build WIR (FlatPackage → WirPackage) ===
+    let mut wir_package = {
         let _span = logger.span("wir_build");
-        let project = wir_build::plan_project(project);
-        let wir_package = wir_build::build_wir_package(&project);
-        (project, wir_package)
+        wir_build::build_wir_package(&flat)
     };
 
     // === Phase 11.5: Optimize WIR ===
@@ -411,7 +418,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 12: Emit Wasm (WirPackage → Wasm component bytes) ===
     let wasm = {
         let _span = logger.span("codegen");
-        codegen::emit_wasm(&project, &wir_package)
+        codegen::emit_wasm(&flat, &wir_package)
     };
 
     // Return the original (non-desugared) entry AST for tooling
@@ -658,15 +665,15 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 &logger,
             )
         };
-        let project = wir_build::plan_project(project);
+        let flat = link::link(project);
 
         // WIR: Translate optimized Package to WirPackage for inspection.
         let wir_package = Some({
-            let mut wir = wir_build::build_wir_package(&project);
+            let mut wir = wir_build::build_wir_package(&flat);
             wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
             wir
         });
-        let optimized = Some(project);
+        let optimized = Some(flat);
 
         (mono_snapshot, lower_snapshot, optimized, wir_package)
     } else {

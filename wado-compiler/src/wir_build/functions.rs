@@ -42,7 +42,7 @@ pub fn collect_functions(ctx: &mut WirContext<'_>) {
 
 /// Register builtin and bundled function imports.
 fn register_imports(ctx: &mut WirContext<'_>) {
-    let entry_tir = ctx.project.entry_module();
+    let entry_tir = ctx.package.entry_module();
     let type_table = &*entry_tir.type_table.borrow();
 
     for import in &entry_tir.imports {
@@ -104,7 +104,7 @@ fn register_imports(ctx: &mut WirContext<'_>) {
 /// the core module imports them from the "wasi" namespace.
 /// Uses `flatten_wasi_param_type` / `return_type_requires_outptr` for CM ABI type flattening.
 fn register_wasi_imports(ctx: &mut WirContext<'_>) {
-    let wasi_registry = ctx.project.wasi_registry;
+    let wasi_registry = ctx.package.wasi_registry;
 
     for interface_info in wasi_registry.interfaces() {
         for func in &interface_info.functions {
@@ -116,7 +116,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             // WASI functions that the component builder doesn't support (e.g.,
             // [static] HTTP functions like consume_body).
             let wasi_func_key = format!("{}::{}", func.effect_name, func.method_name);
-            if !ctx.project.used_wasi_functions.contains(&wasi_func_key) {
+            if !ctx.package.used_wasi_functions.contains(&wasi_func_key) {
                 continue;
             }
 
@@ -240,7 +240,7 @@ fn register_memory_import(ctx: &mut WirContext<'_>) {
 
 /// Register entry module functions.
 fn register_entry_functions(ctx: &mut WirContext<'_>) {
-    let entry_tir = ctx.project.entry_module();
+    let entry_tir = ctx.package.entry_module();
     let type_table_rc = entry_tir.type_table.clone();
     let type_table = &*type_table_rc.borrow();
     let module_source = entry_tir.module_source.clone();
@@ -270,7 +270,7 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
         ));
 
         // Skip unreachable functions (but keep export functions)
-        if !tir_func.is_export && !ctx.project.is_reachable(&func_id) {
+        if !tir_func.is_export && !ctx.package.is_reachable(&func_id) {
             continue;
         }
 
@@ -287,9 +287,9 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
 
 /// Register loaded module functions (core:*, etc.).
 fn register_loaded_functions(ctx: &mut WirContext<'_>) {
-    let entry_source = ctx.project.entry_module_source.clone();
+    let entry_source = ctx.package.entry_module_source.clone();
 
-    for (module_source, tir_mod) in &ctx.project.tir_modules {
+    for (module_source, tir_mod) in &ctx.package.tir_modules {
         if *module_source == entry_source || module_source.is_wasi() {
             continue;
         }
@@ -310,7 +310,7 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
             }
 
             // Skip unsupported effects
-            if has_unsupported_effects(&tir_func, ctx.project) {
+            if has_unsupported_effects(&tir_func, ctx.package) {
                 continue;
             }
 
@@ -319,7 +319,7 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
                 module_source,
                 &tir_func.name,
             ));
-            if !ctx.project.is_reachable(&func_id) {
+            if !ctx.package.is_reachable(&func_id) {
                 continue;
             }
 
@@ -337,7 +337,7 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
 
 /// Register methods from all modules.
 fn register_methods(ctx: &mut WirContext<'_>) {
-    for (module_source, tir_mod) in &ctx.project.tir_modules {
+    for (module_source, tir_mod) in &ctx.package.tir_modules {
         if module_source.is_wasi() {
             continue;
         }
@@ -376,12 +376,12 @@ fn register_methods(ctx: &mut WirContext<'_>) {
             let method_id = FunctionId::Method(method_name);
 
             let is_mono = tir_func.monomorph_info.is_some();
-            if !is_mono && !ctx.project.is_reachable(&method_id) {
+            if !is_mono && !ctx.package.is_reachable(&method_id) {
                 continue;
             }
 
             // Skip unsupported effects
-            if has_unsupported_effects(&tir_func, ctx.project) {
+            if has_unsupported_effects(&tir_func, ctx.package) {
                 continue;
             }
 
@@ -500,16 +500,12 @@ fn register_bytes_data(ctx: &mut WirContext<'_>) {
 
 /// Register function exports (world exports like "run").
 fn register_exports(ctx: &mut WirContext<'_>) {
-    let component_plan = ctx
-        .project
-        .component_plan
-        .as_ref()
-        .expect("component_plan should be set");
+    let component_plan = &ctx.package.component_plan;
 
     for export in &component_plan.world_exports {
         let core_func_name = &export.core_func_name;
         // Find the function in the map
-        let entry_source = &ctx.project.entry_module_source;
+        let entry_source = &ctx.package.entry_module_source;
         let fq = format!("{entry_source}/{core_func_name}");
         if let Some(func_id) = ctx.func_map.get(&fq) {
             // Export with export.name (component-level name), using core_func_name's function
@@ -530,7 +526,7 @@ fn register_exports(ctx: &mut WirContext<'_>) {
 
     // Also export test functions
     for test in &component_plan.test_exports {
-        let entry_source = &ctx.project.entry_module_source;
+        let entry_source = &ctx.package.entry_module_source;
         let fq = format!("{entry_source}/{}", test.core_func_name);
         if let Some(func_id) = ctx.func_map.get(&fq) {
             // Export test function with its core function name
@@ -550,9 +546,9 @@ fn register_exports(ctx: &mut WirContext<'_>) {
 /// - Entry module: `"global:{name}"`
 /// - Other modules: `"global:{mod_path}::{name}"`
 fn register_globals(ctx: &mut WirContext<'_>) {
-    let entry_source = ctx.project.entry_module_source.clone();
+    let entry_source = ctx.package.entry_module_source.clone();
 
-    for (module_source, tir_mod) in &ctx.project.tir_modules {
+    for (module_source, tir_mod) in &ctx.package.tir_modules {
         if module_source.is_wasi() {
             continue;
         }
@@ -672,7 +668,7 @@ fn build_mangled_name(tir_func: &TirFunction, _module_source: &ModuleSource) -> 
 }
 
 /// Check if a function has unsupported effects.
-fn has_unsupported_effects(tir_func: &TirFunction, project: &crate::package::Package) -> bool {
+fn has_unsupported_effects(tir_func: &TirFunction, project: &crate::flat_package::FlatPackage) -> bool {
     if tir_func.effects.is_empty() {
         return false;
     }

@@ -7,7 +7,7 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::name::{ModuleSource, StructName};
-use crate::package::Package;
+use crate::flat_package::FlatPackage;
 use crate::tir::{TirFunction, TypeId, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
@@ -26,8 +26,8 @@ pub const DEFINED_FUNC_BASE: u32 = 0x8000_0000;
 /// Accumulates all WIR entities and provides lookup maps for resolving
 /// type and function references during translation.
 pub struct WirContext<'a> {
-    /// Reference to the immutable project data.
-    pub project: &'a Package,
+    /// Reference to the linked package data.
+    pub package: &'a FlatPackage,
 
     // === Type Registry ===
     /// All type definitions in registration order.
@@ -130,11 +130,11 @@ pub struct PendingFunctionBody {
 
 impl<'a> WirContext<'a> {
     /// Create a new `WirContext` from a Package.
-    pub fn new(project: &'a Package) -> Self {
+    pub fn new(package: &'a FlatPackage) -> Self {
         // Collect string literals from all TIR modules (deduped)
         let mut seen: IndexSet<&str> = IndexSet::default();
         let mut string_literals = Vec::new();
-        for tir_module in project.tir_modules.values() {
+        for tir_module in package.tir_modules.values() {
             for s in &tir_module.string_literals {
                 if seen.insert(s.as_str()) {
                     string_literals.push(s.clone());
@@ -145,7 +145,7 @@ impl<'a> WirContext<'a> {
         // Collect bytes literals from all TIR modules (deduped)
         let mut seen_bytes: IndexSet<&[u8]> = IndexSet::default();
         let mut bytes_literals = Vec::new();
-        for tir_module in project.tir_modules.values() {
+        for tir_module in package.tir_modules.values() {
             for b in &tir_module.bytes_literals {
                 if seen_bytes.insert(b.as_slice()) {
                     bytes_literals.push(b.clone());
@@ -154,7 +154,7 @@ impl<'a> WirContext<'a> {
         }
 
         Self {
-            project,
+            package,
             types: Vec::new(),
             type_map: IndexMap::default(),
             rec_groups: Vec::new(),
@@ -971,7 +971,7 @@ impl<'a> WirContext<'a> {
             names: self.names,
             component: WirComponent::default(),
             variant_case_info: self.variant_case_info,
-            entry_point_path: Some(self.project.entry_module_source.to_string()),
+            entry_point_path: Some(self.package.entry_module_source.to_string()),
             wasm_modules,
             dead_type_indices,
             dead_func_indices,

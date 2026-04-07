@@ -16,7 +16,7 @@ use crate::ast::Type;
 use crate::bundled::wado_bundled_libm_wasm;
 use crate::component_model::{CmInstanceTypeGen, CmVariantCase, WasiFunctionInfo};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::package::Package;
+use crate::flat_package::FlatPackage;
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirPackage};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
@@ -24,7 +24,7 @@ use wasm_encoder::{
 };
 
 /// Build a complete Wasm Component from a pre-built core module and project metadata.
-pub fn build_component(project: &Package, core_module: &[u8], wir_package: &WirPackage) -> Vec<u8> {
+pub fn build_component(project: &FlatPackage, core_module: &[u8], wir_package: &WirPackage) -> Vec<u8> {
     let wasm_modules = &wir_package.wasm_modules;
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
@@ -40,10 +40,7 @@ pub fn build_component(project: &Package, core_module: &[u8], wir_package: &WirP
     }
 
     // Bundled modules (FTS and libm)
-    let component_plan = project
-        .component_plan
-        .as_ref()
-        .expect("component_plan should be set by wir_build::plan_project");
+    let component_plan = &project.component_plan;
     let bundled_functions = &component_plan.bundled_functions;
 
     // Core memory module
@@ -385,7 +382,7 @@ fn emit_cm_val_type(
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
     mut shared_type_gen: Option<&mut CmInstanceTypeGen>,
-    project: Option<&Package>,
+    project: Option<&FlatPackage>,
     ctx: &mut ComponentModelContext,
 ) -> ComponentValType {
     match ty {
@@ -617,7 +614,7 @@ fn build_cm_tuple_types(
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
     mut shared_type_gen: Option<&mut CmInstanceTypeGen>,
-    project: Option<&Package>,
+    project: Option<&FlatPackage>,
     ctx: &mut ComponentModelContext,
 ) -> Vec<ComponentValType> {
     elems
@@ -671,7 +668,7 @@ fn collect_resources_in_type(
 }
 
 fn wado_type_to_cm_val_type(
-    _project: &Package,
+    _project: &FlatPackage,
     ty: &Type,
     stream_type_idx: Option<u32>,
     _error_code_idx: Option<u32>,
@@ -1257,7 +1254,7 @@ fn emit_world_exports(
 fn generate_cm_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    project: &Package,
+    project: &FlatPackage,
 ) {
     let cli_version = project
         .wasi_registry
@@ -1801,7 +1798,7 @@ fn generate_cm_imports(
 }
 
 fn import_http_types_for_service(
-    project: &Package,
+    project: &FlatPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
 ) {
@@ -2119,7 +2116,7 @@ fn import_http_types_for_service(
 fn import_http_client(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    project: &Package,
+    project: &FlatPackage,
 ) {
     // Build the instance type for wasi:http/client from registry metadata.
     // The client interface references types defined in wasi:http/types (request, handler-result),
@@ -2211,7 +2208,7 @@ fn import_interface_with_resource(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     interface_info: &crate::component_model::WasiInterfaceInfo,
-    project: &Package,
+    project: &FlatPackage,
 ) {
     let Some((_resource_wado_name, resource_cm_name)) = &interface_info.resource_type else {
         return;
@@ -2304,7 +2301,7 @@ fn import_interface_with_resource(
 fn import_interfaces_with_resources(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    project: &Package,
+    project: &FlatPackage,
 ) {
     let interfaces_with_resources: Vec<_> = project
         .wasi_registry
@@ -2484,7 +2481,7 @@ fn import_interfaces_with_resources(
 fn import_resource_using_interfaces(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    project: &Package,
+    project: &FlatPackage,
 ) {
     for interface_info in project.wasi_registry.interfaces() {
         if interface_info.interface == "run" {
@@ -2709,7 +2706,7 @@ fn import_resource_using_interfaces(
 }
 
 fn lower_wasi_functions(
-    project: &Package,
+    project: &FlatPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
 ) {
@@ -2750,7 +2747,7 @@ fn lower_wasi_functions(
 fn append_http_handler_export(
     component_bytes: &mut Vec<u8>,
     ctx: &ComponentModelContext,
-    project: &Package,
+    project: &FlatPackage,
 ) {
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
 

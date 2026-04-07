@@ -157,7 +157,7 @@ fn sort_types_topologically<'a>(
 /// This follows a multi-phase registration order to ensure type dependencies
 /// are satisfied.
 pub fn register_types(ctx: &mut WirContext<'_>) {
-    let entry_tir = ctx.project.entry_module();
+    let entry_tir = ctx.package.entry_module();
     let _type_table = &*entry_tir.type_table.borrow();
 
     // Phase 0: Internal Box<T> structs
@@ -474,7 +474,7 @@ fn register_raw_array_type(
 // === Phase implementations ===
 
 fn register_box_structs(ctx: &mut WirContext<'_>) {
-    for (_module_source, tir_mod) in &ctx.project.tir_modules {
+    for (_module_source, tir_mod) in &ctx.package.tir_modules {
         let type_table = &*tir_mod.type_table.borrow();
         for s in &tir_mod.structs {
             if s.monomorph_info
@@ -526,8 +526,8 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
 }
 
 fn register_library_types(ctx: &mut WirContext<'_>) {
-    let entry_source = &ctx.project.entry_module_source;
-    for (module_source, tir_mod) in &ctx.project.tir_modules {
+    let entry_source = &ctx.package.entry_module_source;
+    for (module_source, tir_mod) in &ctx.package.tir_modules {
         if module_source == entry_source {
             continue;
         }
@@ -559,7 +559,7 @@ fn register_library_types(ctx: &mut WirContext<'_>) {
 }
 
 fn register_tuple_types(ctx: &mut WirContext<'_>) {
-    for tir_mod in ctx.project.tir_modules.values() {
+    for tir_mod in ctx.package.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             let resolved = type_table.get(type_id);
@@ -651,7 +651,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
 }
 
 fn register_entry_types(ctx: &mut WirContext<'_>) {
-    let entry_tir = ctx.project.entry_module();
+    let entry_tir = ctx.package.entry_module();
     let type_table = &*entry_tir.type_table.borrow();
     let module_source = &entry_tir.module_source;
 
@@ -678,7 +678,7 @@ fn register_entry_types(ctx: &mut WirContext<'_>) {
 }
 
 fn register_nonmono_arrays(ctx: &mut WirContext<'_>) {
-    for tir_mod in ctx.project.tir_modules.values() {
+    for tir_mod in ctx.package.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::BuiltinArray(elem_type_id) = type_table.get(type_id) {
@@ -693,8 +693,8 @@ fn register_nonmono_arrays(ctx: &mut WirContext<'_>) {
 }
 
 fn register_mono_library_types(ctx: &mut WirContext<'_>) {
-    let entry_source = &ctx.project.entry_module_source;
-    for (module_source, tir_mod) in &ctx.project.tir_modules {
+    let entry_source = &ctx.package.entry_module_source;
+    for (module_source, tir_mod) in &ctx.package.tir_modules {
         if module_source == entry_source {
             continue;
         }
@@ -717,7 +717,7 @@ fn register_mono_library_types(ctx: &mut WirContext<'_>) {
 
 fn register_mono_field_arrays(ctx: &mut WirContext<'_>) {
     // Pre-scan monomorphized struct fields for array types
-    for tir_mod in ctx.project.tir_modules.values() {
+    for tir_mod in ctx.package.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();
         for s in &tir_mod.structs {
             if s.monomorph_info.is_some() {
@@ -732,7 +732,7 @@ fn register_mono_field_arrays(ctx: &mut WirContext<'_>) {
 }
 
 fn register_mono_entry_types(ctx: &mut WirContext<'_>) {
-    let entry_tir = ctx.project.entry_module();
+    let entry_tir = ctx.package.entry_module();
     let type_table = &*entry_tir.type_table.borrow();
     let module_source = &entry_tir.module_source;
 
@@ -763,7 +763,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
             Vec<(String, Vec<crate::wir::WirType>)>, // cases: (name, payload types)
         )> = Vec::new();
 
-        for tir_mod in ctx.project.tir_modules.values() {
+        for tir_mod in ctx.package.tir_modules.values() {
             let type_table = &*tir_mod.type_table.borrow();
             for type_id in type_table.iter_type_ids() {
                 if let ResolvedType::GenericInstance {
@@ -804,11 +804,11 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                             .any(|v| v.name == *name && !v.type_params.is_empty())
                     };
                     let variant_mod = ctx
-                        .project
+                        .package
                         .tir_modules
                         .get(module_source)
                         .filter(|m| has_variant(m))
-                        .or_else(|| ctx.project.tir_modules.values().find(|m| has_variant(m)));
+                        .or_else(|| ctx.package.tir_modules.values().find(|m| has_variant(m)));
                     if let Some(variant_mod) = variant_mod {
                         let variant_tt = &*variant_mod.type_table.borrow();
                         let base = variant_mod
@@ -987,7 +987,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
 }
 
 fn register_remaining_arrays(ctx: &mut WirContext<'_>) {
-    for tir_mod in ctx.project.tir_modules.values() {
+    for tir_mod in ctx.package.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::BuiltinArray(elem_type_id) = type_table.get(type_id) {
@@ -1001,7 +1001,7 @@ fn register_remaining_arrays(ctx: &mut WirContext<'_>) {
 }
 
 fn register_enums(ctx: &mut WirContext<'_>) {
-    for (module_source, tir_mod) in &ctx.project.tir_modules {
+    for (module_source, tir_mod) in &ctx.package.tir_modules {
         for e in &tir_mod.enums {
             let fq = format!("{module_source}//enum:{}", e.name);
             if ctx.type_map.contains_key(&fq) {
@@ -1050,7 +1050,7 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>)> = Vec::new();
     let mut seen_keys: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
 
-    for tir_mod in ctx.project.tir_modules.values() {
+    for tir_mod in ctx.package.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::Function {
@@ -1125,7 +1125,7 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
     // We need to borrow type tables, but can't hold refs across ctx mutation.
     // Collect TypeIds and elem names, keeping the first module's type table for lookups.
     let mut first_type_table: Option<std::rc::Rc<std::cell::RefCell<TypeTable>>> = None;
-    for tir_mod in ctx.project.tir_modules.values() {
+    for tir_mod in ctx.package.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();
         if first_type_table.is_none() {
             first_type_table = Some(tir_mod.type_table.clone());
@@ -1282,7 +1282,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             let mut resolved = None;
 
             // Try resolving from TIR structs
-            for tir_mod in ctx.project.tir_modules.values() {
+            for tir_mod in ctx.package.tir_modules.values() {
                 let type_table = &*tir_mod.type_table.borrow();
                 for tir_struct in &tir_mod.structs {
                     // Match by exact name, or by monomorphized name (base name matches TIR name)
@@ -1313,7 +1313,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
 
             // Try resolving from TIR tuple types (tuples have display names like "[T, U]")
             if resolved.is_none() && struct_name_str.starts_with('[') {
-                for tir_mod in ctx.project.tir_modules.values() {
+                for tir_mod in ctx.package.tir_modules.values() {
                     let type_table = &*tir_mod.type_table.borrow();
                     for type_id in type_table.iter_type_ids() {
                         if let ResolvedType::GenericInstance {
@@ -1382,7 +1382,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 let Some(ms) = &variant_module_source else {
                     continue;
                 };
-                let Some(tir_mod) = ctx.project.tir_modules.get(ms) else {
+                let Some(tir_mod) = ctx.package.tir_modules.get(ms) else {
                     continue;
                 };
                 let type_table = &*tir_mod.type_table.borrow();
@@ -1476,7 +1476,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             && is_abstract_ref(&a.element_type)
         {
             // Try to resolve via TIR BuiltinArray types
-            for tir_mod in ctx.project.tir_modules.values() {
+            for tir_mod in ctx.package.tir_modules.values() {
                 let type_table = &*tir_mod.type_table.borrow();
                 for type_id in type_table.iter_type_ids() {
                     if let crate::tir::ResolvedType::BuiltinArray(elem_tid) =
@@ -1507,7 +1507,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             for (case_idx, case) in v.cases.iter().enumerate() {
                 if case.payload.iter().any(is_abstract_ref) {
                     // Try to resolve payload types through TIR variant decls
-                    for tir_mod in ctx.project.tir_modules.values() {
+                    for tir_mod in ctx.package.tir_modules.values() {
                         let tt = tir_mod.type_table.borrow();
                         for tir_variant in &tir_mod.variants {
                             let v_base = v.name.fq.split("//").nth(1).unwrap_or(&v.name.fq);

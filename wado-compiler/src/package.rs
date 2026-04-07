@@ -1,12 +1,8 @@
-//! Package - Compilation context for Wado programs
+//! Package — per-module compilation context for Wado programs
 //!
-//! This module provides the `Package` struct which encapsulates all
-//! compilation context needed for code generation.
-//!
-//! The compilation flow is:
-//! 1. Parse/analyze -> Package (unoptimized)
-//! 2. Optimize -> Package (optimized, with usage analysis)
-//! 3. Codegen takes Package and generates Wasm
+//! `Package` flows through the early compilation phases (resolve → synthesis →
+//! monomorphize → lower → optimize). The link phase then consumes it and
+//! produces a [`crate::flat_package::FlatPackage`] for WIR building and codegen.
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
@@ -14,14 +10,13 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
-use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
 
-/// A Wado project ready for code generation.
+/// A Wado package in per-module form.
 ///
-/// A Package is a representation of a WebAssembly Component Model component.
-/// It contains all the information needed to compile a Wado program,
-/// including the results of optimization analysis.
+/// Contains TIR modules indexed by source, plus analysis metadata. Flows
+/// through resolve → synthesis → monomorphize → lower → optimize, then
+/// consumed by the link phase to produce a [`crate::flat_package::FlatPackage`].
 #[derive(Debug)]
 pub struct Package {
     /// The entry module source
@@ -54,10 +49,6 @@ pub struct Package {
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
     pub target_world: String,
 
-    /// When true, the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>).
-    /// This determines whether HTTP-related glue code is needed.
-    pub has_http_handler_export: bool,
-
     /// Maps world export name → adapter function name.
     /// Populated by `synthesis::cm_binding` when export adapters are synthesized.
     /// For example: `"run"` → `"__cm_export__run"`.
@@ -66,9 +57,6 @@ pub struct Package {
     /// Populated by `synthesis::cm_binding` when an export returns a Result type.
     /// Used by `optimize_dce` to override the builtin registry's single-`i32` signature.
     pub task_return_flat_params: Option<Vec<TypeId>>,
-
-    /// Component Model structure plan. Populated by `wir_build::plan_project`.
-    pub component_plan: Option<ComponentPlan>,
 }
 
 impl Package {
@@ -99,13 +87,9 @@ impl Package {
             strip_names: false,
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),
-            // CM export characteristics
-            has_http_handler_export: false,
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
             task_return_flat_params: None,
-            // Wasm plan
-            component_plan: None,
         }
     }
 
