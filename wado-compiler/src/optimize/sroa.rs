@@ -55,7 +55,7 @@ struct SroaCandidate {
 /// Build a lookup table mapping (`module_source`, `func_name`) → set of stored param indices.
 fn build_stores_lookup(project: &FlatPackage) -> StoresLookup {
     let mut lookup = StoresLookup::default();
-    for (module_source, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let func = func_rc.borrow();
         if func.stores.is_empty() {
             continue;
@@ -68,7 +68,7 @@ fn build_stores_lookup(project: &FlatPackage) -> StoresLookup {
             .map(|(i, _)| i)
             .collect();
         if !stored_indices.is_empty() {
-            lookup.insert((module_source.clone(), func.name.clone()), stored_indices);
+            lookup.insert((func.module_source.clone(), func.name.clone()), stored_indices);
         }
     }
     lookup
@@ -79,9 +79,10 @@ pub fn scalar_replace_aggregates(project: &mut FlatPackage) -> bool {
     let stores_lookup = build_stores_lookup(project);
     let type_table = project.type_table.borrow();
     let mut changed = false;
-    for (module_source, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        changed |= sroa_in_function(&mut func, &type_table, &stores_lookup, module_source);
+        let module_source = func.module_source.clone();
+        changed |= sroa_in_function(&mut func, &type_table, &stores_lookup, &module_source);
     }
     changed
 }

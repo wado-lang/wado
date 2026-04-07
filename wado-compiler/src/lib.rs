@@ -391,7 +391,7 @@ fn compile_after_load<H: CompilerHost>(
         link::link(project)
     };
 
-    // === Phase 10.5: Optimize (FlatPackage -> FlatPackage) ===
+    // === Phase 11: Optimize (FlatPackage → FlatPackage) ===
     let flat = {
         let _span = logger.span("optimize");
         optimize(
@@ -403,19 +403,19 @@ fn compile_after_load<H: CompilerHost>(
         )
     };
 
-    // === Phase 11: Build WIR (FlatPackage → WirPackage) ===
+    // === Phase 12: Build WIR (FlatPackage → WirPackage) ===
     let mut wir_package = {
         let _span = logger.span("wir_build");
         wir_build::build_wir_package(&flat)
     };
 
-    // === Phase 11.5: Optimize WIR ===
+    // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
         wir_optimize::optimize_wir(&mut wir_package, options.opt_level, logger);
     }
 
-    // === Phase 12: Emit Wasm (WirPackage → Wasm component bytes) ===
+    // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
     let wasm = {
         let _span = logger.span("codegen");
         codegen::emit_wasm(&flat, &wir_package)

@@ -71,9 +71,10 @@ pub fn link(package: Package) -> FlatPackage {
         let ms: ModuleSource = tir_mod.module_source.clone();
         let is_entry = ms == package.entry_module_source;
 
-        // Functions: pair each with its module source
+        // Functions: set module_source on each function
         for func_rc in tir_mod.functions {
-            functions.push((ms.clone(), func_rc));
+            func_rc.borrow_mut().module_source = ms.clone();
+            functions.push(func_rc);
         }
 
         // Dedup monomorphized structs by (name, module_source). The monomorphizer
@@ -109,16 +110,14 @@ pub fn link(package: Package) -> FlatPackage {
         string_literals.extend(tir_mod.string_literals);
         bytes_literals.extend(tir_mod.bytes_literals);
         closure_functors.extend(tir_mod.closure_functors);
-        // Merge function_strings: closure functions from different modules can share
-        // names (e.g., `__Closure_0::__call`), so we must append string lists rather
-        // than overwriting to avoid losing string associations.
+        // Merge function_strings and function_method_info with compound keys
+        // (module_source, function_name) to prevent cross-module name collisions.
         for (func_name, strings) in tir_mod.function_strings {
-            function_strings
-                .entry(func_name)
-                .or_insert_with(Vec::new)
-                .extend(strings);
+            function_strings.insert((ms.clone(), func_name), strings);
         }
-        function_method_info.extend(tir_mod.function_method_info);
+        for (func_name, info) in tir_mod.function_method_info {
+            function_method_info.insert((ms.clone(), func_name), info);
+        }
 
         if is_entry {
             imports = tir_mod.imports;

@@ -204,13 +204,13 @@ fn is_inline_eligible(
 
 /// Detect recursive functions using call graph analysis
 fn find_recursive_functions(
-    functions: &[(ModuleSource, Rc<RefCell<TirFunction>>)],
+    functions: &[Rc<RefCell<TirFunction>>],
 ) -> IndexSet<String> {
     // Phase 1: Build name→index mapping (one String allocation per function)
     let mut name_to_idx: IndexMap<String, usize> = IndexMap::default();
     let mut idx_to_name: Vec<String> = Vec::new();
 
-    for (_ms, func_rc) in functions {
+    for func_rc in functions {
         let func = func_rc.borrow();
         let name = func.name.clone();
         if !name_to_idx.contains_key(&name) {
@@ -224,7 +224,7 @@ fn find_recursive_functions(
     // Phase 2: Build call graph using indices (no String allocations in inner loop)
     let mut call_graph: Vec<Vec<usize>> = vec![Vec::new(); n];
 
-    for (_ms, func_rc) in functions {
+    for func_rc in functions {
         let func = func_rc.borrow();
         if let Some(caller_idx) = name_to_idx.get(&func.name) {
             let mut callee_names: IndexSet<String> = IndexSet::default();
@@ -493,8 +493,9 @@ pub fn inline_functions(project: &mut FlatPackage, inline_threshold: usize) -> b
     let mut candidate_strings: IndexMap<(ModuleSource, String), Vec<String>> = IndexMap::default();
 
     let type_table = project.type_table.borrow();
-    for (module_source, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let func = func_rc.borrow();
+        let module_source = &func.module_source;
         let key = (module_source.clone(), func.name.clone());
         if is_inline_eligible(
             &func,
@@ -505,7 +506,7 @@ pub fn inline_functions(project: &mut FlatPackage, inline_threshold: usize) -> b
         ) {
             inline_candidates.insert(key.clone(), func.clone());
             // Get the strings used by this function
-            if let Some(strings) = project.function_strings.get(&func.name) {
+            if let Some(strings) = project.function_strings.get(&key) {
                 candidate_strings.insert(key, strings.clone());
             }
         }
@@ -519,9 +520,9 @@ pub fn inline_functions(project: &mut FlatPackage, inline_threshold: usize) -> b
     let mut changed = false;
 
     // Inline at call sites
-    for (caller_module_source, func_rc) in &project.functions {
-        let caller_module_source = caller_module_source.clone();
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
+        let caller_module_source = func.module_source.clone();
         let func_name = func.name.clone();
         if let Some(mut body) = func.body.take() {
             // Track which functions were inlined into this function
@@ -562,7 +563,7 @@ pub fn inline_functions(project: &mut FlatPackage, inline_threshold: usize) -> b
                 {
                     let caller_strings = project
                         .function_strings
-                        .entry(func_name.clone())
+                        .entry((caller_module_source.clone(), func_name.clone()))
                         .or_default();
                     let existing: IndexSet<&str> =
                         caller_strings.iter().map(String::as_str).collect();

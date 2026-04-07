@@ -377,6 +377,7 @@ pub fn make_synthetic_method(
     let local_count = local_types.len() as u32;
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name,
         is_pub: true,
         is_export: false,

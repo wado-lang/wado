@@ -730,7 +730,7 @@ fn collect_unsafe_in_expr(expr: &TirExpr, unsafe_locals: &mut IndexSet<u32>) {
 pub fn forward_stores_to_loads(project: &mut FlatPackage) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
-    for (_ms, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         changed |= forward_in_function(&mut func, &type_table);
     }

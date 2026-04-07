@@ -4739,7 +4739,7 @@ pub fn unparse_flat_package(package: &crate::flat_package::FlatPackage) -> Strin
     }
 
     // Functions
-    for (_module_source, f_rc) in &package.functions {
+    for f_rc in &package.functions {
         let f = f_rc.borrow();
         unparser.unparse_function(&f);
         unparser.output.push('\n');

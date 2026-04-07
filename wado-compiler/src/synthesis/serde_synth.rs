@@ -647,6 +647,7 @@ fn generate_struct_serialize(
         MethodName::format_local(&req.target_type_name, Some("Serialize"), "serialize");
 
     Some(TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -1182,6 +1183,7 @@ fn generate_struct_deserialize(
         MethodName::format_local(&req.target_type_name, Some("Deserialize"), "deserialize");
 
     let deser_func = TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -1355,6 +1357,7 @@ fn generate_lookup_function(
     stmts.push(return_stmt(Some(option_none(option_i32))));
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: fn_name,
         is_pub: false,
         is_export: false,
@@ -1501,6 +1504,7 @@ fn generate_enum_serialize(
         MethodName::format_local(&req.target_type_name, Some("Serialize"), "serialize");
 
     Some(TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -1880,6 +1884,7 @@ fn generate_enum_deserialize(
         MethodName::format_local(&req.target_type_name, Some("Deserialize"), "deserialize");
 
     Some(TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -2145,6 +2150,7 @@ fn generate_variant_serialize(
         MethodName::format_local(&req.target_type_name, Some("Serialize"), "serialize");
 
     Some(TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -2684,6 +2690,7 @@ fn generate_variant_deserialize(
         MethodName::format_local(&req.target_type_name, Some("Deserialize"), "deserialize");
 
     Some(TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,

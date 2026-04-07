@@ -848,7 +848,7 @@ pub fn visit_project_functions(
     visitor: &mut impl TirOptVisitor,
 ) -> bool {
     let mut changed = false;
-    for (_module_source, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(ref mut body) = func.body {
             changed |= visitor.visit_block(body);

@@ -3,7 +3,7 @@
 use crate::ast::{self, Function, GlobalDecl, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
     TirFunction, TirGlobal, TirParam, TirStruct, TirTest, TirVariantCase, TirVariantDecl, TypeTable,
 };
@@ -421,6 +421,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         self.current_effect_params = old_effect_params;
 
         Some(TirFunction {
+            module_source: ModuleSource::default(),
             name: func.name.clone(),
             is_pub: func.is_pub,
             is_export: func.is_export,
@@ -500,6 +501,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let body = self.resolve_block(&test_decl.body, &mut ctx, None);
 
         let tir_func = TirFunction {
+            module_source: ModuleSource::default(),
             name: function_name.clone(),
             is_pub: false,    // Tests are not public
             is_export: false, // Tests are not world exports
@@ -822,6 +824,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         self.trait_ctx.self_type = old_self_type;
 
         Some(TirFunction {
+            module_source: ModuleSource::default(),
             name: func.name.clone(), // Will be mangled by caller
             is_pub: func.is_pub,
             is_export: false, // Methods are not world exports

@@ -32,7 +32,7 @@ use crate::token::Span;
 
 pub fn eliminate_common_subexprs(project: &mut FlatPackage) -> bool {
     let mut changed = false;
-    for (_ms, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         changed |= cse_function(&mut func);
     }

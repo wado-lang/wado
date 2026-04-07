@@ -1091,6 +1091,7 @@ fn generate_generic_struct_inspect_fn(
 
     let local_count = 2;
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -1405,6 +1406,7 @@ fn generate_generic_variant_inspect_fn(
     let body = TirBlock::new(stmts, span);
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -2211,6 +2213,7 @@ fn generate_generic_struct_inspect_alt_fn(
     let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -2405,6 +2408,7 @@ fn generate_generic_variant_inspect_alt_fn(
 
     let body = TirBlock::new(stmts, span);
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -2974,6 +2978,7 @@ fn generate_display_fallback(
     );
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -4422,6 +4427,7 @@ fn generate_generic_struct_eq_fn(
     let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -4599,6 +4605,7 @@ fn generate_generic_variant_eq_fn(
     let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,
@@ -4938,6 +4945,7 @@ fn generate_generic_struct_ord_fn(
     let impl_type_params: Vec<TirTypeParam> = type_params.to_vec();
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: qualified_name,
         is_pub: true,
         is_export: false,

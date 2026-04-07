@@ -38,7 +38,7 @@ pub fn promote_constant_globals(project: &mut FlatPackage) -> bool {
         promotable: &promotable,
         promotions: IndexMap::default(),
     };
-    for (_module_source, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(ref mut body) = func.body {
             collector.visit_block(body);
@@ -62,7 +62,7 @@ pub fn promote_constant_globals(project: &mut FlatPackage) -> bool {
     let mut remover = PromotionRemover {
         promotions: &promotions,
     };
-    for (_module_source, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(ref mut body) = func.body {
             remover.visit_block(body);

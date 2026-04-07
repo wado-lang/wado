@@ -59,7 +59,7 @@ pub fn fold_constants(project: &mut FlatPackage) -> bool {
     let mut visitor = ConstFoldVisitor {
         type_table: &type_table,
     };
-    for (_ms, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(ref mut body) = func.body {
             changed |= visitor.visit_block(body);

@@ -44,7 +44,7 @@ use crate::tir_visitor::expr_has_break_to;
 
 pub fn fuse_labeled_blocks(project: &mut FlatPackage) -> bool {
     let mut changed = false;
-    for (_ms, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         changed |= fuse_in_function(&mut func);
     }

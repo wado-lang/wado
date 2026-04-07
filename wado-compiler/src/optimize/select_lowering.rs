@@ -17,7 +17,7 @@ use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 /// Run select lowering on all functions.
 pub fn select_lowering(project: &mut FlatPackage) {
     let mut visitor = SelectLoweringVisitor;
-    for (_ms, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(ref mut body) = func.body {
             visitor.visit_block(body);

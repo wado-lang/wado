@@ -46,7 +46,7 @@ use crate::token::Span;
 pub fn hoist_template_buffers(project: &mut FlatPackage) -> bool {
     let mut changed = false;
     let type_table = project.type_table.clone();
-    for (_ms, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         changed |= hoist_in_function(&mut func, &type_table);
     }

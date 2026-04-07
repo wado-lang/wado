@@ -32,9 +32,8 @@ pub struct FlatPackage {
     /// Shared type table
     pub type_table: Rc<RefCell<TypeTable>>,
 
-    /// All functions from all modules, paired with their module source.
-    /// `TirFunction` does not carry `module_source` internally, so we pair it here.
-    pub functions: Vec<(ModuleSource, Rc<RefCell<TirFunction>>)>,
+    /// All functions from all modules. Each `TirFunction` carries its own `module_source`.
+    pub functions: Vec<Rc<RefCell<TirFunction>>>,
     /// All struct declarations (each carries its own `module_source`)
     pub structs: Vec<TirStruct>,
     /// All enum declarations (each carries its own `module_source`)
@@ -63,10 +62,10 @@ pub struct FlatPackage {
     pub closure_functors: Vec<ClosureFunctor>,
     /// Data section content (from entry module)
     pub data_section: Option<String>,
-    /// Map of function name to string literals it contains (for DCE)
-    pub function_strings: IndexMap<String, Vec<String>>,
-    /// Map of function name to method info (for DCE)
-    pub function_method_info: IndexMap<String, Option<LocalMethodName>>,
+    /// Map of (`ModuleSource`, function name) to string literals it contains (for DCE)
+    pub function_strings: IndexMap<(ModuleSource, String), Vec<String>>,
+    /// Map of (`ModuleSource`, function name) to method info (for DCE)
+    pub function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
     /// Map of module source prefix to wasm module name (from `#![wasm_module("name")]`)
     pub wasm_module_sources: IndexMap<String, String>,
 

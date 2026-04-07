@@ -863,7 +863,7 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
 pub fn propagate_copies(project: &mut FlatPackage) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
-    for (_ms, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         changed |= propagate_copies_in_function(&mut func, &type_table);
     }

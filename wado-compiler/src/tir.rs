@@ -2435,6 +2435,10 @@ pub struct TirGlobal {
 #[derive(Debug, Clone)]
 pub struct TirFunction {
     pub name: String,
+    /// Module this function belongs to. Set by the link phase when flattening
+    /// per-module TIR into flat lists; before link, the `module_source` is
+    /// carried implicitly by the parent `TirModule`.
+    pub module_source: ModuleSource,
     pub is_pub: bool,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,

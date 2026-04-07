@@ -49,7 +49,7 @@ pub fn scalarize_hot_fields(project: &mut FlatPackage) -> bool {
     // Phase 2: Run scalarization (mutable access)
     let type_table = project.type_table.borrow();
     let mut changed = false;
-    for (_module_source, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         changed |= scalarize_function(&mut func, &type_table, &cache);
     }
@@ -59,11 +59,11 @@ pub fn scalarize_hot_fields(project: &mut FlatPackage) -> bool {
 fn build_field_usage_cache(project: &FlatPackage) -> FieldUsageCache {
     let mut cache = FieldUsageCache::default();
     let type_table = project.type_table.borrow();
-    for (module_source, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let func = func_rc.borrow();
         let usage = analyze_function_field_usage(&func, &type_table);
         if !usage.is_empty() {
-            cache.insert((module_source.clone(), func.name.clone()), usage);
+            cache.insert((func.module_source.clone(), func.name.clone()), usage);
         }
     }
     cache

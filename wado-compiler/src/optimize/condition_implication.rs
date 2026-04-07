@@ -65,7 +65,7 @@ type DefMap = IndexMap<u32, Def>;
 
 pub fn eliminate_implied_conditions(project: &mut FlatPackage) -> bool {
     let mut changed = false;
-    for (_ms, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         changed |= process_function(&mut func);
     }

@@ -243,11 +243,12 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
     let type_table = &*type_table_rc.borrow();
     let entry_source = &ctx.package.entry_module_source;
 
-    for (module_source, func_rc) in &ctx.package.functions {
+    for func_rc in &ctx.package.functions {
+        let tir_func = func_rc.borrow();
+        let module_source = &tir_func.module_source;
         if module_source != entry_source {
             continue;
         }
-        let tir_func = func_rc.borrow();
 
         // Skip bodyless functions
         if tir_func.body.is_none() {
@@ -292,12 +293,12 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
     let type_table_rc = ctx.package.type_table.clone();
     let type_table = &*type_table_rc.borrow();
 
-    for (module_source, func_rc) in &ctx.package.functions {
+    for func_rc in &ctx.package.functions {
+        let tir_func = func_rc.borrow();
+        let module_source = &tir_func.module_source;
         if module_source == entry_source || module_source.is_wasi() {
             continue;
         }
-
-        let tir_func = func_rc.borrow();
 
         if tir_func.name == "run" || tir_func.body.is_none() || tir_func.name.contains("::") {
             continue;
@@ -338,12 +339,12 @@ fn register_methods(ctx: &mut WirContext<'_>) {
     let type_table_rc = ctx.package.type_table.clone();
     let type_table = &*type_table_rc.borrow();
 
-    for (module_source, func_rc) in &ctx.package.functions {
+    for func_rc in &ctx.package.functions {
+        let tir_func = func_rc.borrow();
+        let module_source = &tir_func.module_source;
         if module_source.is_wasi() {
             continue;
         }
-
-        let tir_func = func_rc.borrow();
 
         // Only methods
         let Some(ref method_info) = tir_func.method_info else {

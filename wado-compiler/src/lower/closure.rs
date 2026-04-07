@@ -1231,6 +1231,7 @@ impl ClosureLowerer {
             );
 
             let call_method = TirFunction {
+                module_source: ModuleSource::default(),
                 is_async: false,
                 name: qualified_method_name,
                 is_pub: false,
@@ -2899,6 +2900,7 @@ impl ClosureLowerer {
         });
 
         let specialized_func = TirFunction {
+            module_source: ModuleSource::default(),
             is_async: false,
             name: specialized_name.clone(),
             is_pub: false,    // Specialized functions are always private

@@ -2338,6 +2338,7 @@ fn make_binding_function(
     local_types: Vec<TypeId>,
 ) -> Rc<RefCell<TirFunction>> {
     Rc::new(RefCell::new(TirFunction {
+        module_source: ModuleSource::default(),
         name,
         is_pub: false,
         is_export: false,
@@ -6382,6 +6383,7 @@ fn synthesize_stream_read_func(
     stmts.push(return_stmt(Some(local_ref(arr_idx, "arr", array_type_id))));
 
     TirFunction {
+        module_source: ModuleSource::default(),
         name: func_name,
         is_pub: false,
         is_export: false,

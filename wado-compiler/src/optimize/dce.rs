@@ -90,17 +90,17 @@ pub fn analyze_project(project: &mut FlatPackage) {
 
     // Mark exported functions from #![wasm_module] sources as reachable.
     // These are compiled into separate wasm modules and must not be eliminated.
-    for (module_source, func_rc) in &project.functions {
-        if project.wasm_module_sources.contains_key(&module_source.to_string()) {
-            let func = func_rc.borrow();
-            if func.is_export {
-                let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                    module_source,
-                    &func.name,
-                ));
-                let wasm_mod_reachable = compute_reachable(&call_graph, &func_id);
-                reachable.extend(wasm_mod_reachable);
-            }
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        if project.wasm_module_sources.contains_key(&func.module_source.to_string())
+            && func.is_export
+        {
+            let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                &func.module_source,
+                &func.name,
+            ));
+            let wasm_mod_reachable = compute_reachable(&call_graph, &func_id);
+            reachable.extend(wasm_mod_reachable);
         }
     }
 
@@ -252,30 +252,12 @@ pub fn analyze_project(project: &mut FlatPackage) {
     project.used_wasi_functions = used_wasi_functions;
 
     // Filter string literals to only include strings from reachable functions.
-    // Build a func_name → [module_source] mapping so we construct the correct FunctionId
-    // for reachability checks. Multiple functions can share the same name across modules
-    // (e.g., `__Closure_0::__call`), so we collect ALL module sources per name.
-    let mut func_module_sources: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
-    for (ms, frc) in &project.functions {
-        func_module_sources
-            .entry(frc.borrow().name.clone())
-            .or_default()
-            .push(ms.clone());
-    }
-
+    // Keys are (module_source, function_name) — no collision possible.
     let mut reachable_strings: IndexSet<String> = IndexSet::default();
 
-    for (func_name, strings) in &project.function_strings {
-        let Some(module_sources) = func_module_sources.get(func_name) else {
-            // Function not in the flat functions list (e.g., closure functors).
-            // Conservatively keep its strings.
-            reachable_strings.extend(strings.iter().cloned());
-            continue;
-        };
-        // Check reachability against ALL module sources for this function name.
-        // If ANY instance is reachable, keep the strings.
-        let is_reachable = module_sources.iter().any(|module_source| {
-            if let Some(Some(method_info)) = project.function_method_info.get(func_name) {
+    for ((module_source, func_name), strings) in &project.function_strings {
+        let is_reachable =
+            if let Some(Some(method_info)) = project.function_method_info.get(&(module_source.clone(), func_name.clone())) {
                 let method_id = FunctionId::Method(MethodName::new(
                     module_source.clone(),
                     method_info.struct_name.clone(),
@@ -297,8 +279,7 @@ pub fn analyze_project(project: &mut FlatPackage) {
                     func_name,
                 ));
                 reachable.contains(&func_id)
-            }
-        });
+            };
 
         if is_reachable {
             reachable_strings.extend(strings.iter().cloned());
@@ -316,8 +297,9 @@ fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
     let type_table = &*project.type_table.borrow();
 
     // Analyze functions (including methods stored as functions)
-    for (module_source, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let func = func_rc.borrow();
+        let module_source = &func.module_source;
         // Use the TirFunction's is_method() to determine if this is a method
         let func_id = if let Some(ref info) = func.method_info {
             // This is a method - use MethodName or FreeFunctionName with monomorph info
@@ -1069,8 +1051,9 @@ fn compute_reachable(
 /// from the TIR, so codegen doesn't need to filter them.
 pub fn remove_unreachable_functions(project: &mut FlatPackage) {
     let reachable_functions = project.reachable_functions.clone();
-    project.functions.retain(|(module_source, func_rc)| {
+    project.functions.retain(|func_rc| {
         let func = func_rc.borrow();
+        let module_source = &func.module_source;
 
         // CM binding functions are referenced during WIR translation (not TIR
         // call graph), so they must survive function DCE. Their return types
@@ -1209,7 +1192,7 @@ fn compute_reachable_types(project: &FlatPackage) -> IndexSet<TypeId> {
     {
         let type_table = project.type_table.borrow();
 
-        for (_ms, func_rc) in &project.functions {
+        for func_rc in &project.functions {
             let func = func_rc.borrow();
             collect_types_from_function(&func, &type_table, &mut reachable_types);
         }
@@ -1882,7 +1865,7 @@ pub fn remove_unreachable_globals(project: &mut FlatPackage) {
     // Key: (module_source path as string, global name)
     let mut used_globals: IndexSet<(String, String)> = IndexSet::default();
 
-    for (_ms, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let func = func_rc.borrow();
         if let Some(body) = &func.body {
             collect_global_reads_block(body, &mut used_globals);
@@ -1896,7 +1879,7 @@ pub fn remove_unreachable_globals(project: &mut FlatPackage) {
     });
 
     // Phase 3: Remove GlobalVarSet statements for dead globals from function bodies
-    for (_ms, func_rc) in &project.functions {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = &mut func.body {
             remove_dead_global_sets_block(body, &used_globals);
