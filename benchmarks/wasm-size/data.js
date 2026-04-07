@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775529293532,
+  "lastUpdate": 1775601646861,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10631,6 +10631,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ea8c83482a3be6a843bd69fc3cba1744eac1e96d"
         },
         "date": 1775529293313,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ea205ffe0dd47dd549814c41f66b174eecc7fdc",
+          "message": "Merge pull request #783 from wado-lang/claude/refactor-compiler-linking-VKCQ2\n\nRefactor: extract link phase, flatten FlatPackage, clean up DCE",
+          "timestamp": "2026-04-08T07:37:17+09:00",
+          "tree_id": "ec2b937035221ced692bf325a4767403a0e7cd7f",
+          "url": "https://github.com/wado-lang/wado/commit/1ea205ffe0dd47dd549814c41f66b174eecc7fdc"
+        },
+        "date": 1775601646603,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
