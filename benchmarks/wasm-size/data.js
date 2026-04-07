@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775490523398,
+  "lastUpdate": 1775529293532,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10592,6 +10592,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1b2dc6facd4af52c897ec065507208def9bf2488"
         },
         "date": 1775490523110,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ea8c83482a3be6a843bd69fc3cba1744eac1e96d",
+          "message": "Merge pull request #782 from wado-lang/claude/improve-golden-fixtures-YFWSD\n\nImprove WIR golden fixture readability",
+          "timestamp": "2026-04-07T11:31:31+09:00",
+          "tree_id": "29400c971b8a021e2c36472dafb08f11304e71bd",
+          "url": "https://github.com/wado-lang/wado/commit/ea8c83482a3be6a843bd69fc3cba1744eac1e96d"
+        },
+        "date": 1775529293313,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
