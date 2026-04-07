@@ -238,7 +238,7 @@ impl<'a> WirUnparser<'a> {
         self.write(&s.name.fq);
         self.write(" {");
 
-        self.unparse_type_comment(type_idx, &s.meta);
+        self.unparse_type_comment(type_idx);
 
         if let Some(ref newtype) = s.newtype_origin {
             self.write(&format!(
@@ -280,7 +280,7 @@ impl<'a> WirUnparser<'a> {
         self.write("variant ");
         self.write(&v.name.fq);
         self.write(" {");
-        self.unparse_type_comment(type_idx, &v.meta);
+        self.unparse_type_comment(type_idx);
         self.newline();
 
         self.indent += 1;
@@ -323,7 +323,7 @@ impl<'a> WirUnparser<'a> {
         }
 
         self.write(" };");
-        self.unparse_type_comment(type_idx, &e.meta);
+        self.unparse_type_comment(type_idx);
         self.newline();
     }
 
@@ -343,7 +343,7 @@ impl<'a> WirUnparser<'a> {
         }
 
         self.write(" };");
-        self.unparse_type_comment(type_idx, &f.meta);
+        self.unparse_type_comment(type_idx);
         self.newline();
     }
 
@@ -358,7 +358,7 @@ impl<'a> WirUnparser<'a> {
         }
         self.write(&self.fmt_type(&a.element_type));
         self.write(");");
-        self.unparse_type_comment(type_idx, &a.meta);
+        self.unparse_type_comment(type_idx);
         self.newline();
     }
 
@@ -2021,7 +2021,7 @@ impl<'a> WirUnparser<'a> {
         self.write("}");
     }
 
-    fn unparse_type_comment(&mut self, type_idx: usize, _meta: &crate::wir::WirMeta) {
+    fn unparse_type_comment(&mut self, type_idx: usize) {
         self.write(&format!("  // TypeId({type_idx})"));
     }
 
