@@ -153,7 +153,6 @@ pub fn link(package: Package) -> FlatPackage {
         module_name: package.module_name,
         wasi_registry: package.wasi_registry,
         world_registry: package.world_registry,
-        reachable_functions: package.reachable_functions,
         used_wasi_functions: package.used_wasi_functions,
         strip_names: package.strip_names,
         skip_validation: package.skip_validation,

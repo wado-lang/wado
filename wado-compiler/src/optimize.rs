@@ -175,8 +175,8 @@ pub fn optimize(
 
 fn run_dce(project: &mut FlatPackage, profiler: &dyn SpanEmitter) {
     profiler.span_start("tir/dce");
-    analyze_project(project);
-    remove_unreachable_functions(project);
+    let reachable = analyze_project(project);
+    remove_unreachable_functions(project, &reachable);
     remove_unreachable_globals(project);
     remove_unreachable_types(project);
     profiler.span_end("tir/dce");

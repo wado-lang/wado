@@ -1,7 +1,7 @@
 //! Function collection — gathers all reachable functions from the Package,
 //! registers their types and creates `WirFunction` stubs (bodies filled later).
 
-use crate::name::{FreeFunctionName, FunctionId, MethodName, ModuleSource};
+use crate::name::ModuleSource;
 use crate::tir::{TirFunction, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType,
@@ -265,17 +265,6 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        // Build function ID for reachability check
-        let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
-            module_source,
-            &tir_func.name,
-        ));
-
-        // Skip unreachable functions (but keep export functions)
-        if !tir_func.is_export && !ctx.package.is_reachable(&func_id) {
-            continue;
-        }
-
         register_single_function(
             ctx,
             &tir_func,
@@ -314,15 +303,6 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        // Build function ID
-        let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
-            module_source,
-            &tir_func.name,
-        ));
-        if !ctx.package.is_reachable(&func_id) {
-            continue;
-        }
-
         register_single_function(
             ctx,
             &tir_func,
@@ -347,9 +327,9 @@ fn register_methods(ctx: &mut WirContext<'_>) {
         }
 
         // Only methods
-        let Some(ref method_info) = tir_func.method_info else {
+        if tir_func.method_info.is_none() {
             continue;
-        };
+        }
 
         if tir_func.body.is_none() {
             continue;
@@ -362,20 +342,6 @@ fn register_methods(ctx: &mut WirContext<'_>) {
                 .iter()
                 .any(|p| type_table.contains_type_param(p.type_id))
         {
-            continue;
-        }
-
-        // Build method ID
-        let method_name = MethodName::new(
-            module_source.clone(),
-            method_info.struct_name.clone(),
-            method_info.trait_name.clone(),
-            method_info.method_name.clone(),
-        );
-        let method_id = FunctionId::Method(method_name);
-
-        let is_mono = tir_func.monomorph_info.is_some();
-        if !is_mono && !ctx.package.is_reachable(&method_id) {
             continue;
         }
 

@@ -7,7 +7,7 @@
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{FunctionId, ModuleSource};
+use crate::name::ModuleSource;
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::world_registry::{self, WorldRegistry};
@@ -37,8 +37,6 @@ pub struct Package {
     /// Registry of builtin function signatures from lib/core/builtin.wado
     pub builtin_registry: BuiltinRegistry,
 
-    /// Set of reachable functions (from DCE analysis)
-    pub reachable_functions: IndexSet<FunctionId>,
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
@@ -81,7 +79,6 @@ impl Package {
             world_registry,
             builtin_registry,
             // Usage analysis fields default to empty/false
-            reachable_functions: IndexSet::default(),
             used_wasi_functions: IndexSet::default(),
             // Codegen options
             strip_names: false,
@@ -98,11 +95,6 @@ impl Package {
         self.tir_modules
             .get(&self.entry_module_source)
             .expect("entry module should exist in TIR modules")
-    }
-
-    /// Check if a function is reachable (should be included in the binary)
-    pub fn is_reachable(&self, func_id: &FunctionId) -> bool {
-        self.reachable_functions.contains(func_id)
     }
 
     /// Check if the project targets the synthetic test world.

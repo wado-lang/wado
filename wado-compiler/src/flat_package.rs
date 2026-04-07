@@ -11,7 +11,7 @@ use std::rc::Rc;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{FunctionId, LocalMethodName, ModuleSource};
+use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
     ClosureFunctor, TirEnum, TirFlags, TirFunction, TirGlobal, TirImpl, TirImport, TirNewtype,
     TirStruct, TirTest, TirTrait, TirVariantDecl, TypeId, TypeTable,
@@ -77,8 +77,6 @@ pub struct FlatPackage {
     /// Registry of world definitions from lib/wasi/*.wado
     pub world_registry: &'static WorldRegistry,
 
-    /// Set of reachable functions (from DCE analysis)
-    pub reachable_functions: IndexSet<FunctionId>,
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
@@ -103,11 +101,6 @@ pub struct FlatPackage {
 }
 
 impl FlatPackage {
-    /// Check if a function is reachable (should be included in the binary)
-    pub fn is_reachable(&self, func_id: &FunctionId) -> bool {
-        self.reachable_functions.contains(func_id)
-    }
-
     /// Check if the project targets the synthetic test world.
     pub fn is_test_world(&self) -> bool {
         self.target_world == world_registry::TEST_WORLD

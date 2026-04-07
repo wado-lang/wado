@@ -39,9 +39,10 @@ struct FunctionAnalysis {
 /// Analyze the project and populate its usage fields with DCE analysis results.
 ///
 /// This performs dead code elimination analysis starting from the entry point
-/// and populates the project's `reachable_functions`, `used_wasi_functions`
-/// fields, and the entry module's `imports` list.
-pub fn analyze_project(project: &mut FlatPackage) {
+/// and populates the project's `used_wasi_functions` field and the `imports`
+/// list. Returns the set of reachable functions for use by
+/// `remove_unreachable_functions`.
+pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     // Build call graph and effect usage from all functions
     let (call_graph, effect_usage) = build_analysis_graph(project);
 
@@ -248,7 +249,6 @@ pub fn analyze_project(project: &mut FlatPackage) {
         .sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
 
     // Apply results to project
-    project.reachable_functions.clone_from(&reachable);
     project.used_wasi_functions = used_wasi_functions;
 
     // Filter string literals to only include strings from reachable functions.
@@ -287,6 +287,8 @@ pub fn analyze_project(project: &mut FlatPackage) {
     }
 
     project.string_literals = reachable_strings.into_iter().collect();
+
+    reachable
 }
 
 /// Build call graph and effect usage from all TIR functions
@@ -1045,22 +1047,17 @@ fn compute_reachable(
     reachable
 }
 
-/// Remove unreachable functions from the project's TIR modules.
+/// Remove unreachable functions from the project's function list.
 ///
-/// This physically removes functions that are not in `reachable_functions`
-/// from the TIR, so codegen doesn't need to filter them.
-pub fn remove_unreachable_functions(project: &mut FlatPackage) {
-    let reachable_functions = project.reachable_functions.clone();
+/// After this, all remaining functions are reachable — downstream phases
+/// (`wir_build`, codegen) register every function without additional filtering.
+pub fn remove_unreachable_functions(
+    project: &mut FlatPackage,
+    reachable_functions: &IndexSet<FunctionId>,
+) {
     project.functions.retain(|func_rc| {
         let func = func_rc.borrow();
         let module_source = &func.module_source;
-
-        // CM binding functions are referenced during WIR translation (not TIR
-        // call graph), so they must survive function DCE. Their return types
-        // may include synthesized TypeIds that must also survive type DCE.
-        if func.is_cm_binding {
-            return true;
-        }
 
         // Use TirFunction's method_info to check if this is a method
         if let Some(ref info) = func.method_info {
@@ -1091,7 +1088,7 @@ pub fn remove_unreachable_functions(project: &mut FlatPackage) {
             // For generic methods/static methods, check if any monomorphized version is reachable
             // Generic functions are named "Array::with_capacity" but calls use "Array<i32>::with_capacity"
             // Check if any function ID in reachable_functions matches this base name
-            is_generic_func_reachable(&reachable_functions, module_source, &func.name)
+            is_generic_func_reachable(reachable_functions, module_source, &func.name)
         } else {
             // Regular function
             let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
