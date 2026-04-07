@@ -17,9 +17,6 @@ use crate::world_registry::WorldExportInfo;
 /// and stored in `WirPackage::needed_canonicals`.
 #[derive(Debug, Clone, Default)]
 pub struct ComponentPlan {
-    /// Bundled module function names (e.g., "`libm_sin`").
-    /// These are TIR imports with namespace "bundled".
-    pub bundled_functions: Vec<String>,
     /// World exports to create at the component boundary.
     pub world_exports: Vec<WorldExportPlan>,
     /// Test functions to export.
@@ -72,14 +69,6 @@ pub struct TestExportPlan {
 pub fn build_component_plan(project: &Package) -> ComponentPlan {
     let entry_tir = project.entry_module();
 
-    // Collect bundled module functions from TIR imports with namespace "bundled"
-    let bundled_functions: Vec<String> = entry_tir
-        .imports
-        .iter()
-        .filter(|i| i.namespace == "bundled")
-        .map(|i| i.canonical_name.clone())
-        .collect();
-
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
     let world_exports = if project.is_test_world() {
@@ -115,7 +104,6 @@ pub fn build_component_plan(project: &Package) -> ComponentPlan {
     };
 
     ComponentPlan {
-        bundled_functions,
         world_exports,
         test_exports,
     }

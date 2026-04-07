@@ -43,13 +43,18 @@ pub fn build_component(
         enc.defined_type().result(None, None);
     }
 
-    // Bundled modules (FTS and libm)
+    // Bundled modules (FTS and libm) — computed from post-DCE imports
     let component_plan = &project.component_plan;
-    let bundled_functions = &component_plan.bundled_functions;
+    let bundled_functions: Vec<String> = project
+        .imports
+        .iter()
+        .filter(|i| i.namespace == "bundled")
+        .map(|i| i.canonical_name.clone())
+        .collect();
 
     // Core memory module
     let mem_info = wasm_modules.get("mem");
-    let mem_module = build_memory_module(project.strip_names, mem_info, bundled_functions);
+    let mem_module = build_memory_module(project.strip_names, mem_info, &bundled_functions);
     ctx.register_core_module("mem-mod");
     builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -75,7 +80,7 @@ pub fn build_component(
         ExportKind::Func,
     );
 
-    embed_bundled_modules(&mut builder, &mut ctx, bundled_functions);
+    embed_bundled_modules(&mut builder, &mut ctx, &bundled_functions);
 
     // Canonical intrinsics are discovered lazily during WIR translation via ensure_canonical().
     // They are stored in wir_package.needed_canonicals — the single source of truth.
