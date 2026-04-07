@@ -131,25 +131,21 @@ pub struct PendingFunctionBody {
 impl<'a> WirContext<'a> {
     /// Create a new `WirContext` from a Package.
     pub fn new(package: &'a FlatPackage) -> Self {
-        // Collect string literals from all TIR modules (deduped)
+        // Collect string literals (deduped)
         let mut seen: IndexSet<&str> = IndexSet::default();
         let mut string_literals = Vec::new();
-        for tir_module in package.tir_modules.values() {
-            for s in &tir_module.string_literals {
-                if seen.insert(s.as_str()) {
-                    string_literals.push(s.clone());
-                }
+        for s in &package.string_literals {
+            if seen.insert(s.as_str()) {
+                string_literals.push(s.clone());
             }
         }
 
-        // Collect bytes literals from all TIR modules (deduped)
+        // Collect bytes literals (deduped)
         let mut seen_bytes: IndexSet<&[u8]> = IndexSet::default();
         let mut bytes_literals = Vec::new();
-        for tir_module in package.tir_modules.values() {
-            for b in &tir_module.bytes_literals {
-                if seen_bytes.insert(b.as_slice()) {
-                    bytes_literals.push(b.clone());
-                }
+        for b in &package.bytes_literals {
+            if seen_bytes.insert(b.as_slice()) {
+                bytes_literals.push(b.clone());
             }
         }
 

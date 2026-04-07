@@ -1120,6 +1120,7 @@ impl ClosureLowerer {
 
             let tir_struct = TirStruct {
                 name: struct_name.clone(),
+                module_source: self.module_source.clone(),
                 is_pub: false,
                 type_params: Vec::new(),
                 monomorph_info: None,
@@ -1259,6 +1260,7 @@ impl ClosureLowerer {
             self.generated_functions.push(Rc::clone(&call_method_rc));
 
             self.functor_infos.push(ClosureFunctor {
+                module_source: self.module_source.clone(),
                 id: collected.id,
                 struct_name,
                 struct_type_id,

@@ -42,10 +42,9 @@ pub fn collect_functions(ctx: &mut WirContext<'_>) {
 
 /// Register builtin and bundled function imports.
 fn register_imports(ctx: &mut WirContext<'_>) {
-    let entry_tir = ctx.package.entry_module();
-    let type_table = &*entry_tir.type_table.borrow();
+    let type_table = &*ctx.package.type_table.borrow();
 
-    for import in &entry_tir.imports {
+    for import in &ctx.package.imports {
         // Register the function type
         let params: Vec<WirType> = import
             .params
@@ -238,14 +237,16 @@ fn register_memory_import(ctx: &mut WirContext<'_>) {
     });
 }
 
-/// Register entry module functions.
+/// Register entry module free functions.
 fn register_entry_functions(ctx: &mut WirContext<'_>) {
-    let entry_tir = ctx.package.entry_module();
-    let type_table_rc = entry_tir.type_table.clone();
+    let type_table_rc = ctx.package.type_table.clone();
     let type_table = &*type_table_rc.borrow();
-    let module_source = entry_tir.module_source.clone();
+    let entry_source = &ctx.package.entry_module_source;
 
-    for func_rc in &entry_tir.functions {
+    for (module_source, func_rc) in &ctx.package.functions {
+        if module_source != entry_source {
+            continue;
+        }
         let tir_func = func_rc.borrow();
 
         // Skip bodyless functions
@@ -265,7 +266,7 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
 
         // Build function ID for reachability check
         let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
-            &module_source,
+            module_source,
             &tir_func.name,
         ));
 
@@ -278,7 +279,7 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
             ctx,
             &tir_func,
             type_table,
-            &module_source,
+            module_source,
             func_rc.clone(),
             type_table_rc.clone(),
         );
@@ -287,113 +288,109 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
 
 /// Register loaded module functions (core:*, etc.).
 fn register_loaded_functions(ctx: &mut WirContext<'_>) {
-    let entry_source = ctx.package.entry_module_source.clone();
+    let entry_source = &ctx.package.entry_module_source;
+    let type_table_rc = ctx.package.type_table.clone();
+    let type_table = &*type_table_rc.borrow();
 
-    for (module_source, tir_mod) in &ctx.package.tir_modules {
-        if *module_source == entry_source || module_source.is_wasi() {
+    for (module_source, func_rc) in &ctx.package.functions {
+        if module_source == entry_source || module_source.is_wasi() {
             continue;
         }
 
-        let type_table_rc = tir_mod.type_table.clone();
-        let type_table = &*type_table_rc.borrow();
+        let tir_func = func_rc.borrow();
 
-        for func_rc in &tir_mod.functions {
-            let tir_func = func_rc.borrow();
-
-            if tir_func.name == "run" || tir_func.body.is_none() || tir_func.name.contains("::") {
-                continue;
-            }
-
-            // Skip generic template functions
-            if !tir_func.type_params.is_empty() && tir_func.monomorph_info.is_none() {
-                continue;
-            }
-
-            // Skip unsupported effects
-            if has_unsupported_effects(&tir_func, ctx.package) {
-                continue;
-            }
-
-            // Build function ID
-            let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                module_source,
-                &tir_func.name,
-            ));
-            if !ctx.package.is_reachable(&func_id) {
-                continue;
-            }
-
-            register_single_function(
-                ctx,
-                &tir_func,
-                type_table,
-                module_source,
-                func_rc.clone(),
-                type_table_rc.clone(),
-            );
+        if tir_func.name == "run" || tir_func.body.is_none() || tir_func.name.contains("::") {
+            continue;
         }
+
+        // Skip generic template functions
+        if !tir_func.type_params.is_empty() && tir_func.monomorph_info.is_none() {
+            continue;
+        }
+
+        // Skip unsupported effects
+        if has_unsupported_effects(&tir_func, ctx.package) {
+            continue;
+        }
+
+        // Build function ID
+        let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+            module_source,
+            &tir_func.name,
+        ));
+        if !ctx.package.is_reachable(&func_id) {
+            continue;
+        }
+
+        register_single_function(
+            ctx,
+            &tir_func,
+            type_table,
+            module_source,
+            func_rc.clone(),
+            type_table_rc.clone(),
+        );
     }
 }
 
 /// Register methods from all modules.
 fn register_methods(ctx: &mut WirContext<'_>) {
-    for (module_source, tir_mod) in &ctx.package.tir_modules {
+    let type_table_rc = ctx.package.type_table.clone();
+    let type_table = &*type_table_rc.borrow();
+
+    for (module_source, func_rc) in &ctx.package.functions {
         if module_source.is_wasi() {
             continue;
         }
-        let type_table_rc = tir_mod.type_table.clone();
-        let type_table = &*type_table_rc.borrow();
 
-        for func_rc in &tir_mod.functions {
-            let tir_func = func_rc.borrow();
+        let tir_func = func_rc.borrow();
 
-            // Only methods
-            let Some(ref method_info) = tir_func.method_info else {
-                continue;
-            };
+        // Only methods
+        let Some(ref method_info) = tir_func.method_info else {
+            continue;
+        };
 
-            if tir_func.body.is_none() {
-                continue;
-            }
-
-            // Skip generic template methods
-            if type_table.contains_type_param(tir_func.return_type)
-                || tir_func
-                    .params
-                    .iter()
-                    .any(|p| type_table.contains_type_param(p.type_id))
-            {
-                continue;
-            }
-
-            // Build method ID
-            let method_name = MethodName::new(
-                module_source.clone(),
-                method_info.struct_name.clone(),
-                method_info.trait_name.clone(),
-                method_info.method_name.clone(),
-            );
-            let method_id = FunctionId::Method(method_name);
-
-            let is_mono = tir_func.monomorph_info.is_some();
-            if !is_mono && !ctx.package.is_reachable(&method_id) {
-                continue;
-            }
-
-            // Skip unsupported effects
-            if has_unsupported_effects(&tir_func, ctx.package) {
-                continue;
-            }
-
-            register_single_function(
-                ctx,
-                &tir_func,
-                type_table,
-                module_source,
-                func_rc.clone(),
-                type_table_rc.clone(),
-            );
+        if tir_func.body.is_none() {
+            continue;
         }
+
+        // Skip generic template methods
+        if type_table.contains_type_param(tir_func.return_type)
+            || tir_func
+                .params
+                .iter()
+                .any(|p| type_table.contains_type_param(p.type_id))
+        {
+            continue;
+        }
+
+        // Build method ID
+        let method_name = MethodName::new(
+            module_source.clone(),
+            method_info.struct_name.clone(),
+            method_info.trait_name.clone(),
+            method_info.method_name.clone(),
+        );
+        let method_id = FunctionId::Method(method_name);
+
+        let is_mono = tir_func.monomorph_info.is_some();
+        if !is_mono && !ctx.package.is_reachable(&method_id) {
+            continue;
+        }
+
+        // Skip unsupported effects
+        if has_unsupported_effects(&tir_func, ctx.package) {
+            continue;
+        }
+
+        register_single_function(
+            ctx,
+            &tir_func,
+            type_table,
+            module_source,
+            func_rc.clone(),
+            type_table_rc.clone(),
+        );
     }
 }
 
@@ -546,52 +543,50 @@ fn register_exports(ctx: &mut WirContext<'_>) {
 /// - Entry module: `"global:{name}"`
 /// - Other modules: `"global:{mod_path}::{name}"`
 fn register_globals(ctx: &mut WirContext<'_>) {
-    let entry_source = ctx.package.entry_module_source.clone();
+    let entry_source = &ctx.package.entry_module_source;
+    let type_table = &*ctx.package.type_table.borrow();
 
-    for (module_source, tir_mod) in &ctx.package.tir_modules {
+    for global in &ctx.package.globals {
+        let module_source = &global.module_source;
         if module_source.is_wasi() {
             continue;
         }
 
-        let type_table = &*tir_mod.type_table.borrow();
+        let global_name = if module_source == entry_source {
+            format!("global:{}", global.name)
+        } else {
+            let module_path = module_source.to_path();
+            format!("global:{}::{}", module_path.join("::"), global.name)
+        };
 
-        for global in &tir_mod.globals {
-            let global_name = if *module_source == entry_source {
-                format!("global:{}", global.name)
-            } else {
-                let module_path = module_source.to_path();
-                format!("global:{}::{}", module_path.join("::"), global.name)
+        let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
+
+        // For nullable globals (lazy-init reference types), ensure the WIR type is nullable
+        if global.is_nullable
+            && let WirType::Ref { type_id, .. } = wir_type
+        {
+            wir_type = WirType::Ref {
+                type_id,
+                nullable: true,
             };
-
-            let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
-
-            // For nullable globals (lazy-init reference types), ensure the WIR type is nullable
-            if global.is_nullable
-                && let WirType::Ref { type_id, .. } = wir_type
-            {
-                wir_type = WirType::Ref {
-                    type_id,
-                    nullable: true,
-                };
-            }
-
-            // Convert the initializer to a WIR constant instruction
-            let init = translate_global_init(&global.initializer, type_table);
-
-            let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
-            ctx.global_map.insert(global_name.clone(), idx);
-
-            ctx.globals.push(WirGlobal {
-                name: WirName { fq: global_name },
-                ty: wir_type,
-                mutable: global.mutable,
-                init,
-                meta: WirMeta {
-                    module_source: Some(module_source.clone()),
-                    ..WirMeta::default()
-                },
-            });
         }
+
+        // Convert the initializer to a WIR constant instruction
+        let init = translate_global_init(&global.initializer, type_table);
+
+        let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
+        ctx.global_map.insert(global_name.clone(), idx);
+
+        ctx.globals.push(WirGlobal {
+            name: WirName { fq: global_name },
+            ty: wir_type,
+            mutable: global.mutable,
+            init,
+            meta: WirMeta {
+                module_source: Some(module_source.clone()),
+                ..WirMeta::default()
+            },
+        });
     }
 }
 

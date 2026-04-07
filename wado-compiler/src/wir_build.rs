@@ -19,14 +19,9 @@ pub use context::DEFINED_FUNC_BASE;
 pub fn build_wir_package(package: &FlatPackage) -> WirPackage {
     let mut ctx = context::WirContext::new(package);
 
-    // Collect wasm_module attributes from TIR modules
-    for (module_source, tir_mod) in &package.tir_modules {
-        if let Some(wasm_mod_name) = &tir_mod.wasm_module {
-            let prefix = module_source.to_string();
-            ctx.wasm_module_sources
-                .insert(prefix, wasm_mod_name.clone());
-        }
-    }
+    // Copy wasm_module attributes (already collected during link)
+    ctx.wasm_module_sources
+        .clone_from(&package.wasm_module_sources);
 
     // Step 1: Register all types
     types::register_types(&mut ctx);

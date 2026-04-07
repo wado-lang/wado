@@ -2535,6 +2535,7 @@ pub struct TirParam {
 #[derive(Debug, Clone)]
 pub struct TirStruct {
     pub name: String,
+    pub module_source: ModuleSource,
     pub is_pub: bool,
     /// Generic type parameters (empty for non-generic structs)
     pub type_params: Vec<TirTypeParam>,
@@ -2564,6 +2565,7 @@ pub struct TirField {
 #[derive(Debug, Clone)]
 pub struct TirEnum {
     pub name: String,
+    pub module_source: ModuleSource,
     pub is_pub: bool,
     /// Generic type parameters (empty for non-generic enums)
     pub type_params: Vec<TirTypeParam>,
@@ -2588,6 +2590,7 @@ pub struct TirEnumCase {
 #[derive(Debug, Clone)]
 pub struct TirFlags {
     pub name: String,
+    pub module_source: ModuleSource,
     pub is_pub: bool,
     /// The newtype `TypeId` (base type is u32)
     pub type_id: TypeId,
@@ -2609,6 +2612,7 @@ pub struct TirFlagsMember {
 #[derive(Debug, Clone)]
 pub struct TirVariantDecl {
     pub name: String,
+    pub module_source: ModuleSource,
     pub is_pub: bool,
     /// Generic type parameters (e.g., `T` in `variant Option<T>`)
     pub type_params: Vec<TirTypeParam>,
@@ -2639,6 +2643,7 @@ pub struct TirVariantCase {
 #[derive(Debug, Clone)]
 pub struct TirNewtype {
     pub name: String,
+    pub module_source: ModuleSource,
     pub is_pub: bool,
     pub type_id: TypeId,
     pub span: Span,
@@ -2731,6 +2736,7 @@ pub struct SynthesisRequest {
 /// closure calls when the closure is known at compile time.
 #[derive(Debug, Clone)]
 pub struct ClosureFunctor {
+    pub module_source: ModuleSource,
     /// Unique closure ID (matches the order closures are visited in the module)
     pub id: u32,
     /// Name of the generated functor struct (e.g., `__Closure_0`)

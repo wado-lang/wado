@@ -2360,6 +2360,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         self.pending_anonymous_structs.push(TirStruct {
             name: anon_name.clone(),
+            module_source: self.current_module_source.clone(),
             is_pub: false,
             type_params: Vec::new(),
             monomorph_info: None,

@@ -104,6 +104,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         TirStruct {
             name: struct_decl.name.clone(),
+            module_source: self.current_module_source.clone(),
             is_pub: struct_decl.is_pub,
             type_params,
             monomorph_info: None, // Not from monomorphization
@@ -204,6 +205,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         TirVariantDecl {
             name: variant_decl.name.clone(),
+            module_source: self.current_module_source.clone(),
             is_pub: variant_decl.is_pub,
             type_params,
             cases,

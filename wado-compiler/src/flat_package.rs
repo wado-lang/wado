@@ -1,42 +1,76 @@
 //! `FlatPackage` — linked compilation context for WIR building and code generation
 //!
-//! `FlatPackage` is produced by the link phase from a `Package`. It carries
-//! the TIR modules and metadata needed by `wir_build` and `codegen`.
-//!
-//! Conceptually, the link phase consumes per-module TIR and produces a linked
-//! representation. In this initial version, `tir_modules` is kept as-is;
-//! future work will flatten it into a single module-independent function/type
-//! list so that `wir_build` no longer needs per-module iteration.
+//! `FlatPackage` is produced by the link phase from a `Package`. It flattens all
+//! per-module TIR into flat lists of functions, types, etc. Downstream phases
+//! (optimizer, `wir_build`, `codegen`) work directly on these flat lists without
+//! needing per-module iteration.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{FunctionId, ModuleSource};
-use crate::tir::{TirModule, TypeTable};
+use crate::name::{FunctionId, LocalMethodName, ModuleSource};
+use crate::tir::{
+    ClosureFunctor, TirEnum, TirFlags, TirFunction, TirGlobal, TirImpl, TirImport, TirNewtype,
+    TirStruct, TirTest, TirTrait, TirVariantDecl, TypeTable,
+};
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
 
 /// A linked Wado package ready for WIR building and code generation.
 ///
 /// Produced by [`crate::link::link`] from a [`crate::package::Package`].
-/// Contains the TIR modules plus all metadata needed by downstream phases
-/// (WIR build, WIR optimize, codegen).
+/// Contains flattened TIR data (merged from all modules) plus metadata needed
+/// by downstream phases (optimizer, WIR build, codegen).
 #[derive(Debug)]
 pub struct FlatPackage {
     /// The entry module source
     pub entry_module_source: ModuleSource,
-    /// All TIR modules indexed by module source.
-    ///
-    /// In a future refactoring step, this will be replaced by flat lists of
-    /// functions, structs, variants, etc.
-    pub tir_modules: IndexMap<ModuleSource, TirModule>,
-    /// Shared type table (same `Rc` as every `TirModule.type_table`)
+
+    /// Shared type table
     pub type_table: Rc<RefCell<TypeTable>>,
+
+    /// All functions from all modules, paired with their module source.
+    /// `TirFunction` does not carry `module_source` internally, so we pair it here.
+    pub functions: Vec<(ModuleSource, Rc<RefCell<TirFunction>>)>,
+    /// All struct declarations (each carries its own `module_source`)
+    pub structs: Vec<TirStruct>,
+    /// All enum declarations (each carries its own `module_source`)
+    pub enums: Vec<TirEnum>,
+    /// All variant declarations (each carries its own `module_source`)
+    pub variants: Vec<TirVariantDecl>,
+    /// All flags declarations (each carries its own `module_source`)
+    pub flags: Vec<TirFlags>,
+    /// All newtype declarations (each carries its own `module_source`)
+    pub newtypes: Vec<TirNewtype>,
+    /// All global variable declarations (each carries its own `module_source`)
+    pub globals: Vec<TirGlobal>,
+    /// Imports (from entry module only)
+    pub imports: Vec<TirImport>,
+    /// Test declarations (from entry module only)
+    pub tests: Vec<TirTest>,
+    /// Trait declarations
+    pub traits: Vec<TirTrait>,
+    /// Trait impl blocks
+    pub impls: Vec<TirImpl>,
+    /// All string literals (merged from all modules)
+    pub string_literals: Vec<String>,
+    /// All byte array literals (merged from all modules)
+    pub bytes_literals: Vec<Vec<u8>>,
+    /// Closure functor metadata (each carries its own `module_source`)
+    pub closure_functors: Vec<ClosureFunctor>,
+    /// Data section content (from entry module)
+    pub data_section: Option<String>,
+    /// Map of function name to string literals it contains (for DCE)
+    pub function_strings: IndexMap<String, Vec<String>>,
+    /// Map of function name to method info (for DCE)
+    pub function_method_info: IndexMap<String, Option<LocalMethodName>>,
+    /// Map of module source prefix to wasm module name (from `#![wasm_module("name")]`)
+    pub wasm_module_sources: IndexMap<String, String>,
+
     /// Module name for the output (derived from filename)
     pub module_name: String,
-
     /// Registry of WASI imports from lib/wasi/*.wado
     pub wasi_registry: &'static WasiRegistry,
     /// Registry of world definitions from lib/wasi/*.wado
@@ -55,7 +89,6 @@ pub struct FlatPackage {
 
     /// When true, the target world exports an HTTP handler.
     pub has_http_handler_export: bool,
-
     /// Maps world export name → adapter function name.
     pub export_binding_names: IndexMap<String, String>,
 
@@ -64,13 +97,6 @@ pub struct FlatPackage {
 }
 
 impl FlatPackage {
-    /// Get the entry module TIR.
-    pub fn entry_module(&self) -> &TirModule {
-        self.tir_modules
-            .get(&self.entry_module_source)
-            .expect("entry module should exist in TIR modules")
-    }
-
     /// Check if a function is reachable (should be included in the binary)
     pub fn is_reachable(&self, func_id: &FunctionId) -> bool {
         self.reachable_functions.contains(func_id)

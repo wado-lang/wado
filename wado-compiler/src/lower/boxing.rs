@@ -69,6 +69,7 @@ impl BoxLowerer {
         // Create the TirStruct definition with a single `value` field
         let tir_struct = TirStruct {
             name: struct_name,
+            module_source: self.box_module_source.clone(),
             is_pub: true,
             type_params: Vec::new(),
             monomorph_info: Some(MonomorphInfo {

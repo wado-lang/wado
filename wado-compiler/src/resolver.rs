@@ -693,6 +693,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 Item::Enum(enum_decl) => {
                     let tir_enum = TirEnum {
                         name: enum_decl.name.clone(),
+                        module_source: self.current_module_source.clone(),
                         is_pub: enum_decl.is_pub,
                         type_params: Vec::new(),
                         monomorph_info: None,
@@ -714,6 +715,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     if let Some(flags_info) = self.flags_cases.get(&flags_decl.name) {
                         let tir_flags = TirFlags {
                             name: flags_decl.name.clone(),
+                            module_source: self.current_module_source.clone(),
                             is_pub: flags_decl.is_pub,
                             type_id: flags_info.type_id,
                             members: flags_decl
@@ -735,6 +737,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     if let Some(&type_id) = self.newtypes.get(&newtype_decl.name) {
                         tir_module.add_newtype(TirNewtype {
                             name: newtype_decl.name.clone(),
+                            module_source: self.current_module_source.clone(),
                             is_pub: newtype_decl.is_pub,
                             type_id,
                             span: newtype_decl.span,

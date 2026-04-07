@@ -731,12 +731,8 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 println!("{project:#?}");
             } else {
                 println!("=== TIR ===");
-                for (module_source, module) in &project.tir_modules {
-                    let path_str = module_source.to_string();
-                    println!("// --- Module: {path_str} ---");
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    println!("{unparsed}");
-                }
+                let unparsed = wado_compiler::unparse::unparse_flat_package(&project);
+                println!("{unparsed}");
             }
             println!();
         } else {
