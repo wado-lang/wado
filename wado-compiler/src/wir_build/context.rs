@@ -11,8 +11,8 @@ use crate::name::{ModuleSource, StructName};
 use crate::tir::{TirFunction, TypeId, TypeTable};
 use crate::wir::{
     CanonicalIntrinsic, WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
-    WirGlobal, WirImport, WirImportDesc, WirName, WirNames, WirPackage, WirRecGroup, WirType,
-    WirTypeDef, WirTypeId,
+    WirGlobal, WirImport, WirImportDesc, WirName, WirNames, WirPackage, WirType, WirTypeDef,
+    WirTypeId,
 };
 
 /// Base offset for defined function `WirFuncId` indices.
@@ -34,8 +34,6 @@ pub struct WirContext<'a> {
     pub types: Vec<WirTypeDef>,
     /// Map from fully-qualified type name to `WirTypeId`.
     pub type_map: IndexMap<String, WirTypeId>,
-    /// Rec groups (mutually recursive types).
-    pub rec_groups: Vec<WirRecGroup>,
     /// Map from `StructName` to `WirTypeId` (for struct lookup by qualified name).
     pub struct_type_map: IndexMap<StructName, WirTypeId>,
     /// Map from element `TypeId` to `WirTypeId` for raw GC array types.
@@ -153,7 +151,6 @@ impl<'a> WirContext<'a> {
             package,
             types: Vec::new(),
             type_map: IndexMap::default(),
-            rec_groups: Vec::new(),
             struct_type_map: IndexMap::default(),
             array_type_map: IndexMap::default(),
             array_type_by_name: IndexMap::default(),
@@ -922,22 +919,8 @@ impl<'a> WirContext<'a> {
         let needed_canonicals: IndexSet<CanonicalIntrinsic> =
             self.needed_canonicals.keys().cloned().collect();
 
-        // Build parallel list of stored WirFuncId indices for defined functions.
-        // Each entry is the WirFuncId.index() that Call instructions use to call that function.
-        // This may differ from `final_import_count + list_pos` when `ensure_canonical` adds
-        // imports after functions were registered (which shifts the import count).
-        let func_wir_indices: Vec<u32> = functions
-            .iter()
-            .map(|f| {
-                self.func_map
-                    .get(&f.name.fq)
-                    .map_or(0, super::super::wir::WirFuncId::index)
-            })
-            .collect();
-
         WirPackage {
             types: self.types,
-            rec_groups: self.rec_groups,
             imports: self.imports,
             functions,
             globals,
@@ -945,17 +928,14 @@ impl<'a> WirContext<'a> {
             elements: Vec::new(), // TODO: element section
             memories: Vec::new(),
             data: self.data,
-            branch_hints: Vec::new(),
             names: self.names,
             component: WirComponent::default(),
             variant_case_info: self.variant_case_info,
-            entry_point_path: Some(self.package.entry_module_source.to_string()),
             wasm_modules,
             dead_type_indices,
             dead_func_indices,
             dead_global_indices,
             needed_canonicals,
-            func_wir_indices,
         }
     }
 }

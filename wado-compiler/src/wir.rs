@@ -29,8 +29,6 @@ pub struct WirPackage {
     /// Type definitions: Wado-level types (struct, variant, enum, flags, array, func).
     /// Not a 1:1 mapping to the Wasm type section — the emit phase expands these.
     pub types: Vec<WirTypeDef>,
-    /// Rec groups: which types form recursive groups.
-    pub rec_groups: Vec<WirRecGroup>,
     /// Import section.
     pub imports: Vec<WirImport>,
     /// Function declarations with bodies.
@@ -45,8 +43,6 @@ pub struct WirPackage {
     pub memories: Vec<WirMemory>,
     /// Data section (string literals, etc.).
     pub data: Vec<WirData>,
-    /// Branch hints (from likely/unlikely).
-    pub branch_hints: Vec<WirBranchHint>,
     /// Name section entries.
     pub names: WirNames,
     /// Component Model wrapper info.
@@ -54,8 +50,6 @@ pub struct WirPackage {
     /// Variant case type info: case WIR type index → (variant WIR type index, case index).
     /// Used by emitter to resolve case-specific struct types within variant rec groups.
     pub variant_case_info: IndexMap<u32, (u32, u32)>,
-    /// Entry-point module path string (for display shortening in unparse).
-    pub entry_point_path: Option<String>,
     /// Separate Wasm core modules extracted from `#![wasm_module("name")]` sources.
     /// Key: wasm module name (e.g., "mem").
     pub wasm_modules: IndexMap<String, WasmModuleInfo>,
@@ -69,10 +63,6 @@ pub struct WirPackage {
     /// Populated during WIR translation via `WirContext::ensure_canonical`.
     /// Used by the component codegen to determine which canonical imports to generate.
     pub needed_canonicals: IndexSet<CanonicalIntrinsic>,
-    /// Original `WirFuncId` indices for each defined function (parallel to `functions`).
-    /// These are the indices stored in `Call` instructions and may differ from
-    /// `import_count + list_position` when `ensure_canonical` adds imports after registration.
-    pub func_wir_indices: Vec<u32>,
 }
 
 /// Functions and globals extracted from a `#![wasm_module("name")]` source module.
@@ -226,7 +216,6 @@ impl WirPackage {
     pub fn empty() -> Self {
         Self {
             types: Vec::new(),
-            rec_groups: Vec::new(),
             imports: Vec::new(),
             functions: Vec::new(),
             globals: Vec::new(),
@@ -234,17 +223,14 @@ impl WirPackage {
             elements: Vec::new(),
             memories: Vec::new(),
             data: Vec::new(),
-            branch_hints: Vec::new(),
             names: WirNames::default(),
             component: WirComponent::default(),
             variant_case_info: IndexMap::default(),
-            entry_point_path: None,
             wasm_modules: IndexMap::default(),
             dead_type_indices: IndexSet::default(),
             dead_func_indices: IndexSet::default(),
             dead_global_indices: IndexSet::default(),
             needed_canonicals: IndexSet::default(),
-            func_wir_indices: Vec::new(),
         }
     }
 }
@@ -2955,13 +2941,6 @@ pub struct WirCopyCase {
     pub payload_copy: Option<WirCopyType>,
 }
 
-/// Rec group: a set of mutually-recursive type definitions.
-#[derive(Debug)]
-pub struct WirRecGroup {
-    /// Indices into `WirPackage.types`.
-    pub type_indices: Vec<u32>,
-}
-
 /// An import entry.
 #[derive(Debug)]
 pub struct WirImport {
@@ -3055,17 +3034,6 @@ pub struct WirData {
     pub bytes: Vec<u8>,
     /// Optional memory offset (active segment). None for passive segments.
     pub offset: Option<WirInstr>,
-}
-
-/// A branch hint annotation.
-#[derive(Debug)]
-pub struct WirBranchHint {
-    /// Function index.
-    pub func_index: u32,
-    /// Instruction offset within the function.
-    pub instr_offset: u32,
-    /// Hint: true = likely, false = unlikely.
-    pub likely: bool,
 }
 
 /// Name section entries for debugging.

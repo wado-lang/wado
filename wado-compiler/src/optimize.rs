@@ -36,8 +36,8 @@ use const_propagation::propagate_constants;
 use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
 use dce::{
-    analyze_project, remove_unreachable_functions, remove_unreachable_globals,
-    remove_unreachable_types,
+    analyze_project, filter_bytes_literals, remove_unreachable_closure_functors,
+    remove_unreachable_functions, remove_unreachable_globals, remove_unreachable_types,
 };
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
@@ -179,6 +179,8 @@ fn run_dce(project: &mut FlatPackage, profiler: &dyn SpanEmitter) {
     remove_unreachable_functions(project, &reachable);
     remove_unreachable_globals(project);
     remove_unreachable_types(project);
+    filter_bytes_literals(project);
+    remove_unreachable_closure_functors(project);
     project.rebuild_variant_indices();
     profiler.span_end("tir/dce");
 }

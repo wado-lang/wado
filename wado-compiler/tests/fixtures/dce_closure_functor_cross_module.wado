@@ -1,0 +1,16 @@
+// Test cross-module DCE of closure functors.
+// make_closure is imported but never called, so its closure functor
+// should be eliminated. add_one is called and should survive.
+use { println, Stdout } from "core:cli";
+use { make_closure, add_one } from "./sub/dce_closure_functor_helper.wado";
+
+export fn run() with Stdout {
+    let result = add_one(41);
+    println(`{result}`);
+}
+
+__DATA__
+{
+    "stdout": "42\n",
+    "wir_not_expect:O0": ["__Closure", "__call", "make_closure"]
+}
