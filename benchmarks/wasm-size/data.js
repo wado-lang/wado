@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775618199087,
+  "lastUpdate": 1775642074595,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10748,6 +10748,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1c7a1a44cc499682b6d76e44ecffa6d4e27967b1"
         },
         "date": 1775618198832,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b88d2b183c2f20cb33a0c30d81f4907fbc0df11",
+          "message": "Merge pull request #786 from wado-lang/claude/optimize-link-flatten-cO1lm\n\nOptimize DCE for linked FlatPackage, remove dead fields",
+          "timestamp": "2026-04-08T18:51:03+09:00",
+          "tree_id": "6d6ba712966be3ccdc3d5de706d996485ad49660",
+          "url": "https://github.com/wado-lang/wado/commit/9b88d2b183c2f20cb33a0c30d81f4907fbc0df11"
+        },
+        "date": 1775642074354,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
