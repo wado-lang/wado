@@ -1,0 +1,52 @@
+// HTTP GET example: fetch data from httpbin.org
+//
+// Usage: wado run example/http-get.wado
+
+use { println, Stdout } from "core:cli";
+use { Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
+use { Client } from "wasi:http/client.wado";
+
+fn send_get(authority: String, path: String) -> Response {
+    let headers = Fields::new();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [req, _req_future] = Request::new(headers, null, trailers_future, null);
+
+    req.set_scheme(Option::<Scheme>::Some(Scheme::Https));
+    req.set_authority(Option::<String>::Some(authority));
+    req.set_path_with_query(Option::<String>::Some(path));
+
+    let result = Client::send(req);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    return match result {
+        Ok(resp) => resp,
+        Err(_) => panic("HTTP request failed"),
+    };
+}
+
+fn read_body(resp: Response) -> String {
+    let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [body_stream, _trailers] = Response::consume_body(resp, res_future);
+
+    let mut body = "";
+    loop {
+        let chunk = body_stream.read(4096);
+        if chunk.len() == 0 { break; }
+        let text = match String::from_utf8(chunk) {
+            Ok(s) => s,
+            Err(_) => panic("invalid utf-8"),
+        };
+        body = body + text;
+    }
+    body_stream.drop();
+    return body;
+}
+
+export fn run() with Stdout, Client {
+    let resp = send_get("httpbin.org", "/get");
+    let status = resp.get_status_code();
+    println(`Status: {status}`);
+
+    let body = read_body(resp);
+    println(body);
+}

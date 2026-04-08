@@ -2,10 +2,13 @@ use anyhow::Result;
 use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{Config, Engine, OptLevel, ProfilingStrategy, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi_http::WasiHttpCtx;
+use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
 
 pub struct WasiState {
     ctx: WasiCtx,
     table: ResourceTable,
+    http: WasiHttpCtx,
 }
 
 impl WasiState {
@@ -25,7 +28,8 @@ impl WasiState {
         }
         let ctx = builder.build();
         let table = ResourceTable::new();
-        Ok(Self { ctx, table })
+        let http = WasiHttpCtx::new();
+        Ok(Self { ctx, table, http })
     }
 }
 
@@ -34,6 +38,16 @@ impl WasiView for WasiState {
         WasiCtxView {
             ctx: &mut self.ctx,
             table: &mut self.table,
+        }
+    }
+}
+
+impl WasiHttpView for WasiState {
+    fn http(&mut self) -> WasiHttpCtxView<'_> {
+        WasiHttpCtxView {
+            ctx: &mut self.http,
+            table: &mut self.table,
+            hooks: Default::default(),
         }
     }
 }
@@ -125,7 +139,7 @@ pub fn create_store(
     Ok(Store::new(engine, WasiState::new(preopened_dirs, args)?))
 }
 
-/// Create a Linker with WASI P3 bindings.
+/// Create a Linker with WASI P3 and HTTP bindings.
 ///
 /// # Errors
 ///
@@ -133,5 +147,6 @@ pub fn create_store(
 pub fn create_linker(engine: &Engine) -> Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(engine);
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
+    wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     Ok(linker)
 }
