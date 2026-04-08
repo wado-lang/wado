@@ -43,9 +43,27 @@ struct FunctionAnalysis {
 /// list. Returns the set of reachable functions for use by
 /// `remove_unreachable_functions`.
 pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
-    // Build call graph and effect usage from all functions
+    // Phase 1: Pure analysis — build graph, compute reachable set
     let (call_graph, effect_usage) = build_analysis_graph(project);
+    let reachable = compute_reachable_from_entries(project, &call_graph);
 
+    // Phase 2: Resolve imports and WASI features using reachable set
+    resolve_imports(project, &reachable, &effect_usage);
+
+    // Phase 3: Filter literals to reachable functions
+    filter_string_literals(project, &reachable);
+
+    reachable
+}
+
+/// Compute reachable functions from all entry points via call graph traversal.
+///
+/// Entry points include: world exports, test functions, wasm_module exports,
+/// and HTTP handler helpers.
+fn compute_reachable_from_entries(
+    project: &FlatPackage,
+    call_graph: &CallGraph,
+) -> IndexSet<FunctionId> {
     // Determine entry functions from world exports.
     // For the test world, test functions are the sole entry points; world exports
     // (like `run`) are only reachable if tests transitively call them.
@@ -72,7 +90,7 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
             &project.entry_module_source,
             entry_name,
         ));
-        let entry_reachable = compute_reachable(&call_graph, &entry_func);
+        let entry_reachable = compute_reachable(call_graph, &entry_func);
         reachable.extend(entry_reachable);
     }
 
@@ -84,7 +102,7 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
                 &project.entry_module_source,
                 &test.function_name,
             ));
-            let test_reachable = compute_reachable(&call_graph, &test_func);
+            let test_reachable = compute_reachable(call_graph, &test_func);
             reachable.extend(test_reachable);
         }
     }
@@ -102,14 +120,39 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
                 &func.module_source,
                 &func.name,
             ));
-            let wasm_mod_reachable = compute_reachable(&call_graph, &func_id);
+            let wasm_mod_reachable = compute_reachable(call_graph, &func_id);
             reachable.extend(wasm_mod_reachable);
         }
     }
 
+    // HTTP handler exports need cm_lower_string for ErrorCode payload lowering
+    // (ErrorCode variant cases can contain Option<String> payloads).
+    // This is used in the component export path, not via TIR call graph.
+    let has_http_handler_export = project
+        .world_registry
+        .get(&project.target_world)
+        .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
+    if has_http_handler_export {
+        let func = FunctionId::Free(FreeFunctionName::from_strs(
+            &["core", "internal"],
+            "cm_lower_string",
+        ));
+        reachable.extend(compute_reachable(call_graph, &func));
+    }
+
+    reachable
+}
+
+/// Resolve WASI imports and populate `project.imports` and `project.used_wasi_functions`
+/// from the set of reachable functions and their effect usage.
+fn resolve_imports(
+    project: &mut FlatPackage,
+    reachable: &IndexSet<FunctionId>,
+    effect_usage: &EffectUsageMap,
+) {
     // Collect used WASI functions from reachable functions
     let mut used_wasi_functions: IndexSet<String> = IndexSet::default();
-    for func_id in &reachable {
+    for func_id in reachable {
         if let Some(effects) = effect_usage.get(func_id) {
             for (effect_name, op_name) in effects {
                 used_wasi_functions.insert(format!("{effect_name}::{op_name}"));
@@ -117,64 +160,26 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
         }
     }
 
-    // Helper to check if a core/internal function is reachable
-    let core_internal = |name: &str| -> FunctionId {
-        FunctionId::Free(FreeFunctionName::from_strs(&["core", "internal"], name))
-    };
-
-    // CM helper functions (cm_lower_string, memory_to_gc_string, etc.)
-    // are called from synthesized CM binding functions, which are part of the TIR
-    // and discovered through normal call graph analysis.
-
-    // HTTP handler exports need cm_lower_string for ErrorCode payload lowering
-    // (ErrorCode variant cases can contain Option<String> payloads).
-    // This is used in the component export path, not via TIR call graph.
-    let has_http_handler_export_early = project
-        .world_registry
-        .get(&project.target_world)
-        .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
-    if has_http_handler_export_early {
-        let func = core_internal("cm_lower_string");
-        reachable.extend(compute_reachable(&call_graph, &func));
-    }
-
-    // Check if stream intrinsics are needed by looking for:
-    // 1. Stdout/Stderr effects being used
-    // 2. Any builtin stream_* functions being called (for ambient logging)
-    // 3. Any builtin call_indirect_* functions (ambient effect calls)
     let is_builtin_func = |f: &FreeFunctionName| {
-        // Check if module_source is core/builtin
-        f.module_source.is_core_builtin()
-            // Legacy format: name starts with "builtin::"
-            || f.name.starts_with("builtin::")
-    };
-    let is_builtin_call_indirect_stdout = |f: &FreeFunctionName| {
-        if is_builtin_func(f) {
-            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-            name.starts_with("call_indirect_stdout")
-        } else {
-            false
-        }
-    };
-    let is_builtin_call_indirect_stderr = |f: &FreeFunctionName| {
-        if is_builtin_func(f) {
-            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-            name.starts_with("call_indirect_stderr")
-        } else {
-            false
-        }
+        f.module_source.is_core_builtin() || f.name.starts_with("builtin::")
     };
 
     // Also mark WASI functions as used if indirect calls are present (for ambient logging)
     if reachable
         .iter()
-        .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_call_indirect_stdout(f)))
+        .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
+            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+            name.starts_with("call_indirect_stdout")
+        }))
     {
         used_wasi_functions.insert("Stdout::write_via_stream".to_string());
     }
     if reachable
         .iter()
-        .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_call_indirect_stderr(f)))
+        .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
+            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+            name.starts_with("call_indirect_stderr")
+        }))
     {
         used_wasi_functions.insert("Stderr::write_via_stream".to_string());
     }
@@ -182,7 +187,6 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     // Collect imports using registry lookup instead of hard-coded match
     let mut imports: IndexSet<TirImport> = IndexSet::default();
 
-    // Helper to add an import from builtin registry by function name
     let add_import_by_name = |imports: &mut IndexSet<TirImport>, name: &str| {
         if let Some(info) = project.builtin_registry.get(name)
             && let Some(canonical_name) = &info.canonical_name
@@ -198,7 +202,7 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     };
 
     // Map reachable builtin function calls to imports via registry lookup
-    for func_id in &reachable {
+    for func_id in reachable {
         if let FunctionId::Free(f) = func_id
             && is_builtin_func(f)
         {
@@ -237,10 +241,6 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
         } else {
             add_import_by_name(&mut imports, "task_return");
         }
-
-        // CM resource canonicals (stream-new, stream-write, waitable-set-new, subtask-drop, etc.)
-        // are registered lazily by WIR synthesis via `ensure_canonical()` when resource methods
-        // are called. No DCE injection needed — they are discovered through normal reachability.
     }
 
     // Store imports in the project
@@ -250,10 +250,11 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
         .imports
         .sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
 
-    // Apply results to project
     project.used_wasi_functions = used_wasi_functions;
+}
 
-    // Filter string literals to only include strings from reachable functions.
+/// Filter string literals to only include strings from reachable functions.
+fn filter_string_literals(project: &mut FlatPackage, reachable: &IndexSet<FunctionId>) {
     // Keys are (module_source, function_name) — no collision possible.
     let mut reachable_strings: IndexSet<String> = IndexSet::default();
 
@@ -291,8 +292,243 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
     }
 
     project.string_literals = reachable_strings.into_iter().collect();
+}
 
-    reachable
+/// Filter bytes literals to only include bytes referenced by surviving functions.
+///
+/// Unlike string literals (which have a `function_strings` map for per-function
+/// tracking), bytes literals are stored inline as `TirExprKind::BytesLiteral(Vec<u8>)`.
+/// This function scans all surviving function bodies to collect referenced bytes,
+/// then retains only matching entries in `project.bytes_literals`.
+pub fn filter_bytes_literals(project: &mut FlatPackage) {
+    let mut used_bytes: IndexSet<Vec<u8>> = IndexSet::default();
+
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        if let Some(body) = &func.body {
+            collect_bytes_literals_block(body, &mut used_bytes);
+        }
+    }
+
+    project.bytes_literals.retain(|b| used_bytes.contains(b));
+}
+
+fn collect_bytes_literals_block(block: &TirBlock, used: &mut IndexSet<Vec<u8>>) {
+    for stmt in &block.stmts {
+        collect_bytes_literals_stmt(stmt, used);
+    }
+}
+
+fn collect_bytes_literals_stmt(stmt: &TirStmt, used: &mut IndexSet<Vec<u8>>) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. }
+        | TirStmtKind::LetDestructure { value, .. }
+        | TirStmtKind::Expr(value) => {
+            collect_bytes_literals_expr(value, used);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(expr) = value {
+                collect_bytes_literals_expr(expr, used);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            collect_bytes_literals_expr(condition, used);
+            collect_bytes_literals_block(then_block, used);
+            if let Some(else_blk) = else_block {
+                collect_bytes_literals_block(else_blk, used);
+            }
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_bytes_literals_expr(scrutinee, used);
+            collect_bytes_literals_block(then_block, used);
+            if let Some(else_blk) = else_block {
+                collect_bytes_literals_block(else_blk, used);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            collect_bytes_literals_block(body, used);
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                collect_bytes_literals_expr(v, used);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => {}
+    }
+}
+
+fn collect_bytes_literals_expr(expr: &TirExpr, used: &mut IndexSet<Vec<u8>>) {
+    match &expr.kind {
+        TirExprKind::BytesLiteral(b) => {
+            used.insert(b.clone());
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            collect_bytes_literals_expr(left, used);
+            collect_bytes_literals_expr(right, used);
+        }
+        TirExprKind::Unary { expr, .. }
+        | TirExprKind::Cast { expr, .. }
+        | TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TupleZip { expr }
+        | TirExprKind::TypePackExpansion {
+            call_expr: expr, ..
+        }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. }
+        | TirExprKind::GlobalVarSet { value: expr, .. }
+        | TirExprKind::Closure { body: expr, .. }
+        | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
+            collect_bytes_literals_expr(expr, used);
+        }
+        TirExprKind::Index { expr, index } | TirExprKind::Assign { target: expr, value: index } => {
+            collect_bytes_literals_expr(expr, used);
+            collect_bytes_literals_expr(index, used);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                collect_bytes_literals_expr(&arg.expr, used);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            collect_bytes_literals_expr(receiver, used);
+            for arg in args {
+                collect_bytes_literals_expr(&arg.expr, used);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                collect_bytes_literals_expr(arg, used);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            collect_bytes_literals_expr(callee, used);
+            for arg in args {
+                collect_bytes_literals_expr(arg, used);
+            }
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            collect_bytes_literals_expr(condition, used);
+            collect_bytes_literals_block(then_branch, used);
+            if let Some(else_blk) = else_branch {
+                collect_bytes_literals_block(else_blk, used);
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            collect_bytes_literals_expr(expr, used);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_bytes_literals_expr(guard, used);
+                }
+                collect_bytes_literals_expr(&arm.body, used);
+            }
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            collect_bytes_literals_block(block, used);
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for e in elements {
+                collect_bytes_literals_expr(e, used);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for f in fields {
+                collect_bytes_literals_expr(&f.value, used);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                collect_bytes_literals_expr(p, used);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_bytes_literals_expr(scrutinee, used);
+            for arm in arms {
+                collect_bytes_literals_block(arm, used);
+            }
+            collect_bytes_literals_block(default, used);
+        }
+        // Leaf nodes — no children to recurse into
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Unit
+        | TirExprKind::Null
+        | TirExprKind::Local { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. }
+        | TirExprKind::TemplateString { .. } => {}
+    }
+}
+
+/// Remove closure functors whose `__call` method was eliminated by function DCE.
+pub fn remove_unreachable_closure_functors(project: &mut FlatPackage) {
+    // Build a set of surviving (module_source, func_name) pairs for O(1) lookup.
+    // The __call method is named "{struct_name}::__call" (via MethodName::format_local).
+    let surviving_funcs: IndexSet<(ModuleSource, String)> = project
+        .functions
+        .iter()
+        .map(|f| {
+            let func = f.borrow();
+            (func.module_source.clone(), func.name.clone())
+        })
+        .collect();
+
+    project.closure_functors.retain(|functor| {
+        let call_method_name = format!("{}::__call", functor.struct_name);
+        surviving_funcs.contains(&(functor.module_source.clone(), call_method_name))
+    });
+}
+
+/// Remove impl blocks whose target type is unreachable, and traits not
+/// referenced by any surviving impl.
+///
+/// Post-resolution, impl methods are already flattened into the `functions` list
+/// with mangled names (e.g., `Point::sum`). The `impls` list is metadata only —
+/// neither `wir_build` nor codegen consumes it.
+pub fn remove_unreachable_impls_and_traits(project: &mut FlatPackage) {
+    let reachable_types = compute_reachable_types(project);
+
+    // Remove impls whose target type is not reachable
+    project
+        .impls
+        .retain(|impl_block| reachable_types.contains(&impl_block.target_type));
+
+    // Collect trait names referenced by surviving impls
+    let used_trait_names: IndexSet<String> = project
+        .impls
+        .iter()
+        .filter_map(|impl_block| impl_block.trait_name.clone())
+        .collect();
+
+    // Remove traits not referenced by any surviving impl
+    project
+        .traits
+        .retain(|trait_def| used_trait_names.contains(&trait_def.name));
 }
 
 /// Build call graph and effect usage from all TIR functions
