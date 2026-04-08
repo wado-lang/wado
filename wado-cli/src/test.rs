@@ -366,10 +366,10 @@ async fn collect_test_jobs(
             Err(failure) if failure.is_todo_module => {
                 // #![TODO] module failed to compile — expected, count as pass
                 let dur = format_duration(compile_duration);
-                println!("[{elapsed}] Compiled {path} (TODO module, compile error expected, {dur})");
-                todo_compile_errors.push(TodoCompileError {
-                    path: path.clone(),
-                });
+                println!(
+                    "[{elapsed}] Compiled {path} (TODO module, compile error expected, {dur})"
+                );
+                todo_compile_errors.push(TodoCompileError { path: path.clone() });
                 continue;
             }
             Err(_) => {
@@ -730,10 +730,7 @@ pub async fn run(opts: TestOptions) {
                         total_passed += 1;
                     }
                     TestOutcome::Fail => {
-                        println!(
-                            "  \x1b[31mFAILED\x1b[0m {} ({dur})",
-                            result.display_name
-                        );
+                        println!("  \x1b[31mFAILED\x1b[0m {} ({dur})", result.display_name);
                         fail_entries.push(FailEntry {
                             file_path: result.file_path.clone(),
                             display_name: result.display_name.clone(),

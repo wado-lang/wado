@@ -401,9 +401,18 @@ fn check_return_variant_struct_new(instr: &WirInstr, valid_type_indices: &IndexS
             value_expr_is_variant_struct_new(v, valid_type_indices)
         }
         WirInstr::Return { value: None } => true,
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            all_returns_are_variant_struct_new(body, valid_type_indices)
+        WirInstr::Block { body, result, .. } => {
+            let inner_ok = all_returns_are_variant_struct_new(body, valid_type_indices);
+            if result.is_some() {
+                // Typed block: the block's exit values are carried via [val, Br(0)] pairs.
+                // These Br-exit values must also be StructNew of valid variant case types,
+                // otherwise the function cannot be correctly SROA'd.
+                inner_ok && all_br_variant_values_are_struct_new(body, valid_type_indices, 0)
+            } else {
+                inner_ok
+            }
         }
+        WirInstr::Loop { body, .. } => all_returns_are_variant_struct_new(body, valid_type_indices),
         WirInstr::If {
             then_body,
             else_body,
@@ -618,6 +627,22 @@ fn all_br_variant_values_are_struct_new(
                 return false;
             }
             i += 2;
+        } else if let WirInstr::Seq(seq) = &instrs[i]
+            && seq.last().is_some_and(
+                |last| matches!(last, WirInstr::Br { depth } if *depth == target_depth),
+            )
+        {
+            // Seq([..., val, Br(depth)]): the Br is wrapped in a Seq (LabeledBlock exit pattern).
+            // The instruction before the Br within the Seq is the exit value.
+            let exit_val = seq.len().checked_sub(2).and_then(|j| seq.get(j));
+            let is_valid = exit_val.is_some_and(|v| {
+                contains_unreachable(v)
+                    || matches!(v, WirInstr::StructNew { type_id, .. } if valid_type_indices.contains(&type_id.index()))
+            });
+            if !is_valid {
+                return false;
+            }
+            i += 1;
         } else {
             if let WirInstr::Block { body, .. } = &instrs[i]
                 && !all_br_variant_values_are_struct_new(body, valid_type_indices, target_depth + 1)
