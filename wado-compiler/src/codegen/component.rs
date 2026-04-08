@@ -197,6 +197,7 @@ pub fn build_component(
         trailers_future_type,
         &transmission_future_types,
         &scalar_future_types,
+        project.has_http_handler_export,
     );
 
     // Lower WASI functions
@@ -250,7 +251,9 @@ pub fn build_component(
             ctx.core_func_idx(local_name),
         ));
     }
-    if project.has_http_handler_export && ctx.has_core_func("http-fields-constructor") {
+    if (project.has_http_handler_export || project.has_effect("Client"))
+        && ctx.has_core_func("http-fields-constructor")
+    {
         wasi_exports.push((
             "http-fields-constructor".to_string(),
             ExportKind::Func,
@@ -965,6 +968,7 @@ fn emit_canonical_intrinsics(
     trailers_future_type: u32,
     transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
+    has_http_handler_export: bool,
 ) {
     for intrinsic in canonical_intrinsics {
         ctx.register_core_func(&intrinsic.import_name());
@@ -1084,11 +1088,15 @@ fn emit_canonical_intrinsics(
                 builder.future_drop_readable(ft);
             }
             CanonicalIntrinsic::TaskReturn => {
-                let task_return_type = if ctx.has_type("http-handler-result") {
-                    ctx.type_idx("http-handler-result")
-                } else {
-                    result_unit_type
-                };
+                // Use the HTTP handler result type only when the world actually
+                // exports an HTTP handler (not just when HTTP types are imported
+                // for client usage).
+                let task_return_type =
+                    if has_http_handler_export && ctx.has_type("http-handler-result") {
+                        ctx.type_idx("http-handler-result")
+                    } else {
+                        result_unit_type
+                    };
                 builder.task_return(
                     Some(ComponentValType::Type(task_return_type)),
                     [CanonicalOption::Memory(ctx.memory_idx())],
@@ -1795,8 +1803,10 @@ fn generate_cm_imports(
     // Import interfaces with resource types
     import_interfaces_with_resources(builder, ctx, project);
 
-    // For Service world, import wasi:http/types
-    if project.has_http_handler_export {
+    // Import wasi:http/types when the world exports an HTTP handler
+    // or when the code uses the HTTP Client effect (e.g., CLI programs
+    // that make outgoing HTTP requests).
+    if project.has_http_handler_export || project.has_effect("Client") {
         import_http_types_for_service(project, builder, ctx);
     }
 
