@@ -171,7 +171,7 @@ fn sort_types_topologically<'a>(
         .collect()
 }
 
-/// Register all types from the Package into the `WirContext`.
+/// Register all types from the `FlatPackage` into the `WirContext`.
 ///
 /// This follows a multi-phase registration order to ensure type dependencies
 /// are satisfied.
@@ -238,18 +238,10 @@ fn register_struct(
     type_table: &TypeTable,
     module_source: &ModuleSource,
 ) {
-    // For monomorphized structs, use the defining module (the module where the
-    // base generic struct is defined) rather than the processing module. This
-    // ensures that e.g. `Box<i32>` instantiated from both the entry module and
-    // a library module gets the same StructName key, enabling exact-match dedup.
-    // Non-mono structs use the processing module as-is (they are distinct types).
-    let effective_module = if let Some(ref mono) = tir_struct.monomorph_info {
-        type_table
-            .find_struct_module_source(&mono.generic_name)
-            .unwrap_or(module_source.clone())
-    } else {
-        module_source.clone()
-    };
+    // Use the TirStruct's own module_source directly.  The monomorphizer sets
+    // this to the module where the generic struct is *defined* (via InstantiationKey),
+    // and link.rs dedup ensures only the defining-module copy survives.
+    let effective_module = module_source.clone();
 
     let struct_name = StructName::new(effective_module.clone(), tir_struct.name.clone());
 
@@ -273,13 +265,8 @@ fn register_struct(
                 .collect();
             let resolved_name =
                 crate::name::mangle_generic_name(&mono.generic_name, &resolved_args);
-            let resolved_sn = StructName::new(effective_module.clone(), resolved_name.clone());
-            if let Some(existing) = ctx
-                .struct_type_map
-                .get(&resolved_sn)
-                .or_else(|| ctx.lookup_struct_by_name(&resolved_name))
-                .cloned()
-            {
+            let resolved_sn = StructName::new(effective_module.clone(), resolved_name);
+            if let Some(existing) = ctx.struct_type_map.get(&resolved_sn).cloned() {
                 ctx.struct_type_map.insert(struct_name, existing);
                 return;
             }
@@ -512,11 +499,17 @@ fn register_box_structs(ctx: &mut WirContext<'_>) {
 fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::wir::WirType) {
     let box_name =
         crate::name::mangle_generic_name("Box", std::slice::from_ref(&prim_name.to_string()));
-    if ctx.lookup_struct_by_name(&box_name).is_some() {
+    let module_source = ctx
+        .package
+        .type_table
+        .borrow()
+        .box_module_source
+        .clone()
+        .unwrap_or_else(ModuleSource::prelude);
+    let struct_name = StructName::new(module_source.clone(), box_name.clone());
+    if ctx.struct_type_map.contains_key(&struct_name) {
         return;
     }
-    let module_source = ModuleSource::prelude();
-    let struct_name = StructName::new(module_source.clone(), box_name.clone());
     let fq = format!("{module_source}//{box_name}");
     let type_id = ctx.register_type(
         fq.clone(),
@@ -811,25 +804,11 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     if ctx.variant_type_map.contains_key(&fq) {
                         continue;
                     }
-                    // Find the base variant declaration.
-                    // First try matching by module_source, then search all variants
-                    // (handles module_source mismatch, e.g. core:prelude vs
-                    // core:prelude/types.wado)
+                    // Find the base variant declaration using module_source directly.
                     let base = ctx
                         .package
-                        .variants
-                        .iter()
-                        .find(|v| {
-                            v.name == *name
-                                && !v.type_params.is_empty()
-                                && v.module_source == *module_source
-                        })
-                        .or_else(|| {
-                            ctx.package
-                                .variants
-                                .iter()
-                                .find(|v| v.name == *name && !v.type_params.is_empty())
-                        });
+                        .find_variant(module_source, name)
+                        .filter(|v| !v.type_params.is_empty());
                     if let Some(base) = base {
                         let variant_tt = type_table;
                         let type_args = type_args.clone();
@@ -1194,11 +1173,6 @@ fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
     let mangled =
         crate::name::mangle_generic_name("Array", std::slice::from_ref(&elem_name_string));
 
-    // Skip if already registered (by name)
-    if ctx.lookup_struct_by_name(&mangled).is_some() {
-        return;
-    }
-
     let raw_array_type_id = ctx.array_type_by_name.get(elem_name).cloned();
     let Some(raw_type) = raw_array_type_id else {
         return;
@@ -1377,12 +1351,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                     continue;
                 };
                 let type_table = &*ctx.package.type_table.borrow();
-                let Some(tir_variant) = ctx
-                    .package
-                    .variants
-                    .iter()
-                    .find(|v| v.module_source == *ms && v.name == variant_display)
-                else {
+                let Some(tir_variant) = ctx.package.find_variant(ms, &variant_display) else {
                     continue;
                 };
                 let Some(tir_case) = tir_variant.cases.get(case_idx) else {

@@ -40,6 +40,8 @@ pub struct FlatPackage {
     pub enums: Vec<TirEnum>,
     /// All variant declarations (each carries its own `module_source`)
     pub variants: Vec<TirVariantDecl>,
+    /// Index: `(module_source, name)` → index into `variants`.
+    pub variant_index: IndexMap<(ModuleSource, String), usize>,
     /// All flags declarations (each carries its own `module_source`)
     pub flags: Vec<TirFlags>,
     /// All newtype declarations (each carries its own `module_source`)
@@ -60,9 +62,6 @@ pub struct FlatPackage {
     pub bytes_literals: Vec<Vec<u8>>,
     /// Closure functor metadata (each carries its own `module_source`)
     pub closure_functors: Vec<ClosureFunctor>,
-    /// Data section content (from entry module).
-    /// Only used by the `wado dump` unparser; not part of the compilation pipeline.
-    pub data_section: Option<String>,
     /// Map of (`ModuleSource`, function name) to string literals it contains (for DCE)
     pub function_strings: IndexMap<(ModuleSource, String), Vec<String>>,
     /// Map of (`ModuleSource`, function name) to method info (for DCE)
@@ -104,6 +103,24 @@ impl FlatPackage {
     /// Check if the project targets the synthetic test world.
     pub fn is_test_world(&self) -> bool {
         self.target_world == world_registry::TEST_WORLD
+    }
+
+    /// Look up a variant by `(module_source, name)`.
+    pub fn find_variant(&self, ms: &ModuleSource, name: &str) -> Option<&TirVariantDecl> {
+        self.variant_index
+            .get(&(ms.clone(), name.to_string()))
+            .and_then(|&idx| self.variants.get(idx))
+    }
+
+    /// Rebuild variant lookup indices after the variants list has been modified
+    /// (e.g., after DCE removes unreachable variants).
+    pub fn rebuild_variant_indices(&mut self) {
+        self.variant_index.clear();
+        for (i, v) in self.variants.iter().enumerate() {
+            self.variant_index
+                .entry((v.module_source.clone(), v.name.clone()))
+                .or_insert(i);
+        }
     }
 
     /// Check if any function from the given WASI effect is used.

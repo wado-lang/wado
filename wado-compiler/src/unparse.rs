@@ -4745,12 +4745,6 @@ pub fn unparse_flat_package(package: &crate::flat_package::FlatPackage) -> Strin
         unparser.output.push('\n');
     }
 
-    // Data section
-    if let Some(data) = &package.data_section {
-        unparser.output.push_str("__DATA__\n");
-        unparser.output.push_str(data);
-    }
-
     unparser.output
 }
 

@@ -447,24 +447,19 @@ impl FunctionTranslator<'_, '_> {
     /// Check if a type requires value copy (struct, array, tuple, variant, option).
     fn needs_value_copy(&self, type_id: TypeId) -> bool {
         match self.type_table.get(type_id) {
-            ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => {
-                // Internal Box<T> types are GC reference cells for primitive boxing.
+            ResolvedType::Struct { base_name, .. } => {
+                // Box<T> types are GC reference cells for primitive boxing.
                 // They should share the heap object on assignment, not deep-copy.
-                let is_box = name.starts_with("Box<") && module_source.is_core_internal();
-                !is_box
+                // Identified by base_name set during monomorphization / boxing pass.
+                base_name.as_deref() != Some("Box")
             }
             ResolvedType::GenericInstance {
                 name,
                 module_source,
                 type_args,
             } => {
-                // Internal Box<T> types are GC reference cells for primitive boxing.
-                // They should share the heap object on assignment, not deep-copy.
-                if name == "Box" && module_source.is_core_internal() {
+                // Box<T> types are GC reference cells for primitive boxing.
+                if name == "Box" {
                     return false;
                 }
                 // Empty tuples (unit-like) don't need value copy.

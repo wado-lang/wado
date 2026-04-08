@@ -482,6 +482,8 @@ pub struct TypeTable {
     default_trait_module_source: Option<ModuleSource>,
     /// Module source of the canonical `From<T>` trait, set via `#[comp_feature("from")]`.
     from_trait_module_source: Option<ModuleSource>,
+    /// Module source of the canonical `Box<T>` struct, set via `#[comp_feature("box")]`.
+    pub box_module_source: Option<ModuleSource>,
     /// Module source that owns the tuple type family, set via `#[comp_feature("tuple")]`.
     tuple_module_source: Option<ModuleSource>,
     /// Associated type resolutions: `(concrete_type_id, assoc_name)` → `resolved_type_id`.
@@ -551,6 +553,7 @@ impl TypeTable {
             result_module_source: None,
             default_trait_module_source: None,
             from_trait_module_source: None,
+            box_module_source: None,
             tuple_module_source: None,
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),

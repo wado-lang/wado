@@ -963,6 +963,8 @@ pub const COMP_FEATURE_DEFAULT: u32 = 1 << 5;
 pub const COMP_FEATURE_FROM: u32 = 1 << 6;
 /// Compiler feature flag: declares ownership of the tuple type family (`pub type [..T];`).
 pub const COMP_FEATURE_TUPLE: u32 = 1 << 7;
+/// Compiler feature flag: struct is the canonical `Box<T>` type for primitive boxing.
+pub const COMP_FEATURE_BOX: u32 = 1 << 8;
 
 /// A function declaration with optional body.
 #[derive(Debug)]

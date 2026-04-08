@@ -4,8 +4,9 @@
 //! structure. Built by `wir_build::plan_project`, consumed by `codegen`.
 
 use crate::ast::Type;
-use crate::package::Package;
-use crate::world_registry::WorldExportInfo;
+use crate::hashmap::IndexMap;
+use crate::tir::TirTest;
+use crate::world_registry::{WorldExportInfo, WorldRegistry};
 
 /// Plan for the Component Model structure.
 ///
@@ -59,33 +60,35 @@ pub struct TestExportPlan {
     pub timeout_ms: Option<u64>,
 }
 
-/// Build a `ComponentPlan` from the project.
+/// Build a `ComponentPlan` from pre-link data.
 ///
-/// Scans TIR imports and world registry to determine what the component needs.
-/// Called by `wir_build::plan_project` at the start of the WIR pipeline.
+/// Scans entry module tests and world registry to determine what the component needs.
+/// Called by [`crate::link::link`] before constructing `FlatPackage`.
 ///
 /// Canonical intrinsics are NOT collected here — they are discovered lazily
 /// during WIR translation via `WirContext::ensure_canonical`.
-pub fn build_component_plan(project: &Package) -> ComponentPlan {
-    let entry_tir = project.entry_module();
-
+pub fn build_component_plan(
+    is_test_world: bool,
+    target_world: &str,
+    tests: &[TirTest],
+    export_binding_names: &IndexMap<String, String>,
+    world_registry: &WorldRegistry,
+) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
-    let world_exports = if project.is_test_world() {
+    let world_exports = if is_test_world {
         vec![]
     } else {
-        build_world_export_plans(project)
+        build_world_export_plans(target_world, export_binding_names, world_registry)
     };
 
     // Build test exports (only when targeting the test world)
-    let test_exports: Vec<TestExportPlan> = if project.is_test_world() {
-        entry_tir
-            .tests
+    let test_exports: Vec<TestExportPlan> = if is_test_world {
+        tests
             .iter()
             .map(|test| {
                 let export_name = sanitize_kebab_export_name(&test.function_name);
-                let core_func_name = project
-                    .export_binding_names
+                let core_func_name = export_binding_names
                     .get(&test.function_name)
                     .cloned()
                     .unwrap_or_else(|| test.function_name.clone());
@@ -110,10 +113,13 @@ pub fn build_component_plan(project: &Package) -> ComponentPlan {
 }
 
 /// Build world export plans from the world registry.
-fn build_world_export_plans(project: &Package) -> Vec<WorldExportPlan> {
-    let exports: Vec<WorldExportInfo> = project
-        .world_registry
-        .get(&project.target_world)
+fn build_world_export_plans(
+    target_world: &str,
+    export_binding_names: &IndexMap<String, String>,
+    world_registry: &WorldRegistry,
+) -> Vec<WorldExportPlan> {
+    let exports: Vec<WorldExportInfo> = world_registry
+        .get(target_world)
         .map(|w| w.exports.clone())
         .unwrap_or_else(|| {
             // Fallback to a default run export for unknown worlds
@@ -130,8 +136,7 @@ fn build_world_export_plans(project: &Package) -> Vec<WorldExportPlan> {
         .map(|export| {
             let is_http_handler = export.returns_http_response();
             // Use export adapter if one was synthesized by synthesis::cm_binding
-            let core_func_name = project
-                .export_binding_names
+            let core_func_name = export_binding_names
                 .get(&export.name)
                 .cloned()
                 .unwrap_or_else(|| export.name.clone());

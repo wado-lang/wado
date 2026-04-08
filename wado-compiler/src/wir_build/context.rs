@@ -129,7 +129,7 @@ pub struct PendingFunctionBody {
 }
 
 impl<'a> WirContext<'a> {
-    /// Create a new `WirContext` from a Package.
+    /// Create a new `WirContext` from a `FlatPackage`.
     pub fn new(package: &'a FlatPackage) -> Self {
         // Collect string literals (deduped)
         let mut seen: IndexSet<&str> = IndexSet::default();
@@ -226,16 +226,6 @@ impl<'a> WirContext<'a> {
                 results,
             }),
         )
-    }
-
-    /// Look up a struct type by name only (ignoring `module_source`).
-    /// Used as fallback when `module_source` doesn't match (e.g., monomorphized
-    /// structs where the type's `module_source` is the use site, not the definition site).
-    pub fn lookup_struct_by_name(&self, name: &str) -> Option<&WirTypeId> {
-        self.struct_type_map
-            .iter()
-            .find(|(k, _)| k.name == name)
-            .map(|(_, v)| v)
     }
 
     // === Function Registration ===
@@ -444,26 +434,19 @@ impl<'a> WirContext<'a> {
                 module_source,
                 ..
             } => {
-                let struct_name = StructName::new(module_source.clone(), name.clone());
-                // Special case: String struct
-                let lookup_name = if name == "String" {
-                    StructName::new(ModuleSource::string(), "String".to_string())
+                // String is always at ModuleSource::string().
+                let lookup_module = if name == "String" {
+                    ModuleSource::string()
                 } else {
-                    struct_name
+                    module_source.clone()
                 };
+                let lookup_name = StructName::new(lookup_module, name.clone());
                 if let Some(type_id) = self.struct_type_map.get(&lookup_name) {
                     WirType::Ref {
                         type_id: type_id.clone(),
                         nullable: false,
                     }
-                } else if let Some(type_id) = self.lookup_struct_by_name(name) {
-                    // Fallback for cases like Box types where module_source may differ
-                    WirType::Ref {
-                        type_id: type_id.clone(),
-                        nullable: false,
-                    }
                 } else {
-                    // Fallback: use abstract struct ref
                     WirType::AbstractRef {
                         heap_type: crate::wir::WirAbstractHeapType::Struct,
                         nullable: false,
@@ -551,13 +534,6 @@ impl<'a> WirContext<'a> {
                         type_id: tid.clone(),
                         nullable: false,
                     }
-                } else if let Some(tid) = self.lookup_struct_by_name(&mangled) {
-                    // Fallback for cases where module_source may differ
-                    // (e.g., Box types from boxing pass)
-                    WirType::Ref {
-                        type_id: tid.clone(),
-                        nullable: false,
-                    }
                 } else {
                     // Try as variant (in type_map)
                     let variant_fq = format!("{module_source}//{mangled}");
@@ -567,7 +543,7 @@ impl<'a> WirContext<'a> {
                             nullable: false,
                         }
                     } else {
-                        // Fallback: resolve newtypes in type_args and retry
+                        // Resolve newtypes in type_args and retry
                         let resolved_args: Vec<String> = type_args
                             .iter()
                             .map(|t| type_table.mangle_type_name_resolving_newtypes(*t))
@@ -578,12 +554,6 @@ impl<'a> WirContext<'a> {
                             let resolved_sn =
                                 StructName::new(module_source.clone(), resolved_mangled.clone());
                             if let Some(tid) = self.struct_type_map.get(&resolved_sn) {
-                                return WirType::Ref {
-                                    type_id: tid.clone(),
-                                    nullable: false,
-                                };
-                            }
-                            if let Some(tid) = self.lookup_struct_by_name(&resolved_mangled) {
                                 return WirType::Ref {
                                     type_id: tid.clone(),
                                     nullable: false,
@@ -687,7 +657,15 @@ impl<'a> WirContext<'a> {
                             "Box",
                             std::slice::from_ref(&inner_name),
                         );
-                        if let Some(tid) = self.lookup_struct_by_name(&box_name) {
+                        let box_module = self
+                            .package
+                            .type_table
+                            .borrow()
+                            .box_module_source
+                            .clone()
+                            .unwrap_or_else(ModuleSource::prelude);
+                        let box_sn = StructName::new(box_module, box_name);
+                        if let Some(tid) = self.struct_type_map.get(&box_sn) {
                             WirType::Ref {
                                 type_id: tid.clone(),
                                 nullable: false,
