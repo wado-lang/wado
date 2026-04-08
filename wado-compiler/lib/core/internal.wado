@@ -5,10 +5,6 @@
 // implemented in Wado itself rather than as inline Wasm instructions,
 // making the codegen simpler and the compiler more maintainable.
 
-// Box<T> is defined in core:prelude/types.wado with #[comp_feature("box")].
-// The lower/boxing pass synthesizes monomorphized Box<T> instances using the
-// module_source registered by that comp_feature.
-
 /// Copies bytes from linear memory to a new GC array.
 pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr = builtin::array_new::<u8>(len);
