@@ -360,7 +360,7 @@ async fn compile_one(
             }
         }
         Phase::Tir => {
-            if let Some(ref project) = result.optimized_project {
+            if let Some(ref project) = result.optimized_package {
                 writeln!(
                     output,
                     "// Golden file: Optimized TIR with -O2 optimization"

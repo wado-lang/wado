@@ -50,7 +50,7 @@ use state::Monomorphizer;
 /// 3. Runs monomorphization to instantiate generics
 /// 4. Writes results back to `FlatPackage`
 /// 5. Strips effect params (validated by prior effect checker)
-pub fn monomorphize_flat(flat: &mut FlatPackage) {
+pub fn monomorphize(flat: &mut FlatPackage) {
     let entry_module_source = flat.entry_module_source.clone();
 
     // Collect all generic functions from the flat list.

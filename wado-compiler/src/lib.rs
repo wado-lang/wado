@@ -52,8 +52,8 @@ pub use effect_check::{EffectError, check_effects, check_stores};
 pub use flat_package::FlatPackage;
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
-pub use lower::lower_flat;
-pub use monomorphize::monomorphize_flat;
+pub use lower::lower;
+pub use monomorphize::monomorphize;
 pub use name::ModuleSource;
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
@@ -128,7 +128,7 @@ pub struct DumpResult {
     /// Lowered TIR snapshot (inspect/debug text)
     pub lowered_tir_inspect: Option<String>,
     /// Linked package after optimization (contains usage analysis results)
-    pub optimized_project: Option<FlatPackage>,
+    pub optimized_package: Option<FlatPackage>,
     /// WIR module (after `tir_to_wir` translation)
     pub wir_package: Option<wir::WirPackage>,
     /// Comments for unparsing
@@ -272,7 +272,7 @@ fn compile_after_load<H: CompilerHost>(
     let module_name = filename.unwrap_or_else(|| "module".to_string());
 
     // === Phase 6: Resolve all modules to Package ===
-    let project = {
+    let package = {
         let _span = logger.span("resolve");
         resolve_to_project(
             symbols,
@@ -285,24 +285,24 @@ fn compile_after_load<H: CompilerHost>(
         )?
     };
 
-    // Apply options to project (must be before synthesis)
-    let mut project = project;
+    // Apply options to package (must be before synthesis)
+    let mut package = package;
     if let Some(world) = options.target_world {
-        project.target_world = world;
+        package.target_world = world;
     }
-    project.skip_validation = options.skip_validation;
+    package.skip_validation = options.skip_validation;
 
     // Select allocator: find the function tagged with #[allocator("...")] matching the
     // chosen mode, set its export_name to "realloc", and clear export_name from all others.
     {
         let allocator_tag = options.allocator.unwrap_or_else(|| {
-            if project.is_test_world() {
+            if package.is_test_world() {
                 "debug".to_string()
             } else {
                 "bump".to_string()
             }
         });
-        if let Some(alloc_module) = project.tir_modules.get_mut(&ModuleSource::allocator()) {
+        if let Some(alloc_module) = package.tir_modules.get_mut(&ModuleSource::allocator()) {
             let mut found = false;
             for func_rc in &alloc_module.functions {
                 let mut func = func_rc.borrow_mut();
@@ -326,20 +326,20 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     // Validate target world (test world is handled specially, not in registry)
-    if !project.is_test_world() && project.world_registry.get(&project.target_world).is_none() {
+    if !package.is_test_world() && package.world_registry.get(&package.target_world).is_none() {
         let _ = logger.error(compiler_host::Diagnostic {
             severity: compiler_host::Severity::Error,
             code: compiler_host::Code::UnsupportedFeature,
-            message: format!("unknown target world: `{}`", project.target_world),
+            message: format!("unknown target world: `{}`", package.target_world),
             span: None,
         });
         return Err(Bail);
     }
 
     // === Phase 8: Synthesis (Package -> Package) ===
-    let project = {
+    let package = {
         let _span = logger.span("synthesis");
-        synthesis::synthesize(project).map_err(|message| {
+        synthesis::synthesize(package).map_err(|message| {
             let _ = logger.error(compiler_host::Diagnostic {
                 severity: compiler_host::Severity::Error,
                 code: compiler_host::Code::UnsupportedFeature,
@@ -356,7 +356,7 @@ fn compile_after_load<H: CompilerHost>(
     // CM bindings are skipped (they are boundary code with special effect semantics).
     {
         let _span = logger.span("effect-check");
-        check_effects(&project.tir_modules, logger)?;
+        check_effects(&package.tir_modules, logger)?;
     }
 
     // === Phase 8b: Stores Check ===
@@ -364,35 +364,35 @@ fn compile_after_load<H: CompilerHost>(
     // Runs before monomorphize/optimize so stores info is available for escape analysis.
     {
         let _span = logger.span("stores-check");
-        check_stores(&project.tir_modules, logger)?;
+        check_stores(&package.tir_modules, logger)?;
     }
 
     // === Phase 8b: Erase Newtypes and Flags (Package -> Package) ===
     // After synthesis (which needs full type info) and before monomorphize
     // (which must not see Newtype/Flags). Newtypes → ultimate base; Flags → u32.
-    let project = {
-        for module in project.tir_modules.values() {
+    let package = {
+        for module in package.tir_modules.values() {
             module.type_table.borrow_mut().erase_newtypes_and_flags();
         }
-        project
+        package
     };
 
     // === Phase 8c: Link (Package → FlatPackage) ===
     let mut flat = {
         let _span = logger.span("link");
-        link::link(project)
+        link::link(package)
     };
 
     // === Phase 9: Monomorphize (FlatPackage → FlatPackage) ===
     {
         let _span = logger.span("monomorphize");
-        monomorphize_flat(&mut flat);
+        monomorphize(&mut flat);
     }
 
     // === Phase 10: Lower (FlatPackage → FlatPackage) ===
     {
         let _span = logger.span("lower");
-        lower_flat(&mut flat);
+        lower(&mut flat);
     }
 
     // === Phase 11: Optimize (FlatPackage → FlatPackage) ===
@@ -587,7 +587,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         monomorphized_tir_inspect,
         lowered_tir_text,
         lowered_tir_inspect,
-        optimized_project,
+        optimized_package,
         wir_package,
     ) = if let Some(resolved_modules) = tir_modules_by_source.clone() {
         let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
@@ -598,7 +598,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         let builtin_registry =
             builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
-        let project = Package::new(
+        let package = Package::new(
             load_result.entry_module_source.clone(),
             resolved_modules,
             symbols.clone(),
@@ -610,26 +610,26 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         );
 
         // Apply target world override (must be before synthesis)
-        let mut project = project;
+        let mut package = package;
         if let Some(world) = target_world {
-            project.target_world = world.to_string();
+            package.target_world = world.to_string();
         }
 
         // Validate target world (test world is synthetic, not in registry)
-        if !project.is_test_world() && project.world_registry.get(&project.target_world).is_none() {
+        if !package.is_test_world() && package.world_registry.get(&package.target_world).is_none() {
             let _ = logger.error(compiler_host::Diagnostic {
                 severity: compiler_host::Severity::Error,
                 code: compiler_host::Code::UnsupportedFeature,
-                message: format!("unknown target world: `{}`", project.target_world),
+                message: format!("unknown target world: `{}`", package.target_world),
                 span: None,
             });
             return Err(Bail);
         }
 
         // Synthesis (must run before monomorphize)
-        let project = {
+        let package = {
             let _span = logger.span("synthesis");
-            synthesis::synthesize(project).map_err(|message| {
+            synthesis::synthesize(package).map_err(|message| {
                 let _ = logger.error(compiler_host::Diagnostic {
                     severity: compiler_host::Severity::Error,
                     code: compiler_host::Code::UnsupportedFeature,
@@ -641,17 +641,17 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         };
 
         // Erase Newtypes and Flags (after synthesis, before link)
-        for module in project.tir_modules.values() {
+        for module in package.tir_modules.values() {
             module.type_table.borrow_mut().erase_newtypes_and_flags();
         }
 
         // Link
-        let mut flat = link::link(project);
+        let mut flat = link::link(package);
 
         // Monomorphize
         {
             let _span = logger.span("monomorphize");
-            monomorphize_flat(&mut flat);
+            monomorphize(&mut flat);
         }
 
         let mono_text = Some(unparse::unparse_flat_package(&flat));
@@ -660,7 +660,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         // Lower
         {
             let _span = logger.span("lower");
-            lower_flat(&mut flat);
+            lower(&mut flat);
         }
         let lower_text = Some(unparse::unparse_flat_package(&flat));
         let lower_inspect = Some(format!("{flat:#?}"));
@@ -671,7 +671,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             optimize(flat, opt_level, inline_threshold, opt_iterations, &logger)
         };
 
-        // WIR: Translate optimized Package to WirPackage for inspection.
+        // WIR: Translate optimized FlatPackage to WirPackage for inspection.
         let wir_package = Some({
             let mut wir = wir_build::build_wir_package(&flat);
             wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
@@ -705,7 +705,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         monomorphized_tir_inspect,
         lowered_tir_text,
         lowered_tir_inspect,
-        optimized_project,
+        optimized_package,
         wir_package,
         comments: comment_map,
     })

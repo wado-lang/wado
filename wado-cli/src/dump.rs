@@ -715,7 +715,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
 
     // Final TIR section (after optimization)
     if opts.show_tir {
-        if let Some(ref project) = result.optimized_project {
+        if let Some(ref project) = result.optimized_package {
             if opts.inspect {
                 println!("=== TIR (inspect) ===");
                 println!("{project:#?}");

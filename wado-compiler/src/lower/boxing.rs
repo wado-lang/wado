@@ -392,8 +392,8 @@ impl BoxLowerer {
             }
         }
 
-        // Box structs are injected into the core:internal module separately
-        // (see lower_modules_indexed)
+        // Box structs are injected into the module separately
+        // (see lower::lower)
     }
 
     /// Scan the type table to find which primitives need Box types.
