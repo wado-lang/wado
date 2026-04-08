@@ -98,15 +98,15 @@ type "functype//./sub/cross_module_struct_field_type_lib.wado/Wrapper^Eq::eq" = 
 
 type "functype//./sub/cross_module_struct_field_type_lib.wado/Wrapper^Inspect::inspect" = fn(ref "./sub/cross_module_struct_field_type_lib.wado//Wrapper", ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
-type "functype//./sub/cross_module_struct_field_type_lib.wado/Array<Inner>^Inspect::inspect" = fn(ref "core:prelude//Array<Inner>", ref "core:prelude/format.wado//Formatter");  // TypeId(36)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(36)
 
-type "functype//./sub/cross_module_struct_field_type_lib.wado/Array<Inner>^Eq::eq" = fn(ref "core:prelude//Array<Inner>", ref "core:prelude//Array<Inner>") -> bool;  // TypeId(37)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(38)
+type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(38)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
+type "functype//core:prelude/array.wado/Array<Inner>^Inspect::inspect" = fn(ref "core:prelude//Array<Inner>", ref "core:prelude/format.wado//Formatter");  // TypeId(39)
 
-type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(40)
+type "functype//core:prelude/array.wado/Array<Inner>^Eq::eq" = fn(ref "core:prelude//Array<Inner>", ref "core:prelude//Array<Inner>") -> bool;  // TypeId(40)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
 
@@ -507,7 +507,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Eq::eq"(self, other) {
     return (if "core:prelude/string.wado/String^Eq::eq"(self.name, other.name) -> i32 {
-        "./sub/cross_module_struct_field_type_lib.wado/Array<Inner>^Eq::eq"(self.items, other.items);
+        "core:prelude/array.wado/Array<Inner>^Eq::eq"(self.items, other.items);
     } else {
         0;
     });
@@ -541,75 +541,9 @@ fn "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Inspect::inspect"(self
     "core:prelude/string.wado/String::push_str"(f.buf, s_7);
     s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("items: "), used: 7 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-    "./sub/cross_module_struct_field_type_lib.wado/Array<Inner>^Inspect::inspect"(self.items, f);
+    "core:prelude/array.wado/Array<Inner>^Inspect::inspect"(self.items, f);
     s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_11);
-}
-
-fn "./sub/cross_module_struct_field_type_lib.wado/Array<Inner>^Inspect::inspect"(self, f) {
-    let i: i32;
-    let s: ref "core:prelude/string.wado//String";
-    let _licm_used_12: i32;
-    let _licm_repr_13: ref builtin::array<Inner>;
-    "core:prelude/string.wado/String::push"(f.buf, 91);
-    __for_5: block {
-        i = 0;
-        _licm_used_12 = self.used;
-        _licm_repr_13 = self.repr;
-        block {
-            l34: loop {
-                if (i < _licm_used_12) == 0 {
-                    break __for_5;
-                }
-                if i > 0 {
-                    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
-                    "core:prelude/string.wado/String::push_str"(f.buf, s);
-                }
-                "./sub/cross_module_struct_field_type_lib.wado/Inner^Inspect::inspect"(builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_13, i).value, f);
-                i = i + 1;
-                continue l34;
-            };
-        };
-    };
-    "core:prelude/string.wado/String::push"(f.buf, 93);
-}
-
-fn "./sub/cross_module_struct_field_type_lib.wado/Array<Inner>^Eq::eq"(self, other) {
-    let i: i32;
-    let __local_3: ref "./sub/cross_module_struct_field_type_lib.wado//Inner";
-    let __local_4: ref "./sub/cross_module_struct_field_type_lib.wado//Inner";
-    let _licm_used_5: i32;
-    let _licm_repr_6: ref builtin::array<Inner>;
-    let _licm_repr_7: ref builtin::array<Inner>;
-    if self.used != other.used {
-        return 0;
-    }
-    __for_9: block {
-        i = 0;
-        _licm_used_5 = self.used;
-        _licm_repr_6 = self.repr;
-        _licm_repr_7 = other.repr;
-        block {
-            l39: loop {
-                if (i < _licm_used_5) == 0 {
-                    break __for_9;
-                }
-                if __inline_Inner_Eq__eq_0: block -> bool {
-                    __local_3 = builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_6, i);
-                    __local_4 = builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_7, i);
-                    __inline_i32_Eq__eq_0: block -> bool {
-                        break __inline_i32_Eq__eq_0: __local_3.value == __local_4.value;
-                    };
-                    break __inline_Inner_Eq__eq_0;
-                } == 0 {
-                    return 0;
-                }
-                i = i + 1;
-                continue l39;
-            };
-        };
-    };
-    return 1;
 }
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
@@ -619,13 +553,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l43: loop {
+            l34: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l43;
+                continue l34;
             };
         };
     };
@@ -728,8 +662,8 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b62: block {
-        l63: loop {
+    b53: block {
+        l54: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
@@ -754,12 +688,78 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, c);
                 }
             } else {
-                break b62;
+                break b53;
             }
-            continue l63;
+            continue l54;
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
+}
+
+fn "core:prelude/array.wado/Array<Inner>^Inspect::inspect"(self, f) {
+    let i: i32;
+    let s: ref "core:prelude/string.wado//String";
+    let _licm_used_12: i32;
+    let _licm_repr_13: ref builtin::array<Inner>;
+    "core:prelude/string.wado/String::push"(f.buf, 91);
+    __for_5: block {
+        i = 0;
+        _licm_used_12 = self.used;
+        _licm_repr_13 = self.repr;
+        block {
+            l62: loop {
+                if (i < _licm_used_12) == 0 {
+                    break __for_5;
+                }
+                if i > 0 {
+                    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
+                    "core:prelude/string.wado/String::push_str"(f.buf, s);
+                }
+                "./sub/cross_module_struct_field_type_lib.wado/Inner^Inspect::inspect"(builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_13, i).value, f);
+                i = i + 1;
+                continue l62;
+            };
+        };
+    };
+    "core:prelude/string.wado/String::push"(f.buf, 93);
+}
+
+fn "core:prelude/array.wado/Array<Inner>^Eq::eq"(self, other) {
+    let i: i32;
+    let __local_3: ref "./sub/cross_module_struct_field_type_lib.wado//Inner";
+    let __local_4: ref "./sub/cross_module_struct_field_type_lib.wado//Inner";
+    let _licm_used_5: i32;
+    let _licm_repr_6: ref builtin::array<Inner>;
+    let _licm_repr_7: ref builtin::array<Inner>;
+    if self.used != other.used {
+        return 0;
+    }
+    __for_9: block {
+        i = 0;
+        _licm_used_5 = self.used;
+        _licm_repr_6 = self.repr;
+        _licm_repr_7 = other.repr;
+        block {
+            l67: loop {
+                if (i < _licm_used_5) == 0 {
+                    break __for_9;
+                }
+                if __inline_Inner_Eq__eq_0: block -> bool {
+                    __local_3 = builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_6, i);
+                    __local_4 = builtin::array_get<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(_licm_repr_7, i);
+                    __inline_i32_Eq__eq_0: block -> bool {
+                        break __inline_i32_Eq__eq_0: __local_3.value == __local_4.value;
+                    };
+                    break __inline_Inner_Eq__eq_0;
+                } == 0 {
+                    return 0;
+                }
+                i = i + 1;
+                continue l67;
+            };
+        };
+    };
+    return 1;
 }
 
 export fn "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/__cm_export__run" as "run"

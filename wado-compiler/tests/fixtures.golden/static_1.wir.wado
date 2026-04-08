@@ -158,13 +158,13 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//wado-compiler/tests/fixtures/static_1.wado/Point::distance_squared" = fn(ref "wado-compiler/tests/fixtures/static_1.wado//Point", ref "wado-compiler/tests/fixtures/static_1.wado//Point") -> i32;  // TypeId(61)
 
-type "functype//wado-compiler/tests/fixtures/static_1.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(62)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(62)
 
-type "functype//wado-compiler/tests/fixtures/static_1.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(63)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(63)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(64)
+type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(64)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(65)
+type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(65)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(66)
 
@@ -597,9 +597,9 @@ condition: arr.len() == 0
         });
         unreachable;
     }
-    "wado-compiler/tests/fixtures/static_1.wado/Array<i32>::push"(arr, 1);
-    "wado-compiler/tests/fixtures/static_1.wado/Array<i32>::push"(arr, 2);
-    "wado-compiler/tests/fixtures/static_1.wado/Array<i32>::push"(arr, 3);
+    "core:prelude/array.wado/Array<i32>::push"(arr, 1);
+    "core:prelude/array.wado/Array<i32>::push"(arr, 2);
+    "core:prelude/array.wado/Array<i32>::push"(arr, 3);
     __v0_3 = arr.used;
     __cond_4 = __v0_3 == 3;
     if __cond_4 == 0 {
@@ -1463,48 +1463,6 @@ fn "wado-compiler/tests/fixtures/static_1.wado/Point::distance_squared"(a, b) {
     return (dx * dx) + (dy * dy);
 }
 
-fn "wado-compiler/tests/fixtures/static_1.wado/Array<i32>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/static_1.wado/Array<i32>::grow"(self);
-    }
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/static_1.wado/Array<i32>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<i32>;
-    let old_repr: ref builtin::array<i32>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<i32>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l80: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                i = i + 1;
-                continue l80;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -1512,13 +1470,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l83: loop {
+            l79: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l83;
+                continue l79;
             };
         };
     };
@@ -1604,6 +1562,48 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<i32>::grow"(self);
+    }
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<i32>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<i32>;
+    let old_repr: ref builtin::array<i32>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<i32>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l100: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                i = i + 1;
+                continue l100;
+            };
+        };
+    };
+    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/static_1.wado/__cm_export____test_0_static_method_basic" as "__test_0_static_method_basic"

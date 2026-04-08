@@ -41,14 +41,14 @@ use crate::tir::{ResolvedType, TirFunction, TirModule, TirStruct, TypeId, TypeTa
 
 use state::Monomorphizer;
 
-/// Monomorphize a FlatPackage (FlatPackage -> FlatPackage)
+/// Monomorphize a `FlatPackage` (`FlatPackage` -> `FlatPackage`)
 ///
 /// This is the main entry point for the monomorphize phase. All per-module data
 /// has already been linked into flat lists by the link phase. This function:
 /// 1. Collects all generic struct/function definitions (with shadowing)
-/// 2. Creates a temporary TirModule with the flat data
+/// 2. Creates a temporary `TirModule` with the flat data
 /// 3. Runs monomorphization to instantiate generics
-/// 4. Writes results back to FlatPackage
+/// 4. Writes results back to `FlatPackage`
 /// 5. Strips effect params (validated by prior effect checker)
 pub fn monomorphize_flat(flat: &mut FlatPackage) {
     let entry_module_source = flat.entry_module_source.clone();
@@ -176,8 +176,10 @@ impl Monomorphizer {
         module.generic_structs.clone_from(&generic_structs);
 
         // Build set of valid struct names for collection
-        let valid_struct_names: IndexSet<String> =
-            generic_structs.keys().map(|(name, _)| name.clone()).collect();
+        let valid_struct_names: IndexSet<String> = generic_structs
+            .keys()
+            .map(|(name, _)| name.clone())
+            .collect();
 
         // Phase 2-4: Collect and instantiate structs iteratively
         // This is done in a loop because instantiating a struct (like TreeMap<String,i32>)

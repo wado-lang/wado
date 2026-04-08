@@ -258,9 +258,9 @@ type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/s
 
 type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(73)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/Array<Tuple<Descriptor,String>>::push" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>", ref "tuple//[Descriptor, String]");  // TypeId(74)
+type "functype//core:prelude/Array<Tuple<Descriptor,String>>::push" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>", ref "tuple//[Descriptor, String]");  // TypeId(74)
 
-type "functype//wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/Array<Tuple<Descriptor,String>>::grow" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>");  // TypeId(75)
+type "functype//core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow" = fn(ref "core:prelude//Array<Tuple<Descriptor,String>>");  // TypeId(75)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(76)
 
@@ -494,7 +494,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/__cm_binding__Preo
                 __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
                 break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_11, used: __local_10 };
             };
-            "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/Array<Tuple<Descriptor,String>>::push"(__result, struct.new "tuple//[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
+            "core:prelude/Array<Tuple<Descriptor,String>>::push"(__result, struct.new "tuple//[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l22;
@@ -1845,17 +1845,17 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     return 1;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/Array<Tuple<Descriptor,String>>::push"(self, value) {
+fn "core:prelude/Array<Tuple<Descriptor,String>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/Array<Tuple<Descriptor,String>>::grow"(self);
+        "core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow"(self);
     }
     builtin::array_set<ref "tuple//[Descriptor, String]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_filesystem_symlink.wado/Array<Tuple<Descriptor,String>>::grow"(self) {
+fn "core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<Tuple<Descriptor,String>>;

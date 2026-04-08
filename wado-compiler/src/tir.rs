@@ -2845,9 +2845,9 @@ pub struct TirModule {
     pub string_literals: Vec<String>,
     /// Byte array literals from `#include_bytes` (for data segments)
     pub bytes_literals: Vec<Vec<u8>>,
-    /// Map of (module_source, function name) to string literals it contains (for DCE)
+    /// Map of (`module_source`, function name) to string literals it contains (for DCE)
     pub function_strings: IndexMap<(ModuleSource, String), Vec<String>>,
-    /// Map of (module_source, function name) to its method info (for DCE), populated alongside `function_strings`
+    /// Map of (`module_source`, function name) to its method info (for DCE), populated alongside `function_strings`
     pub function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
     /// Generic struct definitions (before monomorphization)
     /// Key: (struct name, module source)

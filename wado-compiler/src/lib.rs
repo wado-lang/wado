@@ -679,7 +679,14 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         });
         let optimized = Some(flat);
 
-        (mono_text, mono_inspect, lower_text, lower_inspect, optimized, wir_package)
+        (
+            mono_text,
+            mono_inspect,
+            lower_text,
+            lower_inspect,
+            optimized,
+            wir_package,
+        )
     } else {
         (None, None, None, None, None, None)
     };

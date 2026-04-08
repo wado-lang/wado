@@ -130,13 +130,13 @@ type "functype//wado-compiler/tests/fixtures/mut_ref_if_return.wado/Parser::adva
 
 type "functype//wado-compiler/tests/fixtures/mut_ref_if_return.wado/Parser::expect" = fn(ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Parser", i32) -> ref "core:prelude/types.wado//Result<Token,String>";  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/mut_ref_if_return.wado/Array<Token>::push" = fn(ref "core:prelude//Array<Token>", ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token");  // TypeId(42)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(42)
 
-type "functype//wado-compiler/tests/fixtures/mut_ref_if_return.wado/Array<Token>::grow" = fn(ref "core:prelude//Array<Token>");  // TypeId(43)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(43)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(44)
+type "functype//core:prelude/array.wado/Array<Token>::push" = fn(ref "core:prelude//Array<Token>", ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token");  // TypeId(44)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(45)
+type "functype//core:prelude/array.wado/Array<Token>::grow" = fn(ref "core:prelude//Array<Token>");  // TypeId(45)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
 
@@ -620,48 +620,6 @@ fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/Parser::expect"(self, ki
     }) };
 }
 
-fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/Array<Token>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/mut_ref_if_return.wado/Array<Token>::grow"(self);
-    }
-    builtin::array_set<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/Array<Token>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Token>;
-    let old_repr: ref builtin::array<Token>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l41: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(old_repr, i));
-                i = i + 1;
-                continue l41;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -669,13 +627,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l44: loop {
+            l40: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l44;
+                continue l40;
             };
         };
     };
@@ -761,6 +719,48 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/array.wado/Array<Token>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<Token>::grow"(self);
+    }
+    builtin::array_set<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<Token>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<Token>;
+    let old_repr: ref builtin::array<Token>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l61: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/mut_ref_if_return.wado//Token">(old_repr, i));
+                i = i + 1;
+                continue l61;
+            };
+        };
+    };
+    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/mut_ref_if_return.wado/__cm_export__run" as "run"

@@ -335,35 +335,37 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(78)
 
-type "functype//wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<Array<u8>>::push" = fn(ref "core:prelude//Array<Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(79)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(79)
 
-type "functype//wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<Array<u8>>::grow" = fn(ref "core:prelude//Array<Array<u8>>");  // TypeId(80)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(80)
 
-type "functype//wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(81)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(81)
 
-type "functype//wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(82)
+type "functype//core:prelude/Array<Array<u8>>::push" = fn(ref "core:prelude//Array<Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(82)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(83)
+type "functype//core:prelude/array.wado/Array<Array<u8>>::grow" = fn(ref "core:prelude//Array<Array<u8>>");  // TypeId(83)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(84)
+type "functype//core:prelude/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(84)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(85)
+type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(85)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(86)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(86)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(87)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(87)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(88)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(88)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(89)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(89)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(90)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(90)
 
-type "functype//wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(91)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(91)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(92)
+type "functype//wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(92)
 
-type "functype//wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/handle" = fn();  // TypeId(93)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(93)
+
+type "functype//wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/handle" = fn();  // TypeId(94)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1114,7 +1116,7 @@ fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__F
                             break b55;
                         }
                         __elem_addr_15 = __base_11 + (__i_14 * 1);
-                        "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<u8>::push"(__result_13, builtin::load_u8(__elem_addr_15));
+                        "core:prelude/Array<u8>::push"(__result_13, builtin::load_u8(__elem_addr_15));
                         __i_14 = __i_14 + 1;
                         continue l56;
                     };
@@ -1122,7 +1124,7 @@ fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_binding__F
                 if __count_12 > 0 {
                     drop("mem/realloc"(__base_11, __count_12 * 1, 4, 0));
                 }
-                "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<Array<u8>>::push"(__result_8, __result_13);
+                "core:prelude/Array<Array<u8>>::push"(__result_8, __result_13);
                 __i_9 = __i_9 + 1;
                 continue l53;
             };
@@ -1449,90 +1451,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<Array<u8>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<Array<u8>>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude//Array<u8>">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<Array<u8>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Array<u8>>;
-    let old_repr: ref builtin::array<Array<u8>>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "core:prelude//Array<u8>">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l93: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "core:prelude//Array<u8>">(new_repr, i, builtin::array_get<ref "core:prelude//Array<u8>">(old_repr, i));
-                i = i + 1;
-                continue l93;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<u8>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<u8>::grow"(self);
-    }
-    builtin::array_set_u8(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/Array<u8>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<u8>;
-    let old_repr: ref builtin::array<u8>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<u8>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l97: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
-                i = i + 1;
-                continue l97;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -1540,13 +1458,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l100: loop {
+            l92: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l100;
+                continue l92;
             };
         };
     };
@@ -1666,6 +1584,100 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/Array<Array<u8>>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<Array<u8>>::grow"(self);
+    }
+    builtin::array_set<ref "core:prelude//Array<u8>">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<Array<u8>>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<Array<u8>>;
+    let old_repr: ref builtin::array<Array<u8>>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "core:prelude//Array<u8>">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l117: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "core:prelude//Array<u8>">(new_repr, i, builtin::array_get<ref "core:prelude//Array<u8>">(old_repr, i));
+                i = i + 1;
+                continue l117;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
+fn "core:prelude/Array<u8>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<u8>::grow"(self);
+    }
+    builtin::array_set_u8(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<u8>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<u8>;
+    let old_repr: ref builtin::array<u8>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<u8>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l121: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
+                i = i + 1;
+                continue l121;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
+fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<u8>::grow"(self);
+    }
+    builtin::array_set_u8(self.repr, used, value);
+    self.used = used + 1;
 }
 
 export fn "wado-compiler/tests/fixtures/http-fields-get-and-delete.wado/__cm_export__handle" as "handle"

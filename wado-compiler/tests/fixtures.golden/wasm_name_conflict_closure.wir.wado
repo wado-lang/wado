@@ -20,9 +20,9 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct ./sub/wasm_name_conflict_closure_mod.wado//__Closure_1 {  // TypeId(3)}
+struct wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado//__Closure_1 {  // TypeId(3)}
 
-struct ./sub/wasm_name_conflict_closure_mod.wado//__Closure_0 {  // TypeId(4)}
+struct wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado//__Closure_0 {  // TypeId(4)}
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(5)
 
@@ -76,13 +76,19 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> i32;  // TypeId(31)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(33)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(34)
+
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+
+type "functype//wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__Closure_0::__call" = fn(i32) -> i32;  // TypeId(36)
+
+type "functype//wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__Closure_1::__call" = fn(i32) -> i32;  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -104,8 +110,8 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/run"() with Std
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    let __local_21: ref "./sub/wasm_name_conflict_closure_mod.wado//__Closure_0";
-    let __local_29: ref "./sub/wasm_name_conflict_closure_mod.wado//__Closure_1";
+    let __local_21: ref "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado//__Closure_0";
+    let __local_29: ref "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado//__Closure_1";
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
@@ -116,8 +122,8 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/run"() with Std
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_apply_double_10: block -> i32 {
-            __local_21 = struct.new "./sub/wasm_name_conflict_closure_mod.wado//__Closure_0" {  };
-            break __inline_apply_double_10: 10;
+            __local_21 = struct.new "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado//__Closure_0" {  };
+            break __inline_apply_double_10: "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__Closure_0::__call"(5);
         }, __local_4);
         break __tmpl: __local_3;
     });
@@ -125,8 +131,8 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/run"() with Std
         __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_apply_triple_15: block -> i32 {
-            __local_29 = struct.new "./sub/wasm_name_conflict_closure_mod.wado//__Closure_1" {  };
-            break __inline_apply_triple_15: 15;
+            __local_29 = struct.new "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado//__Closure_1" {  };
+            break __inline_apply_triple_15: "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__Closure_1::__call"(5);
         }, __local_6);
         break __tmpl: __local_5;
     });
@@ -466,6 +472,22 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__Closure_0::__call"(n) {
+    return n * 2;
+}
+
+fn "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__Closure_1::__call"(n) {
+    return n * 3;
+}
+
+fn "closure/wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__closure_wrapper_0"(__env, __p0) {
+    return "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__Closure_0::__call"(__p0);
+}
+
+fn "closure/wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__closure_wrapper_1"(__env, __p0) {
+    return "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__Closure_1::__call"(__p0);
 }
 
 export fn "wado-compiler/tests/fixtures/wasm_name_conflict_closure.wado/__cm_export__run" as "run"

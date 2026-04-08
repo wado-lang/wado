@@ -599,7 +599,7 @@ fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
     }
 }
 
-/// Generate `__initialize_modules` for a FlatPackage.
+/// Generate `__initialize_modules` for a `FlatPackage`.
 pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
     let entry_source = flat.entry_module_source.clone();
 

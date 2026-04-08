@@ -78,15 +78,15 @@ fn lower_post_boxing(module: &mut TirModule) {
     module.function_method_info = function_method_info;
 }
 
-/// Lower a FlatPackage in place.
+/// Lower a `FlatPackage` in place.
 ///
 /// This is the main entry point for the lower phase. It creates a temporary
-/// TirModule from the flat data, runs lowering, and writes results back.
+/// `TirModule` from the flat data, runs lowering, and writes results back.
 pub fn lower_flat(flat: &mut FlatPackage) {
     let entry_module_source = flat.entry_module_source.clone();
 
     // Create a temporary TirModule with all flat data for lowering.
-    let mut temp_module = TirModule::new(entry_module_source.clone());
+    let mut temp_module = TirModule::new(entry_module_source);
     temp_module.type_table = flat.type_table.clone();
     temp_module.functions = std::mem::take(&mut flat.functions);
     temp_module.structs = std::mem::take(&mut flat.structs);
@@ -121,10 +121,9 @@ pub fn lower_flat(flat: &mut FlatPackage) {
         let mut box_lowerer = BoxLowerer::new(box_module_source);
 
         for s in &temp_module.structs {
-            box_lowerer.struct_fields_map.insert(
-                (s.name.clone(), s.module_source.clone()),
-                s.fields.clone(),
-            );
+            box_lowerer
+                .struct_fields_map
+                .insert((s.name.clone(), s.module_source.clone()), s.fields.clone());
         }
         for v in &temp_module.variants {
             box_lowerer.variant_names.insert(v.name.clone());

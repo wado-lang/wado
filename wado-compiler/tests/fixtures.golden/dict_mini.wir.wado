@@ -96,15 +96,15 @@ type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(34)
 
-type "functype//wado-compiler/tests/fixtures/dict_mini.wado/Array<Tuple<String,String>>::push" = fn(ref "core:prelude//Array<Tuple<String,String>>", ref "tuple//[String, String]");  // TypeId(35)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(35)
 
-type "functype//wado-compiler/tests/fixtures/dict_mini.wado/Array<Tuple<String,String>>::grow" = fn(ref "core:prelude//Array<Tuple<String,String>>");  // TypeId(36)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(36)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(37)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(38)
+type "functype//core:prelude/array.wado/Array<Tuple<String,String>>::grow" = fn(ref "core:prelude//Array<Tuple<String,String>>");  // TypeId(38)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
+type "functype//core:prelude/array.wado/Array<Tuple<String,String>>::push" = fn(ref "core:prelude//Array<Tuple<String,String>>", ref "tuple//[String, String]");  // TypeId(39)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
 
@@ -514,131 +514,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/dict_mini.wado/Array<Tuple<String,String>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/dict_mini.wado/Array<Tuple<String,String>>::grow"(self);
-    }
-    builtin::array_set<ref "tuple//[String, String]">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/dict_mini.wado/Array<Tuple<String,String>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Tuple<String,String>>;
-    let old_repr: ref builtin::array<Tuple<String,String>>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "tuple//[String, String]">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l35: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "tuple//[String, String]">(new_repr, i, builtin::array_get<ref "tuple//[String, String]">(old_repr, i));
-                i = i + 1;
-                continue l35;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<String,String>::has"(self, key) {
-    let i: i32;
-    let _licm_entries_6: ref "core:prelude//Array<Tuple<String,String>>";
-    let _licm_used_7: i32;
-    let _licm_repr_8: ref builtin::array<Tuple<String,String>>;
-    __for_2: block {
-        i = 0;
-        _licm_entries_6 = self;
-        _licm_used_7 = _licm_entries_6.used;
-        _licm_repr_8 = _licm_entries_6.repr;
-        block {
-            l38: loop {
-                if (i < _licm_used_7) == 0 {
-                    break __for_2;
-                }
-                if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[String, String]">(_licm_repr_8, i).0, key) {
-                    return 1;
-                }
-                i = i + 1;
-                continue l38;
-            };
-        };
-    };
-    return 0;
-}
-
-fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<String,String>::get"(self, key) {
-    let i: i32;
-    let _licm_entries_8: ref "core:prelude//Array<Tuple<String,String>>";
-    let _licm_used_9: i32;
-    let _licm_repr_10: ref builtin::array<Tuple<String,String>>;
-    __for_1: block {
-        i = 0;
-        _licm_entries_8 = self;
-        _licm_used_9 = _licm_entries_8.used;
-        _licm_repr_10 = _licm_entries_8.repr;
-        block {
-            l42: loop {
-                if (i < _licm_used_9) == 0 {
-                    break __for_1;
-                }
-                if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[String, String]">(_licm_repr_10, i).0, key) {
-                    return builtin::array_get<ref "tuple//[String, String]">(_licm_repr_10, i).1;
-                }
-                i = i + 1;
-                continue l42;
-            };
-        };
-    };
-    return ref.null none;
-}
-
-fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<String,String>::set"(self, key, value) {
-    let i: i32;
-    let index: i32;
-    let value_9: ref "tuple//[String, String]";
-    let _licm_entries_10: ref "core:prelude//Array<Tuple<String,String>>";
-    let _licm_used_11: i32;
-    let _licm_repr_12: ref builtin::array<Tuple<String,String>>;
-    __for_0: block {
-        i = 0;
-        _licm_entries_10 = self;
-        _licm_used_11 = _licm_entries_10.used;
-        _licm_repr_12 = _licm_entries_10.repr;
-        block {
-            l46: loop {
-                if (i < _licm_used_11) == 0 {
-                    break __for_0;
-                }
-                if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[String, String]">(_licm_repr_12, i).0, key) {
-                    index = i;
-                    value_9 = struct.new "tuple//[String, String]" { 0: key, 1: value };
-                    builtin::array_set<ref "tuple//[String, String]">(_licm_repr_12, index, value_9);
-                    return;
-                }
-                i = i + 1;
-                continue l46;
-            };
-        };
-    };
-    "wado-compiler/tests/fixtures/dict_mini.wado/Array<Tuple<String,String>>::push"(self, struct.new "tuple//[String, String]" { 0: key, 1: value });
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -646,13 +521,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l50: loop {
+            l34: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l50;
+                continue l34;
             };
         };
     };
@@ -772,6 +647,131 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/array.wado/Array<Tuple<String,String>>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<Tuple<String,String>>;
+    let old_repr: ref builtin::array<Tuple<String,String>>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "tuple//[String, String]">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l58: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "tuple//[String, String]">(new_repr, i, builtin::array_get<ref "tuple//[String, String]">(old_repr, i));
+                i = i + 1;
+                continue l58;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
+fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<String,String>::has"(self, key) {
+    let i: i32;
+    let _licm_entries_6: ref "core:prelude//Array<Tuple<String,String>>";
+    let _licm_used_7: i32;
+    let _licm_repr_8: ref builtin::array<Tuple<String,String>>;
+    __for_2: block {
+        i = 0;
+        _licm_entries_6 = self;
+        _licm_used_7 = _licm_entries_6.used;
+        _licm_repr_8 = _licm_entries_6.repr;
+        block {
+            l61: loop {
+                if (i < _licm_used_7) == 0 {
+                    break __for_2;
+                }
+                if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[String, String]">(_licm_repr_8, i).0, key) {
+                    return 1;
+                }
+                i = i + 1;
+                continue l61;
+            };
+        };
+    };
+    return 0;
+}
+
+fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<String,String>::get"(self, key) {
+    let i: i32;
+    let _licm_entries_8: ref "core:prelude//Array<Tuple<String,String>>";
+    let _licm_used_9: i32;
+    let _licm_repr_10: ref builtin::array<Tuple<String,String>>;
+    __for_1: block {
+        i = 0;
+        _licm_entries_8 = self;
+        _licm_used_9 = _licm_entries_8.used;
+        _licm_repr_10 = _licm_entries_8.repr;
+        block {
+            l65: loop {
+                if (i < _licm_used_9) == 0 {
+                    break __for_1;
+                }
+                if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[String, String]">(_licm_repr_10, i).0, key) {
+                    return builtin::array_get<ref "tuple//[String, String]">(_licm_repr_10, i).1;
+                }
+                i = i + 1;
+                continue l65;
+            };
+        };
+    };
+    return ref.null none;
+}
+
+fn "wado-compiler/tests/fixtures/dict_mini.wado/MiniDict<String,String>::set"(self, key, value) {
+    let i: i32;
+    let index: i32;
+    let value_9: ref "tuple//[String, String]";
+    let _licm_entries_10: ref "core:prelude//Array<Tuple<String,String>>";
+    let _licm_used_11: i32;
+    let _licm_repr_12: ref builtin::array<Tuple<String,String>>;
+    __for_0: block {
+        i = 0;
+        _licm_entries_10 = self;
+        _licm_used_11 = _licm_entries_10.used;
+        _licm_repr_12 = _licm_entries_10.repr;
+        block {
+            l69: loop {
+                if (i < _licm_used_11) == 0 {
+                    break __for_0;
+                }
+                if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[String, String]">(_licm_repr_12, i).0, key) {
+                    index = i;
+                    value_9 = struct.new "tuple//[String, String]" { 0: key, 1: value };
+                    builtin::array_set<ref "tuple//[String, String]">(_licm_repr_12, index, value_9);
+                    return;
+                }
+                i = i + 1;
+                continue l69;
+            };
+        };
+    };
+    "core:prelude/array.wado/Array<Tuple<String,String>>::push"(self, struct.new "tuple//[String, String]" { 0: key, 1: value });
+}
+
+fn "core:prelude/array.wado/Array<Tuple<String,String>>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<Tuple<String,String>>::grow"(self);
+    }
+    builtin::array_set<ref "tuple//[String, String]">(self.repr, used, value);
+    self.used = used + 1;
 }
 
 export fn "wado-compiler/tests/fixtures/dict_mini.wado/__cm_export__run" as "run"

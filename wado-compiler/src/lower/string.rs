@@ -6,9 +6,9 @@ use crate::tir::{TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind
 pub(super) struct StringCollector {
     strings: IndexSet<String>,
     bytes: IndexSet<Vec<u8>>,
-    /// Map of (module_source, function name) → strings in that function (for DCE filtering)
+    /// Map of (`module_source`, function name) → strings in that function (for DCE filtering)
     function_strings: IndexMap<(ModuleSource, String), IndexSet<String>>,
-    /// Map of (module_source, function name) → method info (for DCE to avoid parsing)
+    /// Map of (`module_source`, function name) → method info (for DCE to avoid parsing)
     function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
     /// Current function being collected (for tracking)
     current_function: Option<(ModuleSource, String)>,

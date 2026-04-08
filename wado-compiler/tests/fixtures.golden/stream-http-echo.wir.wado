@@ -276,11 +276,11 @@ type "functype//core:internal/cm_stream_read_u8" = fn(i32, i32) -> ref "core:pre
 
 type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(60)
 
-type "functype//wado-compiler/tests/fixtures/stream-http-echo.wado/ArrayIter<Array<u8>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Array<u8>>") -> ref null "core:prelude//Array<u8>";  // TypeId(61)
+type "functype//core:prelude/array.wado/ArrayIter<Array<u8>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Array<u8>>") -> ref null "core:prelude//Array<u8>";  // TypeId(61)
 
-type "functype//wado-compiler/tests/fixtures/stream-http-echo.wado/Array<Array<u8>>::push" = fn(ref "core:prelude//Array<Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(62)
+type "functype//core:prelude/array.wado/Array<Array<u8>>::push" = fn(ref "core:prelude//Array<Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(62)
 
-type "functype//wado-compiler/tests/fixtures/stream-http-echo.wado/Array<Array<u8>>::grow" = fn(ref "core:prelude//Array<Array<u8>>");  // TypeId(63)
+type "functype//core:prelude/array.wado/Array<Array<u8>>::grow" = fn(ref "core:prelude//Array<Array<u8>>");  // TypeId(63)
 
 type "functype//wasi/future-new:transmission-http" = fn() -> i64;  // TypeId(64)
 
@@ -483,7 +483,7 @@ fn "wado-compiler/tests/fixtures/stream-http-echo.wado/handle"(request) {
             if chunk_7.used == 0 {
                 break b0;
             }
-            "wado-compiler/tests/fixtures/stream-http-echo.wado/Array<Array<u8>>::push"(chunks, chunk_7);
+            "core:prelude/array.wado/Array<Array<u8>>::push"(chunks, chunk_7);
             continue l1;
         };
     };
@@ -806,7 +806,7 @@ fn "wado-compiler/tests/fixtures/stream-http-echo.wado/handle"(request) {
     __iter_15 = struct.new "core:prelude/array.wado//ArrayIter<Array<u8>>" { repr: chunks.repr, used: chunks.used, index: 0 };
     b41: block {
         l42: loop {
-            __pattern_temp_5 = "wado-compiler/tests/fixtures/stream-http-echo.wado/ArrayIter<Array<u8>>^Iterator::next"(__iter_15);
+            __pattern_temp_5 = "core:prelude/array.wado/ArrayIter<Array<u8>>^Iterator::next"(__iter_15);
             if ref.is_null(__pattern_temp_5) == 0 {
                 chunk_16 = value_copy "core:prelude//Array<u8>"(ref.as_non_null(__pattern_temp_5));
                 "core:internal/cm_stream_write_u8"(resp_tx, chunk_16);
@@ -984,7 +984,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
     drop("mem/realloc"(ptr, len, 1, 0));
 }
 
-fn "wado-compiler/tests/fixtures/stream-http-echo.wado/ArrayIter<Array<u8>>^Iterator::next"(self) {
+fn "core:prelude/array.wado/ArrayIter<Array<u8>>^Iterator::next"(self) {
     let item: ref "core:prelude//Array<u8>";
     if self.index >= self.used {
         return ref.null none;
@@ -994,17 +994,17 @@ fn "wado-compiler/tests/fixtures/stream-http-echo.wado/ArrayIter<Array<u8>>^Iter
     return item;
 }
 
-fn "wado-compiler/tests/fixtures/stream-http-echo.wado/Array<Array<u8>>::push"(self, value) {
+fn "core:prelude/array.wado/Array<Array<u8>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/stream-http-echo.wado/Array<Array<u8>>::grow"(self);
+        "core:prelude/array.wado/Array<Array<u8>>::grow"(self);
     }
     builtin::array_set<ref "core:prelude//Array<u8>">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "wado-compiler/tests/fixtures/stream-http-echo.wado/Array<Array<u8>>::grow"(self) {
+fn "core:prelude/array.wado/Array<Array<u8>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<Array<u8>>;
