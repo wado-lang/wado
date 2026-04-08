@@ -58,7 +58,7 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
 
 /// Compute reachable functions from all entry points via call graph traversal.
 ///
-/// Entry points include: world exports, test functions, wasm_module exports,
+/// Entry points include: world exports, test functions, `wasm_module` exports,
 /// and HTTP handler helpers.
 fn compute_reachable_from_entries(
     project: &FlatPackage,
@@ -156,27 +156,24 @@ fn resolve_imports(
         }
     }
 
-    let is_builtin_func = |f: &FreeFunctionName| {
-        f.module_source.is_core_builtin() || f.name.starts_with("builtin::")
-    };
+    let is_builtin_func =
+        |f: &FreeFunctionName| f.module_source.is_core_builtin() || f.name.starts_with("builtin::");
 
     // Also mark WASI functions as used if indirect calls are present (for ambient logging)
-    if reachable
-        .iter()
-        .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
+    if reachable.iter().any(|func_id| {
+        matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
             let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
             name.starts_with("call_indirect_stdout")
-        }))
-    {
+        })
+    }) {
         used_wasi_functions.insert("Stdout::write_via_stream".to_string());
     }
-    if reachable
-        .iter()
-        .any(|func_id| matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
+    if reachable.iter().any(|func_id| {
+        matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
             let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
             name.starts_with("call_indirect_stderr")
-        }))
-    {
+        })
+    }) {
         used_wasi_functions.insert("Stderr::write_via_stream".to_string());
     }
 
@@ -388,7 +385,11 @@ fn collect_bytes_literals_expr(expr: &TirExpr, used: &mut IndexSet<Vec<u8>>) {
         | TirExprKind::ClosureToCanonical { functor: expr, .. } => {
             collect_bytes_literals_expr(expr, used);
         }
-        TirExprKind::Index { expr, index } | TirExprKind::Assign { target: expr, value: index } => {
+        TirExprKind::Index { expr, index }
+        | TirExprKind::Assign {
+            target: expr,
+            value: index,
+        } => {
             collect_bytes_literals_expr(expr, used);
             collect_bytes_literals_expr(index, used);
         }
