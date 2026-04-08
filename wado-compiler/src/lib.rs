@@ -52,7 +52,7 @@ pub use effect_check::{EffectError, check_effects, check_stores};
 pub use flat_package::FlatPackage;
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
-pub use lower::{lower, lower_flat, lower_modules_indexed};
+pub use lower::lower_flat;
 pub use monomorphize::monomorphize_flat;
 pub use name::ModuleSource;
 pub use optimize::{OptLevel, optimize};

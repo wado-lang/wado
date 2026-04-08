@@ -230,7 +230,7 @@ impl Monomorphizer {
             let func = func_rc.borrow();
             if func.has_real_type_params() || !func.impl_type_params.is_empty() {
                 let key =
-                    generic_function_key(func.is_method(), &self.current_module_source, &func.name);
+                    generic_function_key(func.is_method(), &func.module_source, &func.name);
                 generic_functions.insert(key, Rc::clone(func_rc));
             }
         }

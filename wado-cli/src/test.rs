@@ -704,7 +704,7 @@ pub async fn run(opts: TestOptions) {
 
     for path in &opts.paths {
         // Handle #![TODO] modules that failed to compile
-        if let Some(_todo_err) = todo_error_by_path.get(path.as_str()) {
+        if todo_error_by_path.contains_key(path.as_str()) {
             println!("  \x1b[33m·\x1b[0m #![TODO] module — compile error (expected)  ({path})");
             total_todo += 1;
             todo_entries.push(TodoEntry {
