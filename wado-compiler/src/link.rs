@@ -64,8 +64,6 @@ pub fn link(package: Package) -> FlatPackage {
     let mut globals = Vec::new();
     let mut imports = Vec::new();
     let mut tests = Vec::new();
-    let mut traits = Vec::new();
-    let mut impls = Vec::new();
     let mut string_literals = Vec::new();
     let mut bytes_literals = Vec::new();
     let mut closure_functors = Vec::new();
@@ -110,8 +108,6 @@ pub fn link(package: Package) -> FlatPackage {
         flags.extend(tir_mod.flags);
         newtypes.extend(tir_mod.newtypes);
         globals.extend(tir_mod.globals);
-        traits.extend(tir_mod.traits);
-        impls.extend(tir_mod.impls);
         string_literals.extend(tir_mod.string_literals);
         bytes_literals.extend(tir_mod.bytes_literals);
         closure_functors.extend(tir_mod.closure_functors);
@@ -155,8 +151,6 @@ pub fn link(package: Package) -> FlatPackage {
         globals,
         imports,
         tests,
-        traits,
-        impls,
         string_literals,
         bytes_literals,
         closure_functors,

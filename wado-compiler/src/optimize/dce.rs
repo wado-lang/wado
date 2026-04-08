@@ -504,19 +504,6 @@ pub fn remove_unreachable_closure_functors(project: &mut FlatPackage) {
     });
 }
 
-/// Remove impl blocks whose target type is unreachable.
-///
-/// Post-resolution, impl methods are already flattened into the `functions` list
-/// with mangled names (e.g., `Point::sum`). The `impls` list is metadata only —
-/// neither `wir_build` nor codegen consumes it.
-pub fn remove_unreachable_impls(project: &mut FlatPackage) {
-    let reachable_types = compute_reachable_types(project);
-
-    project
-        .impls
-        .retain(|impl_block| reachable_types.contains(&impl_block.target_type));
-}
-
 /// Build call graph and effect usage from all TIR functions
 fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
     let mut call_graph: CallGraph = IndexMap::default();
@@ -568,32 +555,6 @@ fn build_analysis_graph(project: &FlatPackage) -> (CallGraph, EffectUsageMap) {
         call_graph.insert(func_id.clone(), analysis.callees);
         if !analysis.effect_calls.is_empty() {
             effect_usage.insert(func_id.clone(), analysis.effect_calls);
-        }
-    }
-
-    // Note: impl_block.methods is empty because resolver adds methods to functions
-    // with mangled names like "Point::sum". This loop is kept for future compatibility.
-    for impl_block in &project.impls {
-        let (struct_name, module_source) = match type_table.get(impl_block.target_type) {
-            ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.clone()),
-            _ => continue,
-        };
-        for method in &impl_block.methods {
-            let method_id = FunctionId::Method(MethodName::new(
-                module_source.clone(),
-                struct_name.clone(),
-                None,
-                method.name.clone(),
-            ));
-            let analysis = analyze_function(method, &module_source, type_table);
-            call_graph.insert(method_id.clone(), analysis.callees);
-            if !analysis.effect_calls.is_empty() {
-                effect_usage.insert(method_id.clone(), analysis.effect_calls);
-            }
         }
     }
 
@@ -1422,14 +1383,6 @@ fn compute_reachable_types(project: &FlatPackage) -> IndexSet<TypeId> {
         for func_rc in &project.functions {
             let func = func_rc.borrow();
             collect_types_from_function(&func, &type_table, &mut reachable_types);
-        }
-
-        // Also collect types from impl blocks
-        for impl_block in &project.impls {
-            reachable_types.insert(impl_block.target_type);
-            for method in &impl_block.methods {
-                collect_types_from_function(method, &type_table, &mut reachable_types);
-            }
         }
 
         // Collect types from global variables
