@@ -1,0 +1,19 @@
+// Test DCE of closure functors from unreachable functions.
+// When a function that creates a closure is never called, the closure
+// functor (__Closure_N::__call) should not appear in the WIR output.
+use { println, Stdout } from "core:cli";
+
+fn make_unused_closure() -> fn(i32) -> i32 {
+    let x = 42;
+    return |n: i32| n + x;
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O0": ["__Closure", "__call"]
+}

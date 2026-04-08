@@ -1,0 +1,24 @@
+// Test DCE of bytes literals from unreachable functions.
+// When a function using #include_bytes is never called, the byte data
+// ("Hello") should not appear in the WIR output as a data segment.
+use { println, Stdout } from "core:cli";
+
+fn unused_bytes() -> Array<u8> {
+    return #include_bytes("./testdata/binary.dat");
+}
+
+fn used_bytes() -> Array<u8> {
+    return #include_bytes("./testdata/hello.txt");
+}
+
+export fn run() with Stdout {
+    let data = used_bytes();
+    println(`{data.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "14\n",
+    "wir_expect:O0": ["array.new_data<u8>(\"Hello, World!"],
+    "wir_not_expect:O0": ["unused_bytes"]
+}
