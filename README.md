@@ -10,7 +10,9 @@ Existing solutions bundle their own memory management runtime into every `.wasm`
 
 The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, Wado is designed from the ground up for this new era — no legacy baggage, no retrofitting.
 
-## Hello World
+## Examples
+
+### Hello World
 
 ```wado
 #!/usr/bin/env wado run
@@ -39,7 +41,7 @@ wado compile --format wat example/hello.wado # generates example/hello.wat with 
 wado compile -o example/hello.wat example/hello.wado  # ditto
 ```
 
-## FizzBuzz
+### FizzBuzz
 
 ```wado
 use { println, Stdout } from "core:cli";
@@ -135,67 +137,13 @@ That said, Wado is already usable for its original purpose: embedding lightweigh
 
 ## Future Directions
 
-### Colorless Async
-
-Thanks to Wasm Stack Switching (not yet available in runtimes), all functions will be "colorless" — no async/await infection:
-
-```wado
-fn fetch_all() with Http {
-    let users = Http::get("/users");   // No await needed
-    let posts = Http::get("/posts");   // Just works
-    return (users, posts);
-}
-```
-
-### Reactive Signals
-
-Built-in reactive state for UI and event-driven applications:
-
-```wado
-use {observe} from "core:reactive";
-
-let reactive mut count = 0;           // Mutable reactive state
-let reactive doubled = || count * 2;  // Derived value
-
-observe(|| {
-    println(`Count: {count}, Doubled: {doubled}`);
-});
-
-count += 1;  // Automatically propagates to `doubled` and triggers observe()
-```
-
-Why built-in instead of a library?
-
-- **Compiler optimization**: Dependencies are analyzed at compile-time, generating precise Wasm update code with no runtime tracking overhead
-- **Ergonomics**: No wrapper functions like `useState()`, `ref()`, or `createSignal()`
-- **Automatic dependency tracking**: `observe()` automatically tracks reactive values accessed within the closure—no manual subscription needed
-- **No virtual DOM**: Updates compile to direct mutations, not diffing
-- **Context-aware**: In CLI, updates are synchronous; in event-looped environments (browser/GUI), updates may be batched for efficiency
-
-### JSX for UI
-
-JSX syntax will enable declarative UI descriptions:
-
-```wado
-fn App() -> Node {
-    let reactive mut count = 0;
-
-    return <div>
-        <h1>Count: {count}</h1>
-        <button onclick={|| count += 1}>Increment</button>
-    </div>;
-}
-```
-
-Combined with reactive signals, this will provide a compile-time optimized UI framework without virtual DOM overhead.
-
 ### Full WASI P3 Integration
 
 As the spec finalizes and runtime support matures, Wado will leverage async streams, futures, and the full capability model.
 
 ## Informed by Agentic Coding
 
-Wado is developed entirely through agentic coding — AI agents write the code while the human handles design decisions and project management.
+Wado is developed entirely through agentic coding — AI agents write the entire code while the human handles design decisions and project management.
 
 This isn't just a curiosity; it shaped the language itself. After a year of intensive agentic coding experience, certain patterns became clear:
 
@@ -211,16 +159,7 @@ The result: a language where common agentic coding pitfalls are eliminated by de
 - [Language Specification](docs/spec.md) - Full language reference
 - [Compiler Implementation](docs/compiler.md) - Compiler internals and feature checklist
 - [Benchmarks](benchmark/README.md) - Performance benchmarks vs C and JavaScript, and so on
-- [Other Documentation](docs) - WEP, research notes, TODOs, etc.
-
-## Benchmarks
-
-Per-commit performance tracking is published to GitHub Pages. Every push to `main` records runtime and binary size metrics.
-
-- [Runtime Performance](https://wado-lang.github.io/wado/benchmarks/runtime/) — execution time for integer, float, array, string, and compression workloads (compiled at `-O2`, run on wasmtime)
-- [Wasm Binary Size](https://wado-lang.github.io/wado/benchmarks/wasm-size/) — `.wasm` output size for representative programs (compiled at `-Os`)
-
-See [benchmark/README.md](benchmark/README.md) for local benchmark instructions and comparison results against C, Rust, Zig, and JavaScript.
+- [Other Documentation](docs) - WEP, research notes, etc.
 
 ## Development
 
@@ -299,8 +238,17 @@ See [wado-vscode/README.md](wado-vscode/README.md) for more details.
 ### On Your Task Done
 
 ```sh
-mise run on-task-done # format, clippy-fix, update-bundled, test
+mise run on-task-done # format, clippy-fix, update resources, test
 ```
+
+## Benchmarks
+
+Per-commit performance tracking is published to GitHub Pages. Every push to `main` records runtime and binary size metrics.
+
+- [Runtime Performance](https://wado-lang.github.io/wado/benchmarks/runtime/) — execution time for integer, float, array, string, and compression workloads (compiled at `-O2`, run on wasmtime)
+- [Wasm Binary Size](https://wado-lang.github.io/wado/benchmarks/wasm-size/) — `.wasm` output size for representative programs (compiled at `-Os`)
+
+See [benchmark/README.md](benchmark/README.md) and [wasm-size/README.md](wasm-size/README.md) for local benchmark instructions and comparison results against other programming languages.
 
 ## Authors
 
