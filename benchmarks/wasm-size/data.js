@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775642074595,
+  "lastUpdate": 1775649266259,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10787,6 +10787,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9b88d2b183c2f20cb33a0c30d81f4907fbc0df11"
         },
         "date": 1775642074354,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9f64ba0352f5169c796d716d0fab9b514d662274",
+          "message": "Merge pull request #787 from wado-lang/gfx/update_mise\n\nupdate mise.lock",
+          "timestamp": "2026-04-08T20:50:44+09:00",
+          "tree_id": "5335e1697a69b36a982b0ecdc526f99a332395f6",
+          "url": "https://github.com/wado-lang/wado/commit/9f64ba0352f5169c796d716d0fab9b514d662274"
+        },
+        "date": 1775649266170,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
