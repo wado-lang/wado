@@ -13,8 +13,8 @@ use crate::component_model::WasiRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
-    ClosureFunctor, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirNewtype, TirStruct,
-    TirTest, TirVariantDecl, TypeId, TypeTable,
+    ClosureFunctor, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
+    TirVariantDecl, TypeId, TypeTable,
 };
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
@@ -44,8 +44,6 @@ pub struct FlatPackage {
     pub variant_index: IndexMap<(ModuleSource, String), usize>,
     /// All flags declarations (each carries its own `module_source`)
     pub flags: Vec<TirFlags>,
-    /// All newtype declarations (each carries its own `module_source`)
-    pub newtypes: Vec<TirNewtype>,
     /// All global variable declarations (each carries its own `module_source`)
     pub globals: Vec<TirGlobal>,
     /// Imports (from entry module only)

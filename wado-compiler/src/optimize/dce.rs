@@ -128,11 +128,7 @@ fn compute_reachable_from_entries(
     // HTTP handler exports need cm_lower_string for ErrorCode payload lowering
     // (ErrorCode variant cases can contain Option<String> payloads).
     // This is used in the component export path, not via TIR call graph.
-    let has_http_handler_export = project
-        .world_registry
-        .get(&project.target_world)
-        .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
-    if has_http_handler_export {
+    if project.has_http_handler_export {
         let func = FunctionId::Free(FreeFunctionName::from_strs(
             &["core", "internal"],
             "cm_lower_string",

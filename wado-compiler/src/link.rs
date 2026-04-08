@@ -60,7 +60,6 @@ pub fn link(package: Package) -> FlatPackage {
     let mut enums = Vec::new();
     let mut variants = Vec::new();
     let mut flags = Vec::new();
-    let mut newtypes = Vec::new();
     let mut globals = Vec::new();
     let mut imports = Vec::new();
     let mut tests = Vec::new();
@@ -106,7 +105,6 @@ pub fn link(package: Package) -> FlatPackage {
         enums.extend(tir_mod.enums);
         variants.extend(tir_mod.variants);
         flags.extend(tir_mod.flags);
-        newtypes.extend(tir_mod.newtypes);
         globals.extend(tir_mod.globals);
         string_literals.extend(tir_mod.string_literals);
         bytes_literals.extend(tir_mod.bytes_literals);
@@ -147,7 +145,6 @@ pub fn link(package: Package) -> FlatPackage {
         variants,
         variant_index,
         flags,
-        newtypes,
         globals,
         imports,
         tests,
