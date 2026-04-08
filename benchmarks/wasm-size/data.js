@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775608607625,
+  "lastUpdate": 1775618199087,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10709,6 +10709,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9a873b8d4508a3023b613e9acb08801c03b3edc3"
         },
         "date": 1775608607369,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1c7a1a44cc499682b6d76e44ecffa6d4e27967b1",
+          "message": "Merge pull request #784 from wado-lang/claude/simplify-search-remove-data-PvIqZ\n\nFix module_source root causes, eliminate all fallback lookups",
+          "timestamp": "2026-04-08T12:13:19+09:00",
+          "tree_id": "8f7074c3c8d0c526234620e6af39cdb22df3e548",
+          "url": "https://github.com/wado-lang/wado/commit/1c7a1a44cc499682b6d76e44ecffa6d4e27967b1"
+        },
+        "date": 1775618198832,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
