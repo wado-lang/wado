@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775650335396,
+  "lastUpdate": 1775652643851,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10904,6 +10904,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4fbcc77de4ffa7aae9b9b1119a756c965c6cc533"
         },
         "date": 1775650335235,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "54a15e3539443312317fc96337681e72fb0c7306",
+          "message": "Merge pull request #790 from wado-lang/claude/fix-http-get-example-wLNkc\n\nSupport HTTP client in CLI world (wado run)",
+          "timestamp": "2026-04-08T21:47:01+09:00",
+          "tree_id": "ed7620d8bdb7ee9f1d1cd9f9463a706bef390d6d",
+          "url": "https://github.com/wado-lang/wado/commit/54a15e3539443312317fc96337681e72fb0c7306"
+        },
+        "date": 1775652643581,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
