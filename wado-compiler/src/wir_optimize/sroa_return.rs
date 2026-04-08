@@ -569,21 +569,14 @@ fn all_br_values_are_struct_new(
                     else_body,
                     ..
                 } => {
-                    if !all_br_values_are_struct_new(
-                        then_body,
-                        expected_type_idx,
-                        target_depth + 1,
-                    ) {
+                    if !all_br_values_are_struct_new(then_body, expected_type_idx, target_depth + 1)
+                    {
                         return false;
                     }
-                    if let Some(eb) = else_body {
-                        if !all_br_values_are_struct_new(
-                            eb,
-                            expected_type_idx,
-                            target_depth + 1,
-                        ) {
-                            return false;
-                        }
+                    if let Some(eb) = else_body
+                        && !all_br_values_are_struct_new(eb, expected_type_idx, target_depth + 1)
+                    {
+                        return false;
                     }
                 }
                 _ => {}
@@ -692,14 +685,14 @@ fn all_br_variant_values_are_struct_new(
                     ) {
                         return false;
                     }
-                    if let Some(eb) = else_body {
-                        if !all_br_variant_values_are_struct_new(
+                    if let Some(eb) = else_body
+                        && !all_br_variant_values_are_struct_new(
                             eb,
                             valid_type_indices,
                             target_depth + 1,
-                        ) {
-                            return false;
-                        }
+                        )
+                    {
+                        return false;
                     }
                 }
                 _ => {}
