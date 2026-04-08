@@ -228,7 +228,6 @@ impl<'a> WirContext<'a> {
         )
     }
 
-
     // === Function Registration ===
 
     /// Register a function import and return its `WirFuncId`.
@@ -552,18 +551,15 @@ impl<'a> WirContext<'a> {
                         let resolved_mangled =
                             crate::name::mangle_generic_name(name, &resolved_args);
                         if resolved_mangled != mangled {
-                            let resolved_sn = StructName::new(
-                                module_source.clone(),
-                                resolved_mangled.clone(),
-                            );
+                            let resolved_sn =
+                                StructName::new(module_source.clone(), resolved_mangled.clone());
                             if let Some(tid) = self.struct_type_map.get(&resolved_sn) {
                                 return WirType::Ref {
                                     type_id: tid.clone(),
                                     nullable: false,
                                 };
                             }
-                            let resolved_fq =
-                                format!("{module_source}//{resolved_mangled}");
+                            let resolved_fq = format!("{module_source}//{resolved_mangled}");
                             if let Some(tid) = self.type_map.get(&resolved_fq) {
                                 return WirType::Ref {
                                     type_id: tid.clone(),

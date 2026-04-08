@@ -447,9 +447,7 @@ impl FunctionTranslator<'_, '_> {
     /// Check if a type requires value copy (struct, array, tuple, variant, option).
     fn needs_value_copy(&self, type_id: TypeId) -> bool {
         match self.type_table.get(type_id) {
-            ResolvedType::Struct {
-                base_name, ..
-            } => {
+            ResolvedType::Struct { base_name, .. } => {
                 // Box<T> types are GC reference cells for primitive boxing.
                 // They should share the heap object on assignment, not deep-copy.
                 // Identified by base_name set during monomorphization / boxing pass.

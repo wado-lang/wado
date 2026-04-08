@@ -265,7 +265,7 @@ fn register_struct(
                 .collect();
             let resolved_name =
                 crate::name::mangle_generic_name(&mono.generic_name, &resolved_args);
-            let resolved_sn = StructName::new(effective_module.clone(), resolved_name.clone());
+            let resolved_sn = StructName::new(effective_module.clone(), resolved_name);
             if let Some(existing) = ctx.struct_type_map.get(&resolved_sn).cloned() {
                 ctx.struct_type_map.insert(struct_name, existing);
                 return;
