@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775652643851,
+  "lastUpdate": 1775655074978,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10943,6 +10943,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/54a15e3539443312317fc96337681e72fb0c7306"
         },
         "date": 1775652643581,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "987952591a6e0bab04369d7d21f42e08c6093c30",
+          "message": "Merge pull request #791 from wado-lang/gfx/simplify_http_get\n\nchore: simplify http-get.wado example",
+          "timestamp": "2026-04-08T22:27:37+09:00",
+          "tree_id": "51b2544200d1fe8b6d093fbb37397dbe2c2cb8a1",
+          "url": "https://github.com/wado-lang/wado/commit/987952591a6e0bab04369d7d21f42e08c6093c30"
+        },
+        "date": 1775655074725,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
