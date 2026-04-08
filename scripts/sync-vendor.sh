@@ -51,11 +51,12 @@ else
     echo "vendor/wasmtime updated to ${TAG}"
 fi
 
-# Verify mise.toml wasmtime CLI version consistency
+# Auto-sync mise.toml wasmtime CLI version
 MISE_VERSION=$(grep '^wasmtime' mise.toml 2>/dev/null | sed 's/.*= "//;s/"//')
 if [ -n "${MISE_VERSION}" ] && [ "${MISE_VERSION}" != "${MAJOR}" ]; then
-    echo "WARNING: .mise.toml wasmtime = \"${MISE_VERSION}\" does not match major version ${MAJOR}"
-    echo "Consider updating .mise.toml: wasmtime = \"${MAJOR}\""
+    echo "Updating mise.toml: wasmtime = \"${MISE_VERSION}\" -> \"${MAJOR}\""
+    sed -i "s/^wasmtime = \"${MISE_VERSION}\"/wasmtime = \"${MAJOR}\"/" mise.toml
+    mise lock wasmtime 2>/dev/null || true
 fi
 
 # --- Other vendors: update to latest ---
