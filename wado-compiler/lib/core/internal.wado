@@ -5,10 +5,9 @@
 // implemented in Wado itself rather than as inline Wasm instructions,
 // making the codegen simpler and the compiler more maintainable.
 
-// Box<T> wraps a value on the GC heap, enabling references to primitives.
-// The lower phase generates Box<T> struct instances synthetically (not from this source).
-// Do NOT define Box<T> here — the monomorphizer would create user-type instances
-// in core:internal, conflicting with entry module types.
+// Box<T> is defined in core:prelude/types.wado with #[comp_feature("box")].
+// The lower/boxing pass synthesizes monomorphized Box<T> instances using the
+// module_source registered by that comp_feature.
 
 /// Copies bytes from linear memory to a new GC array.
 pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {

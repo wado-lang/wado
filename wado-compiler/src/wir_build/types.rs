@@ -241,9 +241,6 @@ fn register_struct(
     // Use the TirStruct's own module_source directly.  The monomorphizer sets
     // this to the module where the generic struct is *defined* (via InstantiationKey),
     // and link.rs dedup ensures only the defining-module copy survives.
-    // Lookup-side fallbacks (generic_base_module, struct_def_module) handle the
-    // case where a GenericInstance's module_source differs from the definition's
-    // (e.g., Box<i32> referenced from core:internal but defined in core:prelude).
     let effective_module = module_source.clone();
 
     let struct_name = StructName::new(effective_module.clone(), tir_struct.name.clone());
@@ -502,7 +499,13 @@ fn register_box_structs(ctx: &mut WirContext<'_>) {
 fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::wir::WirType) {
     let box_name =
         crate::name::mangle_generic_name("Box", std::slice::from_ref(&prim_name.to_string()));
-    let module_source = ModuleSource::prelude();
+    let module_source = ctx
+        .package
+        .type_table
+        .borrow()
+        .box_module_source
+        .clone()
+        .unwrap_or_else(ModuleSource::prelude);
     let struct_name = StructName::new(module_source.clone(), box_name.clone());
     if ctx.struct_type_map.contains_key(&struct_name) {
         return;
@@ -801,12 +804,10 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     if ctx.variant_type_map.contains_key(&fq) {
                         continue;
                     }
-                    // Find the base variant declaration using the definition-site module.
-                    let effective_ms =
-                        ctx.package.resolve_effective_module(name, module_source);
+                    // Find the base variant declaration using module_source directly.
                     let base = ctx
                         .package
-                        .find_variant(effective_ms, name)
+                        .find_variant(module_source, name)
                         .filter(|v| !v.type_params.is_empty());
                     if let Some(base) = base {
                         let variant_tt = type_table;

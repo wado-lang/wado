@@ -42,17 +42,6 @@ pub struct FlatPackage {
     pub variants: Vec<TirVariantDecl>,
     /// Index: `(module_source, name)` → index into `variants`.
     pub variant_index: IndexMap<(ModuleSource, String), usize>,
-    /// Maps generic base name (e.g., "Box", "Array", "Option") → defining `ModuleSource`.
-    /// Built from struct/variant declarations with type parameters, plus `GenericInstance`
-    /// entries from the type table (covers types like `Box` whose generic template is
-    /// only in the type table).
-    /// Used to resolve the correct `ModuleSource` for monomorphized type lookups.
-    pub generic_base_module: IndexMap<String, ModuleSource>,
-    /// Maps non-monomorphized struct name → defining `ModuleSource` (from `TirStruct`).
-    /// Fixes module_source mismatches for WASI types where the `ResolvedType` has a
-    /// package-level source (e.g., `"clocks"`) but the struct definition has a file-level
-    /// source (e.g., `"clocks/system-clock.wado"`).
-    pub struct_def_module: IndexMap<String, ModuleSource>,
     /// All flags declarations (each carries its own `module_source`)
     pub flags: Vec<TirFlags>,
     /// All newtype declarations (each carries its own `module_source`)
@@ -132,22 +121,6 @@ impl FlatPackage {
                 .entry((v.module_source.clone(), v.name.clone()))
                 .or_insert(i);
         }
-    }
-
-    /// Resolve the effective `ModuleSource` for a type lookup.
-    ///
-    /// For monomorphized types, returns the definition-site module of the generic base
-    /// from `generic_base_module`. For non-generic types, returns the struct definition's
-    /// module from `struct_def_module`. Falls back to the provided `module_source`.
-    pub fn resolve_effective_module<'a>(
-        &'a self,
-        base_name: &str,
-        module_source: &'a ModuleSource,
-    ) -> &'a ModuleSource {
-        self.generic_base_module
-            .get(base_name)
-            .or_else(|| self.struct_def_module.get(base_name))
-            .unwrap_or(module_source)
     }
 
     /// Check if any function from the given WASI effect is used.

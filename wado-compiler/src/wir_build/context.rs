@@ -435,62 +435,17 @@ impl<'a> WirContext<'a> {
                 module_source,
                 ..
             } => {
-                // Special case: String always resolves to the String module.
-                if name == "String" {
-                    let sn = StructName::new(ModuleSource::string(), name.clone());
-                    if let Some(type_id) = self.struct_type_map.get(&sn) {
-                        return WirType::Ref {
-                            type_id: type_id.clone(),
-                            nullable: false,
-                        };
-                    }
-                }
-
-                // Primary: try with the ResolvedType's own module_source.
-                let lookup_name = StructName::new(module_source.clone(), name.clone());
+                // String is always at ModuleSource::string().
+                let lookup_module = if name == "String" {
+                    ModuleSource::string()
+                } else {
+                    module_source.clone()
+                };
+                let lookup_name = StructName::new(lookup_module, name.clone());
                 if let Some(type_id) = self.struct_type_map.get(&lookup_name) {
                     WirType::Ref {
                         type_id: type_id.clone(),
                         nullable: false,
-                    }
-                } else if let Some(base) = name.split('<').next()
-                    && base != name
-                {
-                    // Monomorphized name: fall back to generic_base_module to find
-                    // the defining module (e.g., Box<i32> from core:internal →
-                    // core:prelude).
-                    let effective = self
-                        .package
-                        .resolve_effective_module(base, module_source);
-                    if effective != module_source {
-                        let alt = StructName::new(effective.clone(), name.clone());
-                        if let Some(type_id) = self.struct_type_map.get(&alt) {
-                            return WirType::Ref {
-                                type_id: type_id.clone(),
-                                nullable: false,
-                            };
-                        }
-                    }
-                    WirType::AbstractRef {
-                        heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: false,
-                    }
-                } else if let Some(def_module) = self.package.struct_def_module.get(name)
-                    && def_module != module_source
-                {
-                    // Non-mono fallback: WASI types where package-level module_source
-                    // differs from the struct definition's file-level module.
-                    let alt = StructName::new(def_module.clone(), name.clone());
-                    if let Some(type_id) = self.struct_type_map.get(&alt) {
-                        WirType::Ref {
-                            type_id: type_id.clone(),
-                            nullable: false,
-                        }
-                    } else {
-                        WirType::AbstractRef {
-                            heap_type: crate::wir::WirAbstractHeapType::Struct,
-                            nullable: false,
-                        }
                     }
                 } else {
                     WirType::AbstractRef {
@@ -574,10 +529,6 @@ impl<'a> WirContext<'a> {
                 // monomorphization the struct is registered with the mangled name
                 // (e.g., "Box<i32>"). Build the mangled name to look up.
                 let mangled = type_table.mangle_type_name(type_id);
-                // Try with the original module_source first, then fall back to
-                // generic_base_module for cases where the module differs (e.g.,
-                // Box types from the boxing pass use core:internal but are
-                // registered under core:prelude).
                 let struct_name = StructName::new(module_source.clone(), mangled.clone());
                 if let Some(tid) = self.struct_type_map.get(&struct_name) {
                     WirType::Ref {
@@ -585,21 +536,6 @@ impl<'a> WirContext<'a> {
                         nullable: false,
                     }
                 } else {
-                    let effective_module = self
-                        .package
-                        .generic_base_module
-                        .get(name);
-                    if let Some(em) = effective_module
-                        && em != module_source
-                    {
-                        let alt = StructName::new(em.clone(), mangled.clone());
-                        if let Some(tid) = self.struct_type_map.get(&alt) {
-                            return WirType::Ref {
-                                type_id: tid.clone(),
-                                nullable: false,
-                            };
-                        }
-                    }
                     // Try as variant (in type_map)
                     let variant_fq = format!("{module_source}//{mangled}");
                     if let Some(tid) = self.type_map.get(&variant_fq) {
@@ -608,7 +544,7 @@ impl<'a> WirContext<'a> {
                             nullable: false,
                         }
                     } else {
-                        // Fallback: resolve newtypes in type_args and retry
+                        // Resolve newtypes in type_args and retry
                         let resolved_args: Vec<String> = type_args
                             .iter()
                             .map(|t| type_table.mangle_type_name_resolving_newtypes(*t))
@@ -625,20 +561,6 @@ impl<'a> WirContext<'a> {
                                     type_id: tid.clone(),
                                     nullable: false,
                                 };
-                            }
-                            if let Some(em) = effective_module
-                                && em != module_source
-                            {
-                                let alt = StructName::new(
-                                    em.clone(),
-                                    resolved_mangled.clone(),
-                                );
-                                if let Some(tid) = self.struct_type_map.get(&alt) {
-                                    return WirType::Ref {
-                                        type_id: tid.clone(),
-                                        nullable: false,
-                                    };
-                                }
                             }
                             let resolved_fq =
                                 format!("{module_source}//{resolved_mangled}");
@@ -739,11 +661,14 @@ impl<'a> WirContext<'a> {
                             "Box",
                             std::slice::from_ref(&inner_name),
                         );
-                        let prelude = ModuleSource::prelude();
                         let box_module = self
                             .package
-                            .resolve_effective_module("Box", &prelude);
-                        let box_sn = StructName::new(box_module.clone(), box_name);
+                            .type_table
+                            .borrow()
+                            .box_module_source
+                            .clone()
+                            .unwrap_or_else(ModuleSource::prelude);
+                        let box_sn = StructName::new(box_module, box_name);
                         if let Some(tid) = self.struct_type_map.get(&box_sn) {
                             WirType::Ref {
                                 type_id: tid.clone(),

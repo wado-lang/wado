@@ -181,15 +181,14 @@ pub fn wasi_type_to_type_id_scoped(
     }
 }
 
-/// Extract the WASI package name for a struct from the registry.
-/// Returns the package portion (e.g., "filesystem" from "wasi:filesystem/types@...").
+/// Extract the WASI sub-module interface path for a struct from the registry.
+/// Returns e.g. "clocks/system-clock.wado" from "wasi:clocks/system-clock@0.3.0-rc-...".
 fn wasi_struct_package(registry: &WasiRegistry, name: &str) -> String {
     if let Some(source) = registry.get_struct_source_interface(name) {
-        // Format: "wasi:filesystem/types@0.3.0-rc-..." -> extract "filesystem"
-        if let Some(after_colon) = source.strip_prefix("wasi:")
-            && let Some(package) = after_colon.split('/').next()
-        {
-            return package.to_string();
+        // Format: "wasi:clocks/system-clock@0.3.0-rc-..." -> "clocks/system-clock.wado"
+        if let Some(after_colon) = source.strip_prefix("wasi:") {
+            let without_version = after_colon.split('@').next().unwrap_or(after_colon);
+            return format!("{without_version}.wado");
         }
     }
     String::new()

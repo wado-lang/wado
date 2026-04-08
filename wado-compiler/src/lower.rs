@@ -126,7 +126,12 @@ pub fn lower_modules_indexed(
     // creates Box<T> struct types, rewrites Ref/MutRef types, then transforms
     // expressions in each module's functions.
     {
-        let mut box_lowerer = BoxLowerer::new();
+        let box_module_source = modules
+            .values()
+            .next()
+            .and_then(|m| m.type_table.borrow().box_module_source.clone())
+            .unwrap_or_else(ModuleSource::prelude);
+        let mut box_lowerer = BoxLowerer::new(box_module_source);
 
         // Build struct fields map and variant names from all modules
         for module in modules.values() {

@@ -20,8 +20,8 @@ pub(super) struct BoxLowerer {
     /// Generated Box<T> struct definitions to add to the module.
     pub(super) generated_structs: Vec<TirStruct>,
     /// Module source for registering Box types in the type table.
-    /// Box is conceptually part of core:internal, matching the module where Box
-    /// is identified in downstream phases (`wir_build` checks `is_core_internal()`).
+    /// Set from `TypeTable::box_module_source` (registered via `#[comp_feature("box")]`
+    /// on `struct Box<T>` in the prelude).
     box_module_source: ModuleSource,
     /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
     pub(super) struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
@@ -31,14 +31,12 @@ pub(super) struct BoxLowerer {
 }
 
 impl BoxLowerer {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(box_module_source: ModuleSource) -> Self {
         Self {
             box_struct_types: IndexMap::default(),
             box_type_ids: IndexSet::default(),
             generated_structs: Vec::new(),
-            box_module_source: ModuleSource::Core {
-                name: "internal".to_string(),
-            },
+            box_module_source,
             struct_fields_map: IndexMap::default(),
             variant_names: IndexSet::default(),
         }
@@ -58,8 +56,7 @@ impl BoxLowerer {
         let inner_name = type_table.mangle_type_name(inner_type_id);
         let struct_name = mangle_generic_name("Box", &[inner_name]);
 
-        // Register under core:internal — Box is a compiler-synthesized type that
-        // downstream phases identify via `is_core_internal()`.
+        // Register under the Box definition's module source (from #[comp_feature("box")]).
         let struct_type_id = type_table.make_monomorphized_struct(
             struct_name.clone(),
             self.box_module_source.clone(),
