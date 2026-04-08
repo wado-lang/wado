@@ -557,11 +557,36 @@ fn all_br_values_are_struct_new(
             }
             i += 1;
         } else {
-            // Recurse into nested blocks
-            if let WirInstr::Block { body, .. } = &instrs[i]
-                && !all_br_values_are_struct_new(body, expected_type_idx, target_depth + 1)
-            {
-                return false;
+            // Recurse into nested blocks and ifs (both add a depth level)
+            match &instrs[i] {
+                WirInstr::Block { body, .. } => {
+                    if !all_br_values_are_struct_new(body, expected_type_idx, target_depth + 1) {
+                        return false;
+                    }
+                }
+                WirInstr::If {
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    if !all_br_values_are_struct_new(
+                        then_body,
+                        expected_type_idx,
+                        target_depth + 1,
+                    ) {
+                        return false;
+                    }
+                    if let Some(eb) = else_body {
+                        if !all_br_values_are_struct_new(
+                            eb,
+                            expected_type_idx,
+                            target_depth + 1,
+                        ) {
+                            return false;
+                        }
+                    }
+                }
+                _ => {}
             }
             i += 1;
         }
@@ -644,10 +669,40 @@ fn all_br_variant_values_are_struct_new(
             }
             i += 1;
         } else {
-            if let WirInstr::Block { body, .. } = &instrs[i]
-                && !all_br_variant_values_are_struct_new(body, valid_type_indices, target_depth + 1)
-            {
-                return false;
+            // Recurse into nested blocks and ifs (both add a depth level)
+            match &instrs[i] {
+                WirInstr::Block { body, .. } => {
+                    if !all_br_variant_values_are_struct_new(
+                        body,
+                        valid_type_indices,
+                        target_depth + 1,
+                    ) {
+                        return false;
+                    }
+                }
+                WirInstr::If {
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    if !all_br_variant_values_are_struct_new(
+                        then_body,
+                        valid_type_indices,
+                        target_depth + 1,
+                    ) {
+                        return false;
+                    }
+                    if let Some(eb) = else_body {
+                        if !all_br_variant_values_are_struct_new(
+                            eb,
+                            valid_type_indices,
+                            target_depth + 1,
+                        ) {
+                            return false;
+                        }
+                    }
+                }
+                _ => {}
             }
             i += 1;
         }
@@ -1410,9 +1465,22 @@ fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) {
                     }
                 }
             } else {
-                // Recurse into nested blocks (which add 1 to the depth)
-                if let WirInstr::Block { body, .. } = &mut instrs[i] {
-                    rewrite_struct_new_br_to_return(body, target_depth + 1);
+                // Recurse into nested blocks and ifs (both add 1 to the depth)
+                match &mut instrs[i] {
+                    WirInstr::Block { body, .. } => {
+                        rewrite_struct_new_br_to_return(body, target_depth + 1);
+                    }
+                    WirInstr::If {
+                        then_body,
+                        else_body,
+                        ..
+                    } => {
+                        rewrite_struct_new_br_to_return(then_body, target_depth + 1);
+                        if let Some(eb) = else_body {
+                            rewrite_struct_new_br_to_return(eb, target_depth + 1);
+                        }
+                    }
+                    _ => {}
                 }
             }
             i += 1;
@@ -1721,6 +1789,26 @@ fn rewrite_variant_struct_new_br_to_return(
                         vi,
                         result_types,
                     );
+                }
+                WirInstr::If {
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    rewrite_variant_struct_new_br_to_return(
+                        then_body,
+                        target_depth + 1,
+                        vi,
+                        result_types,
+                    );
+                    if let Some(eb) = else_body {
+                        rewrite_variant_struct_new_br_to_return(
+                            eb,
+                            target_depth + 1,
+                            vi,
+                            result_types,
+                        );
+                    }
                 }
                 WirInstr::Seq(items) => {
                     rewrite_variant_struct_new_br_to_return(items, target_depth, vi, result_types);
