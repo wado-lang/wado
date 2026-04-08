@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775601646861,
+  "lastUpdate": 1775608607625,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10670,6 +10670,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1ea205ffe0dd47dd549814c41f66b174eecc7fdc"
         },
         "date": 1775601646603,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9a873b8d4508a3023b613e9acb08801c03b3edc3",
+          "message": "Merge pull request #785 from wado-lang/claude/add-mise-lock-S50JK\n\nAdd mise.lock to pin tool versions",
+          "timestamp": "2026-04-08T09:33:17+09:00",
+          "tree_id": "1a1137f20564b556bd4cb16f871ec9452d8c4634",
+          "url": "https://github.com/wado-lang/wado/commit/9a873b8d4508a3023b613e9acb08801c03b3edc3"
+        },
+        "date": 1775608607369,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
