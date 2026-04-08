@@ -671,24 +671,19 @@ async fn run_single(opts: &DumpOptions, input: &str) {
 
     // TIR monomorphized section
     if opts.show_tir_monomorphized {
-        if let Some(ref monomorphized_modules) = result.monomorphized_tir_modules {
-            if opts.inspect {
+        if opts.inspect {
+            if let Some(ref text) = result.monomorphized_tir_inspect {
                 println!("=== TIR Monomorphized (inspect) ===");
-                for (module_source, module) in monomorphized_modules {
-                    let path_str = module_source.to_string();
-                    println!("--- Module: {path_str} ---");
-                    println!("{module:#?}");
-                    println!();
-                }
+                println!("{text}");
+                println!();
             } else {
                 println!("=== TIR Monomorphized ===");
-                for (module_source, module) in monomorphized_modules {
-                    let path_str = module_source.to_string();
-                    println!("// --- Module: {path_str} ---");
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    println!("{unparsed}");
-                }
+                println!("(Monomorphization failed or not available)");
+                println!();
             }
+        } else if let Some(ref text) = result.monomorphized_tir_text {
+            println!("=== TIR Monomorphized ===");
+            println!("{text}");
         } else {
             println!("=== TIR Monomorphized ===");
             println!("(Monomorphization failed or not available)");
@@ -698,24 +693,19 @@ async fn run_single(opts: &DumpOptions, input: &str) {
 
     // TIR lowered section (after lowering, before optimization)
     if opts.show_tir_lowered {
-        if let Some(ref lowered_modules) = result.lowered_tir_modules {
-            if opts.inspect {
+        if opts.inspect {
+            if let Some(ref text) = result.lowered_tir_inspect {
                 println!("=== TIR Lowered (inspect) ===");
-                for (module_source, module) in lowered_modules {
-                    let path_str = module_source.to_string();
-                    println!("--- Module: {path_str} ---");
-                    println!("{module:#?}");
-                    println!();
-                }
+                println!("{text}");
+                println!();
             } else {
                 println!("=== TIR Lowered ===");
-                for (module_source, module) in lowered_modules {
-                    let path_str = module_source.to_string();
-                    println!("// --- Module: {path_str} ---");
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    println!("{unparsed}");
-                }
+                println!("(TIR lowering failed or not available)");
+                println!();
             }
+        } else if let Some(ref text) = result.lowered_tir_text {
+            println!("=== TIR Lowered ===");
+            println!("{text}");
         } else {
             println!("=== TIR Lowered ===");
             println!("(TIR lowering failed or not available)");

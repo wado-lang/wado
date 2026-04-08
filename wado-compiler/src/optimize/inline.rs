@@ -1846,10 +1846,11 @@ fn remap_function_ref(func: &FunctionRef, source_module: &ModuleSource) -> Funct
         return func.clone();
     }
 
-    // Only remap if the func has an entry-point module source (local call)
-    if func.module_source.clone().is_entry_point() {
+    // Only remap if the func has an entry-point module source (local call).
+    // Never remap monomorphized function references — they carry the correct
+    // module_source from monomorphization and must keep it for DCE to match.
+    if func.module_source.clone().is_entry_point() && func.monomorph_info.is_none() {
         // Convert to External with the source module
-        // Local calls within a module are not monomorphized, so monomorph_info is None
         FunctionRef {
             module_source: source_module.clone(),
             name: func.name.clone(),

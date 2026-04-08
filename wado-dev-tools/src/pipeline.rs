@@ -382,13 +382,8 @@ async fn compile_one(
             }
         }
         Phase::TirLowered => {
-            if let Some(ref lowered_modules) = result.lowered_tir_modules {
-                for (module_source, module) in lowered_modules {
-                    let path_str = module_source.to_string();
-                    writeln!(output, "// --- Module: {path_str} ---").unwrap();
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    write!(output, "{unparsed}").unwrap();
-                }
+            if let Some(ref text) = result.lowered_tir_text {
+                write!(output, "{text}").unwrap();
             }
         }
         Phase::Wat => unreachable!(),

@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::flat_package::FlatPackage;
 use crate::name::ModuleSource;
 use crate::tir::FunctionRef;
 use crate::tir::{
@@ -118,7 +119,7 @@ fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// 2. Generates a `__initialize_module` function containing the actual initialization
 ///
 /// Note: The `__initialize_modules` function that calls all modules' `__initialize_module`
-/// is generated in the post-processing step (see `generate_initialize_modules`).
+/// is generated in the post-processing step (see `generate_initialize_modules_flat`).
 pub(super) fn lower_global_initializers(module: &mut TirModule) {
     let type_table = module.type_table.borrow();
 
@@ -192,7 +193,7 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
     };
 
     let init_func = TirFunction {
-        module_source: ModuleSource::default(),
+        module_source: module.module_source.clone(),
         is_async: false,
         name: "__initialize_module".to_string(),
         is_pub: true, // pub so it can be called from entry module's __initialize_modules
@@ -598,48 +599,28 @@ fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
     }
 }
 
-/// Generate `__initialize_modules` function in the entry module.
-///
-/// This function:
-/// 1. Checks an initialization flag and returns early if already initialized
-/// 2. Calls each module's `__initialize_module` in topological order
-/// 3. Sets the initialization flag to true
-/// 4. Injects a call to `__initialize_modules` at the start of entry point functions
-pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) {
-    // Find the entry module
-    let entry_source = modules.keys().find(|ms| ms.is_entry_point()).cloned();
+/// Generate `__initialize_modules` for a FlatPackage.
+pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
+    let entry_source = flat.entry_module_source.clone();
 
-    let Some(entry_source) = entry_source else {
-        return; // No entry module
-    };
-
-    // Collect all modules that have __initialize_module function
+    // Collect distinct module sources that have __initialize_module function
     let mut modules_with_init: Vec<ModuleSource> = Vec::new();
-    for (module_source, module) in modules.iter() {
-        let has_init = module
-            .functions
-            .iter()
-            .any(|f| f.borrow().name == "__initialize_module");
-        if has_init {
-            modules_with_init.push(module_source.clone());
+    let mut seen = IndexSet::default();
+    for func_rc in &flat.functions {
+        let func = func_rc.borrow();
+        if func.name == "__initialize_module" && seen.insert(func.module_source.clone()) {
+            modules_with_init.push(func.module_source.clone());
         }
     }
 
-    // If no modules have initialization, nothing to do
     if modules_with_init.is_empty() {
         return;
     }
 
-    // Sort modules so that dependencies are initialized before dependents.
-    // For now, put the entry module last (it typically imports from other modules).
-    // Non-entry modules are sorted by their appearance order in the IndexMap
-    // (which the loader already sorts by dependency).
-    modules_with_init.sort_by_key(|ms| i32::from(ms == &entry_source));
+    // Sort: entry module last
+    modules_with_init.sort_by_key(|ms| i32::from(*ms == entry_source));
 
     let span = Span::new(0, 0, 1, 1);
-
-    // Get mutable reference to entry module
-    let entry_module = modules.get_mut(&entry_source).unwrap();
 
     // Create __modules_initialized flag global
     let init_flag_global = TirGlobal {
@@ -654,7 +635,7 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
         is_nullable: false,
         local_types: Vec::new(),
     };
-    entry_module.globals.push(init_flag_global);
+    flat.globals.push(init_flag_global);
 
     // Build __initialize_modules function body
     let mut init_stmts: Vec<TirStmt> = Vec::new();
@@ -725,11 +706,11 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
     };
 
     let init_modules_func = TirFunction {
-        module_source: ModuleSource::default(),
+        module_source: entry_source.clone(),
         is_async: false,
         name: "__initialize_modules".to_string(),
-        is_pub: false,    // Not pub - internal to entry module
-        is_export: false, // Internal function, not a world export
+        is_pub: false,
+        is_export: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
         monomorph_info: None,
@@ -751,8 +732,7 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
         allocator_tag: None,
     };
 
-    entry_module
-        .functions
+    flat.functions
         .push(Rc::new(RefCell::new(init_modules_func)));
 
     // Inject call to __initialize_modules at the start of entry point functions
@@ -773,10 +753,12 @@ pub(super) fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, T
     );
     let init_call_stmt = TirStmt::new(TirStmtKind::Expr(init_call), span);
 
-    for func_rc in &entry_module.functions {
+    for func_rc in &flat.functions {
         let mut func = func_rc.borrow_mut();
+        if func.module_source != entry_source {
+            continue;
+        }
         let is_entry = func.name == "run" || func.name.starts_with("__test_");
-
         if is_entry && let Some(ref mut body) = func.body {
             body.stmts.insert(0, init_call_stmt.clone());
         }

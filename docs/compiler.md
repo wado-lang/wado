@@ -7,7 +7,7 @@ This document describes the Wado compiler architecture and implementation status
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Synthesis → Effect Check → Stores Check → Erase Newtypes/Flags → Monomorphize → Lower → Link → Optimize → WIR Build → WIR Optimize → Codegen
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Synthesis → Effect Check → Stores Check → Erase Newtypes/Flags → Link → Monomorphize → Lower → Optimize → WIR Build → WIR Optimize → Codegen
 ```
 
 ### Compilation Pipeline
@@ -24,9 +24,9 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Effect Check | Package       | Package         | Validate function effect requirements                     |
 | Stores Check | Package       | Package         | Validate reference storage declarations                   |
 | Erase Types  | Package       | Package         | Erase newtypes and flags to base types                    |
-| Monomorphize | Package       | Package         | Instantiate generics with concrete types                  |
-| Lower        | Package       | Package         | Closure, i128 match, global init, string literal lowering |
 | Link         | Package       | FlatPackage     | Merge per-module TIR into flat lists                      |
+| Monomorphize | FlatPackage   | FlatPackage     | Instantiate generics with concrete types                  |
+| Lower        | FlatPackage   | FlatPackage     | Closure, i128 match, global init, string literal lowering |
 | Optimize     | FlatPackage   | FlatPackage     | Inlining, copy-prop, LICM, DCE, post-opt rewrite          |
 | WIR Build    | FlatPackage   | WirPackage      | Planning + TIR → WIR (Wasm IR) translation                |
 | WIR Optimize | WirPackage    | WirPackage      | Multi-value SROA, array data promotion, peephole          |
@@ -62,7 +62,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | SynthFrom       | `synthesis/from_synth.rs`            | From trait synthesis                                                             |
 | SynthCmBinding  | `synthesis/cm_binding.rs`            | CM boundary adapter synthesis (TIR functions)                                    |
 | CmAbi           | `cm_abi.rs`                          | Canonical ABI layout computation                                                 |
-| Monomorphize    | `monomorphize.rs`                    | Generic type/function instantiation (Package→Package)                            |
+| Monomorphize    | `monomorphize.rs`                    | Generic type/function instantiation (FlatPackage→FlatPackage)                    |
 | Lower           | `lower.rs`                           | Lowering coordinator (`lower/`)                                                  |
 | LowerWideInt    | `lower/wide_int.rs`                  | i128/u128 match pattern → if-else chains                                         |
 | LowerPattern    | `lower/pattern.rs`                   | LetPattern/IfPattern → explicit statements + switch                              |
@@ -170,7 +170,7 @@ Float-to-string formatting was previously a bundled Wasm module but is now imple
 
 ### Monomorphization
 
-The `monomorphize.rs` module is a dedicated compilation phase that instantiates generic structs and functions with concrete types. It runs after type resolution and before the lower phase.
+The `monomorphize.rs` module is a dedicated compilation phase that instantiates generic structs and functions with concrete types. It runs after link (on a FlatPackage) and before the lower phase.
 
 **Process:**
 
@@ -184,7 +184,7 @@ The `monomorphize.rs` module is a dedicated compilation phase that instantiates 
 
 **Cross-Module Support:**
 
-The monomorphizer supports cross-module generic function instantiation. Generic functions defined in one module (e.g., `Array` methods from prelude) can be instantiated when used in another module. This is achieved by collecting all generic functions from all modules before processing.
+The monomorphizer operates on the flat function/struct lists after the link phase. Generic functions defined in one module (e.g., `Array` methods from prelude) can be instantiated when used in another module. Generic structs are keyed by `(name, module_source)` to allow same-named generics from different modules to coexist.
 
 **Name Mangling:**
 

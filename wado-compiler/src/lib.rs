@@ -52,8 +52,8 @@ pub use effect_check::{EffectError, check_effects, check_stores};
 pub use flat_package::FlatPackage;
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
-pub use lower::{lower, lower_modules_indexed, lower_project};
-pub use monomorphize::{monomorphize_module, monomorphize_modules_indexed, monomorphize_project};
+pub use lower::{lower, lower_flat, lower_modules_indexed};
+pub use monomorphize::monomorphize_flat;
 pub use name::ModuleSource;
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
@@ -119,10 +119,14 @@ pub struct DumpResult {
     pub entry_module_source: ModuleSource,
     /// All TIR modules after resolution (in topological order)
     pub tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
-    /// All monomorphized TIR modules (in topological order)
-    pub monomorphized_tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
-    /// All lowered TIR modules (in topological order)
-    pub lowered_tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
+    /// Monomorphized TIR snapshot (unparsed text)
+    pub monomorphized_tir_text: Option<String>,
+    /// Monomorphized TIR snapshot (inspect/debug text)
+    pub monomorphized_tir_inspect: Option<String>,
+    /// Lowered TIR snapshot (unparsed text)
+    pub lowered_tir_text: Option<String>,
+    /// Lowered TIR snapshot (inspect/debug text)
+    pub lowered_tir_inspect: Option<String>,
     /// Linked package after optimization (contains usage analysis results)
     pub optimized_project: Option<FlatPackage>,
     /// WIR module (after `tir_to_wir` translation)
@@ -373,23 +377,23 @@ fn compile_after_load<H: CompilerHost>(
         project
     };
 
-    // === Phase 8c: Monomorphize (Package -> Package) ===
-    let project = {
-        let _span = logger.span("monomorphize");
-        monomorphize_project(project)
-    };
-
-    // === Phase 9: Lower (Package -> Package) ===
-    let project = {
-        let _span = logger.span("lower");
-        lower_project(project)
-    };
-
-    // === Phase 10: Link (Package → FlatPackage) ===
-    let flat = {
+    // === Phase 8c: Link (Package → FlatPackage) ===
+    let mut flat = {
         let _span = logger.span("link");
         link::link(project)
     };
+
+    // === Phase 9: Monomorphize (FlatPackage → FlatPackage) ===
+    {
+        let _span = logger.span("monomorphize");
+        monomorphize_flat(&mut flat);
+    }
+
+    // === Phase 10: Lower (FlatPackage → FlatPackage) ===
+    {
+        let _span = logger.span("lower");
+        lower_flat(&mut flat);
+    }
 
     // === Phase 11: Optimize (FlatPackage → FlatPackage) ===
     let flat = {
@@ -579,8 +583,10 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // Create Package early so CM binding synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
     let (
-        monomorphized_tir_modules_by_source,
-        lowered_tir_modules_by_source,
+        monomorphized_tir_text,
+        monomorphized_tir_inspect,
+        lowered_tir_text,
+        lowered_tir_inspect,
         optimized_project,
         wir_package,
     ) = if let Some(resolved_modules) = tir_modules_by_source.clone() {
@@ -634,28 +640,30 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             })?
         };
 
-        // Erase Newtypes and Flags (after synthesis, before monomorphize)
+        // Erase Newtypes and Flags (after synthesis, before link)
         for module in project.tir_modules.values() {
             module.type_table.borrow_mut().erase_newtypes_and_flags();
         }
 
-        // Monomorphize
-        let project = {
-            let _span = logger.span("monomorphize");
-            monomorphize_project(project)
-        };
+        // Link
+        let mut flat = link::link(project);
 
-        let mono_snapshot = Some(snapshot_tir_modules(&project.tir_modules));
+        // Monomorphize
+        {
+            let _span = logger.span("monomorphize");
+            monomorphize_flat(&mut flat);
+        }
+
+        let mono_text = Some(unparse::unparse_flat_package(&flat));
+        let mono_inspect = Some(format!("{flat:#?}"));
 
         // Lower
-        let project = {
+        {
             let _span = logger.span("lower");
-            lower_project(project)
-        };
-        let lower_snapshot = Some(snapshot_tir_modules(&project.tir_modules));
-
-        // Link
-        let flat = link::link(project);
+            lower_flat(&mut flat);
+        }
+        let lower_text = Some(unparse::unparse_flat_package(&flat));
+        let lower_inspect = Some(format!("{flat:#?}"));
 
         // Optimize
         let flat = {
@@ -671,9 +679,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         });
         let optimized = Some(flat);
 
-        (mono_snapshot, lower_snapshot, optimized, wir_package)
+        (mono_text, mono_inspect, lower_text, lower_inspect, optimized, wir_package)
     } else {
-        (None, None, None, None)
+        (None, None, None, None, None, None)
     };
 
     Ok(DumpResult {
@@ -686,8 +694,10 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         implicit_modules: load_result.implicit_modules.into_iter().collect(),
         entry_module_source: load_result.entry_module_source,
         tir_modules: tir_modules_by_source,
-        monomorphized_tir_modules: monomorphized_tir_modules_by_source,
-        lowered_tir_modules: lowered_tir_modules_by_source,
+        monomorphized_tir_text,
+        monomorphized_tir_inspect,
+        lowered_tir_text,
+        lowered_tir_inspect,
         optimized_project,
         wir_package,
         comments: comment_map,

@@ -18,15 +18,15 @@ mod pattern;
 mod string;
 mod wide_int;
 
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 
 use crate::name::ModuleSource;
-use crate::package::Package;
 use crate::tir::TirModule;
 
 use boxing::BoxLowerer;
 use closure::ClosureLowerer;
-use globals::{generate_initialize_modules, lower_global_initializers};
+use globals::{generate_initialize_modules_flat, lower_global_initializers};
 use pattern::lower_patterns;
 use string::StringCollector;
 use wide_int::lower_wide_int_match_patterns;
@@ -78,17 +78,98 @@ fn lower_post_boxing(module: &mut TirModule) {
     module.function_method_info = function_method_info;
 }
 
-/// Lower a Package (Package -> Package)
+/// Lower a FlatPackage in place.
 ///
-/// This is the main entry point for the lower phase. It lowers all TIR modules
-/// in the project.
-pub fn lower_project(mut project: Package) -> Package {
-    project.tir_modules = lower_modules_indexed(project.tir_modules);
+/// This is the main entry point for the lower phase. It creates a temporary
+/// TirModule from the flat data, runs lowering, and writes results back.
+pub fn lower_flat(flat: &mut FlatPackage) {
+    let entry_module_source = flat.entry_module_source.clone();
 
-    // Post-processing: generate __initialize_modules in entry module
-    generate_initialize_modules(&mut project.tir_modules);
+    // Create a temporary TirModule with all flat data for lowering.
+    let mut temp_module = TirModule::new(entry_module_source.clone());
+    temp_module.type_table = flat.type_table.clone();
+    temp_module.functions = std::mem::take(&mut flat.functions);
+    temp_module.structs = std::mem::take(&mut flat.structs);
+    temp_module.globals = std::mem::take(&mut flat.globals);
+    temp_module.variants = std::mem::take(&mut flat.variants);
+    temp_module.enums = std::mem::take(&mut flat.enums);
+    temp_module.flags = std::mem::take(&mut flat.flags);
+    temp_module.imports = std::mem::take(&mut flat.imports);
 
-    project
+    // Build global variant map from all variants
+    let mut global_variant_map: IndexMap<String, Vec<(String, u32)>> = IndexMap::default();
+    for variant in &temp_module.variants {
+        let cases: Vec<(String, u32)> = variant
+            .cases
+            .iter()
+            .map(|c| (c.name.clone(), c.index))
+            .collect();
+        global_variant_map.insert(variant.name.clone(), cases);
+    }
+
+    // Pre-boxing passes
+    lower_pre_boxing(&mut temp_module, &global_variant_map);
+
+    // Boxing pass (single BoxLowerer on all data)
+    {
+        let box_module_source = temp_module
+            .type_table
+            .borrow()
+            .box_module_source
+            .clone()
+            .unwrap_or_else(ModuleSource::prelude);
+        let mut box_lowerer = BoxLowerer::new(box_module_source);
+
+        for s in &temp_module.structs {
+            box_lowerer.struct_fields_map.insert(
+                (s.name.clone(), s.module_source.clone()),
+                s.fields.clone(),
+            );
+        }
+        for v in &temp_module.variants {
+            box_lowerer.variant_names.insert(v.name.clone());
+        }
+
+        {
+            let mut type_table = temp_module.type_table.borrow_mut();
+            box_lowerer.create_needed_box_types(&mut type_table);
+            box_lowerer.rewrite_types(&mut type_table);
+        }
+
+        box_lowerer.lower_module_exprs(&mut temp_module);
+
+        temp_module
+            .structs
+            .append(&mut box_lowerer.generated_structs);
+    }
+
+    // Post-boxing passes (closures, string collection)
+    lower_post_boxing(&mut temp_module);
+
+    // Write results back to FlatPackage
+    flat.functions = temp_module.functions;
+    flat.structs = temp_module.structs;
+    flat.globals = temp_module.globals;
+    flat.variants = temp_module.variants;
+    flat.enums = temp_module.enums;
+    flat.flags = temp_module.flags;
+    flat.imports = temp_module.imports;
+
+    // String/bytes literals and function string maps from the string collector
+    // The StringCollector already uses (module_source, func_name) compound keys
+    flat.string_literals = temp_module.string_literals;
+    flat.bytes_literals = temp_module.bytes_literals;
+    flat.function_strings = temp_module.function_strings;
+    flat.function_method_info = temp_module.function_method_info;
+
+    // Closure functors
+    flat.closure_functors = temp_module.closure_functors;
+
+    // Post-processing: generate __initialize_modules
+    generate_initialize_modules_flat(flat);
+
+    // Rebuild variant index since data may have changed
+    flat.rebuild_variant_indices();
 }
 
 /// Lower multiple modules

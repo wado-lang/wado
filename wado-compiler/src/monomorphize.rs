@@ -36,243 +36,95 @@ fn generic_function_key(is_method: bool, module_source: &ModuleSource, name: &st
     }
 }
 
-use crate::package::Package;
+use crate::flat_package::FlatPackage;
 use crate::tir::{ResolvedType, TirFunction, TirModule, TirStruct, TypeId, TypeTable};
 
 use state::Monomorphizer;
 
-/// Monomorphize a single TIR module
+/// Monomorphize a FlatPackage (FlatPackage -> FlatPackage)
 ///
-/// This performs monomorphization of generic types and functions
-/// within a single module without cross-module generic function support.
-pub fn monomorphize_module(module: TirModule) -> TirModule {
-    let module_source = module.module_source.clone();
-    let mut monomorph = Monomorphizer::new(module_source);
-    monomorph.monomorphize_with_externals(
-        module,
-        &IndexMap::default(),
-        &IndexMap::default(),
-        &IndexMap::default(),
-    )
-}
+/// This is the main entry point for the monomorphize phase. All per-module data
+/// has already been linked into flat lists by the link phase. This function:
+/// 1. Collects all generic struct/function definitions (with shadowing)
+/// 2. Creates a temporary TirModule with the flat data
+/// 3. Runs monomorphization to instantiate generics
+/// 4. Writes results back to FlatPackage
+/// 5. Strips effect params (validated by prior effect checker)
+pub fn monomorphize_flat(flat: &mut FlatPackage) {
+    let entry_module_source = flat.entry_module_source.clone();
 
-/// Monomorphize a Package (Package -> Package)
-///
-/// This is the main entry point for the monomorphize phase. It monomorphizes all TIR modules
-/// in the project with cross-module generic function support.
-pub fn monomorphize_project(mut project: Package) -> Package {
-    project.tir_modules = monomorphize_modules_indexed(project.tir_modules);
+    // Collect all generic functions from the flat list.
+    // Link has already set module_source on each function.
+    let all_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> = flat
+        .functions
+        .iter()
+        .filter_map(|func_rc| {
+            let func = func_rc.borrow();
+            if func.has_real_type_params() || !func.impl_type_params.is_empty() {
+                let key = generic_function_key(func.is_method(), &func.module_source, &func.name);
+                Some((key, Rc::clone(func_rc)))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Collect all generic structs keyed by (name, module_source).
+    // This allows same-named generic structs from different modules to coexist.
+    let mut resolved_generic_structs: IndexMap<(String, ModuleSource), TirStruct> =
+        IndexMap::default();
+    for tir_struct in &flat.structs {
+        if !tir_struct.type_params.is_empty() {
+            let key = (tir_struct.name.clone(), tir_struct.module_source.clone());
+            resolved_generic_structs.insert(key, tir_struct.clone());
+        }
+    }
+
+    // Collect trait method locations from all functions.
+    let mut trait_method_locations: IndexMap<String, ModuleSource> = IndexMap::default();
+    for func_rc in &flat.functions {
+        let func = func_rc.borrow();
+        if !func.has_real_type_params()
+            && func.impl_type_params.is_empty()
+            && let Some(ref info) = func.method_info
+            && info.trait_name.is_some()
+        {
+            trait_method_locations.insert(func.name.clone(), func.module_source.clone());
+        }
+    }
+
+    // Create a temporary TirModule with all flat data for monomorphization.
+    // This reuses the existing Monomorphizer infrastructure without rewriting it.
+    let mut temp_module = TirModule::new(entry_module_source.clone());
+    temp_module.type_table = flat.type_table.clone();
+    temp_module.functions = std::mem::take(&mut flat.functions);
+    temp_module.structs = std::mem::take(&mut flat.structs);
+    temp_module.globals = std::mem::take(&mut flat.globals);
+
+    // Run monomorphization on the combined module.
+    // Use entry_module_source since all data is merged.
+    let mut monomorph = Monomorphizer::new(entry_module_source);
+    temp_module = monomorph.monomorphize_with_externals(
+        temp_module,
+        &all_generic_functions,
+        &resolved_generic_structs,
+        &trait_method_locations,
+    );
+
+    // Write results back to FlatPackage
+    flat.functions = temp_module.functions;
+    flat.structs = temp_module.structs;
+    flat.globals = temp_module.globals;
 
     // Strip effect params from all functions. Effect params have been validated by the
     // effect checker (which runs before monomorphization) and are not needed downstream.
-    for module in project.tir_modules.values() {
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            func.effects.retain(|e| !e.is_param());
-        }
+    for func_rc in &flat.functions {
+        let mut func = func_rc.borrow_mut();
+        func.effects.retain(|e| !e.is_param());
     }
 
-    project
-}
-
-/// Monomorphize multiple modules with cross-module generic function and struct support
-///
-/// This function enables monomorphization of generic functions and structs defined in one module
-/// but used in another (e.g., Array methods from prelude, `TreeMap` from prelude used in user code).
-///
-/// IMPORTANT: Requires unified type tables - all modules must share the same `TypeTable`
-/// so that `TypeIds` are valid across modules.
-pub fn monomorphize_modules_indexed(
-    modules: IndexMap<ModuleSource, TirModule>,
-) -> IndexMap<ModuleSource, TirModule> {
-    // First pass: collect all generic functions from all modules.
-    let mut all_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
-    for (module_source, module) in &modules {
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            if func.has_real_type_params() || !func.impl_type_params.is_empty() {
-                let key = generic_function_key(func.is_method(), module_source, &func.name);
-                all_generic_functions.insert(key, Rc::clone(func_rc));
-            }
-        }
-    }
-
-    // Collect all generic structs from all modules, tracking ALL source modules
-    // (a struct name can appear in multiple modules due to shadowing)
-    // This includes private structs as they may be needed for instantiating public structs
-    // (e.g., TreeMap uses TreeMapNode internally)
-    let mut all_generic_structs: IndexMap<String, Vec<(ModuleSource, TirStruct)>> =
-        IndexMap::default();
-    for (module_source, module) in &modules {
-        for tir_struct in &module.structs {
-            if !tir_struct.type_params.is_empty() {
-                all_generic_structs
-                    .entry(tir_struct.name.clone())
-                    .or_default()
-                    .push((module_source.clone(), tir_struct.clone()));
-            }
-        }
-    }
-
-    // Identify entry module and its generic struct names (for shadowing detection)
-    // Entry module is the one with ModuleSource::EntryPoint or the last module (user's file)
-    let entry_module_source = modules
-        .keys()
-        .find(|s| matches!(s, ModuleSource::EntryPoint { .. }))
-        .cloned()
-        .unwrap_or_else(|| {
-            modules
-                .keys()
-                .last()
-                .cloned()
-                .expect("monomorphize_modules_indexed called with empty modules")
-        });
-
-    let entry_generic_struct_names: IndexSet<String> = modules
-        .get(&entry_module_source)
-        .map(|m| {
-            m.structs
-                .iter()
-                .filter(|s| !s.type_params.is_empty())
-                .map(|s| s.name.clone())
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // Collect all concrete trait method functions from all modules.
-    // Maps function name (e.g., "i32^Stringify::to_str") → module source.
-    // This enables correct module resolution when monomorphizing type param
-    // receiver calls (e.g., T^Trait::method → ConcreteType^Trait::method).
-    let mut trait_method_locations: IndexMap<String, ModuleSource> = IndexMap::default();
-    for (module_source, module) in &modules {
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            // Only collect non-generic trait methods (concrete impls like "i32^Stringify::to_str")
-            if !func.has_real_type_params()
-                && func.impl_type_params.is_empty()
-                && let Some(ref info) = func.method_info
-                && info.trait_name.is_some()
-            {
-                trait_method_locations.insert(func.name.clone(), module_source.clone());
-            }
-        }
-    }
-
-    // Second pass: monomorphize each module using the combined generic functions and structs
-    modules
-        .into_iter()
-        .map(|(module_source, module)| {
-            (
-                module_source.clone(),
-                monomorphize_with_externals(
-                    module,
-                    &module_source,
-                    &entry_module_source,
-                    &entry_generic_struct_names,
-                    &all_generic_functions,
-                    &all_generic_structs,
-                    &trait_method_locations,
-                ),
-            )
-        })
-        .collect()
-}
-
-/// Monomorphize a single module with access to cross-module generic functions and structs
-fn monomorphize_with_externals(
-    module: TirModule,
-    current_module_source: &ModuleSource,
-    entry_module_source: &ModuleSource,
-    entry_generic_struct_names: &IndexSet<String>,
-    all_generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
-    all_generic_structs_with_sources: &IndexMap<String, Vec<(ModuleSource, TirStruct)>>,
-    trait_method_locations: &IndexMap<String, ModuleSource>,
-) -> TirModule {
-    let is_entry_module = current_module_source == entry_module_source;
-
-    // Find modules whose structs are shadowed by the entry module's definitions
-    // This is computed globally, not per-module, because we want consistent shadowing
-    let mut shadowed_modules: IndexSet<ModuleSource> = IndexSet::default();
-    for entry_struct_name in entry_generic_struct_names {
-        if let Some(sources) = all_generic_structs_with_sources.get(entry_struct_name) {
-            // Find external modules that define this struct (not the entry module)
-            for (external_module_source, _) in sources {
-                if external_module_source != entry_module_source {
-                    shadowed_modules.insert(external_module_source.clone());
-                }
-            }
-        }
-    }
-
-    // Build generic structs map based on whether this is the entry module or not
-    let mut all_generic_structs: IndexMap<String, TirStruct> = IndexMap::default();
-
-    if is_entry_module {
-        // Entry module: use its own structs + non-shadowed external structs
-        for (name, sources) in all_generic_structs_with_sources {
-            let mut selected: Option<&TirStruct> = None;
-
-            // First, try to find local definition (entry module's own struct)
-            for (source, tir_struct) in sources {
-                if source == entry_module_source {
-                    selected = Some(tir_struct);
-                    break;
-                }
-            }
-
-            // If no local definition, try external (from non-shadowed modules)
-            if selected.is_none() {
-                for (source, tir_struct) in sources {
-                    if !shadowed_modules.contains(source) {
-                        selected = Some(tir_struct);
-                        break;
-                    }
-                }
-            }
-
-            if let Some(tir_struct) = selected {
-                all_generic_structs.insert(name.clone(), tir_struct.clone());
-            }
-        }
-    } else {
-        // Non-entry module: use structs from any non-shadowed module.
-        // This enables cross-module monomorphization (e.g., `./treemap-mod.wado`
-        // can instantiate `ArrayIter<TreeMapEntry<String,Value>>` from core:prelude).
-        for (name, sources) in all_generic_structs_with_sources {
-            // Skip if this struct name is defined in entry module (shadowed)
-            if entry_generic_struct_names.contains(name) {
-                continue;
-            }
-
-            // Prefer structs from the current module, fall back to any non-shadowed module
-            let mut selected: Option<&TirStruct> = None;
-            for (source, tir_struct) in sources {
-                if source == current_module_source {
-                    selected = Some(tir_struct);
-                    break;
-                }
-            }
-            if selected.is_none() {
-                for (source, tir_struct) in sources {
-                    if !shadowed_modules.contains(source) {
-                        selected = Some(tir_struct);
-                        break;
-                    }
-                }
-            }
-            if let Some(tir_struct) = selected {
-                all_generic_structs.insert(name.clone(), tir_struct.clone());
-            }
-        }
-    }
-
-    let mut monomorph = Monomorphizer::new(current_module_source.clone());
-    monomorph.monomorphize_with_externals(
-        module,
-        all_generic_functions,
-        &all_generic_structs,
-        trait_method_locations,
-    )
+    // Rebuild variant index since structs may have changed
+    flat.rebuild_variant_indices();
 }
 
 /// Determine the module where trait implementations for a concrete type are defined.
@@ -300,22 +152,23 @@ impl Monomorphizer {
         &mut self,
         mut module: TirModule,
         external_generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
-        external_generic_structs: &IndexMap<String, TirStruct>,
+        external_generic_structs: &IndexMap<(String, ModuleSource), TirStruct>,
         trait_method_locations: &IndexMap<String, ModuleSource>,
     ) -> TirModule {
         self.functions
             .trait_method_locations
             .clone_from(trait_method_locations);
 
-        // Phase 1: Collect all generic struct definitions
-        // Include both local structs AND external generic structs from other modules
-        let mut generic_structs: IndexMap<String, TirStruct> = external_generic_structs.clone();
+        // Phase 1: Collect all generic struct definitions keyed by (name, module_source).
+        // Same-named structs from different modules coexist; the InstantiationKey's
+        // module_source selects the correct template at instantiation time.
+        let mut generic_structs: IndexMap<(String, ModuleSource), TirStruct> =
+            external_generic_structs.clone();
 
-        // Local generic structs override external ones (allows module-local specialization)
-        // This handles the case where user defines their own TreeMap that shadows prelude's
         for tir_struct in &module.structs {
             if !tir_struct.type_params.is_empty() {
-                generic_structs.insert(tir_struct.name.clone(), tir_struct.clone());
+                let key = (tir_struct.name.clone(), tir_struct.module_source.clone());
+                generic_structs.insert(key, tir_struct.clone());
             }
         }
 
@@ -323,7 +176,8 @@ impl Monomorphizer {
         module.generic_structs.clone_from(&generic_structs);
 
         // Build set of valid struct names for collection
-        let valid_struct_names: IndexSet<String> = generic_structs.keys().cloned().collect();
+        let valid_struct_names: IndexSet<String> =
+            generic_structs.keys().map(|(name, _)| name.clone()).collect();
 
         // Phase 2-4: Collect and instantiate structs iteratively
         // This is done in a loop because instantiating a struct (like TreeMap<String,i32>)
@@ -341,7 +195,8 @@ impl Monomorphizer {
 
             // Process all pending struct instantiations
             while let Some(key) = self.structs.pending.pop() {
-                if let Some(generic_struct) = generic_structs.get(&key.name)
+                let struct_key = (key.name.clone(), key.module_source.clone());
+                if let Some(generic_struct) = generic_structs.get(&struct_key)
                     && let Some(concrete) = self.instantiate_struct(
                         generic_struct,
                         &key,
@@ -443,7 +298,8 @@ impl Monomorphizer {
             // Check for new struct instantiations created by function monomorphization
             self.collect_instantiation_sites(&module.type_table.borrow(), &valid_struct_names);
             while let Some(key) = self.structs.pending.pop() {
-                if let Some(generic_struct) = generic_structs.get(&key.name)
+                let struct_key = (key.name.clone(), key.module_source.clone());
+                if let Some(generic_struct) = generic_structs.get(&struct_key)
                     && let Some(concrete) = self.instantiate_struct(
                         generic_struct,
                         &key,

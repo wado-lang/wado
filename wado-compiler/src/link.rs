@@ -1,12 +1,12 @@
 //! Link phase — transforms a per-module `Package` into a linked `FlatPackage`.
 //!
-//! The link phase sits between lowering and optimization in the pipeline:
+//! The link phase sits between type erasure and monomorphization in the pipeline:
 //!
 //! ```text
 //! Package (per-module TIR)
 //!   → link
 //! FlatPackage (flat TIR)
-//!   → optimize → wir_build → codegen
+//!   → monomorphize → lower → optimize → wir_build → codegen
 //! ```
 //!
 //! The link phase flattens all per-module TIR data into flat lists and
@@ -63,11 +63,7 @@ pub fn link(package: Package) -> FlatPackage {
     let mut globals = Vec::new();
     let mut imports = Vec::new();
     let mut tests = Vec::new();
-    let mut string_literals = Vec::new();
-    let mut bytes_literals = Vec::new();
     let mut closure_functors = Vec::new();
-    let mut function_strings = IndexMap::default();
-    let mut function_method_info = IndexMap::default();
     let mut wasm_module_sources: IndexMap<ModuleSource, String> = IndexMap::default();
 
     for (_ms, tir_mod) in package.tir_modules {
@@ -80,43 +76,12 @@ pub fn link(package: Package) -> FlatPackage {
             functions.push(func_rc);
         }
 
-        // Dedup monomorphized structs by (name, module_source). The monomorphizer
-        // may create cross-contaminated copies (e.g., Wrapper<i32> in module A
-        // instantiated from module B's generic, yielding wrong fields). When two
-        // mono structs share the same (name, module_source), prefer the one whose
-        // source module (`ms`) matches `module_source` (i.e., the struct was
-        // instantiated in the module that owns the generic definition).
-        for s in tir_mod.structs {
-            if s.monomorph_info.is_some()
-                && let Some(pos) = structs.iter().position(|existing: &crate::tir::TirStruct| {
-                    existing.name == s.name
-                        && existing.module_source == s.module_source
-                        && existing.monomorph_info.is_some()
-                })
-            {
-                // Prefer the struct from the defining module
-                if s.module_source == ms {
-                    structs[pos] = s;
-                }
-                continue;
-            }
-            structs.push(s);
-        }
+        structs.extend(tir_mod.structs);
         enums.extend(tir_mod.enums);
         variants.extend(tir_mod.variants);
         flags.extend(tir_mod.flags);
         globals.extend(tir_mod.globals);
-        string_literals.extend(tir_mod.string_literals);
-        bytes_literals.extend(tir_mod.bytes_literals);
         closure_functors.extend(tir_mod.closure_functors);
-        // Merge function_strings and function_method_info with compound keys
-        // (module_source, function_name) to prevent cross-module name collisions.
-        for (func_name, strings) in tir_mod.function_strings {
-            function_strings.insert((ms.clone(), func_name), strings);
-        }
-        for (func_name, info) in tir_mod.function_method_info {
-            function_method_info.insert((ms.clone(), func_name), info);
-        }
 
         if is_entry {
             imports = tir_mod.imports;
@@ -148,11 +113,11 @@ pub fn link(package: Package) -> FlatPackage {
         globals,
         imports,
         tests,
-        string_literals,
-        bytes_literals,
+        string_literals: Vec::new(),
+        bytes_literals: Vec::new(),
         closure_functors,
-        function_strings,
-        function_method_info,
+        function_strings: IndexMap::default(),
+        function_method_info: IndexMap::default(),
         wasm_module_sources,
         module_name: package.module_name,
         wasi_registry: package.wasi_registry,

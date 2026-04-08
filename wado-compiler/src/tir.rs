@@ -1786,7 +1786,7 @@ impl FunctionRef {
     /// Get the builtin function name if this is a builtin call.
     /// Returns the qualified name (e.g., "`builtin::array_len`").
     pub fn builtin_name(&self) -> Option<String> {
-        if self.module_source.is_core_builtin() {
+        if self.module_source.is_core_builtin() && self.monomorph_info.is_none() {
             Some(format!("builtin::{}", &self.name))
         } else {
             None
@@ -2845,13 +2845,13 @@ pub struct TirModule {
     pub string_literals: Vec<String>,
     /// Byte array literals from `#include_bytes` (for data segments)
     pub bytes_literals: Vec<Vec<u8>>,
-    /// Map of function name to string literals it contains (for DCE)
-    pub function_strings: IndexMap<String, Vec<String>>,
-    /// Map of function name to its method info (for DCE), populated alongside `function_strings`
-    pub function_method_info: IndexMap<String, Option<LocalMethodName>>,
+    /// Map of (module_source, function name) to string literals it contains (for DCE)
+    pub function_strings: IndexMap<(ModuleSource, String), Vec<String>>,
+    /// Map of (module_source, function name) to its method info (for DCE), populated alongside `function_strings`
+    pub function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
     /// Generic struct definitions (before monomorphization)
-    /// Key: struct name
-    pub generic_structs: IndexMap<String, TirStruct>,
+    /// Key: (struct name, module source)
+    pub generic_structs: IndexMap<(String, ModuleSource), TirStruct>,
     /// Generic function definitions (before monomorphization)
     /// Key: function name
     pub generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>>,
