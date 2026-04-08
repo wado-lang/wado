@@ -504,31 +504,17 @@ pub fn remove_unreachable_closure_functors(project: &mut FlatPackage) {
     });
 }
 
-/// Remove impl blocks whose target type is unreachable, and traits not
-/// referenced by any surviving impl.
+/// Remove impl blocks whose target type is unreachable.
 ///
 /// Post-resolution, impl methods are already flattened into the `functions` list
 /// with mangled names (e.g., `Point::sum`). The `impls` list is metadata only —
 /// neither `wir_build` nor codegen consumes it.
-pub fn remove_unreachable_impls_and_traits(project: &mut FlatPackage) {
+pub fn remove_unreachable_impls(project: &mut FlatPackage) {
     let reachable_types = compute_reachable_types(project);
 
-    // Remove impls whose target type is not reachable
     project
         .impls
         .retain(|impl_block| reachable_types.contains(&impl_block.target_type));
-
-    // Collect trait names referenced by surviving impls
-    let used_trait_names: IndexSet<String> = project
-        .impls
-        .iter()
-        .filter_map(|impl_block| impl_block.trait_name.clone())
-        .collect();
-
-    // Remove traits not referenced by any surviving impl
-    project
-        .traits
-        .retain(|trait_def| used_trait_names.contains(&trait_def.name));
 }
 
 /// Build call graph and effect usage from all TIR functions
