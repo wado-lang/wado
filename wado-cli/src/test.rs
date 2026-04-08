@@ -234,8 +234,6 @@ struct CompiledTestModule {
     path: String,
     engine: Arc<Engine>,
     component: Arc<Component>,
-    compile_duration: Duration,
-    load_duration: Duration,
 }
 
 /// A single test job to execute
@@ -326,13 +324,16 @@ fn extract_display_name(test_name: &str) -> String {
 /// Treated as a passing result since the module is expected to have errors.
 struct TodoCompileError {
     path: String,
-    compile_duration: Duration,
 }
 
-/// Phase 1: Compile all test files and collect test jobs
+/// Phase 1: Compile all test files and collect test jobs.
+///
+/// Prints a log line for each file as compilation finishes (with elapsed time),
+/// so the user can see progress during long compilation runs.
 async fn collect_test_jobs(
     paths: &[String],
     filter: Option<&str>,
+    overall_start: Instant,
 ) -> Result<(
     Vec<Arc<CompiledTestModule>>,
     Vec<TestJob>,
@@ -358,14 +359,16 @@ async fn collect_test_jobs(
         )
         .await;
         let compile_duration = compile_start.elapsed();
+        let elapsed = format_duration(overall_start.elapsed());
 
         let compile_result = match compile_result {
             Ok(result) => result,
             Err(failure) if failure.is_todo_module => {
                 // #![TODO] module failed to compile — expected, count as pass
+                let dur = format_duration(compile_duration);
+                println!("[{elapsed}] Compiled {path} (TODO module, compile error expected, {dur})");
                 todo_compile_errors.push(TodoCompileError {
                     path: path.clone(),
-                    compile_duration,
                 });
                 continue;
             }
@@ -379,6 +382,11 @@ async fn collect_test_jobs(
         let engine = Arc::new(runtime::create_test_engine(wasmtime::OptLevel::None)?);
         let component = Arc::new(Component::new(&engine, &compile_result.wasm)?);
         let load_duration = load_start.elapsed();
+
+        // Print per-file compilation log with elapsed time
+        let dur = format_duration(compile_duration);
+        let load_dur = format_duration(load_duration);
+        println!("[{elapsed}] Compiled {path} ({dur}, loaded in {load_dur})");
 
         // Find test functions from exports
         let component_ty = component.component_type();
@@ -414,8 +422,6 @@ async fn collect_test_jobs(
             path: path.clone(),
             engine,
             component,
-            compile_duration,
-            load_duration,
         }));
     }
 
@@ -640,7 +646,7 @@ pub async fn run(opts: TestOptions) {
 
     // Phase 1: Compile all files and collect test jobs
     let (modules, jobs, todo_compile_errors) =
-        match collect_test_jobs(&opts.paths, opts.filter.as_deref()).await {
+        match collect_test_jobs(&opts.paths, opts.filter.as_deref(), overall_start).await {
             Ok(result) => result,
             Err(e) => {
                 eprintln!("Error collecting tests: {e}");
@@ -688,18 +694,18 @@ pub async fn run(opts: TestOptions) {
     }
     let mut todo_entries: Vec<TodoEntry> = Vec::new();
 
-    // Build a lookup from path to compiled module for compile duration
-    let module_by_path: indexmap::IndexMap<&str, &CompiledTestModule> = modules
-        .iter()
-        .map(|m| (m.path.as_str(), m.as_ref()))
-        .collect();
+    // Collect failures for the summary section at the end (cargo test style)
+    struct FailEntry {
+        file_path: String,
+        display_name: String,
+        error: Option<String>,
+    }
+    let mut fail_entries: Vec<FailEntry> = Vec::new();
 
     for path in &opts.paths {
         // Handle #![TODO] modules that failed to compile
-        if let Some(todo_err) = todo_error_by_path.get(path.as_str()) {
-            let compile = format_duration(todo_err.compile_duration);
-            println!("Running tests in {path}... (compile error, {compile})");
-            println!("  \x1b[33m·\x1b[0m #![TODO] module — compile error (expected) ({compile})");
+        if let Some(_todo_err) = todo_error_by_path.get(path.as_str()) {
+            println!("  \x1b[33m·\x1b[0m #![TODO] module — compile error (expected)  ({path})");
             total_todo += 1;
             todo_entries.push(TodoEntry {
                 file_path: path.clone(),
@@ -710,19 +716,7 @@ pub async fn run(opts: TestOptions) {
         }
 
         if let Some(file_results) = results_by_file.get(path) {
-            let timing = module_by_path
-                .get(path.as_str())
-                .map(|m| {
-                    let compile = format_duration(m.compile_duration);
-                    if m.load_duration.as_secs() >= 1 {
-                        let load = format_duration(m.load_duration);
-                        format!(" (compiled in {compile}, loaded in {load})")
-                    } else {
-                        format!(" (compiled in {compile})")
-                    }
-                })
-                .unwrap_or_default();
-            println!("Running tests in {path}...{timing}");
+            println!("Running tests in {path}...");
 
             // Sort by test name for consistent output
             let mut sorted_results: Vec<_> = file_results.clone();
@@ -732,14 +726,19 @@ pub async fn run(opts: TestOptions) {
                 let dur = format_duration(result.duration);
                 match result.outcome {
                     TestOutcome::Pass => {
-                        println!("  \x1b[32m✓\x1b[0m {} ({dur})", result.display_name);
+                        println!("  ok   {} ({dur})", result.display_name);
                         total_passed += 1;
                     }
                     TestOutcome::Fail => {
-                        println!("  \x1b[31m✗\x1b[0m {} ({dur})", result.display_name);
-                        if let Some(ref error) = result.error {
-                            println!("    {error}");
-                        }
+                        println!(
+                            "  \x1b[31mFAILED\x1b[0m {} ({dur})",
+                            result.display_name
+                        );
+                        fail_entries.push(FailEntry {
+                            file_path: result.file_path.clone(),
+                            display_name: result.display_name.clone(),
+                            error: result.error.clone(),
+                        });
                         total_failed += 1;
                     }
                     TestOutcome::TodoPending => {
@@ -771,6 +770,24 @@ pub async fn run(opts: TestOptions) {
                     }
                 }
             }
+        }
+    }
+
+    // Failure summary (cargo test style)
+    if !fail_entries.is_empty() {
+        println!();
+        println!("failures:");
+        println!();
+        for entry in &fail_entries {
+            if let Some(ref error) = entry.error {
+                println!("---- {} ({}) ----", entry.display_name, entry.file_path);
+                println!("{error}");
+                println!();
+            }
+        }
+        println!("failures:");
+        for entry in &fail_entries {
+            println!("    {} ({})", entry.display_name, entry.file_path);
         }
     }
 
