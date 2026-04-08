@@ -136,13 +136,63 @@ pub fn link(package: Package) -> FlatPackage {
 
     // Build variant lookup indices.
     let mut variant_index = IndexMap::default();
-    let mut generic_variant_by_name = IndexMap::default();
     for (i, v) in variants.iter().enumerate() {
         variant_index
             .entry((v.module_source.clone(), v.name.clone()))
             .or_insert(i);
+    }
+
+    // Build generic base module map: maps generic type base names to their
+    // defining module. Used to resolve the correct ModuleSource for monomorphized
+    // type lookups (e.g., "Box" → core:prelude, "Option" → core:prelude).
+    //
+    // Sources: (1) generic struct/variant declarations with type_params, and
+    // (2) GenericInstance entries in the type table (covers types like Box whose
+    // generic template is not in the FlatPackage — only monomorphized versions
+    // exist, created by the boxing pass).
+    let mut generic_base_module: IndexMap<String, ModuleSource> = IndexMap::default();
+    for s in &structs {
+        if !s.type_params.is_empty() {
+            generic_base_module
+                .entry(s.name.clone())
+                .or_insert_with(|| s.module_source.clone());
+        }
+    }
+    for v in &variants {
         if !v.type_params.is_empty() {
-            generic_variant_by_name.entry(v.name.clone()).or_insert(i);
+            generic_base_module
+                .entry(v.name.clone())
+                .or_insert_with(|| v.module_source.clone());
+        }
+    }
+    {
+        use crate::tir::ResolvedType;
+        let tt = type_table.borrow();
+        for type_id in tt.iter_type_ids() {
+            if let ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } = tt.get(type_id)
+            {
+                generic_base_module
+                    .entry(name.clone())
+                    .or_insert_with(|| module_source.clone());
+            }
+        }
+    }
+
+    // Build struct definition module map for non-monomorphized structs.
+    // Maps each struct name to its TirStruct module_source. This fixes lookups
+    // where the ResolvedType.module_source differs from the struct definition's
+    // module_source (e.g., WASI types: resolver uses "clocks" but TirStruct
+    // has "clocks/system-clock.wado").
+    let mut struct_def_module: IndexMap<String, ModuleSource> = IndexMap::default();
+    for s in &structs {
+        if s.monomorph_info.is_none() {
+            struct_def_module
+                .entry(s.name.clone())
+                .or_insert_with(|| s.module_source.clone());
         }
     }
 
@@ -154,7 +204,8 @@ pub fn link(package: Package) -> FlatPackage {
         enums,
         variants,
         variant_index,
-        generic_variant_by_name,
+        generic_base_module,
+        struct_def_module,
         flags,
         newtypes,
         globals,
