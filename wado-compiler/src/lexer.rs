@@ -191,11 +191,20 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 if self.peek_char() == Some('.') {
                     self.advance();
-                    if self.peek_char() == Some('.') {
-                        self.advance();
-                        TokenKind::DotDotDot
-                    } else {
-                        TokenKind::DotDot
+                    match self.peek_char() {
+                        Some('.') => {
+                            self.advance();
+                            TokenKind::DotDotDot
+                        }
+                        Some('<') => {
+                            self.advance();
+                            TokenKind::DotDotLt
+                        }
+                        Some('=') => {
+                            self.advance();
+                            TokenKind::DotDotEq
+                        }
+                        _ => TokenKind::DotDot,
                     }
                 } else {
                     TokenKind::Dot
@@ -1572,6 +1581,33 @@ test data"#;
         let tokens = lexer.tokenize().unwrap();
         assert!(matches!(tokens[0].kind, TokenKind::DotDotDot));
         assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "x"));
+    }
+
+    #[test]
+    fn test_dot_dot_lt_token() {
+        let mut lexer = Lexer::new("0..<10");
+        let tokens = lexer.tokenize().unwrap();
+        assert!(matches!(&tokens[0].kind, TokenKind::NumberLit(s) if s == "0"));
+        assert!(matches!(tokens[1].kind, TokenKind::DotDotLt));
+        assert!(matches!(&tokens[2].kind, TokenKind::NumberLit(s) if s == "10"));
+    }
+
+    #[test]
+    fn test_dot_dot_eq_token() {
+        let mut lexer = Lexer::new("1..=10");
+        let tokens = lexer.tokenize().unwrap();
+        assert!(matches!(&tokens[0].kind, TokenKind::NumberLit(s) if s == "1"));
+        assert!(matches!(tokens[1].kind, TokenKind::DotDotEq));
+        assert!(matches!(&tokens[2].kind, TokenKind::NumberLit(s) if s == "10"));
+    }
+
+    #[test]
+    fn test_dot_dot_lt_with_chars() {
+        let mut lexer = Lexer::new("'a'..='z'");
+        let tokens = lexer.tokenize().unwrap();
+        assert!(matches!(&tokens[0].kind, TokenKind::CharLit(s) if s == "a"));
+        assert!(matches!(tokens[1].kind, TokenKind::DotDotEq));
+        assert!(matches!(&tokens[2].kind, TokenKind::CharLit(s) if s == "z"));
     }
 
     #[test]

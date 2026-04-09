@@ -111,7 +111,7 @@ pub trait TirMutVisitor {
                     self.visit_pattern(binding);
                 }
             }
-            TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } => {}
+            TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } | TirPattern::Range { .. } => {}
             TirPattern::Struct { fields, .. } => {
                 for field in fields {
                     self.visit_pattern(&mut field.pattern);

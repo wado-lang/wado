@@ -1,0 +1,147 @@
+#![no_prelude]
+// Range types for the Wado Prelude.
+
+use { Option } from "core:prelude/types.wado";
+use { Eq, Ord, Iterator, IntoIterator } from "core:prelude/traits.wado";
+
+/// Types that can be incremented by one step (for range iteration).
+pub trait Step {
+    fn next_step(&self) -> Option<Self>;
+}
+
+impl Step for i8 {
+    fn next_step(&self) -> Option<i8> {
+        if *self == i8::MAX { return null; }
+        return Option::Some(*self + 1 as i8);
+    }
+}
+
+impl Step for i16 {
+    fn next_step(&self) -> Option<i16> {
+        if *self == i16::MAX { return null; }
+        return Option::Some(*self + 1 as i16);
+    }
+}
+
+impl Step for i32 {
+    fn next_step(&self) -> Option<i32> {
+        if *self == i32::MAX { return null; }
+        return Option::Some(*self + 1);
+    }
+}
+
+impl Step for i64 {
+    fn next_step(&self) -> Option<i64> {
+        if *self == i64::MAX { return null; }
+        return Option::Some(*self + 1 as i64);
+    }
+}
+
+impl Step for u8 {
+    fn next_step(&self) -> Option<u8> {
+        if *self == u8::MAX { return null; }
+        return Option::Some(*self + 1 as u8);
+    }
+}
+
+impl Step for u16 {
+    fn next_step(&self) -> Option<u16> {
+        if *self == u16::MAX { return null; }
+        return Option::Some(*self + 1 as u16);
+    }
+}
+
+impl Step for u32 {
+    fn next_step(&self) -> Option<u32> {
+        if *self == u32::MAX { return null; }
+        return Option::Some(*self + 1 as u32);
+    }
+}
+
+impl Step for u64 {
+    fn next_step(&self) -> Option<u64> {
+        if *self == u64::MAX { return null; }
+        return Option::Some(*self + 1 as u64);
+    }
+}
+
+impl Step for char {
+    fn next_step(&self) -> Option<char> {
+        let code = *self as u32 + 1 as u32;
+        return char::from_u32(code);
+    }
+}
+
+/// Half-open range [start, end)
+#[comp_feature("range_exclusive")]
+pub struct RangeExclusive<T> {
+    pub start: T,
+    pub end: T,
+}
+
+/// Inclusive range [start, end]
+#[comp_feature("range_inclusive")]
+pub struct RangeInclusive<T> {
+    pub start: T,
+    pub end: T,
+    exhausted: bool,
+}
+
+impl<T: Step + Ord> Iterator for RangeExclusive<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        if self.start >= self.end {
+            return null;
+        }
+        let current = self.start;
+        if let Some(next) = current.next_step() {
+            self.start = next;
+        } else {
+            self.start = self.end;
+        }
+        return Option::<T>::Some(current);
+    }
+}
+
+impl<T: Step + Ord> Iterator for RangeInclusive<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        if self.exhausted {
+            return null;
+        }
+        if self.start > self.end {
+            return null;
+        }
+        let current = self.start;
+        if self.start == self.end {
+            self.exhausted = true;
+            return Option::<T>::Some(current);
+        }
+        if let Some(next) = current.next_step() {
+            self.start = next;
+        } else {
+            self.exhausted = true;
+        }
+        return Option::<T>::Some(current);
+    }
+}
+
+impl<T: Step + Ord> IntoIterator for RangeExclusive<T> {
+    type Item = T;
+    type Iter = RangeExclusive<T>;
+
+    fn into_iter(&self) -> RangeExclusive<T> {
+        return *self;
+    }
+}
+
+impl<T: Step + Ord> IntoIterator for RangeInclusive<T> {
+    type Item = T;
+    type Iter = RangeInclusive<T>;
+
+    fn into_iter(&self) -> RangeInclusive<T> {
+        return *self;
+    }
+}

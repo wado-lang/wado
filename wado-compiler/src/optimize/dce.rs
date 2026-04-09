@@ -1793,7 +1793,7 @@ fn collect_types_from_pattern(
         TirPattern::Binding { type_id, .. } => {
             collect_type_transitive(*type_id, type_table, reachable);
         }
-        TirPattern::Literal(_) => {}
+        TirPattern::Literal(_) | TirPattern::Range { .. } => {}
         TirPattern::Tuple(patterns, _) => {
             for p in patterns {
                 collect_types_from_pattern(p, type_table, reachable);

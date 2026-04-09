@@ -1,0 +1,15 @@
+// Overlapping range patterns should be a compile error
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let n = 5;
+    let x = match n {
+        0..=10 => "a",
+        5..=15 => "b",
+        _ => "c",
+    };
+    println(x);
+}
+
+__DATA__
+{"compile_error": "overlapping"}

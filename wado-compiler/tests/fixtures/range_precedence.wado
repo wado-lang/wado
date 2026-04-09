@@ -1,0 +1,29 @@
+// Range operator precedence: lower than logical OR, higher than assignment
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Range binds tighter than assignment
+    let mut sum = 0;
+    for let i of 0..<3 {
+        sum += i;
+    }
+    println(`{sum}`);
+
+    // Range with arithmetic: 1+1..<3+2 should be (1+1)..<(3+2) = 2..<5
+    let mut sum2 = 0;
+    for let i of 1 + 1..<3 + 2 {
+        sum2 += i;
+    }
+    // 2+3+4 = 9
+    println(`{sum2}`);
+
+    // Parenthesized range
+    let mut sum3 = 0;
+    for let i of (0..<4) {
+        sum3 += i;
+    }
+    println(`{sum3}`);
+}
+
+__DATA__
+{"stdout": "3\n9\n6\n"}

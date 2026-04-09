@@ -290,6 +290,17 @@ fn desugar_pattern(p: &Pattern) -> Pattern {
         Pattern::Or(alternatives) => {
             Pattern::Or(alternatives.iter().map(desugar_pattern).collect())
         }
+        Pattern::Range {
+            start,
+            end,
+            kind,
+            span,
+        } => Pattern::Range {
+            start: Box::new(desugar_pattern(start)),
+            end: Box::new(desugar_pattern(end)),
+            kind: *kind,
+            span: *span,
+        },
     }
 }
 
@@ -594,6 +605,12 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         Expr::TryOp(qm) => Expr::TryOp(Box::new(crate::ast::TryOpExpr {
             expr: desugar_expr(&qm.expr),
             span: qm.span,
+        })),
+        Expr::Range(range) => Expr::Range(Box::new(crate::ast::RangeExpr {
+            start: desugar_expr(&range.start),
+            end: desugar_expr(&range.end),
+            kind: range.kind,
+            span: range.span,
         })),
     }
 }
@@ -1747,6 +1764,11 @@ fn strip_ns_from_expr(expr: Expr, ctx: &DesugarContext) -> Expr {
         Expr::Spread(mut inner, span) => {
             *inner = strip_ns_from_expr(*inner, ctx);
             Expr::Spread(inner, span)
+        }
+        Expr::Range(mut range) => {
+            range.start = strip_ns_from_expr(range.start, ctx);
+            range.end = strip_ns_from_expr(range.end, ctx);
+            Expr::Range(range)
         }
         Expr::Literal(_) | Expr::CompoundAssign(_) | Expr::ComparisonChain(_) => expr,
     }

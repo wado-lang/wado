@@ -6146,6 +6146,62 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32Const(0)
                 }
             }
+            TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            } => {
+                let scrut_get = || WirInstr::LocalGet {
+                    name: scrut_local.to_string(),
+                    result_ty: self.wir_type(scrut_type),
+                };
+                let is_i64 = matches!(
+                    self.type_table.get(scrut_type),
+                    ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
+                );
+                if is_i64 {
+                    let start_const = WirInstr::I64Const(*start as i64);
+                    let end_const = WirInstr::I64Const(*end as i64);
+                    let ge = if *is_unsigned {
+                        WirInstr::I64GeU(Box::new(scrut_get()), Box::new(start_const))
+                    } else {
+                        WirInstr::I64GeS(Box::new(scrut_get()), Box::new(start_const))
+                    };
+                    let upper = if *inclusive {
+                        if *is_unsigned {
+                            WirInstr::I64LeU(Box::new(scrut_get()), Box::new(end_const))
+                        } else {
+                            WirInstr::I64LeS(Box::new(scrut_get()), Box::new(end_const))
+                        }
+                    } else if *is_unsigned {
+                        WirInstr::I64LtU(Box::new(scrut_get()), Box::new(end_const))
+                    } else {
+                        WirInstr::I64LtS(Box::new(scrut_get()), Box::new(end_const))
+                    };
+                    WirInstr::I32And(Box::new(ge), Box::new(upper))
+                } else {
+                    let start_const = WirInstr::I32Const(*start as i32);
+                    let end_const = WirInstr::I32Const(*end as i32);
+                    let ge = if *is_unsigned {
+                        WirInstr::I32GeU(Box::new(scrut_get()), Box::new(start_const))
+                    } else {
+                        WirInstr::I32GeS(Box::new(scrut_get()), Box::new(start_const))
+                    };
+                    let upper = if *inclusive {
+                        if *is_unsigned {
+                            WirInstr::I32LeU(Box::new(scrut_get()), Box::new(end_const))
+                        } else {
+                            WirInstr::I32LeS(Box::new(scrut_get()), Box::new(end_const))
+                        }
+                    } else if *is_unsigned {
+                        WirInstr::I32LtU(Box::new(scrut_get()), Box::new(end_const))
+                    } else {
+                        WirInstr::I32LtS(Box::new(scrut_get()), Box::new(end_const))
+                    };
+                    WirInstr::I32And(Box::new(ge), Box::new(upper))
+                }
+            }
             TirPattern::Tuple(_, _) | TirPattern::Struct { .. } => {
                 // Tuple/struct patterns: always irrefutable
                 WirInstr::I32Const(1)
@@ -6458,7 +6514,8 @@ impl FunctionTranslator<'_, '_> {
             TirPattern::Wildcard
             | TirPattern::Literal(_)
             | TirPattern::Enum { .. }
-            | TirPattern::ConstantValue { .. } => {
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. } => {
                 // No bindings needed
             }
             TirPattern::Tuple(sub_patterns, _) => {
@@ -7107,7 +7164,8 @@ fn pattern_has_bindings(pattern: &TirPattern) -> bool {
         TirPattern::Wildcard
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
-        | TirPattern::ConstantValue { .. } => false,
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Range { .. } => false,
         TirPattern::Variant { bindings, .. } => bindings.iter().any(pattern_has_bindings),
         TirPattern::Tuple(subs, _) => subs.iter().any(pattern_has_bindings),
         TirPattern::Struct { fields, .. } => {

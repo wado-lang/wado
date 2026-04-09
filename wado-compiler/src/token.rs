@@ -79,6 +79,8 @@ pub enum TokenKind {
     ColonColon, // ::
     Dot,        // .
     DotDot,     // ..
+    DotDotLt,   // ..<
+    DotDotEq,   // ..=
     DotDotDot,  // ... (error token: "did you mean `..`?")
     Arrow,      // ->
     FatArrow,   // =>

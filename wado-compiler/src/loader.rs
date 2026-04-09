@@ -243,6 +243,7 @@ fn cached_stdlib() -> &'static IndexMap<ModuleSource, Module> {
             ("prelude/fpfmt.wado", stdlib::CORE_PRELUDE_FPFMT),
             ("prelude/int128.wado", stdlib::CORE_PRELUDE_INT128),
             ("prelude/primitive.wado", stdlib::CORE_PRELUDE_PRIMITIVE),
+            ("prelude/range.wado", stdlib::CORE_PRELUDE_RANGE),
             ("prelude/string.wado", stdlib::CORE_PRELUDE_STRING),
             ("prelude/traits.wado", stdlib::CORE_PRELUDE_TRAITS),
             ("prelude/tuple.wado", stdlib::CORE_PRELUDE_TUPLE),

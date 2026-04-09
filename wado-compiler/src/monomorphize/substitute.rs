@@ -355,7 +355,7 @@ impl Monomorphizer {
     ) {
         use crate::tir::TirPattern;
         match pattern {
-            TirPattern::Wildcard | TirPattern::Literal(_) => {}
+            TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Range { .. } => {}
             TirPattern::Binding { type_id, .. } => {
                 // Substitute the binding's type (e.g., type parameter T -> i32)
                 *type_id = self.substitute_type(*type_id, substitution, type_table);
