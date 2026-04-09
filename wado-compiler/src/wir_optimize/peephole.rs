@@ -804,22 +804,25 @@ fn is_safe_condition_use(instr: &WirInstr, var_name: &str) -> bool {
 /// Returns `true` if `var_name` appears in the return/break value expression only
 /// as a direct `LocalGet(var_name)` inside `StructNew` or `ArrayNewFixed` fields.
 ///
-/// Handles multi-value returns (Seq), nested StructNew, and Block expressions.
+/// Handles multi-value returns (Seq), nested `StructNew`, and Block expressions.
 /// This is safe because each `StructNew` creates a fresh allocation — the variable
 /// reference is consumed into a new struct, not aliased or mutated.
 fn value_uses_var_only_in_struct_new_fields(instr: &WirInstr, var_name: &str) -> bool {
     match instr {
         // StructNew/ArrayNewFixed: var must appear only as direct LocalGet in fields
-        WirInstr::StructNew { fields, .. } | WirInstr::ArrayNewFixed { elements: fields, .. } => {
+        WirInstr::StructNew { fields, .. }
+        | WirInstr::ArrayNewFixed {
+            elements: fields, ..
+        } => {
             for field in fields {
                 if is_direct_local_get_or_non_null(field, var_name) {
                     continue;
                 }
                 // Recurse into nested StructNew fields
-                if instr_contains_local_get(field, var_name) {
-                    if !value_uses_var_only_in_struct_new_fields(field, var_name) {
-                        return false;
-                    }
+                if instr_contains_local_get(field, var_name)
+                    && !value_uses_var_only_in_struct_new_fields(field, var_name)
+                {
+                    return false;
                 }
             }
             true
@@ -829,9 +832,7 @@ fn value_uses_var_only_in_struct_new_fields(instr: &WirInstr, var_name: &str) ->
             .iter()
             .all(|i| value_uses_var_only_in_struct_new_fields(i, var_name)),
         // RefAsNonNull wrapping — look through to the inner instruction
-        WirInstr::RefAsNonNull(inner) => {
-            value_uses_var_only_in_struct_new_fields(inner, var_name)
-        }
+        WirInstr::RefAsNonNull(inner) => value_uses_var_only_in_struct_new_fields(inner, var_name),
         // Block: check body and break values
         WirInstr::Block { body, .. } => body
             .iter()
