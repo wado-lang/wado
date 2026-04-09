@@ -41,13 +41,13 @@ extern "C" fn dump_active_files_and_exit(sig: libc::c_int) {
         libc::write(2, header.as_ptr().cast(), header.len());
     }
     for (i, slot) in ACTIVE_FILES.iter().enumerate() {
-        if let Ok(guard) = slot.try_lock() {
-            if let Some((ref path, start)) = *guard {
-                let elapsed = start.elapsed().as_secs();
-                let msg = format!("  worker {i}: {path} ({elapsed}s)\n");
-                unsafe {
-                    libc::write(2, msg.as_ptr().cast(), msg.len());
-                }
+        if let Ok(guard) = slot.try_lock()
+            && let Some((ref path, start)) = *guard
+        {
+            let elapsed = start.elapsed().as_secs();
+            let msg = format!("  worker {i}: {path} ({elapsed}s)\n");
+            unsafe {
+                libc::write(2, msg.as_ptr().cast(), msg.len());
             }
         }
     }
