@@ -240,7 +240,18 @@ fn example() {
 | 9          | `+`, `-`                         | Additive       | Left          |
 | 10         | `*`, `/`, `%`                    | Multiplicative | Left          |
 
-TODO: Add range operators once the range syntax is fully designed.
+Between assignment (1) and logical OR (2), the range operators sit at precedence level 1.5:
+
+| Precedence | Operators    | Description | Associativity   |
+| ---------- | ------------ | ----------- | --------------- |
+| 1.5        | `..<`, `..=` | Range       | Non-associative |
+
+- `..<` creates a half-open range `[start, end)` — `RangeExclusive<T>`
+- `..=` creates an inclusive range `[start, end]` — `RangeInclusive<T>`
+- Non-associative: `a..<b..<c` is a compile error
+- Both operands must have the same type (after literal coercion)
+
+See [WEP: Range Object](./wep-2026-03-03-range-object.md) for the full design.
 
 **Design Note**: Bitwise operators (`&`, `|`, `^`) have **higher** precedence than comparison operators, fixing C's well-known design flaw. This means `flags & MASK == EXPECTED` correctly parses as `(flags & MASK) == EXPECTED`.
 
