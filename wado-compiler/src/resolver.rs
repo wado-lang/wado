@@ -467,14 +467,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 Item::Impl(impl_block) => {
                     // Resolve impl block methods with mangled names
                     let struct_name = self.get_type_name(&impl_block.ty);
-                    let trait_name = impl_block.trait_type.as_ref().map(|t| {
-                        let base = self.get_type_name(t);
-                        if base == "From" || base == "TryFrom" {
-                            self.get_type_name_full(t)
-                        } else {
-                            base
-                        }
-                    });
+                    let trait_name = impl_block
+                        .trait_type
+                        .as_ref()
+                        .map(|t| self.get_type_name_full(t));
 
                     // Register type parameters from impl block's generic type FIRST
                     // e.g., impl IndexValue<i32> for Triple<T> needs T registered

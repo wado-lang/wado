@@ -1669,7 +1669,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             let mut method_found = false;
             if let Some((return_type_ast, self_kind, params, method_type_params)) = method_data {
-                let trait_name = self.get_type_name(&trait_type_for_name);
+                let trait_name = self.get_type_name_full(&trait_type_for_name);
 
                 // Set up method-level type params (e.g., V in deserialize_any<V: Visitor>)
                 let impl_offset = self.trait_ctx.type_params.len() as u32;
@@ -1732,8 +1732,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // If the method wasn't found in the impl block, check the trait
             // declaration for a default method with that name
             if !method_found {
-                let trait_name_str = self.get_type_name(&trait_type_for_name);
-                if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_str) {
+                let trait_name_base = self.get_type_name(&trait_type_for_name);
+                let trait_name_str = self.get_type_name_full(&trait_type_for_name);
+                if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_base) {
                     for default_method in &trait_methods {
                         if default_method.name == method_name && default_method.body.is_some() {
                             // Set up Self type so that `Self` in the default method's
@@ -2488,10 +2489,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Check if this is the target trait (Index or IndexAssign)
             let impl_block = self.get_impl_block(impl_ref);
-            let trait_name = self.get_type_name(impl_block.trait_type.as_ref().unwrap());
-            if !trait_name.starts_with(trait_base_name) {
+            let trait_base = self.get_type_name(impl_block.trait_type.as_ref().unwrap());
+            if !trait_base.starts_with(trait_base_name) {
                 continue;
             }
+            let trait_name = self.get_type_name_full(impl_block.trait_type.as_ref().unwrap());
 
             let impl_block = self.get_impl_block(impl_ref);
             let declared_type_params = self.build_declared_type_params(impl_block);

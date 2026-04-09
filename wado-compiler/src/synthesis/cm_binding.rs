@@ -2797,7 +2797,7 @@ fn synthesize_adapter(
                 let elem_local = alloc_local(&mut next_local, &mut local_types, elem_type_id);
                 let iv_info = crate::name::LocalMethodName::new(
                     "Array".to_string(),
-                    Some("IndexValue".to_string()),
+                    Some("IndexValue<i32>".to_string()),
                     "index_value".to_string(),
                 );
                 let iv_mangled = iv_info.to_mangled_name();
