@@ -1,17 +1,17 @@
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirModule, TirStmt, TirStmtKind};
 
 pub(super) struct StringCollector {
     strings: IndexSet<String>,
     bytes: IndexSet<Vec<u8>>,
-    /// Map of function name → strings in that function (for DCE filtering)
-    function_strings: IndexMap<String, IndexSet<String>>,
-    /// Map of function name → method info (for DCE to avoid parsing)
-    function_method_info: IndexMap<String, Option<LocalMethodName>>,
+    /// Map of (`module_source`, function name) → strings in that function (for DCE filtering)
+    function_strings: IndexMap<(ModuleSource, String), IndexSet<String>>,
+    /// Map of (`module_source`, function name) → method info (for DCE to avoid parsing)
+    function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
     /// Current function being collected (for tracking)
-    current_function: Option<String>,
+    current_function: Option<(ModuleSource, String)>,
 }
 
 impl StringCollector {
@@ -30,8 +30,8 @@ impl StringCollector {
     ) -> (
         Vec<String>,
         Vec<Vec<u8>>,
-        IndexMap<String, Vec<String>>,
-        IndexMap<String, Option<LocalMethodName>>,
+        IndexMap<(ModuleSource, String), Vec<String>>,
+        IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
     ) {
         let strings = self.strings.into_iter().collect();
         let bytes = self.bytes.into_iter().collect();
@@ -46,9 +46,9 @@ impl StringCollector {
     fn add_string(&mut self, s: String) {
         self.strings.insert(s.clone());
         // Also track which function this string belongs to
-        if let Some(func_name) = &self.current_function {
+        if let Some(key) = &self.current_function {
             self.function_strings
-                .entry(func_name.clone())
+                .entry(key.clone())
                 .or_default()
                 .insert(s);
         }
@@ -58,9 +58,10 @@ impl StringCollector {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
-                self.current_function = Some(func.name.clone());
+                let key = (func.module_source.clone(), func.name.clone());
+                self.current_function = Some(key.clone());
                 self.function_method_info
-                    .insert(func.name.clone(), func.method_info.clone());
+                    .insert(key, func.method_info.clone());
                 self.collect_block(body);
                 self.current_function = None;
             }
@@ -69,9 +70,10 @@ impl StringCollector {
         for impl_block in &module.impls {
             for method in &impl_block.methods {
                 if let Some(body) = &method.body {
-                    self.current_function = Some(method.name.clone());
+                    let key = (method.module_source.clone(), method.name.clone());
+                    self.current_function = Some(key.clone());
                     self.function_method_info
-                        .insert(method.name.clone(), method.method_info.clone());
+                        .insert(key, method.method_info.clone());
                     self.collect_block(body);
                     self.current_function = None;
                 }

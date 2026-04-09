@@ -86,11 +86,11 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<String>" = fn(ref "wado-compiler/tests/fixtures/serde_sub_serializer.wado//TextStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError";  // TypeId(31)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(31)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(32)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
+type "functype//wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<String>" = fn(ref "wado-compiler/tests/fixtures/serde_sub_serializer.wado//TextStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError";  // TypeId(33)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
@@ -446,63 +446,6 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serial
     return ref.null none;
 }
 
-fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<i32>"(self, name, value) {
-    let __local_3: ref "core:prelude/string.wado//String";
-    let __local_6: ref "wado-compiler/tests/fixtures/serde_sub_serializer.wado//TextSerializer";
-    if self.count > 0 {
-        "core:prelude/string.wado/String::push"(self.parent.buf, 44);
-    }
-    "core:prelude/string.wado/String::push_str"(self.parent.buf, __tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
-        "core:prelude/string.wado/String::push"(__local_3, 34);
-        "core:prelude/string.wado/String::push_str"(__local_3, name);
-        "core:prelude/string.wado/String::push"(__local_3, 34);
-        "core:prelude/string.wado/String::push"(__local_3, 58);
-        break __tmpl: __local_3;
-    });
-    drop(__inline_i32_Serialize__serialize_TextSerializer__1: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
-        __local_6 = self.parent;
-        break __inline_i32_Serialize__serialize_TextSerializer__1: "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serializer::serialize_i32"(__local_6.buf, value);
-    });
-    self.count = self.count + 1;
-    return ref.null none;
-}
-
-fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<String>"(self, name, value) {
-    let __local_3: ref "core:prelude/string.wado//String";
-    let __local_6: ref "wado-compiler/tests/fixtures/serde_sub_serializer.wado//TextSerializer";
-    if self.count > 0 {
-        "core:prelude/string.wado/String::push"(self.parent.buf, 44);
-    }
-    "core:prelude/string.wado/String::push_str"(self.parent.buf, __tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
-        "core:prelude/string.wado/String::push"(__local_3, 34);
-        "core:prelude/string.wado/String::push_str"(__local_3, name);
-        "core:prelude/string.wado/String::push"(__local_3, 34);
-        "core:prelude/string.wado/String::push"(__local_3, 58);
-        break __tmpl: __local_3;
-    });
-    drop(__inline_String_Serialize__serialize_TextSerializer__1: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
-        __local_6 = self.parent;
-        break __inline_String_Serialize__serialize_TextSerializer__1: "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serializer::serialize_string"(__local_6.buf, value);
-    });
-    self.count = self.count + 1;
-    return ref.null none;
-}
-
-fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSeqSerializer^SerializeSeq::element<i32>"(self, value) {
-    let __local_3: ref "wado-compiler/tests/fixtures/serde_sub_serializer.wado//TextSerializer";
-    if self.count > 0 {
-        "core:prelude/string.wado/String::push"(self.parent.buf, 44);
-    }
-    drop(__inline_i32_Serialize__serialize_TextSerializer__0: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
-        __local_3 = self.parent;
-        break __inline_i32_Serialize__serialize_TextSerializer__0: "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serializer::serialize_i32"(__local_3.buf, value);
-    });
-    self.count = self.count + 1;
-    return ref.null none;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -510,13 +453,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l26: loop {
+            l23: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l26;
+                continue l23;
             };
         };
     };
@@ -602,6 +545,63 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<i32>"(self, name, value) {
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_6: ref "wado-compiler/tests/fixtures/serde_sub_serializer.wado//TextSerializer";
+    if self.count > 0 {
+        "core:prelude/string.wado/String::push"(self.parent.buf, 44);
+    }
+    "core:prelude/string.wado/String::push_str"(self.parent.buf, __tmpl: block -> ref "core:prelude/string.wado//String" {
+        __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
+        "core:prelude/string.wado/String::push"(__local_3, 34);
+        "core:prelude/string.wado/String::push_str"(__local_3, name);
+        "core:prelude/string.wado/String::push"(__local_3, 34);
+        "core:prelude/string.wado/String::push"(__local_3, 58);
+        break __tmpl: __local_3;
+    });
+    drop(__inline_i32_Serialize__serialize_TextSerializer__1: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
+        __local_6 = self.parent;
+        break __inline_i32_Serialize__serialize_TextSerializer__1: "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serializer::serialize_i32"(__local_6.buf, value);
+    });
+    self.count = self.count + 1;
+    return ref.null none;
+}
+
+fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<String>"(self, name, value) {
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_6: ref "wado-compiler/tests/fixtures/serde_sub_serializer.wado//TextSerializer";
+    if self.count > 0 {
+        "core:prelude/string.wado/String::push"(self.parent.buf, 44);
+    }
+    "core:prelude/string.wado/String::push_str"(self.parent.buf, __tmpl: block -> ref "core:prelude/string.wado//String" {
+        __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
+        "core:prelude/string.wado/String::push"(__local_3, 34);
+        "core:prelude/string.wado/String::push_str"(__local_3, name);
+        "core:prelude/string.wado/String::push"(__local_3, 34);
+        "core:prelude/string.wado/String::push"(__local_3, 58);
+        break __tmpl: __local_3;
+    });
+    drop(__inline_String_Serialize__serialize_TextSerializer__1: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
+        __local_6 = self.parent;
+        break __inline_String_Serialize__serialize_TextSerializer__1: "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serializer::serialize_string"(__local_6.buf, value);
+    });
+    self.count = self.count + 1;
+    return ref.null none;
+}
+
+fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSeqSerializer^SerializeSeq::element<i32>"(self, value) {
+    let __local_3: ref "wado-compiler/tests/fixtures/serde_sub_serializer.wado//TextSerializer";
+    if self.count > 0 {
+        "core:prelude/string.wado/String::push"(self.parent.buf, 44);
+    }
+    drop(__inline_i32_Serialize__serialize_TextSerializer__0: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
+        __local_3 = self.parent;
+        break __inline_i32_Serialize__serialize_TextSerializer__0: "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serializer::serialize_i32"(__local_3.buf, value);
+    });
+    self.count = self.count + 1;
+    return ref.null none;
 }
 
 export fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/__cm_export__run" as "run"

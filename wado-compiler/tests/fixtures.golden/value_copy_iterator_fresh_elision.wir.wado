@@ -86,15 +86,15 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/ArrayIter<Point>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Point>") -> ref null "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point";  // TypeId(31)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Array<Point>::push" = fn(ref "core:prelude//Array<Point>", ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point");  // TypeId(32)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Array<Point>::grow" = fn(ref "core:prelude//Array<Point>");  // TypeId(33)
+type "functype//core:prelude/array.wado/ArrayIter<Point>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Point>") -> ref null "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point";  // TypeId(33)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(34)
+type "functype//core:prelude/array.wado/Array<Point>::push" = fn(ref "core:prelude//Array<Point>", ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point");  // TypeId(34)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/array.wado/Array<Point>::grow" = fn(ref "core:prelude//Array<Point>");  // TypeId(35)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
 
@@ -136,7 +136,7 @@ fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/run"() w
     __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<Point>" { repr: points.repr, used: 2, index: 0 };
     b0: block {
         l1: loop {
-            __pattern_temp_0 = "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/ArrayIter<Point>^Iterator::next"(__iter_2);
+            __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<Point>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
                 __pattern_temp_1 = ref.as_non_null(__pattern_temp_0);
                 x = __pattern_temp_1.x;
@@ -395,58 +395,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/ArrayIter<Point>^Iterator::next"(self) {
-    let item: ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point";
-    if self.index >= self.used {
-        return ref.null none;
-    }
-    item = builtin::array_get<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(self.repr, self.index);
-    self.index = self.index + 1;
-    return item;
-}
-
-fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Array<Point>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Array<Point>::grow"(self);
-    }
-    builtin::array_set<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/Array<Point>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Point>;
-    let old_repr: ref builtin::array<Point>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l28: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(old_repr, i));
-                i = i + 1;
-                continue l28;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -454,13 +402,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l31: loop {
+            l26: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l31;
+                continue l26;
             };
         };
     };
@@ -546,6 +494,58 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/array.wado/ArrayIter<Point>^Iterator::next"(self) {
+    let item: ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point";
+    if self.index >= self.used {
+        return ref.null none;
+    }
+    item = builtin::array_get<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(self.repr, self.index);
+    self.index = self.index + 1;
+    return item;
+}
+
+fn "core:prelude/array.wado/Array<Point>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<Point>::grow"(self);
+    }
+    builtin::array_set<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<Point>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<Point>;
+    let old_repr: ref builtin::array<Point>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l48: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado//Point">(old_repr, i));
+                i = i + 1;
+                continue l48;
+            };
+        };
+    };
+    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/value_copy_iterator_fresh_elision.wado/__cm_export__run" as "run"

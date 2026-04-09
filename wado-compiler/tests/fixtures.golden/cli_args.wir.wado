@@ -81,13 +81,13 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/cli_args.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(32)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/cli_args.wado/Array<String>::grow" = fn(ref "core:prelude//Array<String>");  // TypeId(33)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(34)
+type "functype//core:prelude/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(34)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/array.wado/Array<String>::grow" = fn(ref "core:prelude//Array<String>");  // TypeId(35)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
 
@@ -151,7 +151,7 @@ fn "wado-compiler/tests/fixtures/cli_args.wado/__cm_binding__Environment_get_arg
                 break b0;
             }
             __elem_addr = __base + (__i * 8);
-            "wado-compiler/tests/fixtures/cli_args.wado/Array<String>::push"(__result, __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
+            "core:prelude/Array<String>::push"(__result, __inline_memory_to_gc_string_1: block -> ref "core:prelude/string.wado//String" {
                 __local_7 = builtin::load_i32(__elem_addr);
                 __local_8 = builtin::load_i32(__elem_addr + 4);
                 __local_9 = "core:internal/memory_to_gc_array"(__local_7, __local_8);
@@ -420,48 +420,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/cli_args.wado/Array<String>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/cli_args.wado/Array<String>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/cli_args.wado/Array<String>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<String>;
-    let old_repr: ref builtin::array<String>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l31: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
-                i = i + 1;
-                continue l31;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -469,13 +427,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l34: loop {
+            l30: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l34;
+                continue l30;
             };
         };
     };
@@ -561,6 +519,48 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/Array<String>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<String>::grow"(self);
+    }
+    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<String>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<String>;
+    let old_repr: ref builtin::array<String>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l51: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
+                i = i + 1;
+                continue l51;
+            };
+        };
+    };
+    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/cli_args.wado/__cm_export__run" as "run"

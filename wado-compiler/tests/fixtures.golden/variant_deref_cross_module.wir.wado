@@ -159,19 +159,19 @@ type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/Array<Elem>::push" = fn(ref "core:prelude//Array<Elem>", ref "./sub/variant_deref_helper.wado//Elem");  // TypeId(47)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(47)
 
-type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/Array<Elem>::grow" = fn(ref "core:prelude//Array<Elem>");  // TypeId(48)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(48)
 
-type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/ArrayIter<Elem>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Elem>") -> ref null "./sub/variant_deref_helper.wado//Elem";  // TypeId(49)
+type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(49)
 
-type "functype//wado-compiler/tests/fixtures/variant_deref_cross_module.wado/ArrayIter<Alt>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Alt>") -> ref null "./sub/variant_deref_helper.wado//Alt";  // TypeId(50)
+type "functype//core:prelude/array.wado/Array<Elem>::push" = fn(ref "core:prelude//Array<Elem>", ref "./sub/variant_deref_helper.wado//Elem");  // TypeId(50)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(51)
+type "functype//core:prelude/array.wado/Array<Elem>::grow" = fn(ref "core:prelude//Array<Elem>");  // TypeId(51)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(52)
+type "functype//core:prelude/array.wado/ArrayIter<Elem>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Elem>") -> ref null "./sub/variant_deref_helper.wado//Elem";  // TypeId(52)
 
-type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(53)
+type "functype//core:prelude/array.wado/ArrayIter<Alt>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Alt>") -> ref null "./sub/variant_deref_helper.wado//Alt";  // TypeId(53)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(54)
 
@@ -244,7 +244,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
         __iter_7 = struct.new "core:prelude/array.wado//ArrayIter<Alt>" { repr: alts.repr, used: alts.used, index: 0 };
         b5: block {
             l6: loop {
-                __pattern_temp_5 = "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/ArrayIter<Alt>^Iterator::next"(__iter_7);
+                __pattern_temp_5 = "core:prelude/array.wado/ArrayIter<Alt>^Iterator::next"(__iter_7);
                 if ref.is_null(__pattern_temp_5) == 0 {
                     alt = value_copy "./sub/variant_deref_helper.wado//Alt"(ref.as_non_null(__pattern_temp_5));
                     "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(alt, out);
@@ -274,7 +274,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(al
     };
     b9: block {
         l10: loop {
-            __pattern_temp_0 = "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/ArrayIter<Elem>^Iterator::next"(__iter_2);
+            __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<Elem>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
                 "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(ref.as_non_null(__pattern_temp_0), out);
             } else {
@@ -644,68 +644,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/Array<Elem>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/Array<Elem>::grow"(self);
-    }
-    builtin::array_set<ref "./sub/variant_deref_helper.wado//Elem">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/Array<Elem>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Elem>;
-    let old_repr: ref builtin::array<Elem>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "./sub/variant_deref_helper.wado//Elem">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l46: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "./sub/variant_deref_helper.wado//Elem">(new_repr, i, builtin::array_get<ref "./sub/variant_deref_helper.wado//Elem">(old_repr, i));
-                i = i + 1;
-                continue l46;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/ArrayIter<Elem>^Iterator::next"(self) {
-    let item: ref "./sub/variant_deref_helper.wado//Elem";
-    if self.index >= self.used {
-        return ref.null none;
-    }
-    item = builtin::array_get<ref "./sub/variant_deref_helper.wado//Elem">(self.repr, self.index);
-    self.index = self.index + 1;
-    return item;
-}
-
-fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/ArrayIter<Alt>^Iterator::next"(self) {
-    let item: ref "./sub/variant_deref_helper.wado//Alt";
-    if self.index >= self.used {
-        return ref.null none;
-    }
-    item = builtin::array_get<ref "./sub/variant_deref_helper.wado//Alt">(self.repr, self.index);
-    self.index = self.index + 1;
-    return item;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -713,13 +651,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l51: loop {
+            l45: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l51;
+                continue l45;
             };
         };
     };
@@ -822,8 +760,8 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b70: block {
-        l71: loop {
+    b64: block {
+        l65: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
@@ -848,12 +786,74 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, c);
                 }
             } else {
-                break b70;
+                break b64;
             }
-            continue l71;
+            continue l65;
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
+}
+
+fn "core:prelude/array.wado/Array<Elem>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<Elem>::grow"(self);
+    }
+    builtin::array_set<ref "./sub/variant_deref_helper.wado//Elem">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<Elem>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<Elem>;
+    let old_repr: ref builtin::array<Elem>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "./sub/variant_deref_helper.wado//Elem">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l74: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "./sub/variant_deref_helper.wado//Elem">(new_repr, i, builtin::array_get<ref "./sub/variant_deref_helper.wado//Elem">(old_repr, i));
+                i = i + 1;
+                continue l74;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
+fn "core:prelude/array.wado/ArrayIter<Elem>^Iterator::next"(self) {
+    let item: ref "./sub/variant_deref_helper.wado//Elem";
+    if self.index >= self.used {
+        return ref.null none;
+    }
+    item = builtin::array_get<ref "./sub/variant_deref_helper.wado//Elem">(self.repr, self.index);
+    self.index = self.index + 1;
+    return item;
+}
+
+fn "core:prelude/array.wado/ArrayIter<Alt>^Iterator::next"(self) {
+    let item: ref "./sub/variant_deref_helper.wado//Alt";
+    if self.index >= self.used {
+        return ref.null none;
+    }
+    item = builtin::array_get<ref "./sub/variant_deref_helper.wado//Alt">(self.repr, self.index);
+    self.index = self.index + 1;
+    return item;
 }
 
 export fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/__cm_export____test_0_recursive_variant_deref_from_another_module" as "__test_0_recursive_variant_deref_from_another_module"

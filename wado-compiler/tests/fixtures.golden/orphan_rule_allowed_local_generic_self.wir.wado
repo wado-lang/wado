@@ -86,7 +86,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
-type "functype//wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/MyBox<i32>^Inspect::inspect" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//core:prelude/primitive.wado/MyBox<i32>^Inspect::inspect" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -148,13 +148,13 @@ condition: a == b
             "core:prelude/string.wado/String::push"(__local_10, 58);
             "core:prelude/string.wado/String::push"(__local_10, 32);
             __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-            "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/MyBox<i32>^Inspect::inspect"(__v0_3.value, __local_11);
+            "core:prelude/primitive.wado/MyBox<i32>^Inspect::inspect"(__v0_3.value, __local_11);
             "core:prelude/string.wado/String::push"(__local_10, 10);
             "core:prelude/string.wado/String::push"(__local_10, 98);
             "core:prelude/string.wado/String::push"(__local_10, 58);
             "core:prelude/string.wado/String::push"(__local_10, 32);
             __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-            "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/MyBox<i32>^Inspect::inspect"(__v1_4.value, __local_11);
+            "core:prelude/primitive.wado/MyBox<i32>^Inspect::inspect"(__v1_4.value, __local_11);
             "core:prelude/string.wado/String::push"(__local_10, 10);
             break __tmpl: __local_10;
         });
@@ -187,13 +187,13 @@ condition: !a == c
             "core:prelude/string.wado/String::push"(__local_12, 58);
             "core:prelude/string.wado/String::push"(__local_12, 32);
             __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-            "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/MyBox<i32>^Inspect::inspect"(__v0_6.value, __local_13);
+            "core:prelude/primitive.wado/MyBox<i32>^Inspect::inspect"(__v0_6.value, __local_13);
             "core:prelude/string.wado/String::push"(__local_12, 10);
             "core:prelude/string.wado/String::push"(__local_12, 99);
             "core:prelude/string.wado/String::push"(__local_12, 58);
             "core:prelude/string.wado/String::push"(__local_12, 32);
             __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
-            "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/MyBox<i32>^Inspect::inspect"(__v1_7.value, __local_13);
+            "core:prelude/primitive.wado/MyBox<i32>^Inspect::inspect"(__v1_7.value, __local_13);
             "core:prelude/string.wado/String::push"(__local_12, 10);
             "core:prelude/string.wado/String::push"(__local_12, 97);
             "core:prelude/string.wado/String::push"(__local_12, 32);
@@ -455,19 +455,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/MyBox<i32>^Inspect::inspect"(self, f) {
-    let s_3: ref "core:prelude/string.wado//String";
-    let s_5: ref "core:prelude/string.wado//String";
-    let s_11: ref "core:prelude/string.wado//String";
-    s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("MyBox { "), used: 8 };
-    "core:prelude/string.wado/String::push_str"(f.buf, s_3);
-    s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
-    "core:prelude/string.wado/String::push_str"(f.buf, s_5);
-    "core:prelude/primitive.wado/i32::fmt_decimal"(self, f);
-    s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
-    "core:prelude/string.wado/String::push_str"(f.buf, s_11);
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -601,6 +588,19 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/primitive.wado/MyBox<i32>^Inspect::inspect"(self, f) {
+    let s_3: ref "core:prelude/string.wado//String";
+    let s_5: ref "core:prelude/string.wado//String";
+    let s_11: ref "core:prelude/string.wado//String";
+    s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("MyBox { "), used: 8 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_3);
+    s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_5);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self, f);
+    s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    "core:prelude/string.wado/String::push_str"(f.buf, s_11);
 }
 
 export fn "wado-compiler/tests/fixtures/orphan_rule_allowed_local_generic_self.wado/__cm_export__run" as "run"

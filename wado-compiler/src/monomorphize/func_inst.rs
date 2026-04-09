@@ -793,7 +793,7 @@ impl Monomorphizer {
         });
 
         Some(TirFunction {
-            module_source: ModuleSource::default(),
+            module_source: key.module_source.clone(),
             is_async: generic.is_async,
             name: mangled_name,
             is_pub: generic.is_pub,

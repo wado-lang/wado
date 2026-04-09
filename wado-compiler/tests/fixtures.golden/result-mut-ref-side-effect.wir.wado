@@ -340,17 +340,17 @@ type "functype//wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Par
 
 type "functype//wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Parser::expect" = fn(ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Parser", i32, ref "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<Token,ParseError>";  // TypeId(76)
 
-type "functype//wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Array<Token>::push" = fn(ref "core:prelude//Array<Token>", ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Token");  // TypeId(77)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(77)
 
-type "functype//wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Array<Token>::grow" = fn(ref "core:prelude//Array<Token>");  // TypeId(78)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(78)
 
-type "functype//wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(79)
+type "functype//core:prelude/array.wado/Array<Token>::push" = fn(ref "core:prelude//Array<Token>", ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Token");  // TypeId(79)
 
-type "functype//wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Array<String>::grow" = fn(ref "core:prelude//Array<String>");  // TypeId(80)
+type "functype//core:prelude/array.wado/Array<Token>::grow" = fn(ref "core:prelude//Array<Token>");  // TypeId(80)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(81)
+type "functype//core:prelude/array.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(81)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(82)
+type "functype//core:prelude/array.wado/Array<String>::grow" = fn(ref "core:prelude//Array<String>");  // TypeId(82)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(83)
 
@@ -2407,90 +2407,6 @@ fn "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Parser::expect"
     }) };
 }
 
-fn "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Array<Token>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Array<Token>::grow"(self);
-    }
-    builtin::array_set<ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Token">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Array<Token>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Token>;
-    let old_repr: ref builtin::array<Token>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Token">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l227: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Token">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Token">(old_repr, i));
-                i = i + 1;
-                continue l227;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Array<String>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Array<String>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/Array<String>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<String>;
-    let old_repr: ref builtin::array<String>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l231: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
-                i = i + 1;
-                continue l231;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -2498,13 +2414,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l234: loop {
+            l226: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l234;
+                continue l226;
             };
         };
     };
@@ -2590,6 +2506,90 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/array.wado/Array<Token>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<Token>::grow"(self);
+    }
+    builtin::array_set<ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Token">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<Token>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<Token>;
+    let old_repr: ref builtin::array<Token>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Token">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l247: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Token">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado//Token">(old_repr, i));
+                i = i + 1;
+                continue l247;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
+fn "core:prelude/array.wado/Array<String>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<String>::grow"(self);
+    }
+    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<String>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<String>;
+    let old_repr: ref builtin::array<String>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l251: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
+                i = i + 1;
+                continue l251;
+            };
+        };
+    };
+    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/__cm_export__run" as "run"

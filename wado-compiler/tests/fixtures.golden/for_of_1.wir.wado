@@ -91,13 +91,13 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(34)
 
-type "functype//wado-compiler/tests/fixtures/for_of_1.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(35)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(35)
 
-type "functype//wado-compiler/tests/fixtures/for_of_1.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(36)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(37)
+type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(37)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
+type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
@@ -105,7 +105,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/for_of_1.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(42)
+type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(42)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
 
@@ -140,7 +140,7 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_basic"() with Stdout {
         l1: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "wado-compiler/tests/fixtures/for_of_1.wado/ArrayIter<i32>^Iterator::next"(__iter_3);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_3);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 n = __sroa___pattern_temp_0_payload_0;
                 sum = sum + n;
@@ -180,7 +180,7 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_break"() with Stdout {
         l4: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "wado-compiler/tests/fixtures/for_of_1.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 n = __sroa___pattern_temp_0_payload_0;
                 if n == 3 {
@@ -217,7 +217,7 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_continue"() with Stdout {
         l8: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "wado-compiler/tests/fixtures/for_of_1.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 n = __sroa___pattern_temp_0_payload_0;
                 if n == 3 {
@@ -253,7 +253,7 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_empty"() with Stdout {
         l12: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "wado-compiler/tests/fixtures/for_of_1.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
             if __sroa___pattern_temp_0_discriminant == 0 {
                 item = __sroa___pattern_temp_0_payload_0;
                 "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -285,7 +285,7 @@ fn "wado-compiler/tests/fixtures/for_of_1.wado/for_of_generic_method"() with Std
         l15: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: i32;
-            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "wado-compiler/tests/fixtures/for_of_1.wado/ArrayIter<i32>^Iterator::next"(__iter_1);
+            multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_1);
             if __sroa___pattern_temp_0_discriminant == 0 {
             } else {
                 break b14;
@@ -543,58 +543,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/for_of_1.wado/ArrayIter<i32>^Iterator::next"(self) {
-    let item: i32;
-    if self.index >= self.used {
-        return 1, 0;
-    }
-    item = builtin::array_get<i32>(self.repr, self.index);
-    self.index = self.index + 1;
-    return 0, item;
-}
-
-fn "wado-compiler/tests/fixtures/for_of_1.wado/Array<i32>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/for_of_1.wado/Array<i32>::grow"(self);
-    }
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/for_of_1.wado/Array<i32>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<i32>;
-    let old_repr: ref builtin::array<i32>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<i32>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l42: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                i = i + 1;
-                continue l42;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -602,13 +550,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l45: loop {
+            l40: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l45;
+                continue l40;
             };
         };
     };
@@ -694,6 +642,58 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
+    let item: i32;
+    if self.index >= self.used {
+        return 1, 0;
+    }
+    item = builtin::array_get<i32>(self.repr, self.index);
+    self.index = self.index + 1;
+    return 0, item;
+}
+
+fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<i32>::grow"(self);
+    }
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<i32>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<i32>;
+    let old_repr: ref builtin::array<i32>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<i32>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l62: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                i = i + 1;
+                continue l62;
+            };
+        };
+    };
+    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/for_of_1.wado/__cm_export__run" as "run"

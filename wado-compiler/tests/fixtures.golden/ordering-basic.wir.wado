@@ -58,13 +58,13 @@ type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::
 
 type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(24)
 
-type "functype//wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Eq::eq" = fn(ref "core:prelude//Array<i32>", ref "core:prelude//Array<i32>") -> bool;  // TypeId(25)
+type "functype//core:prelude/array.wado/Array<i32>^Eq::eq" = fn(ref "core:prelude//Array<i32>", ref "core:prelude//Array<i32>") -> bool;  // TypeId(25)
 
-type "functype//wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Ord::cmp" = fn(ref "core:prelude//Array<i32>", ref "core:prelude//Array<i32>") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(26)
+type "functype//core:prelude/array.wado/Array<i32>^Ord::cmp" = fn(ref "core:prelude//Array<i32>", ref "core:prelude//Array<i32>") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(26)
 
-type "functype//wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(27)
+type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(27)
 
-type "functype//wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(28)
+type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(28)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
 
@@ -126,19 +126,19 @@ fn "wado-compiler/tests/fixtures/ordering-basic.wado/run"() with Stdout {
         __local_7 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_7;
     };
-    if "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Ord::cmp"(arr1, arr2) == 0 {
+    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(arr1, arr2) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 < arr2"), used: 11 });
     }
-    if "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Ord::cmp"(arr1, arr3) != 2 {
+    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(arr1, arr3) != 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 <= arr3"), used: 12 });
     }
-    if "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Ord::cmp"(arr2, arr1) == 2 {
+    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(arr2, arr1) == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr2 > arr1"), used: 11 });
     }
-    if "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Ord::cmp"(arr3, arr1) != 0 {
+    if "core:prelude/array.wado/Array<i32>^Ord::cmp"(arr3, arr1) != 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr3 >= arr1"), used: 12 });
     }
-    if "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Eq::eq"(arr1, arr3) {
+    if "core:prelude/array.wado/Array<i32>^Eq::eq"(arr1, arr3) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 == arr3"), used: 12 });
     }
     s1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
@@ -332,7 +332,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
     return 1;
 }
 
-fn "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Eq::eq"(self, other) {
+fn "core:prelude/array.wado/Array<i32>^Eq::eq"(self, other) {
     let i: i32;
     let _licm_used_3: i32;
     let _licm_repr_4: ref builtin::array<i32>;
@@ -361,7 +361,7 @@ fn "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Eq::eq"(self, ot
     return 1;
 }
 
-fn "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Ord::cmp"(self, other) {
+fn "core:prelude/array.wado/Array<i32>^Ord::cmp"(self, other) {
     let min_len: i32;
     let i: i32;
     let a: i32;
@@ -406,17 +406,17 @@ fn "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>^Ord::cmp"(self, 
     return 1;
 }
 
-fn "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>::push"(self, value) {
+fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>::grow"(self);
+        "core:prelude/array.wado/Array<i32>::grow"(self);
     }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "wado-compiler/tests/fixtures/ordering-basic.wado/Array<i32>::grow"(self) {
+fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<i32>;

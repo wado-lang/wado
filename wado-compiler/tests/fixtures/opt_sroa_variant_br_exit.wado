@@ -1,0 +1,16 @@
+// Regression: SROA return rewrite must handle typed Block at function body tail.
+// When a function returns a variant via break-with-value from a typed Block
+// (no explicit Return), SROA must rewrite the Br-exit StructNew values.
+use { from_string } from "core:json";
+
+test "f32 deserialize via SROA" {
+    let r = from_string::<f32>("1e2");
+    if let Ok(v) = r {
+        assert v == 100.0 as f32;
+    } else {
+        panic("failed");
+    }
+}
+
+__DATA__
+{"test": {}}

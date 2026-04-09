@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado//__Closure_0 {  // TypeId(3)}
+struct wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado//__Closure_2 {  // TypeId(3)}
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(4)
 
@@ -92,7 +92,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(38)
 
-type "functype//wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/__Closure_0::__call" = fn(i32) -> i32;  // TypeId(39)
+type "functype//wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(39)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -115,12 +115,12 @@ fn "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/run"() wi
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
-    let __local_10: ref "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado//__Closure_0";
+    let __local_10: ref "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado//__Closure_2";
     let __local_15: ref "core:prelude/format.wado//Formatter";
     let __local_20: ref "core:prelude/format.wado//Formatter";
-    result = __inline_apply___Closure_0_2: block -> i32 {
-        __local_10 = struct.new "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado//__Closure_0" {  };
-        break __inline_apply___Closure_0_2: "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/__Closure_0::__call"(41);
+    result = __inline_apply___Closure_2_2: block -> i32 {
+        __local_10 = struct.new "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado//__Closure_2" {  };
+        break __inline_apply___Closure_2_2: "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/__Closure_2::__call"(41);
     };
     __cond = result == 42;
     if __cond == 0 {
@@ -446,22 +446,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/__Closure_0::__call"(x) {
-    let __local_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
-        "core:prelude/string.wado/String::push"(__local_4, 120);
-        "core:prelude/string.wado/String::push"(__local_4, 32);
-        "core:prelude/string.wado/String::push"(__local_4, 61);
-        "core:prelude/string.wado/String::push"(__local_4, 32);
-        __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x, __local_5);
-        break __tmpl: __local_4;
-    });
-    return x + 1;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -563,8 +547,24 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
+fn "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/__Closure_2::__call"(x) {
+    let __local_4: ref "core:prelude/string.wado//String";
+    let __local_5: ref "core:prelude/format.wado//Formatter";
+    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+        __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
+        "core:prelude/string.wado/String::push"(__local_4, 120);
+        "core:prelude/string.wado/String::push"(__local_4, 32);
+        "core:prelude/string.wado/String::push"(__local_4, 61);
+        "core:prelude/string.wado/String::push"(__local_4, 32);
+        __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        "core:prelude/primitive.wado/i32::fmt_decimal"(x, __local_5);
+        break __tmpl: __local_4;
+    });
+    return x + 1;
+}
+
 fn "closure/wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/__closure_wrapper_0"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/__Closure_0::__call"(__p0);
+    return "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/__Closure_2::__call"(__p0);
 }
 
 export fn "wado-compiler/tests/fixtures/stores_fn_type_with_effect_param.wado/__cm_export__run" as "run"

@@ -159,17 +159,17 @@ type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/tuple_2.wado/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tuple<i32,String>>") -> ref null "tuple//[i32, String]";  // TypeId(53)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/tuple_2.wado/Array<Tuple<i32,String>>::push" = fn(ref "core:prelude//Array<Tuple<i32,String>>", ref "tuple//[i32, String]");  // TypeId(54)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(54)
 
-type "functype//wado-compiler/tests/fixtures/tuple_2.wado/Array<Tuple<i32,String>>::grow" = fn(ref "core:prelude//Array<Tuple<i32,String>>");  // TypeId(55)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(55)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(56)
+type "functype//core:prelude/array.wado/ArrayIter<Tuple<i32,String>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<Tuple<i32,String>>") -> ref null "tuple//[i32, String]";  // TypeId(56)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(57)
+type "functype//core:prelude/array.wado/Array<Tuple<i32,String>>::push" = fn(ref "core:prelude//Array<Tuple<i32,String>>", ref "tuple//[i32, String]");  // TypeId(57)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(58)
+type "functype//core:prelude/array.wado/Array<Tuple<i32,String>>::grow" = fn(ref "core:prelude//Array<Tuple<i32,String>>");  // TypeId(58)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(59)
 
@@ -360,7 +360,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
     __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<Tuple<i32,String>>" { repr: pairs.repr, used: 3, index: 0 };
     b10: block {
         l11: loop {
-            __pattern_temp_0 = "wado-compiler/tests/fixtures/tuple_2.wado/ArrayIter<Tuple<i32,String>>^Iterator::next"(__iter_2);
+            __pattern_temp_0 = "core:prelude/array.wado/ArrayIter<Tuple<i32,String>>^Iterator::next"(__iter_2);
             if ref.is_null(__pattern_temp_0) == 0 {
                 __pattern_temp_1 = ref.as_non_null(__pattern_temp_0);
                 num = __pattern_temp_1.0;
@@ -383,7 +383,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
     __iter_5 = struct.new "core:prelude/array.wado//ArrayIter<Tuple<i32,String>>" { repr: pairs.repr, used: 3, index: 0 };
     b13: block {
         l14: loop {
-            __pattern_temp_2 = "wado-compiler/tests/fixtures/tuple_2.wado/ArrayIter<Tuple<i32,String>>^Iterator::next"(__iter_5);
+            __pattern_temp_2 = "core:prelude/array.wado/ArrayIter<Tuple<i32,String>>^Iterator::next"(__iter_5);
             if ref.is_null(__pattern_temp_2) == 0 {
                 __pattern_temp_3 = value_copy "tuple//[i32, String]"(ref.as_non_null(__pattern_temp_2));
                 drop(__pattern_temp_3.0);
@@ -1126,58 +1126,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/tuple_2.wado/ArrayIter<Tuple<i32,String>>^Iterator::next"(self) {
-    let item: ref "tuple//[i32, String]";
-    if self.index >= self.used {
-        return ref.null none;
-    }
-    item = builtin::array_get<ref "tuple//[i32, String]">(self.repr, self.index);
-    self.index = self.index + 1;
-    return item;
-}
-
-fn "wado-compiler/tests/fixtures/tuple_2.wado/Array<Tuple<i32,String>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/tuple_2.wado/Array<Tuple<i32,String>>::grow"(self);
-    }
-    builtin::array_set<ref "tuple//[i32, String]">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/tuple_2.wado/Array<Tuple<i32,String>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Tuple<i32,String>>;
-    let old_repr: ref builtin::array<Tuple<i32,String>>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "tuple//[i32, String]">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l65: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "tuple//[i32, String]">(new_repr, i, builtin::array_get<ref "tuple//[i32, String]">(old_repr, i));
-                i = i + 1;
-                continue l65;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -1185,13 +1133,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l68: loop {
+            l63: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l68;
+                continue l63;
             };
         };
     };
@@ -1311,6 +1259,58 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/array.wado/ArrayIter<Tuple<i32,String>>^Iterator::next"(self) {
+    let item: ref "tuple//[i32, String]";
+    if self.index >= self.used {
+        return ref.null none;
+    }
+    item = builtin::array_get<ref "tuple//[i32, String]">(self.repr, self.index);
+    self.index = self.index + 1;
+    return item;
+}
+
+fn "core:prelude/array.wado/Array<Tuple<i32,String>>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<Tuple<i32,String>>::grow"(self);
+    }
+    builtin::array_set<ref "tuple//[i32, String]">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<Tuple<i32,String>>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<Tuple<i32,String>>;
+    let old_repr: ref builtin::array<Tuple<i32,String>>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "tuple//[i32, String]">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l89: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "tuple//[i32, String]">(new_repr, i, builtin::array_get<ref "tuple//[i32, String]">(old_repr, i));
+                i = i + 1;
+                continue l89;
+            };
+        };
+    };
+    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/tuple_2.wado/__cm_export__run" as "run"

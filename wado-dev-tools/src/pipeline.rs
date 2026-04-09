@@ -12,6 +12,52 @@ use crate::template::Template;
 
 const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
+/// Per-worker slot tracking which file is currently being compiled.
+static ACTIVE_FILES: std::sync::LazyLock<Vec<std::sync::Mutex<Option<(String, Instant)>>>> =
+    std::sync::LazyLock::new(|| {
+        let n = std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(4);
+        (0..n).map(|_| std::sync::Mutex::new(None)).collect()
+    });
+
+/// Install signal handlers (SIGINT, SIGTERM, SIGALRM) that dump active files before exiting.
+#[cfg(unix)]
+fn install_signal_handlers() {
+    unsafe {
+        for sig in [libc::SIGINT, libc::SIGTERM, libc::SIGALRM] {
+            libc::signal(sig, dump_active_files_and_exit as *const () as usize);
+        }
+    }
+}
+
+#[cfg(unix)]
+extern "C" fn dump_active_files_and_exit(sig: libc::c_int) {
+    // Signal handler — keep it async-signal-safe as much as possible.
+    // We use write(2) directly for the header, but for the file list we
+    // accept the small risk of using Mutex (workers are likely stuck, not holding locks).
+    let header = b"\n=== TIMEOUT/SIGNAL: active compilations ===\n";
+    unsafe {
+        libc::write(2, header.as_ptr().cast(), header.len());
+    }
+    for (i, slot) in ACTIVE_FILES.iter().enumerate() {
+        if let Ok(guard) = slot.try_lock()
+            && let Some((ref path, start)) = *guard
+        {
+            let elapsed = start.elapsed().as_secs();
+            let msg = format!("  worker {i}: {path} ({elapsed}s)\n");
+            unsafe {
+                libc::write(2, msg.as_ptr().cast(), msg.len());
+            }
+        }
+    }
+    let footer = b"===========================================\n";
+    unsafe {
+        libc::write(2, footer.as_ptr().cast(), footer.len());
+        libc::_exit(128 + sig);
+    }
+}
+
 #[cfg(unix)]
 const ALT_STACK_SIZE: usize = 8 * 1024 * 1024;
 
@@ -58,9 +104,15 @@ pub fn run_pipeline(
 ) {
     let start = Instant::now();
 
+    #[cfg(unix)]
+    install_signal_handlers();
+
     let num_workers = std::thread::available_parallelism()
         .map(std::num::NonZero::get)
         .unwrap_or(4);
+
+    // Force ACTIVE_FILES initialization with correct worker count
+    let _ = &*ACTIVE_FILES;
 
     let in_tmpl = Template::parse(in_template);
     let out_tmpl = Template::parse(out_template);
@@ -109,7 +161,7 @@ pub fn run_pipeline(
 
     // Dump worker threads
     let mut workers = Vec::with_capacity(num_workers);
-    for _ in 0..num_workers {
+    for worker_id in 0..num_workers {
         let rx = read_rx.clone();
         let tx = write_tx.clone();
         let out_tmpl_prefix = out_template.split("{name}").next().unwrap().to_string();
@@ -140,7 +192,13 @@ pub fn run_pipeline(
                         let output_path =
                             format!("{}{}{}", out_tmpl_prefix, item.name, out_tmpl_suffix);
                         let input_path = item.input_path.clone();
+
+                        // Track active compilation for signal handler
                         let t0 = Instant::now();
+                        if let Some(slot) = ACTIVE_FILES.get(worker_id) {
+                            *slot.lock().unwrap() = Some((input_path.clone(), t0));
+                        }
+
                         let content =
                             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                                 rt.block_on(compile_one(
@@ -161,6 +219,11 @@ pub fn run_pipeline(
                                 Err(format!("panic in {input_path}: {msg}"))
                             });
                         let compile_time = t0.elapsed();
+
+                        // Clear active file
+                        if let Some(slot) = ACTIVE_FILES.get(worker_id) {
+                            *slot.lock().unwrap() = None;
+                        }
 
                         if tx
                             .send(WriteItem {
@@ -360,7 +423,7 @@ async fn compile_one(
             }
         }
         Phase::Tir => {
-            if let Some(ref project) = result.optimized_project {
+            if let Some(ref project) = result.optimized_package {
                 writeln!(
                     output,
                     "// Golden file: Optimized TIR with -O2 optimization"
@@ -382,13 +445,8 @@ async fn compile_one(
             }
         }
         Phase::TirLowered => {
-            if let Some(ref lowered_modules) = result.lowered_tir_modules {
-                for (module_source, module) in lowered_modules {
-                    let path_str = module_source.to_string();
-                    writeln!(output, "// --- Module: {path_str} ---").unwrap();
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    write!(output, "{unparsed}").unwrap();
-                }
+            if let Some(ref text) = result.lowered_tir_text {
+                write!(output, "{text}").unwrap();
             }
         }
         Phase::Wat => unreachable!(),

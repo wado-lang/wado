@@ -258,9 +258,9 @@ type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wad
 
 type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(50)
 
-type "functype//wado-compiler/tests/fixtures/http-response-headers-multi.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(51)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/http-response-headers-multi.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(52)
+type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(52)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(53)
 
@@ -914,17 +914,17 @@ fn "core:internal/cm_lower_list_u8"(data, len) {
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
-fn "wado-compiler/tests/fixtures/http-response-headers-multi.wado/Array<u8>::push"(self, value) {
+fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/http-response-headers-multi.wado/Array<u8>::grow"(self);
+        "core:prelude/array.wado/Array<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "wado-compiler/tests/fixtures/http-response-headers-multi.wado/Array<u8>::grow"(self) {
+fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;

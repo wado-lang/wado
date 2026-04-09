@@ -83,13 +83,13 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/array_of_generic_struct.wado/Array<Box<i32>>::push" = fn(ref "core:prelude//Array<Box<i32>>", ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>");  // TypeId(32)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/array_of_generic_struct.wado/Array<Box<i32>>::grow" = fn(ref "core:prelude//Array<Box<i32>>");  // TypeId(33)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(34)
+type "functype//core:prelude/array.wado/Array<Box<i32>>::push" = fn(ref "core:prelude//Array<Box<i32>>", ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>");  // TypeId(34)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/array.wado/Array<Box<i32>>::grow" = fn(ref "core:prelude//Array<Box<i32>>");  // TypeId(35)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
 
@@ -127,7 +127,7 @@ fn "wado-compiler/tests/fixtures/array_of_generic_struct.wado/__test_0_container
         break __seq_lit: __local_10;
     };
     item = struct.new "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>" { value: 42 };
-    "wado-compiler/tests/fixtures/array_of_generic_struct.wado/Array<Box<i32>>::push"(__sroa_c_items, item);
+    "core:prelude/array.wado/Array<Box<i32>>::push"(__sroa_c_items, item);
     __v0 = __inline_Array_Box_i32___IndexValue__index_value_15: block -> ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>" {
         if 0 >= __sroa_c_items.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -189,8 +189,8 @@ fn "wado-compiler/tests/fixtures/array_of_generic_struct.wado/__test_1_array_of_
         __local_0 = struct.new "core:prelude//Array<Box<i32>>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>">(0), used: 0 };
         break __seq_lit: __local_0;
     };
-    "wado-compiler/tests/fixtures/array_of_generic_struct.wado/Array<Box<i32>>::push"(arr, struct.new "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>" { value: 10 });
-    "wado-compiler/tests/fixtures/array_of_generic_struct.wado/Array<Box<i32>>::push"(arr, struct.new "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>" { value: 20 });
+    "core:prelude/array.wado/Array<Box<i32>>::push"(arr, struct.new "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>" { value: 10 });
+    "core:prelude/array.wado/Array<Box<i32>>::push"(arr, struct.new "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>" { value: 20 });
     __v0_2 = arr.used;
     __cond_3 = __v0_2 == 2;
     if __cond_3 == 0 {
@@ -532,48 +532,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/array_of_generic_struct.wado/Array<Box<i32>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/array_of_generic_struct.wado/Array<Box<i32>>::grow"(self);
-    }
-    builtin::array_set<ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/array_of_generic_struct.wado/Array<Box<i32>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<Box<i32>>;
-    let old_repr: ref builtin::array<Box<i32>>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l31: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>">(old_repr, i));
-                i = i + 1;
-                continue l31;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -581,13 +539,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l34: loop {
+            l30: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l34;
+                continue l30;
             };
         };
     };
@@ -673,6 +631,48 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/array.wado/Array<Box<i32>>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<Box<i32>>::grow"(self);
+    }
+    builtin::array_set<ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>">(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<Box<i32>>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<Box<i32>>;
+    let old_repr: ref builtin::array<Box<i32>>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l51: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/array_of_generic_struct.wado//Box<i32>">(old_repr, i));
+                i = i + 1;
+                continue l51;
+            };
+        };
+    };
+    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/array_of_generic_struct.wado/__cm_export____test_0_container_of_boxes" as "__test_0_container_of_boxes"

@@ -817,58 +817,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/template-string-generic.wado/Box<String>::both"(self) {
-    let __local_1: ref "core:prelude/string.wado//String";
-    let __local_2: ref "core:prelude/format.wado//Formatter";
-    let __local_5: ref "core:prelude/string.wado//String";
-    let __local_6: ref "core:prelude/format.wado//Formatter";
-    return __tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 };
-        "core:prelude/string.wado/String::push"(__local_1, 100);
-        "core:prelude/string.wado/String::push"(__local_1, 105);
-        "core:prelude/string.wado/String::push"(__local_1, 115);
-        "core:prelude/string.wado/String::push"(__local_1, 112);
-        "core:prelude/string.wado/String::push"(__local_1, 108);
-        "core:prelude/string.wado/String::push"(__local_1, 97);
-        "core:prelude/string.wado/String::push"(__local_1, 121);
-        "core:prelude/string.wado/String::push"(__local_1, 61);
-        __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        __local_5 = self;
-        __local_6 = __local_2;
-        "core:prelude/format.wado/Formatter::pad"(__local_6, __local_5);
-        "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" inspect="), used: 9 });
-        __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        "core:prelude/format.wado/String^Inspect::inspect"(self, __local_2);
-        break __tmpl: __local_1;
-    };
-}
-
-fn "wado-compiler/tests/fixtures/template-string-generic.wado/Box<i32>::both"(self) {
-    let __local_1: ref "core:prelude/string.wado//String";
-    let __local_2: ref "core:prelude/format.wado//Formatter";
-    let __local_6: ref "core:prelude/format.wado//Formatter";
-    let __local_11: ref "core:prelude/format.wado//Formatter";
-    return __tmpl: block -> ref "core:prelude/string.wado//String" {
-        __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 };
-        "core:prelude/string.wado/String::push"(__local_1, 100);
-        "core:prelude/string.wado/String::push"(__local_1, 105);
-        "core:prelude/string.wado/String::push"(__local_1, 115);
-        "core:prelude/string.wado/String::push"(__local_1, 112);
-        "core:prelude/string.wado/String::push"(__local_1, 108);
-        "core:prelude/string.wado/String::push"(__local_1, 97);
-        "core:prelude/string.wado/String::push"(__local_1, 121);
-        "core:prelude/string.wado/String::push"(__local_1, 61);
-        __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        __local_6 = __local_2;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_6);
-        "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" inspect="), used: 9 });
-        __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        __local_11 = __local_2;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_11);
-        break __tmpl: __local_1;
-    };
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -1051,6 +999,58 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
+}
+
+fn "wado-compiler/tests/fixtures/template-string-generic.wado/Box<String>::both"(self) {
+    let __local_1: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/format.wado//Formatter";
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
+    return __tmpl: block -> ref "core:prelude/string.wado//String" {
+        __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 };
+        "core:prelude/string.wado/String::push"(__local_1, 100);
+        "core:prelude/string.wado/String::push"(__local_1, 105);
+        "core:prelude/string.wado/String::push"(__local_1, 115);
+        "core:prelude/string.wado/String::push"(__local_1, 112);
+        "core:prelude/string.wado/String::push"(__local_1, 108);
+        "core:prelude/string.wado/String::push"(__local_1, 97);
+        "core:prelude/string.wado/String::push"(__local_1, 121);
+        "core:prelude/string.wado/String::push"(__local_1, 61);
+        __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_5 = self;
+        __local_6 = __local_2;
+        "core:prelude/format.wado/Formatter::pad"(__local_6, __local_5);
+        "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" inspect="), used: 9 });
+        __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        "core:prelude/format.wado/String^Inspect::inspect"(self, __local_2);
+        break __tmpl: __local_1;
+    };
+}
+
+fn "wado-compiler/tests/fixtures/template-string-generic.wado/Box<i32>::both"(self) {
+    let __local_1: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/format.wado//Formatter";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
+    let __local_11: ref "core:prelude/format.wado//Formatter";
+    return __tmpl: block -> ref "core:prelude/string.wado//String" {
+        __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 };
+        "core:prelude/string.wado/String::push"(__local_1, 100);
+        "core:prelude/string.wado/String::push"(__local_1, 105);
+        "core:prelude/string.wado/String::push"(__local_1, 115);
+        "core:prelude/string.wado/String::push"(__local_1, 112);
+        "core:prelude/string.wado/String::push"(__local_1, 108);
+        "core:prelude/string.wado/String::push"(__local_1, 97);
+        "core:prelude/string.wado/String::push"(__local_1, 121);
+        "core:prelude/string.wado/String::push"(__local_1, 61);
+        __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_6 = __local_2;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_6);
+        "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" inspect="), used: 9 });
+        __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_11 = __local_2;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_11);
+        break __tmpl: __local_1;
+    };
 }
 
 export fn "wado-compiler/tests/fixtures/template-string-generic.wado/__cm_export____test_0_display_integer" as "__test_0_display_integer"

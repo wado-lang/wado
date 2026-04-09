@@ -126,7 +126,7 @@ impl Monomorphizer {
                 };
                 if let Some(mangled) = self.functions.instantiated.get(&key) {
                     *func = FunctionRef {
-                        module_source: self.current_module_source.clone(),
+                        module_source: key.module_source.clone(),
                         name: mangled.clone(),
                         monomorph_info: Some(MonomorphInfo {
                             generic_name: original_func_name,
@@ -178,7 +178,7 @@ impl Monomorphizer {
                     if let Some(mangled) = self.functions.instantiated.get(&key) {
                         let original_method_info = func.method_info.clone();
                         *func = FunctionRef {
-                            module_source: self.current_module_source.clone(),
+                            module_source: key.module_source.clone(),
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: generic_method_name,
@@ -245,7 +245,7 @@ impl Monomorphizer {
                 if let Some(mangled) = self.functions.instantiated.get(&key) {
                     let original_method_info = method_func.method_info.clone();
                     *method_func = FunctionRef {
-                        module_source: self.current_module_source.clone(),
+                        module_source: key.module_source.clone(),
                         name: mangled.clone(),
                         monomorph_info: Some(MonomorphInfo {
                             generic_name: full_method_name.clone(),
@@ -298,7 +298,7 @@ impl Monomorphizer {
                         if let Some(mangled) = self.functions.instantiated.get(&combined_key) {
                             let original_method_info = method_func.method_info.clone();
                             *method_func = FunctionRef {
-                                module_source: self.current_module_source.clone(),
+                                module_source: combined_key.module_source.clone(),
                                 name: mangled.clone(),
                                 monomorph_info: Some(MonomorphInfo {
                                     generic_name: generic_method_name.clone(),
@@ -385,7 +385,7 @@ impl Monomorphizer {
                     // Preserve original method_info
                     let original_method_info = method_func.method_info.clone();
                     *method_func = FunctionRef {
-                        module_source: self.current_module_source.clone(),
+                        module_source: key.module_source.clone(),
                         name: mangled.clone(),
                         monomorph_info: Some(MonomorphInfo {
                             generic_name: key.name.clone(),
@@ -416,21 +416,23 @@ impl Monomorphizer {
                     method_type_args: mono.method_type_args.clone(),
                     method_info: None,
                 };
+                let ms = key.module_source.clone();
                 self.functions.instantiated.get(&key).map(|mangled| {
                     (
                         mangled.clone(),
                         mono.generic_name.clone(),
                         mono.impl_type_args.clone(),
                         mono.method_type_args.clone(),
+                        ms,
                     )
                 })
             } else {
                 None
             };
-            if let Some((mangled, generic_name, impl_ta, method_ta)) = blanket_lookup {
+            if let Some((mangled, generic_name, impl_ta, method_ta, ms)) = blanket_lookup {
                 let original_method_info = method_func.method_info.clone();
                 *method_func = FunctionRef {
-                    module_source: self.current_module_source.clone(),
+                    module_source: ms,
                     name: mangled,
                     monomorph_info: Some(MonomorphInfo {
                         generic_name,
@@ -478,7 +480,7 @@ impl Monomorphizer {
                 if let Some(mangled) = self.functions.instantiated.get(&key) {
                     let original_method_info = method_func.method_info.clone();
                     *method_func = FunctionRef {
-                        module_source: self.current_module_source.clone(),
+                        module_source: key.module_source.clone(),
                         name: mangled.clone(),
                         monomorph_info: Some(MonomorphInfo {
                             generic_name,

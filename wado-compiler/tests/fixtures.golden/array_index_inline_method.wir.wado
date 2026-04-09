@@ -107,27 +107,27 @@ type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(39)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(40)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(40)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<String>::grow" = fn(ref "core:prelude//Array<String>");  // TypeId(41)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_method.wado/Container<String,i32>::is_full" = fn(ref "wado-compiler/tests/fixtures/array_index_inline_method.wado//Container<String,i32>", i32) -> bool;  // TypeId(42)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(42)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_method.wado/Container<String,i32>::find_key_index" = fn(ref "wado-compiler/tests/fixtures/array_index_inline_method.wado//Container<String,i32>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(43)
+type "functype//core:prelude/array.wado/Array<String>::grow" = fn(ref "core:prelude//Array<String>");  // TypeId(43)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<bool>::push" = fn(ref "core:prelude//Array<bool>", bool);  // TypeId(44)
+type "functype//wado-compiler/tests/fixtures/array_index_inline_method.wado/Container<String,i32>::is_full" = fn(ref "wado-compiler/tests/fixtures/array_index_inline_method.wado//Container<String,i32>", i32) -> bool;  // TypeId(44)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<bool>::grow" = fn(ref "core:prelude//Array<bool>");  // TypeId(45)
+type "functype//wado-compiler/tests/fixtures/array_index_inline_method.wado/Container<String,i32>::find_key_index" = fn(ref "wado-compiler/tests/fixtures/array_index_inline_method.wado//Container<String,i32>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(45)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(46)
+type "functype//core:prelude/array.wado/Array<bool>::push" = fn(ref "core:prelude//Array<bool>", bool);  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(47)
+type "functype//core:prelude/array.wado/Array<bool>::grow" = fn(ref "core:prelude//Array<bool>");  // TypeId(47)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(48)
+type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(48)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(49)
+type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(49)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(50)
+type "functype//core:prelude/array.wado/Array<String>::push" = fn(ref "core:prelude//Array<String>", ref "core:prelude/string.wado//String");  // TypeId(50)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(51)
 
@@ -520,201 +520,6 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<String>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<String>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<String>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<String>;
-    let old_repr: ref builtin::array<String>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l33: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
-                i = i + 1;
-                continue l33;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Container<String,i32>::is_full"(self, max_keys) {
-    let count: i32;
-    let i: i32;
-    let _licm_keys_7: ref "core:prelude//Array<String>";
-    let _licm_deleted_8: ref "core:prelude//Array<bool>";
-    let _licm_used_9: i32;
-    let _licm_used_10: i32;
-    let _licm_repr_11: ref builtin::array<bool>;
-    count = 0;
-    __for_0: block {
-        i = 0;
-        _licm_keys_7 = self.keys;
-        _licm_deleted_8 = self.deleted;
-        _licm_used_9 = _licm_keys_7.used;
-        _licm_used_10 = _licm_deleted_8.used;
-        _licm_repr_11 = _licm_deleted_8.repr;
-        block {
-            l36: loop {
-                if (i < _licm_used_9) == 0 {
-                    break __for_0;
-                }
-                if __inline_Array_bool__IndexValue__index_value_1: block -> bool {
-                    if i >= _licm_used_10 {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_11, i);
-                } == 0 {
-                    count = count + 1;
-                }
-                i = i + 1;
-                continue l36;
-            };
-        };
-    };
-    return count >= max_keys;
-}
-
-fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Container<String,i32>::find_key_index"(self, key) {
-    let i: i32;
-    let _licm_keys_6: ref "core:prelude//Array<String>";
-    let _licm_used_7: i32;
-    let _licm_repr_8: ref builtin::array<String>;
-    i = 0;
-    _licm_keys_6 = self.keys;
-    _licm_used_7 = _licm_keys_6.used;
-    _licm_repr_8 = _licm_keys_6.repr;
-    b40: block {
-        l41: loop {
-            if (if i < _licm_used_7 -> i32 {
-                "core:prelude/string.wado/String^Ord::cmp"(__inline_Array_String__IndexValue__index_value_1: block -> ref "core:prelude/string.wado//String" {
-                    if i >= _licm_used_7 {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_8, i);
-                }, key) == 0;
-            } else {
-                0;
-            }) == 0 {
-                break b40;
-            }
-            i = i + 1;
-            continue l41;
-        };
-    };
-    return i;
-}
-
-fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<bool>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<bool>::grow"(self);
-    }
-    builtin::array_set<bool>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<bool>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<bool>;
-    let old_repr: ref builtin::array<bool>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<bool>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l47: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
-                i = i + 1;
-                continue l47;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
-fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<i32>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<i32>::grow"(self);
-    }
-    builtin::array_set<i32>(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Array<i32>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref builtin::array<i32>;
-    let old_repr: ref builtin::array<i32>;
-    let used: i32;
-    let i: i32;
-    let __local_7: i32;
-    capacity = builtin::array_len(self.repr);
-    new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = capacity * 2;
-        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
-    };
-    new_repr = builtin::array_new<i32>(new_capacity);
-    old_repr = self.repr;
-    used = self.used;
-    __for_0: block {
-        i = 0;
-        block {
-            l51: loop {
-                if (i < used) == 0 {
-                    break __for_0;
-                }
-                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
-                i = i + 1;
-                continue l51;
-            };
-        };
-    };
-    self.repr = new_repr;
-}
-
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let i: i32;
     let _licm_buf_4: ref "core:prelude/string.wado//String";
@@ -722,13 +527,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l54: loop {
+            l32: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l54;
+                continue l32;
             };
         };
     };
@@ -848,6 +653,201 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
+}
+
+fn "core:prelude/array.wado/Array<String>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<String>;
+    let old_repr: ref builtin::array<String>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l56: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
+                i = i + 1;
+                continue l56;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
+fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Container<String,i32>::is_full"(self, max_keys) {
+    let count: i32;
+    let i: i32;
+    let _licm_keys_7: ref "core:prelude//Array<String>";
+    let _licm_deleted_8: ref "core:prelude//Array<bool>";
+    let _licm_used_9: i32;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref builtin::array<bool>;
+    count = 0;
+    __for_0: block {
+        i = 0;
+        _licm_keys_7 = self.keys;
+        _licm_deleted_8 = self.deleted;
+        _licm_used_9 = _licm_keys_7.used;
+        _licm_used_10 = _licm_deleted_8.used;
+        _licm_repr_11 = _licm_deleted_8.repr;
+        block {
+            l59: loop {
+                if (i < _licm_used_9) == 0 {
+                    break __for_0;
+                }
+                if __inline_Array_bool__IndexValue__index_value_1: block -> bool {
+                    if i >= _licm_used_10 {
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    }
+                    break __inline_Array_bool__IndexValue__index_value_1: builtin::array_get<bool>(_licm_repr_11, i);
+                } == 0 {
+                    count = count + 1;
+                }
+                i = i + 1;
+                continue l59;
+            };
+        };
+    };
+    return count >= max_keys;
+}
+
+fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Container<String,i32>::find_key_index"(self, key) {
+    let i: i32;
+    let _licm_keys_6: ref "core:prelude//Array<String>";
+    let _licm_used_7: i32;
+    let _licm_repr_8: ref builtin::array<String>;
+    i = 0;
+    _licm_keys_6 = self.keys;
+    _licm_used_7 = _licm_keys_6.used;
+    _licm_repr_8 = _licm_keys_6.repr;
+    b63: block {
+        l64: loop {
+            if (if i < _licm_used_7 -> i32 {
+                "core:prelude/string.wado/String^Ord::cmp"(__inline_Array_String__IndexValue__index_value_1: block -> ref "core:prelude/string.wado//String" {
+                    if i >= _licm_used_7 {
+                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                        unreachable;
+                    }
+                    break __inline_Array_String__IndexValue__index_value_1: builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_8, i);
+                }, key) == 0;
+            } else {
+                0;
+            }) == 0 {
+                break b63;
+            }
+            i = i + 1;
+            continue l64;
+        };
+    };
+    return i;
+}
+
+fn "core:prelude/array.wado/Array<bool>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<bool>::grow"(self);
+    }
+    builtin::array_set<bool>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<bool>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<bool>;
+    let old_repr: ref builtin::array<bool>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<bool>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l70: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
+                i = i + 1;
+                continue l70;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
+fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<i32>::grow"(self);
+    }
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<i32>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<i32>;
+    let old_repr: ref builtin::array<i32>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<i32>(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l74: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
+                i = i + 1;
+                continue l74;
+            };
+        };
+    };
+    self.repr = new_repr;
+}
+
+fn "core:prelude/array.wado/Array<String>::push"(self, value) {
+    let used: i32;
+    used = self.used;
+    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        "core:prelude/array.wado/Array<String>::grow"(self);
+    }
+    builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
+    self.used = used + 1;
 }
 
 export fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/__cm_export__run" as "run"

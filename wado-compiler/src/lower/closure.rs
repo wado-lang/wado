@@ -1231,7 +1231,7 @@ impl ClosureLowerer {
             );
 
             let call_method = TirFunction {
-                module_source: ModuleSource::default(),
+                module_source: self.module_source.clone(),
                 is_async: false,
                 name: qualified_method_name,
                 is_pub: false,
@@ -2900,7 +2900,7 @@ impl ClosureLowerer {
         });
 
         let specialized_func = TirFunction {
-            module_source: ModuleSource::default(),
+            module_source: self.module_source.clone(),
             is_async: false,
             name: specialized_name.clone(),
             is_pub: false,    // Specialized functions are always private
@@ -4058,10 +4058,13 @@ impl ClosureLowerer {
         });
 
         // Update the function reference to use the specialized name
+        // Use self.module_source so it matches the specialized function definition
+        // Preserve monomorph_info so DCE can trace the call graph correctly
+        let orig_monomorph_info = func.monomorph_info.clone();
         *func = FunctionRef {
             module_source: self.module_source.clone(),
             name: specialized_name.clone(),
-            monomorph_info: None,
+            monomorph_info: orig_monomorph_info,
             method_info: specialized_method_info,
             is_cm_binding: false,
         };
