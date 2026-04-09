@@ -305,6 +305,137 @@ test "tree: multiple items with diverse constructs" {
     ");
 }
 
+// --- Struct, lifetime, and type tests ---
+// Due to \p{L} misparse, only chars l, p, L, N (and XID_Continue: c, d, n, M, P)
+// are valid identifier characters. Lifetimes 'l, 'p, 'N work via LIFETIME_OR_LABEL.
+
+test "tree: unit struct with lifetime generic param" {
+    assert_tree(&"struct\nl<'p>;", &"
+        (crate (item (visItem (struct_ (structStruct
+            struct (identifier l)
+            (genericParams < (genericParam (lifetimeParam 'p)) >)
+            ;)))))
+    ");
+}
+
+test "tree: unit struct with type generic param" {
+    assert_tree(&"struct\nl<N>;", &"
+        (crate (item (visItem (struct_ (structStruct
+            struct (identifier l)
+            (genericParams < (genericParam (typeParam (identifier N))) >)
+            ;)))))
+    ");
+}
+
+test "tree: type alias with lifetime reference" {
+    assert_tree(&"type\nl<'p>\n=\n&'p\nSelf;", &"
+        (crate (item (visItem (typeAlias
+            type (identifier l)
+            (genericParams < (genericParam (lifetimeParam 'p)) >)
+            =
+            (type_ (typeNoBounds (referenceType
+                & (lifetime 'p)
+                (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment Self)))))))))
+            ;))))
+    ");
+}
+
+test "tree: type alias with mutable lifetime reference" {
+    assert_tree(&"type\nl<'p>\n=\n&'p\nmut\nSelf;", &"
+        (crate (item (visItem (typeAlias
+            type (identifier l)
+            (genericParams < (genericParam (lifetimeParam 'p)) >)
+            =
+            (type_ (typeNoBounds (referenceType
+                & (lifetime 'p) mut
+                (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment Self)))))))))
+            ;))))
+    ");
+}
+
+test "tree: pub struct and pub static mut" {
+    assert_tree(&"pub\nstruct\nl;\npub\nstatic\nmut\nNp:\nSelf\n=\n42;", &"
+        (crate
+            (item (visItem (visibility pub) (struct_ (structStruct
+                struct (identifier l) ;))))
+            (item (visItem (visibility pub) (staticItem
+                static mut (identifier Np) :
+                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment Self)))))))
+                = (expression (literalExpression 42)) ;))))
+    ");
+}
+
+test "tree: extern crate self" {
+    assert_tree(&"extern\ncrate\nself;", &"
+        (crate (item (visItem (externCrate extern crate (crateRef self) ;))))
+    ");
+}
+
+test "tree: const with qualified root path expression" {
+    assert_tree(&"const\nl:\nSelf\n=\n::l;", &"
+        (crate (item (visItem (constantItem
+            const (identifier l) :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment Self)))))))
+            =
+            (expression (pathExpression (pathInExpression
+                :: (pathExprSegment (pathIdentSegment (identifier l))))))
+            ;))))
+    ");
+}
+
+test "tree: type alias with root path type" {
+    assert_tree(&"type\nl\n=\n::l;", &"
+        (crate (item (visItem (typeAlias
+            type (identifier l)
+            =
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath :: (typePathSegment (pathIdentSegment (identifier l))))))))
+            ;))))
+    ");
+}
+
+test "tree: struct type and const items combined" {
+    assert_tree(&"struct\nl<'p>;\ntype\nN<'p>\n=\n&'p\nSelf;\nconst\np:\nSelf\n=\n42;", &"
+        (crate
+            (item (visItem (struct_ (structStruct
+                struct (identifier l)
+                (genericParams < (genericParam (lifetimeParam 'p)) >)
+                ;))))
+            (item (visItem (typeAlias
+                type (identifier N)
+                (genericParams < (genericParam (lifetimeParam 'p)) >)
+                =
+                (type_ (typeNoBounds (referenceType
+                    & (lifetime 'p)
+                    (typeNoBounds (traitObjectTypeOneBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment Self)))))))))
+                ;)))
+            (item (visItem (constantItem
+                const (identifier p) :
+                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment Self)))))))
+                = (expression (literalExpression 42)) ;))))
+    ");
+}
+
+test "tree: pub type alias with mutable lifetime reference" {
+    assert_tree(&"pub\ntype\nl<'p>\n=\n&'p\nmut\nSelf;", &"
+        (crate (item (visItem (visibility pub) (typeAlias
+            type (identifier l)
+            (genericParams < (genericParam (lifetimeParam 'p)) >)
+            =
+            (type_ (typeNoBounds (referenceType
+                & (lifetime 'p) mut
+                (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment Self)))))))))
+            ;))))
+    ");
+}
+
 test "tree: move closure with ref body and comparison in const" {
     // move |_: Self| 1+2 == 3+4
     assert_tree(&"const\n_:\nSelf\n=\nmove\n|_:\nSelf|\n1+2==3+4;", &"
