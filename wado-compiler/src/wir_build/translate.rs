@@ -1463,17 +1463,14 @@ impl FunctionTranslator<'_, '_> {
                         func_id,
                         args: translated_args,
                     }
+                } else if let Some(mi) = func.method_info.clone() {
+                    panic!(
+                        "[WIR] unresolved MethodCall: name={:?} method_info={:?}",
+                        func.name.clone(),
+                        mi
+                    );
                 } else {
-                    if let Some(mi) = func.method_info.clone() {
-                        eprintln!(
-                            "[WIR] unresolved MethodCall: name={:?} method_info={:?}",
-                            func.name.clone(),
-                            mi
-                        );
-                    } else {
-                        eprintln!("[WIR] unresolved MethodCall: name={:?}", func.name.clone());
-                    }
-                    WirInstr::Unreachable
+                    panic!("[WIR] unresolved MethodCall: name={:?}", func.name.clone());
                 }
             }
 
