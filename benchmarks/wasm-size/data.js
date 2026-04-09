@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775769607104,
+  "lastUpdate": 1775772183272,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11138,6 +11138,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8e3f55375e24348f896caf72bb2b79a38495bb4c"
         },
         "date": 1775769606843,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "109fc8d69f98e35df67ed0293ec117f6640a47a6",
+          "message": "Merge pull request #796 from wado-lang/claude/add-range-object-support-PIKGJ\n\nAdd range object support with ..</.= syntax",
+          "timestamp": "2026-04-10T06:59:45+09:00",
+          "tree_id": "c7cc58d34c7dc1c792952dc5396d1520b86fec3c",
+          "url": "https://github.com/wado-lang/wado/commit/109fc8d69f98e35df67ed0293ec117f6640a47a6"
+        },
+        "date": 1775772183026,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
