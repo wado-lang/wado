@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775733594172,
+  "lastUpdate": 1775769607104,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11099,6 +11099,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5e56f6bf6376c59a57caf2355e4e5f6de6938a15"
         },
         "date": 1775733594124,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8e3f55375e24348f896caf72bb2b79a38495bb4c",
+          "message": "Merge pull request #795 from wado-lang/claude/add-parser-tests-XxZhA\n\nAdd Rust parser tests and fix Unicode property class parsing",
+          "timestamp": "2026-04-10T06:16:35+09:00",
+          "tree_id": "8679f8b676bcabcddf1546e3fd1192cd62ab4244",
+          "url": "https://github.com/wado-lang/wado/commit/8e3f55375e24348f896caf72bb2b79a38495bb4c"
+        },
+        "date": 1775769606843,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
