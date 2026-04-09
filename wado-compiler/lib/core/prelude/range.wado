@@ -72,16 +72,18 @@ impl Step for char {
     }
 }
 
-/// Half-open range [start, end)
+/// Half-open range [start, end).
+/// Constructed via the `..<` operator: `0..<10` produces `RangeExclusive<i32>`.
 #[comp_feature("range_exclusive")]
-pub struct RangeExclusive<T> {
+pub struct RangeExclusive<T: Ord> {
     pub start: T,
     pub end: T,
 }
 
-/// Inclusive range [start, end]
+/// Inclusive range [start, end].
+/// Constructed via the `..=` operator: `0..=10` produces `RangeInclusive<i32>`.
 #[comp_feature("range_inclusive")]
-pub struct RangeInclusive<T> {
+pub struct RangeInclusive<T: Ord> {
     pub start: T,
     pub end: T,
     exhausted: bool,
