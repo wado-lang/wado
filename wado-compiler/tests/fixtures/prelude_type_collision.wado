@@ -1,0 +1,12 @@
+// Test: defining a type that collides with a prelude type should produce a compile error.
+// Option is re-exported by core:prelude, so this must be rejected.
+struct Option {
+    value: i32,
+}
+
+export fn run() {
+    let o = Option { value: 42 };
+}
+
+__DATA__
+{"compile_error": "type 'Option' conflicts with prelude type of the same name"}

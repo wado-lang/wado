@@ -40,6 +40,8 @@ pub enum AnalyzeError {
         message: String,
         span: Span,
     },
+    /// Type name collides with a prelude type
+    PreludeTypeCollision { name: String, span: Span },
 }
 
 impl std::fmt::Display for AnalyzeError {
@@ -91,6 +93,13 @@ impl std::fmt::Display for AnalyzeError {
                     span.line, span.column, path, message
                 )
             }
+            AnalyzeError::PreludeTypeCollision { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: type '{}' conflicts with prelude type of the same name",
+                    span.line, span.column, name
+                )
+            }
         }
     }
 }
@@ -135,6 +144,11 @@ impl From<AnalyzeError> for crate::compiler_host::Diagnostic {
             } => (
                 Code::ModuleNotFound,
                 format!("invalid module path '{path}': {message}"),
+                *span,
+            ),
+            AnalyzeError::PreludeTypeCollision { name, span } => (
+                Code::DuplicateDefinition,
+                format!("type '{name}' conflicts with prelude type of the same name"),
                 *span,
             ),
         };
@@ -394,6 +408,33 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         }
     }
 
+    /// Check for type names that collide with prelude-exported types.
+    ///
+    /// Runs after pub use processing so that `is_prelude_type` can resolve
+    /// re-exports from `core:prelude`. Only non-core modules are checked.
+    fn check_prelude_collisions(&mut self, module: &Module, module_source: &ModuleSource) {
+        if module_source.is_core() {
+            return;
+        }
+        for item in &module.items {
+            let (name, span) = match item {
+                Item::Struct(d) => (&d.name, d.span),
+                Item::Enum(d) => (&d.name, d.span),
+                Item::Variant(d) => (&d.name, d.span),
+                Item::Newtype(d) => (&d.name, d.span),
+                Item::Resource(d) => (&d.name, d.span),
+                Item::Flags(d) => (&d.name, d.span),
+                _ => continue,
+            };
+            if self.symbols.is_prelude_type(name) {
+                let _ = self.logger.error(AnalyzeError::PreludeTypeCollision {
+                    name: name.clone(),
+                    span,
+                });
+            }
+        }
+    }
+
     /// Look up a symbol by name (for use during codegen)
     pub fn lookup(&self, name: &str) -> Option<&Symbol> {
         self.symbols.lookup(name)
@@ -442,7 +483,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             self.process_pub_use(module, source, modules);
         }
 
-        // Third pass: validate imports in each module
+        // Third pass: check for prelude type collisions
+        // Must run after pub use processing so that is_prelude_type can
+        // resolve re-exports from core:prelude.
+        for (source, module) in modules {
+            self.check_prelude_collisions(module, source);
+        }
+
+        // Fourth pass: validate imports in each module
         let _ = self.validate_all_imports(modules);
 
         self.logger.ok_or_bail(())
