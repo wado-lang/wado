@@ -3287,9 +3287,57 @@ impl<H: CompilerHost> Resolver<'_, H> {
         use crate::name::ModuleSource;
         use crate::tir::{TirExprKind, TirStructField};
 
-        let start = self.resolve_expr(&range.start, ctx, None);
-        let end = self.resolve_expr(&range.end, ctx, Some(start.type_id));
+        // Bidirectional coercion: resolve non-literal first to infer the element type
+        let start_is_literal = self.is_numeric_literal(&range.start);
+        let end_is_literal = self.is_numeric_literal(&range.end);
+
+        let (start, end) = if start_is_literal && !end_is_literal {
+            let end = self.resolve_expr(&range.end, ctx, None);
+            let start = self.resolve_expr(&range.start, ctx, Some(end.type_id));
+            (start, end)
+        } else {
+            let start = self.resolve_expr(&range.start, ctx, None);
+            let end = self.resolve_expr(&range.end, ctx, Some(start.type_id));
+            (start, end)
+        };
+
+        // Check type mismatch between start and end
+        if start.type_id != end.type_id
+            && start.type_id != TypeTable::ERROR
+            && end.type_id != TypeTable::ERROR
+        {
+            let type_table = self.type_table.borrow();
+            let start_name = type_table.type_name(start.type_id);
+            let end_name = type_table.type_name(end.type_id);
+            if start_name != end_name {
+                let op_str = match range.kind {
+                    RangeKind::Exclusive => "..<",
+                    RangeKind::Inclusive => "..=",
+                };
+                let _ = self.logger.error(TypeError::TypeMismatch {
+                    expected: start_name,
+                    found: format!("{end_name} (range `{op_str}` requires both operands to have the same type)"),
+                    span: range.span,
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+            }
+        }
+
         let element_type = start.type_id;
+
+        // Check that the element type implements Ord
+        if element_type != TypeTable::ERROR
+            && !self.type_implements_trait(element_type, "Ord")
+        {
+            let type_name = self.type_id_to_string(element_type);
+            let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
+                type_name,
+                trait_name: "Ord".to_string(),
+                param_name: "T".to_string(),
+                span: range.span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+        }
 
         let (struct_name, module_source, fields) = match range.kind {
             RangeKind::Exclusive => {

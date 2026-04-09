@@ -1,0 +1,12 @@
+// Range element type must implement Ord
+struct Wrapper {
+    callback: fn(i32) -> i32,
+}
+
+export fn run() {
+    let w = Wrapper { callback: |x: i32| x + 1 };
+    let r = w..<w;
+}
+
+__DATA__
+{"compile_error": "does not implement trait 'Ord'"}
