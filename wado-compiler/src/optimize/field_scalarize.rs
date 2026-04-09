@@ -852,6 +852,11 @@ fn scalarize_loop(
         if info.local_fully_assigned {
             continue;
         }
+        // The local must not be aliased (e.g., `other = pos` creates an alias,
+        // and field modifications through the alias would bypass the scalar local)
+        if info.aliased {
+            continue;
+        }
         // The type must be a GC struct (not a primitive)
         if !is_gc_heap_type(info.local_type_id, type_table) {
             continue;
@@ -1035,6 +1040,9 @@ struct FieldAccessInfo {
     read_count: usize,
     write_count: usize,
     local_fully_assigned: bool,
+    /// True if the struct reference is copied to another local (alias created),
+    /// meaning field modifications through the alias won't update the scalar local.
+    aliased: bool,
 }
 
 fn count_field_accesses_in_block(
@@ -1057,6 +1065,15 @@ fn count_field_accesses_in_stmt(
             // A Let inside a loop defines a new local variable. Unlike Assign,
             // it doesn't reassign an existing local. We don't need to mark
             // anything as fully assigned here — only process the value expression.
+            //
+            // However, if the value is a Local reference (e.g. `__local_47 = pos`),
+            // this creates an alias. Any field modifications through the alias
+            // won't be tracked by the scalarization, so mark the original as aliased.
+            if let TirExprKind::Local { index, .. } = &value.kind {
+                if is_gc_heap_type(value.type_id, type_table) {
+                    mark_local_aliased(*index, counts);
+                }
+            }
             count_field_accesses_in_expr(value, counts, false, type_table);
         }
         TirStmtKind::Expr(expr) => {
@@ -1130,6 +1147,12 @@ fn count_field_accesses_in_expr(
             if let TirExprKind::Local { index, .. } = &target.kind {
                 mark_local_fully_assigned(*index, counts);
             }
+            // If value is a local reference (e.g., `other = pos`), the source is aliased
+            if let TirExprKind::Local { index, .. } = &value.kind {
+                if is_gc_heap_type(value.type_id, type_table) {
+                    mark_local_aliased(*index, counts);
+                }
+            }
         }
         TirExprKind::FieldAccess {
             expr: inner,
@@ -1163,6 +1186,7 @@ fn count_field_accesses_in_expr(
                     read_count: 0,
                     write_count: 0,
                     local_fully_assigned: false,
+                    aliased: false,
                 });
                 if is_assign_target {
                     info.write_count += 1;
@@ -1309,6 +1333,14 @@ fn mark_local_fully_assigned(local_idx: u32, counts: &mut IndexMap<(u32, u32), F
     for (&(li, _fi), info) in counts.iter_mut() {
         if li == local_idx {
             info.local_fully_assigned = true;
+        }
+    }
+}
+
+fn mark_local_aliased(local_idx: u32, counts: &mut IndexMap<(u32, u32), FieldAccessInfo>) {
+    for (&(li, _fi), info) in counts.iter_mut() {
+        if li == local_idx {
+            info.aliased = true;
         }
     }
 }

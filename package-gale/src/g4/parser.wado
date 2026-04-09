@@ -616,7 +616,7 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
 
         let c = resolve_char(&chars, &mut pos);
         if pos < end && chars[pos] == '-' && pos + 1 < end {
-            pos += 1; // skip '-'
+            advance_char(&chars, &mut pos);
             let c2 = resolve_char(&chars, &mut pos);
             ranges.push(CharRange::range(c, c2));
         } else {
