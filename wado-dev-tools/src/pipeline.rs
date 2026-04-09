@@ -13,14 +13,13 @@ use crate::template::Template;
 const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
 /// Per-worker slot tracking which file is currently being compiled.
-static ACTIVE_FILES: std::sync::LazyLock<
-    Vec<std::sync::Mutex<Option<(String, Instant)>>>,
-> = std::sync::LazyLock::new(|| {
-    let n = std::thread::available_parallelism()
-        .map(std::num::NonZero::get)
-        .unwrap_or(4);
-    (0..n).map(|_| std::sync::Mutex::new(None)).collect()
-});
+static ACTIVE_FILES: std::sync::LazyLock<Vec<std::sync::Mutex<Option<(String, Instant)>>>> =
+    std::sync::LazyLock::new(|| {
+        let n = std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(4);
+        (0..n).map(|_| std::sync::Mutex::new(None)).collect()
+    });
 
 /// Install signal handlers (SIGINT, SIGTERM, SIGALRM) that dump active files before exiting.
 #[cfg(unix)]

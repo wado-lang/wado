@@ -578,110 +578,104 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
-    let (
-        monomorphized_tir_text,
-        lowered_tir_text,
-        optimized_package,
-        wir_package,
-    ) = if let Some(resolved_modules) = tir_modules_by_source.clone() {
-        let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
+    let (monomorphized_tir_text, lowered_tir_text, optimized_package, wir_package) =
+        if let Some(resolved_modules) = tir_modules_by_source.clone() {
+            let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
-        let (wasi_registry, world_registry) = component_model::WasiRegistry::build_from_stdlib();
+            let (wasi_registry, world_registry) =
+                component_model::WasiRegistry::build_from_stdlib();
 
-        let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
-        let builtin_registry =
-            builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
+            let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
+            let builtin_registry =
+                builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
-        let package = Package::new(
-            load_result.entry_module_source.clone(),
-            resolved_modules,
-            symbols.clone(),
-            load_result.implicit_modules.clone(),
-            module_name,
-            wasi_registry,
-            world_registry,
-            builtin_registry,
-        );
+            let package = Package::new(
+                load_result.entry_module_source.clone(),
+                resolved_modules,
+                symbols.clone(),
+                load_result.implicit_modules.clone(),
+                module_name,
+                wasi_registry,
+                world_registry,
+                builtin_registry,
+            );
 
-        // Apply target world override (must be before synthesis)
-        let mut package = package;
-        if let Some(world) = target_world {
-            package.target_world = world.to_string();
-        }
+            // Apply target world override (must be before synthesis)
+            let mut package = package;
+            if let Some(world) = target_world {
+                package.target_world = world.to_string();
+            }
 
-        // Validate target world (test world is synthetic, not in registry)
-        if !package.is_test_world() && package.world_registry.get(&package.target_world).is_none() {
-            let _ = logger.error(compiler_host::Diagnostic {
-                severity: compiler_host::Severity::Error,
-                code: compiler_host::Code::UnsupportedFeature,
-                message: format!("unknown target world: `{}`", package.target_world),
-                span: None,
-            });
-            return Err(Bail);
-        }
-
-        // Synthesis (must run before monomorphize)
-        let package = {
-            let _span = logger.span("synthesis");
-            synthesis::synthesize(package).map_err(|message| {
+            // Validate target world (test world is synthetic, not in registry)
+            if !package.is_test_world()
+                && package.world_registry.get(&package.target_world).is_none()
+            {
                 let _ = logger.error(compiler_host::Diagnostic {
                     severity: compiler_host::Severity::Error,
                     code: compiler_host::Code::UnsupportedFeature,
-                    message,
+                    message: format!("unknown target world: `{}`", package.target_world),
                     span: None,
                 });
-                Bail
-            })?
+                return Err(Bail);
+            }
+
+            // Synthesis (must run before monomorphize)
+            let package = {
+                let _span = logger.span("synthesis");
+                synthesis::synthesize(package).map_err(|message| {
+                    let _ = logger.error(compiler_host::Diagnostic {
+                        severity: compiler_host::Severity::Error,
+                        code: compiler_host::Code::UnsupportedFeature,
+                        message,
+                        span: None,
+                    });
+                    Bail
+                })?
+            };
+
+            // Erase Newtypes and Flags (after synthesis, before link)
+            for module in package.tir_modules.values() {
+                module.type_table.borrow_mut().erase_newtypes_and_flags();
+            }
+
+            // Link
+            let mut flat = link::link(package);
+
+            // Monomorphize
+            {
+                let _span = logger.span("monomorphize");
+                monomorphize(&mut flat);
+            }
+
+            // Snapshot monomorphized state (only unparse; Debug format is deferred)
+            let mono_text = Some(unparse::unparse_flat_package(&flat));
+
+            // Lower
+            {
+                let _span = logger.span("lower");
+                lower(&mut flat);
+            }
+            // Snapshot lowered state (only unparse; Debug format is deferred)
+            let lower_text = Some(unparse::unparse_flat_package(&flat));
+
+            // Optimize
+            let flat = {
+                let _span = logger.span("optimize");
+                optimize(flat, opt_level, inline_threshold, opt_iterations, &logger)
+            };
+
+            // WIR: Translate optimized FlatPackage to WirPackage for inspection.
+            let wir_package = Some({
+                let mut wir = wir_build::build_wir_package(&flat);
+                wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
+                wir
+            });
+            let optimized = Some(flat);
+
+            (mono_text, lower_text, optimized, wir_package)
+        } else {
+            (None, None, None, None)
         };
-
-        // Erase Newtypes and Flags (after synthesis, before link)
-        for module in package.tir_modules.values() {
-            module.type_table.borrow_mut().erase_newtypes_and_flags();
-        }
-
-        // Link
-        let mut flat = link::link(package);
-
-        // Monomorphize
-        {
-            let _span = logger.span("monomorphize");
-            monomorphize(&mut flat);
-        }
-
-        // Snapshot monomorphized state (only unparse; Debug format is deferred)
-        let mono_text = Some(unparse::unparse_flat_package(&flat));
-
-        // Lower
-        {
-            let _span = logger.span("lower");
-            lower(&mut flat);
-        }
-        // Snapshot lowered state (only unparse; Debug format is deferred)
-        let lower_text = Some(unparse::unparse_flat_package(&flat));
-
-        // Optimize
-        let flat = {
-            let _span = logger.span("optimize");
-            optimize(flat, opt_level, inline_threshold, opt_iterations, &logger)
-        };
-
-        // WIR: Translate optimized FlatPackage to WirPackage for inspection.
-        let wir_package = Some({
-            let mut wir = wir_build::build_wir_package(&flat);
-            wir_optimize::optimize_wir(&mut wir, opt_level, &logger);
-            wir
-        });
-        let optimized = Some(flat);
-
-        (
-            mono_text,
-            lower_text,
-            optimized,
-            wir_package,
-        )
-    } else {
-        (None, None, None, None)
-    };
 
     Ok(DumpResult {
         source: source.to_string(),
