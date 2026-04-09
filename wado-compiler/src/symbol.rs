@@ -439,27 +439,23 @@ impl SymbolTable {
         None
     }
 
-    /// Check if a type name is already defined in any `core:prelude*` module.
+    /// Check if a type name is re-exported by `core:prelude`.
+    ///
+    /// Only types explicitly `pub use`d from `core:prelude` are considered
+    /// prelude types. Internal types in prelude sub-modules that are not
+    /// re-exported (e.g. `UnpackResult` in fpfmt.wado) are not checked.
     pub fn is_prelude_type(&self, name: &str) -> bool {
-        for (module_source, module_symbols) in &self.modules {
-            if let ModuleSource::Core { name: mod_name } = module_source {
-                if (mod_name == "prelude" || mod_name.starts_with("prelude/"))
-                    && let Some(&id) = module_symbols.get(name)
-                {
-                    let symbol = &self.symbols[id];
-                    if matches!(
-                        symbol.kind,
-                        SymbolKind::Struct(_)
-                            | SymbolKind::Enum(_)
-                            | SymbolKind::Variant(_)
-                            | SymbolKind::Flags(_)
-                            | SymbolKind::Newtype(_)
-                            | SymbolKind::Resource(_)
-                    ) {
-                        return true;
-                    }
-                }
-            }
+        let prelude = ModuleSource::prelude();
+        if let Some(symbol) = self.lookup_in_module(&prelude, name) {
+            return matches!(
+                symbol.kind,
+                SymbolKind::Struct(_)
+                    | SymbolKind::Enum(_)
+                    | SymbolKind::Variant(_)
+                    | SymbolKind::Flags(_)
+                    | SymbolKind::Newtype(_)
+                    | SymbolKind::Resource(_)
+            );
         }
         false
     }

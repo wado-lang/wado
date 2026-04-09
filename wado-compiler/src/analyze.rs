@@ -246,15 +246,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Struct(struct_decl) => {
-                    if !module_source.is_core_prelude_family()
-                        && self.symbols.is_prelude_type(&struct_decl.name)
-                    {
-                        let _ = self.logger.error(AnalyzeError::PreludeTypeCollision {
-                            name: struct_decl.name.clone(),
-                            span: struct_decl.span,
-                        });
-                        continue;
-                    }
                     let kind = SymbolKind::Struct(StructSymbol {
                         fields: struct_decl.fields.iter().map(|f| f.name.clone()).collect(),
                     });
@@ -268,15 +259,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Enum(enum_decl) => {
-                    if !module_source.is_core_prelude_family()
-                        && self.symbols.is_prelude_type(&enum_decl.name)
-                    {
-                        let _ = self.logger.error(AnalyzeError::PreludeTypeCollision {
-                            name: enum_decl.name.clone(),
-                            span: enum_decl.span,
-                        });
-                        continue;
-                    }
                     let kind = SymbolKind::Enum(EnumSymbol {
                         cases: enum_decl.cases.iter().map(|c| c.name.clone()).collect(),
                     });
@@ -286,15 +268,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Variant(variant_decl) => {
-                    if !module_source.is_core_prelude_family()
-                        && self.symbols.is_prelude_type(&variant_decl.name)
-                    {
-                        let _ = self.logger.error(AnalyzeError::PreludeTypeCollision {
-                            name: variant_decl.name.clone(),
-                            span: variant_decl.span,
-                        });
-                        continue;
-                    }
                     let kind = SymbolKind::Variant(VariantSymbol {
                         cases: variant_decl.cases.iter().map(|c| c.name.clone()).collect(),
                     });
@@ -326,15 +299,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Newtype(newtype) => {
-                    if !module_source.is_core_prelude_family()
-                        && self.symbols.is_prelude_type(&newtype.name)
-                    {
-                        let _ = self.logger.error(AnalyzeError::PreludeTypeCollision {
-                            name: newtype.name.clone(),
-                            span: newtype.span,
-                        });
-                        continue;
-                    }
                     let kind = SymbolKind::Newtype(NewtypeSymbol {
                         aliased_type: "unknown".to_string(), // TODO: store actual type
                     });
@@ -344,15 +308,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Resource(resource) => {
-                    if !module_source.is_core_prelude_family()
-                        && self.symbols.is_prelude_type(&resource.name)
-                    {
-                        let _ = self.logger.error(AnalyzeError::PreludeTypeCollision {
-                            name: resource.name.clone(),
-                            span: resource.span,
-                        });
-                        continue;
-                    }
                     let kind = SymbolKind::Resource(ResourceSymbol {
                         methods: resource.methods.iter().map(|m| m.name.clone()).collect(),
                         cm_import: resource.attrs.first().and_then(|a| a.cm_import.clone()),
@@ -420,15 +375,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Flags(flags_decl) => {
-                    if !module_source.is_core_prelude_family()
-                        && self.symbols.is_prelude_type(&flags_decl.name)
-                    {
-                        let _ = self.logger.error(AnalyzeError::PreludeTypeCollision {
-                            name: flags_decl.name.clone(),
-                            span: flags_decl.span,
-                        });
-                        continue;
-                    }
                     let kind = SymbolKind::Flags(FlagsSymbol {
                         members: flags_decl.flags.iter().map(|m| m.name.clone()).collect(),
                     });
@@ -458,6 +404,33 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 Item::TupleTypeDecl(_) => {
                     // Tuple type family declaration — handled in orchestration
                 }
+            }
+        }
+    }
+
+    /// Check for type names that collide with prelude-exported types.
+    ///
+    /// Runs after pub use processing so that `is_prelude_type` can resolve
+    /// re-exports from `core:prelude`. Only non-core modules are checked.
+    fn check_prelude_collisions(&mut self, module: &Module, module_source: &ModuleSource) {
+        if module_source.is_core() {
+            return;
+        }
+        for item in &module.items {
+            let (name, span) = match item {
+                Item::Struct(d) => (&d.name, d.span),
+                Item::Enum(d) => (&d.name, d.span),
+                Item::Variant(d) => (&d.name, d.span),
+                Item::Newtype(d) => (&d.name, d.span),
+                Item::Resource(d) => (&d.name, d.span),
+                Item::Flags(d) => (&d.name, d.span),
+                _ => continue,
+            };
+            if self.symbols.is_prelude_type(name) {
+                let _ = self.logger.error(AnalyzeError::PreludeTypeCollision {
+                    name: name.clone(),
+                    span,
+                });
             }
         }
     }
@@ -501,17 +474,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         self.entry_module_source = entry_source.clone();
 
         // First pass: collect definitions from all modules (excluding pub use)
-        // Process core:prelude* modules first so that prelude type collision
-        // checks work correctly for user-defined types.
         for (source, module) in modules {
-            if source.is_core_prelude_family() {
-                self.collect_definitions(module, source);
-            }
-        }
-        for (source, module) in modules {
-            if !source.is_core_prelude_family() {
-                self.collect_definitions(module, source);
-            }
+            self.collect_definitions(module, source);
         }
 
         // Second pass: process pub use (re-exports) now that all symbols are collected
@@ -519,7 +483,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             self.process_pub_use(module, source, modules);
         }
 
-        // Third pass: validate imports in each module
+        // Third pass: check for prelude type collisions
+        // Must run after pub use processing so that is_prelude_type can
+        // resolve re-exports from core:prelude.
+        for (source, module) in modules {
+            self.check_prelude_collisions(module, source);
+        }
+
+        // Fourth pass: validate imports in each module
         let _ = self.validate_all_imports(modules);
 
         self.logger.ok_or_bail(())
