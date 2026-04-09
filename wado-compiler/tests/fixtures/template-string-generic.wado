@@ -5,11 +5,11 @@
 // After monomorphization, the concrete type's Display impl is used
 // for {value}, while {value:?} always uses inspect output.
 
-struct Box<T> {
+struct Wrapper<T> {
     value: T,
 }
 
-impl Box<T> {
+impl Wrapper<T> {
     fn display_value(&self) -> String {
         return `{self.value}`;
     }
@@ -25,45 +25,45 @@ impl Box<T> {
 
 // Display: integers render the same way for display and inspect
 test "display integer" {
-    let b = Box { value: 42 };
+    let b = Wrapper { value: 42 };
     assert b.display_value() == "42";
 }
 
 test "inspect integer" {
-    let b = Box { value: 42 };
+    let b = Wrapper { value: 42 };
     assert b.inspect_value() == "42";
 }
 
 // Display vs Inspect: strings differ (inspect adds quotes)
 test "display string" {
-    let b = Box { value: "hello" };
+    let b = Wrapper { value: "hello" };
     assert b.display_value() == "hello";
 }
 
 test "inspect string" {
-    let b = Box { value: "hello" };
+    let b = Wrapper { value: "hello" };
     assert b.inspect_value() == `"hello"`;
 }
 
 // Both in the same template string
 test "both display and inspect for integer" {
-    let b = Box { value: 99 };
+    let b = Wrapper { value: 99 };
     assert b.both() == "display=99 inspect=99";
 }
 
 test "both display and inspect for string" {
-    let b = Box { value: "world" };
+    let b = Wrapper { value: "world" };
     assert b.both() == `display=world inspect="world"`;
 }
 
 // Bool type
 test "display bool" {
-    let b = Box { value: true };
+    let b = Wrapper { value: true };
     assert b.display_value() == "true";
 }
 
 test "inspect bool" {
-    let b = Box { value: true };
+    let b = Wrapper { value: true };
     assert b.inspect_value() == "true";
 }
 

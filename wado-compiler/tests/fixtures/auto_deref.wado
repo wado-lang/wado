@@ -17,11 +17,11 @@ impl Point {
 }
 
 // Generic struct for auto-deref on generic types
-struct Box<T> {
+struct Wrapper<T> {
     value: T,
 }
 
-impl<T> Box<T> {
+impl<T> Wrapper<T> {
     fn get(&self) -> T {
         return self.value;
     }
@@ -62,13 +62,13 @@ fn auto_deref_method() with Stdout {
     let p_ref2 = &p_ref;
     assert p_ref2.sum() == 30;
 
-    // Auto-deref on generic struct Box<i32>
-    let box_i32 = Box { value: 42 };
+    // Auto-deref on generic struct Wrapper<i32>
+    let box_i32 = Wrapper { value: 42 };
     let box_ref = &box_i32;
     assert box_ref.get() == 42;
 
-    // Auto-deref on generic struct Box<String>
-    let box_str = Box { value: "hello" };
+    // Auto-deref on generic struct Wrapper<String>
+    let box_str = Wrapper { value: "hello" };
     let box_str_ref = &box_str;
     let inner = box_str_ref.get();
     assert inner.len() == 5;

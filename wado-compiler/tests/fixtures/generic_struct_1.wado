@@ -1,4 +1,4 @@
-struct Box<T> {
+struct Wrapper<T> {
     value: T,
 }
 
@@ -13,16 +13,16 @@ struct Point {
 }
 
 test "basic usage" {
-    let b = Box { value: 42 };
+    let b = Wrapper { value: 42 };
     assert b.value == 42;
 }
 
 test "different types" {
-    let int_box = Box { value: 42 };
-    let float_box = Box { value: 3.14 };
-    let str_box = Box { value: "hello" };
-    let bool_box = Box { value: true };
-    let char_box = Box { value: 'A' };
+    let int_box = Wrapper { value: 42 };
+    let float_box = Wrapper { value: 3.14 };
+    let str_box = Wrapper { value: "hello" };
+    let bool_box = Wrapper { value: true };
+    let char_box = Wrapper { value: 'A' };
     assert int_box.value == 42;
     assert float_box.value == 3.14;
     assert str_box.value == "hello";
@@ -31,13 +31,13 @@ test "different types" {
 }
 
 test "explicit type annotations" {
-    let i32_box: Box<i32> = Box { value: 42 };
-    let i64_box: Box<i64> = Box { value: 9999999999 as i64 };
-    let f32_box: Box<f32> = Box { value: 2.5 as f32 };
-    let f64_box: Box<f64> = Box { value: 3.14159 };
-    let bool_box: Box<bool> = Box { value: false };
-    let char_box: Box<char> = Box { value: 'Z' };
-    let str_box: Box<String> = Box { value: "world" };
+    let i32_box: Wrapper<i32> = Wrapper { value: 42 };
+    let i64_box: Wrapper<i64> = Wrapper { value: 9999999999 as i64 };
+    let f32_box: Wrapper<f32> = Wrapper { value: 2.5 as f32 };
+    let f64_box: Wrapper<f64> = Wrapper { value: 3.14159 };
+    let bool_box: Wrapper<bool> = Wrapper { value: false };
+    let char_box: Wrapper<char> = Wrapper { value: 'Z' };
+    let str_box: Wrapper<String> = Wrapper { value: "world" };
     assert i32_box.value == 42;
     assert i64_box.value == 9999999999 as i64;
     assert f32_box.value == 2.5 as f32;
@@ -54,23 +54,23 @@ test "multi params" {
 }
 
 test "mutable field" {
-    let mut b = Box { value: 10 };
+    let mut b = Wrapper { value: 10 };
     assert b.value == 10;
     b.value = 42;
     assert b.value == 42;
 }
 
 test "nested" {
-    let inner = Box { value: 42 };
-    let outer = Box { value: inner };
+    let inner = Wrapper { value: 42 };
+    let outer = Wrapper { value: inner };
     assert outer.value.value == 42;
 }
 
-fn make_box_i32(v: i32) -> Box<i32> {
-    return Box { value: v };
+fn make_box_i32(v: i32) -> Wrapper<i32> {
+    return Wrapper { value: v };
 }
 
-fn get_box_value(b: Box<i32>) -> i32 {
+fn get_box_value(b: Wrapper<i32>) -> i32 {
     return b.value;
 }
 
@@ -79,23 +79,23 @@ test "func param and return" {
     assert get_box_value(b) == 42;
 }
 
-impl<i32> Box<i32> {
+impl<i32> Wrapper<i32> {
     fn get(&self) -> i32 {
         return self.value;
     }
 }
 
 test "impl block" {
-    let b = Box { value: 42 };
+    let b = Wrapper { value: 42 };
     assert b.get() == 42;
 }
 
 test "with struct type params" {
-    let point_box = Box { value: Point { x: 10, y: 20 } };
+    let point_box = Wrapper { value: Point { x: 10, y: 20 } };
     assert point_box.value.x == 10;
     assert point_box.value.y == 20;
 
-    let pair_box = Box { value: Pair { first: 1, second: "one" } };
+    let pair_box = Wrapper { value: Pair { first: 1, second: "one" } };
     assert pair_box.value.first == 1;
     assert pair_box.value.second == "one";
 }

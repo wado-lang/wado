@@ -15,11 +15,11 @@ impl Counter {
     }
 }
 
-struct Box {
+struct Container {
     item: Counter,
 }
 
-impl<i32> IndexMut<i32> for Box {
+impl<i32> IndexMut<i32> for Container {
     type Output = Counter;
 
     fn index_mut(&mut self, _idx: i32) -> &mut Self::Output {
@@ -28,7 +28,7 @@ impl<i32> IndexMut<i32> for Box {
 }
 
 export fn run() with Stdout {
-    let mut b = Box { item: Counter { value: 10 } };
+    let mut b = Container { item: Counter { value: 10 } };
 
     // Index in different branches
     let condition = true;

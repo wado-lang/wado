@@ -439,6 +439,31 @@ impl SymbolTable {
         None
     }
 
+    /// Check if a type name is already defined in any `core:prelude*` module.
+    pub fn is_prelude_type(&self, name: &str) -> bool {
+        for (module_source, module_symbols) in &self.modules {
+            if let ModuleSource::Core { name: mod_name } = module_source {
+                if mod_name == "prelude" || mod_name.starts_with("prelude/") {
+                    if let Some(&id) = module_symbols.get(name) {
+                        let symbol = &self.symbols[id];
+                        if matches!(
+                            symbol.kind,
+                            SymbolKind::Struct(_)
+                                | SymbolKind::Enum(_)
+                                | SymbolKind::Variant(_)
+                                | SymbolKind::Flags(_)
+                                | SymbolKind::Newtype(_)
+                                | SymbolKind::Resource(_)
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
     /// Get a symbol by its ID
     pub fn get(&self, id: SymbolId) -> Option<&Symbol> {
         self.symbols.get(id)

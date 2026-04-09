@@ -315,6 +315,12 @@ impl ModuleSource {
         matches!(self, Self::Core { name } if name == "prelude")
     }
 
+    /// Check if this is core:prelude or any core:prelude/* sub-module.
+    #[must_use]
+    pub fn is_core_prelude_family(&self) -> bool {
+        matches!(self, Self::Core { name } if name == "prelude" || name.starts_with("prelude/"))
+    }
+
     /// Check if this is the entry point module.
     #[must_use]
     pub fn is_entry_point(&self) -> bool {

@@ -1,10 +1,10 @@
-struct Box<T> {
+struct Wrapper<T> {
     value: T,
 }
 
-impl<T> Box<T> {
-    fn new(value: T) -> Box<T> {
-        return Box { value };
+impl<T> Wrapper<T> {
+    fn new(value: T) -> Wrapper<T> {
+        return Wrapper { value };
     }
 }
 
@@ -25,16 +25,16 @@ impl<T> Container<T> {
 }
 
 test "container-of-boxes" {
-    let mut c = Container::<Box<i32>>::new();
-    c.add(Box::<i32>::new(42));
+    let mut c = Container::<Wrapper<i32>>::new();
+    c.add(Wrapper::<i32>::new(42));
     assert c.size == 1;
     assert c.items[0].value == 42;
 }
 
 test "array-of-boxes" {
-    let mut arr: Array<Box<i32>> = [];
-    arr.push(Box::<i32>::new(10));
-    arr.push(Box::<i32>::new(20));
+    let mut arr: Array<Wrapper<i32>> = [];
+    arr.push(Wrapper::<i32>::new(10));
+    arr.push(Wrapper::<i32>::new(20));
     assert arr.len() == 2;
     assert arr[0].value == 10;
     assert arr[1].value == 20;
