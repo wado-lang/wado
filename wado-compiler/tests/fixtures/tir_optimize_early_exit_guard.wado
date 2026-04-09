@@ -1,0 +1,28 @@
+// Test: early-exit guard eliminates redundant bounds checks.
+//
+// Pattern: `if pos >= arr.len() { return ...; }; arr[pos]`
+// After the guard, pos < arr.len() is known, so the bounds check
+// inside arr[pos] is always false and gets eliminated.
+
+use { println } from "core:cli";
+
+#[inline(never)]
+fn safe_get(arr: Array<char>, pos: i32) -> char {
+    if pos >= arr.len() {
+        return '?';
+    }
+    return arr[pos];
+}
+
+export fn run() with Stdout {
+    let a: Array<char> = ['a', 'b', 'c'];
+    println(`{safe_get(a, 1)}`);
+    println(`{safe_get(a, 10)}`);
+}
+
+__DATA__
+{
+    "stdout": "b\n?\n",
+    "wir_expect:O2": ["builtin::array_get<char>(arr.repr, pos)"],
+    "wir_not_expect:O2": ["index out of bounds"]
+}

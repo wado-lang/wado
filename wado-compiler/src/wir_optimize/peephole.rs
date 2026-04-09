@@ -641,23 +641,51 @@ fn is_fresh_via_defs(instr: &WirInstr, defs: &IndexMap<String, FreshDef>) -> boo
 /// ```
 fn elide_copy_used_only_for_field_reads(instrs: &mut [WirInstr]) {
     for i in 0..instrs.len() {
-        let var_name = match &instrs[i] {
+        match &instrs[i] {
             WirInstr::LocalSet { name, value }
                 if matches!(value.as_ref(), WirInstr::ValueCopy { .. }) =>
             {
-                name.clone()
+                let var_name = name.clone();
+                let all_reads_only = instrs[i + 1..]
+                    .iter()
+                    .all(|instr| uses_of_var_are_field_reads_only(instr, &var_name));
+                if all_reads_only && let WirInstr::LocalSet { value, .. } = &mut instrs[i] {
+                    let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
+                    if let WirInstr::ValueCopy { expr, .. } = old {
+                        *value.as_mut() = *expr;
+                    }
+                }
             }
-            _ => continue,
-        };
-        let all_reads_only = instrs[i + 1..]
-            .iter()
-            .all(|instr| uses_of_var_are_field_reads_only(instr, &var_name));
-        if all_reads_only && let WirInstr::LocalSet { value, .. } = &mut instrs[i] {
-            let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
-            if let WirInstr::ValueCopy { expr, .. } = old {
-                *value.as_mut() = *expr;
+            _ => {}
+        }
+        // Recurse into nested scopes to find value_copies inside blocks/ifs/loops.
+        elide_copy_field_reads_recurse_into(&mut instrs[i]);
+    }
+}
+
+/// Recurse into all nested instruction bodies to apply field-reads-only copy elision.
+fn elide_copy_field_reads_recurse_into(instr: &mut WirInstr) {
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            elide_copy_used_only_for_field_reads(body);
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            ..
+        } => {
+            elide_copy_used_only_for_field_reads(then_body);
+            if let Some(eb) = else_body {
+                elide_copy_used_only_for_field_reads(eb);
             }
         }
+        WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. } => {
+            elide_copy_field_reads_recurse_into(value);
+        }
+        WirInstr::ValueCopy { expr, .. } => {
+            elide_copy_field_reads_recurse_into(expr);
+        }
+        _ => {}
     }
 }
 
@@ -669,11 +697,16 @@ fn elide_copy_used_only_for_field_reads(instrs: &mut [WirInstr]) {
 /// - `LocalSet { x, StructGet { expr: StructGet { expr: LocalGet(var) } } }` — chained
 /// - `LocalSet { x, StructGet { expr: RefCast { expr: LocalGet(var) } } }` — variant payload
 /// - `LocalSet { x, ValueCopy { expr: StructGet { expr: ... LocalGet(var) } } }` — with copy
+/// - `LocalSet { x, StructNew { fields: [..., LocalGet(var), ...] } }` — stored in new struct
 /// - `RefTest(LocalGet(var))` embedded in a condition — discriminant check
 ///
 /// We intentionally do NOT allow StructGet(var) embedded in arbitrary expressions
 /// (e.g., `var.repr` as a function argument), because the extracted reference
 /// could alias mutable internals of the struct.
+///
+/// Storing `var` as a field in a `StructNew` is safe because the new struct is a
+/// fresh allocation that nobody else references yet. Any future extraction of the
+/// field will go through its own `value_copy`, maintaining value semantics.
 fn uses_of_var_are_field_reads_only(instr: &WirInstr, var_name: &str) -> bool {
     match instr {
         WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. } => {
@@ -690,6 +723,16 @@ fn uses_of_var_are_field_reads_only(instr: &WirInstr, var_name: &str) -> bool {
                     if let WirInstr::StructGet { expr: inner, .. } = expr.as_ref()
                         && expr_roots_at_var(inner, var_name)
                     {
+                        return true;
+                    }
+                    !instr_contains_local_get(value, var_name)
+                }
+                // `x = struct.new T { ..., var, ... }` — var stored as field in fresh struct.
+                WirInstr::StructNew { fields, .. }
+                | WirInstr::ArrayNewFixed {
+                    elements: fields, ..
+                } => {
+                    if var_used_only_as_direct_local_get_in_fields(fields, var_name) {
                         return true;
                     }
                     !instr_contains_local_get(value, var_name)
@@ -739,6 +782,32 @@ fn is_safe_condition_use(instr: &WirInstr, var_name: &str) -> bool {
             is_safe_condition_use(a, var_name) && is_safe_condition_use(b, var_name)
         }
         _ => !instr_contains_local_get(instr, var_name),
+    }
+}
+
+/// Returns `true` if `var_name` appears in `fields` only as direct `LocalGet(var_name)`
+/// expressions (not nested inside other expressions). Other fields must not reference
+/// `var_name` at all.
+fn var_used_only_as_direct_local_get_in_fields(fields: &[WirInstr], var_name: &str) -> bool {
+    let mut found = false;
+    for field in fields {
+        if is_direct_local_get_or_non_null(field, var_name) {
+            found = true;
+        } else if instr_contains_local_get(field, var_name) {
+            return false;
+        }
+    }
+    found
+}
+
+/// Check if an expression is `LocalGet(var)` or `RefAsNonNull(LocalGet(var))`.
+fn is_direct_local_get_or_non_null(instr: &WirInstr, var_name: &str) -> bool {
+    match instr {
+        WirInstr::LocalGet { name, .. } => name == var_name,
+        WirInstr::RefAsNonNull(inner) => {
+            matches!(inner.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
+        }
+        _ => false,
     }
 }
 

@@ -1,0 +1,31 @@
+// Test: short-circuit || eliminates redundant bounds checks.
+//
+// Pattern: `pos >= arr.len() || arr[pos] != ch`
+// The right side of || only executes when `pos < arr.len()`, so the
+// inlined bounds check `if (pos >= arr.used) { panic }` is always false
+// and gets eliminated.
+
+use { println } from "core:cli";
+
+#[inline(never)]
+fn check_char(arr: Array<char>, pos: i32, ch: char) -> bool {
+    if pos >= arr.len() || arr[pos] != ch {
+        return false;
+    }
+    return true;
+}
+
+export fn run() with Stdout {
+    let a: Array<char> = ['h', 'e', 'l', 'l', 'o'];
+    println(`{check_char(a, 0, 'h')}`);
+    println(`{check_char(a, 4, 'o')}`);
+    println(`{check_char(a, 5, 'x')}`);
+    println(`{check_char(a, 2, 'x')}`);
+}
+
+__DATA__
+{
+    "stdout": "true\ntrue\nfalse\nfalse\n",
+    "wir_expect:O2": ["builtin::array_get<char>(arr.repr, pos)"],
+    "wir_not_expect:O2": ["index out of bounds"]
+}
