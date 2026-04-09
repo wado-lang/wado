@@ -23,45 +23,45 @@ Prerequisites: `cc`, `rustc`, `zig`, `node` (managed by `mise install`).
 
 ## Results
 
-Environment: Wado 2026-04-05, wasmtime 42.0.1, gcc 13.3.0, rustc 1.94.1, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
+Environment: Wado 2026-04-09, wasmtime 42.0.1, gcc 13.3.0, rustc 1.94.1, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
 
 ### Compute
 
 | Benchmark              | Baseline      | Baseline (ms) | Wado (ms) | Relative |
 | ---------------------- | ------------- | ------------- | --------- | -------- |
 | Mandelbrot (1024x768)  | C (gcc -O3)   | 131           | 139       | 1.06x    |
-| Prime counting (10M)   | C (gcc -O3)   | 3,284         | 3,307     | 1.01x    |
-| Sieve (10M)            | C (gcc -O3)   | 53            | 81        | 1.53x    |
-| Float-to-string (500K) | Zig (RelFast) | 25            | 43        | 1.72x    |
+| Prime counting (10M)   | C (gcc -O3)   | 3,289         | 3,342     | 1.02x    |
+| Sieve (10M)            | C (gcc -O3)   | 51            | 85        | 1.67x    |
+| Float-to-string (500K) | Zig (RelFast) | 24            | 43        | 1.79x    |
 
 ### Compression (twitter.json 631KB x 10 iterations)
 
 | Operation  | zlib-rs (native) | C zlib (Wasm) | Wado (pure) |
 | ---------- | ---------------- | ------------- | ----------- |
-| Compress   | 29 ms            | 72 ms         | 251 ms      |
-| Decompress | 4 ms             | 10 ms         | 96 ms       |
+| Compress   | 29 ms            | 73 ms         | 248 ms      |
+| Decompress | 4 ms             | 12 ms         | 93 ms       |
 
 ### JSON Parsing (Wado `core:json` vs Rust `serde_json`)
 
 | Dataset         | Rust (native) | Wado (Wasm) | Relative |
 | --------------- | ------------- | ----------- | -------- |
-| twitter (631KB) | 0.789 ms      | 16.542 ms   | 20.96x   |
-| canada (2.3MB)  | 7.972 ms      | 68.244 ms   | 8.56x    |
-| catalog (1.7MB) | 2.347 ms      | 36.112 ms   | 15.38x   |
+| twitter (631KB) | 0.676 ms      | 16.415 ms   | 24.28x   |
+| canada (2.3MB)  | 6.990 ms      | 79.570 ms   | 11.38x   |
+| catalog (1.7MB) | 2.112 ms      | 36.138 ms   | 17.11x   |
 
 ### Parser & Highlighter (13KB SQL, 81 statements x 100 iterations)
 
 | Benchmark        | Baseline (native)   | Baseline (ms) | Wado (ms) | Relative |
 | ---------------- | ------------------- | ------------- | --------- | -------- |
-| SQLite parse     | sqlparser-rs (Rust) | 168           | 2,937     | 17.48x   |
-| Syntax highlight | tree-sitter (Rust)  | 438           | 8,967     | 20.47x   |
+| SQLite parse     | sqlparser-rs (Rust) | 160           | 2,892     | 18.08x   |
+| Syntax highlight | tree-sitter (Rust)  | 446           | 8,795     | 19.72x   |
 
 Syntax highlight Wasm-to-Wasm comparison (both on wasmtime):
 
 | Runtime                        | Time (ms) | Relative |
 | ------------------------------ | --------- | -------- |
-| tree-sitter (Wasm/wasmtime)    | 557       | 1.00x    |
-| **Wado** (Gale, Wasm/wasmtime) | 8,967     | 16.10x   |
+| tree-sitter (Wasm/wasmtime)    | 575       | 1.00x    |
+| **Wado** (Gale, Wasm/wasmtime) | 8,795     | 15.30x   |
 
 ## Profiling
 
