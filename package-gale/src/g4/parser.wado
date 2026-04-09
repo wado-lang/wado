@@ -599,6 +599,21 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
     }
 
     while pos < end {
+        // Detect \p{PropertyName} Unicode property escape
+        if pos + 2 < end && chars[pos] == '\\' && chars[pos + 1] == 'p' && chars[pos + 2] == '{' {
+            pos += 3; // skip \p{
+            let mut prop = String::with_capacity(16);
+            while pos < end && chars[pos] != '}' {
+                prop.push(chars[pos]);
+                pos += 1;
+            }
+            if pos < end {
+                pos += 1; // skip }
+            }
+            expand_unicode_property(&prop, &mut ranges);
+            continue;
+        }
+
         let c = resolve_char(&chars, &mut pos);
         if pos < end && chars[pos] == '-' && pos + 1 < end {
             advance_char(&chars, &mut pos);
@@ -610,6 +625,80 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
     }
 
     return Result::<CharClass, ParseError>::Ok(CharClass { ranges, negated });
+}
+
+/// Expand a Unicode general category property into character ranges.
+/// This is an incomplete approximation covering ASCII and common Unicode blocks.
+fn expand_unicode_property(name: &String, ranges: &mut Array<CharRange>) {
+    if *name == "L" || *name == "Letter" {
+        // Basic Latin
+        ranges.push(CharRange::range('A', 'Z'));
+        ranges.push(CharRange::range('a', 'z'));
+        // Latin-1 Supplement
+        ranges.push(CharRange::range('\u00C0', '\u00D6'));
+        ranges.push(CharRange::range('\u00D8', '\u00F6'));
+        ranges.push(CharRange::range('\u00F8', '\u00FF'));
+        // Latin Extended-A/B
+        ranges.push(CharRange::range('\u0100', '\u024F'));
+        // Greek and Coptic
+        ranges.push(CharRange::range('\u0370', '\u03FF'));
+        // Cyrillic
+        ranges.push(CharRange::range('\u0400', '\u04FF'));
+        // Arabic
+        ranges.push(CharRange::range('\u0600', '\u06FF'));
+        // Devanagari
+        ranges.push(CharRange::range('\u0900', '\u097F'));
+        // CJK Unified Ideographs
+        ranges.push(CharRange::range('\u4E00', '\u9FFF'));
+        // Hiragana
+        ranges.push(CharRange::range('\u3040', '\u309F'));
+        // Katakana
+        ranges.push(CharRange::range('\u30A0', '\u30FF'));
+        // Hangul Syllables
+        ranges.push(CharRange::range('\uAC00', '\uD7AF'));
+    } else if *name == "Nl" || *name == "Letter_Number" {
+        // Roman Numerals
+        ranges.push(CharRange::range('\u2160', '\u2188'));
+        // Runic
+        ranges.push(CharRange::range('\u16EE', '\u16F0'));
+    } else if *name == "Mn" || *name == "Nonspacing_Mark" {
+        // Combining Diacritical Marks
+        ranges.push(CharRange::range('\u0300', '\u036F'));
+        // Combining Diacritical Marks Extended
+        ranges.push(CharRange::range('\u1AB0', '\u1AFF'));
+        // Devanagari combining marks
+        ranges.push(CharRange::range('\u0901', '\u0902'));
+        ranges.push(CharRange::single('\u093C'));
+        ranges.push(CharRange::range('\u0941', '\u0948'));
+        ranges.push(CharRange::single('\u094D'));
+    } else if *name == "Mc" || *name == "Spacing_Mark" {
+        ranges.push(CharRange::single('\u0903'));
+        ranges.push(CharRange::range('\u093E', '\u0940'));
+        ranges.push(CharRange::range('\u0949', '\u094C'));
+    } else if *name == "Nd" || *name == "Decimal_Number" {
+        ranges.push(CharRange::range('0', '9'));
+        // Arabic-Indic
+        ranges.push(CharRange::range('\u0660', '\u0669'));
+        ranges.push(CharRange::range('\u06F0', '\u06F9'));
+        // Devanagari
+        ranges.push(CharRange::range('\u0966', '\u096F'));
+    } else if *name == "Pc" || *name == "Connector_Punctuation" {
+        ranges.push(CharRange::single('_'));
+        ranges.push(CharRange::range('\u203F', '\u2040'));
+        ranges.push(CharRange::single('\u2054'));
+        ranges.push(CharRange::range('\uFE33', '\uFE34'));
+        ranges.push(CharRange::range('\uFE4D', '\uFE4F'));
+        ranges.push(CharRange::single('\uFF3F'));
+    } else if *name == "Zs" || *name == "Space_Separator" {
+        ranges.push(CharRange::single(' '));
+        ranges.push(CharRange::single('\u00A0'));
+        ranges.push(CharRange::single('\u1680'));
+        ranges.push(CharRange::range('\u2000', '\u200A'));
+        ranges.push(CharRange::single('\u202F'));
+        ranges.push(CharRange::single('\u205F'));
+        ranges.push(CharRange::single('\u3000'));
+    }
+    // Unknown properties are silently ignored (empty expansion)
 }
 
 fn intern_mode(mode_names: &mut Array<String>, name: &String) -> i32 {

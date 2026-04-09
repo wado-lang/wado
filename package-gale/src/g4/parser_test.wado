@@ -166,6 +166,81 @@ HEX : [0-9a-fA-F] ;";
     }
 }
 
+test "unicode property class L" {
+    let input = "grammar Test;
+ID : [\\p{L}] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.negated == false;
+        // \p{L} should expand to at least A-Z, a-z
+        let mut has_upper = false;
+        let mut has_lower = false;
+        for let r of &cc.ranges {
+            if r.start == 'A' && r.end == 'Z' { has_upper = true; }
+            if r.start == 'a' && r.end == 'z' { has_lower = true; }
+        }
+        assert has_upper, "\\p{L} must include A-Z";
+        assert has_lower, "\\p{L} must include a-z";
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "unicode property class Nd" {
+    let input = "grammar Test;
+DIGIT : [\\p{Nd}] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        let mut has_digits = false;
+        for let r of &cc.ranges {
+            if r.start == '0' && r.end == '9' { has_digits = true; }
+        }
+        assert has_digits, "\\p{Nd} must include 0-9";
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "unicode property class Zs" {
+    let input = "grammar Test;
+WS : [\\p{Zs}] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        let mut has_space = false;
+        for let r of &cc.ranges {
+            if r.start <= ' ' && ' ' <= r.end { has_space = true; }
+        }
+        assert has_space, "\\p{Zs} must include U+0020 (space)";
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "unicode property mixed with literal ranges" {
+    let input = "grammar Test;
+ID : [\\p{L}0-9_] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        let mut has_letter = false;
+        let mut has_digit = false;
+        let mut has_underscore = false;
+        for let r of &cc.ranges {
+            if r.start == 'A' && r.end == 'Z' { has_letter = true; }
+            if r.start == '0' && r.end == '9' { has_digit = true; }
+            if r.start == '_' && r.end == '_' { has_underscore = true; }
+        }
+        assert has_letter, "should include letters from \\p{L}";
+        assert has_digit, "should include 0-9";
+        assert has_underscore, "should include _";
+    } else {
+        panic("expected CharClass");
+    }
+}
+
 test "negated char class" {
     let input = "grammar Test;
 SAFE : [^\"\\\\] ;";

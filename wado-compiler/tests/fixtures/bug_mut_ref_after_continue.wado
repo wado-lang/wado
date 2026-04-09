@@ -1,0 +1,34 @@
+use { println } from "core:cli";
+
+fn advance(items: &Array<i32>, pos: &mut i32) -> i32 {
+    let val = items[*pos];
+    *pos += 1;
+    return val;
+}
+
+export fn run() with Stdout {
+    let items: Array<i32> = [10, 20, 30, 40, 50];
+    let mut pos = 0;
+
+    // Bug: after a `continue` in a while loop, calling a function
+    // with &mut local_var loses the mutation side-effect.
+    while pos < items.len() {
+        if items[pos] < 20 {
+            pos += 1;
+            continue;
+        }
+        let first = advance(&items, &mut pos);
+        assert first == 20, `expected first=20, got {first}`;
+        assert pos == 2, `expected pos=2, got {pos}`;
+
+        let second = advance(&items, &mut pos);
+        assert second == 30, `expected second=30, got {second}`;
+        assert pos == 3, `expected pos=3, got {pos}`;
+        break;
+    }
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
