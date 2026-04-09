@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775655074978,
+  "lastUpdate": 1775696506886,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10997,6 +10997,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19565,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7e5a19555569775556c8e72ef575bff514991b84",
+          "message": "Merge pull request #792 from wado-lang/claude/link-phase-ordering-0McqK\n\nMove link phase before monomorphize and lower",
+          "timestamp": "2026-04-09T09:58:18+09:00",
+          "tree_id": "b82c63d1aa72e2b00666900277e1731927b47c39",
+          "url": "https://github.com/wado-lang/wado/commit/7e5a19555569775556c8e72ef575bff514991b84"
+        },
+        "date": 1775696506633,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19355,
             "unit": "bytes"
           }
         ]
