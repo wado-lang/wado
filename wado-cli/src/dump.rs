@@ -22,7 +22,6 @@ pub struct DumpOptions {
     pub show_tir_monomorphized: bool,
     pub show_tir_lowered: bool,
     pub show_wir: bool,
-    pub inspect: bool,
     pub opt_level: OptLevel,
     pub inline_threshold: Option<usize>,
     pub opt_iterations: Option<u32>,
@@ -41,7 +40,6 @@ enum Opt {
     TirMonomorphized,
     TirLowered,
     Wir,
-    Inspect,
     OptLevel,
     InlineThreshold,
     OptIterations,
@@ -61,7 +59,6 @@ impl Opt {
         Self::TirMonomorphized,
         Self::TirLowered,
         Self::Wir,
-        Self::Inspect,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
@@ -136,12 +133,6 @@ impl Opt {
                 value: None,
                 desc: "Show final WIR (after optimization, affected by -Ox) [default]",
             },
-            Self::Inspect => args::OptSpec {
-                long: Some("inspect"),
-                short: None,
-                value: None,
-                desc: "Show internal Debug format instead of unparsed source",
-            },
             Self::OptLevel => args::OptSpec {
                 long: None,
                 short: Some('O'),
@@ -193,14 +184,6 @@ fn format_usage() -> String {
     )
     .unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Display Options:").unwrap();
-    write!(
-        buf,
-        "{}",
-        args::format_opts_help(&[Opt::Inspect], |o| o.spec())
-    )
-    .unwrap();
-    writeln!(buf).unwrap();
     writeln!(buf, "Optimization Level:").unwrap();
     writeln!(buf, "  -O0          No optimizations").unwrap();
     writeln!(
@@ -245,7 +228,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut show_tir_monomorphized = false;
     let mut show_tir_lowered = false;
     let mut show_wir = false;
-    let mut inspect = false;
     let mut opt_level = OptLevel::O2;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
@@ -298,7 +280,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                     show_wir = true;
                     any_phase = true;
                 }
-                Opt::Inspect => inspect = true,
                 Opt::OptLevel => {
                     let level = args::require_value(&mut parser)
                         .map_err(|_| CliExit::error("-O requires a level (0, 1, 2, 3, or s)"))?;
@@ -357,7 +338,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         show_tir_monomorphized,
         show_tir_lowered,
         show_wir,
-        inspect,
         opt_level,
         inline_threshold,
         opt_iterations,
@@ -428,43 +408,19 @@ async fn run_single(opts: &DumpOptions, input: &str) {
 
     // AST section (Parser phase)
     if opts.show_ast {
-        if opts.inspect {
-            println!("=== AST (inspect) ===");
-            for (i, item) in result.ast.items.iter().enumerate() {
-                println!("  [{i}] {item:#?}");
-            }
-            if let Some(data) = result.ast.data_section() {
-                println!();
-                println!("--- Data Section ---");
-                println!("{data}");
-            }
-        } else {
-            println!("=== AST ===");
-            let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
-            let unparsed = unparser.unparse(&result.ast);
-            println!("{unparsed}");
-        }
+        println!("=== AST ===");
+        let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
+        let unparsed = unparser.unparse(&result.ast);
+        println!("{unparsed}");
         println!();
     }
 
     // Desugared AST section
     if opts.show_desugared {
-        if opts.inspect {
-            println!("=== Desugared AST (inspect) ===");
-            for (i, item) in result.desugared_ast.items.iter().enumerate() {
-                println!("  [{i}] {item:#?}");
-            }
-            if let Some(data) = result.desugared_ast.data_section() {
-                println!();
-                println!("--- Data Section ---");
-                println!("{data}");
-            }
-        } else {
-            println!("=== Desugared AST ===");
-            let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
-            let unparsed = unparser.unparse(&result.desugared_ast);
-            println!("{unparsed}");
-        }
+        println!("=== Desugared AST ===");
+        let unparser = wado_compiler::unparse::Unparser::new(&result.comments);
+        let unparsed = unparser.unparse(&result.desugared_ast);
+        println!("{unparsed}");
         println!();
     }
 
@@ -593,46 +549,37 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             // Type table is shared across modules; grab from the first one
             if let Some((_, first_module)) = tir_modules.iter().next() {
                 let type_table = first_module.type_table.borrow();
-                if opts.inspect {
-                    println!("=== Types (inspect) ===");
-                    for (id, ty) in type_table.all_types() {
-                        println!("  [{id}] {ty:#?}");
-                    }
-                } else {
-                    println!("=== Types ===");
-                    for (id, ty) in type_table.all_types() {
-                        let name = type_table.type_name(*id);
-                        let kind = match ty {
-                            wado_compiler::tir::ResolvedType::Primitive(_) => "primitive",
-                            wado_compiler::tir::ResolvedType::Unit => "unit",
-                            wado_compiler::tir::ResolvedType::Never => "never",
-                            wado_compiler::tir::ResolvedType::Struct { .. } => "struct",
-                            wado_compiler::tir::ResolvedType::Enum { .. } => "enum",
-                            wado_compiler::tir::ResolvedType::Variant { .. } => "variant",
-                            wado_compiler::tir::ResolvedType::Newtype { .. } => "newtype",
-                            wado_compiler::tir::ResolvedType::Resource { .. }
-                            | wado_compiler::tir::ResolvedType::GenericResource { .. } => {
-                                "resource"
-                            }
-                            wado_compiler::tir::ResolvedType::Ref(_) => "ref",
-                            wado_compiler::tir::ResolvedType::MutRef(_) => "mut_ref",
-                            wado_compiler::tir::ResolvedType::Function { .. } => "fn",
-                            wado_compiler::tir::ResolvedType::BuiltinArray(_) => "builtin_array",
-                            wado_compiler::tir::ResolvedType::Reactive(_) => "reactive",
-                            wado_compiler::tir::ResolvedType::TypeParam { .. } => "type_param",
-                            wado_compiler::tir::ResolvedType::GenericInstance { .. } => {
-                                "generic_instance"
-                            }
-                            wado_compiler::tir::ResolvedType::AssocTypeProjection { .. } => {
-                                "assoc_type"
-                            }
-                            wado_compiler::tir::ResolvedType::Flags { .. } => "flags",
-                            wado_compiler::tir::ResolvedType::TypePack { .. } => "type_pack",
-                            wado_compiler::tir::ResolvedType::Unknown => "unknown",
-                            wado_compiler::tir::ResolvedType::Error => "error",
-                        };
-                        println!("  [{id}] {kind}: {name}");
-                    }
+                println!("=== Types ===");
+                for (id, ty) in type_table.all_types() {
+                    let name = type_table.type_name(*id);
+                    let kind = match ty {
+                        wado_compiler::tir::ResolvedType::Primitive(_) => "primitive",
+                        wado_compiler::tir::ResolvedType::Unit => "unit",
+                        wado_compiler::tir::ResolvedType::Never => "never",
+                        wado_compiler::tir::ResolvedType::Struct { .. } => "struct",
+                        wado_compiler::tir::ResolvedType::Enum { .. } => "enum",
+                        wado_compiler::tir::ResolvedType::Variant { .. } => "variant",
+                        wado_compiler::tir::ResolvedType::Newtype { .. } => "newtype",
+                        wado_compiler::tir::ResolvedType::Resource { .. }
+                        | wado_compiler::tir::ResolvedType::GenericResource { .. } => "resource",
+                        wado_compiler::tir::ResolvedType::Ref(_) => "ref",
+                        wado_compiler::tir::ResolvedType::MutRef(_) => "mut_ref",
+                        wado_compiler::tir::ResolvedType::Function { .. } => "fn",
+                        wado_compiler::tir::ResolvedType::BuiltinArray(_) => "builtin_array",
+                        wado_compiler::tir::ResolvedType::Reactive(_) => "reactive",
+                        wado_compiler::tir::ResolvedType::TypeParam { .. } => "type_param",
+                        wado_compiler::tir::ResolvedType::GenericInstance { .. } => {
+                            "generic_instance"
+                        }
+                        wado_compiler::tir::ResolvedType::AssocTypeProjection { .. } => {
+                            "assoc_type"
+                        }
+                        wado_compiler::tir::ResolvedType::Flags { .. } => "flags",
+                        wado_compiler::tir::ResolvedType::TypePack { .. } => "type_pack",
+                        wado_compiler::tir::ResolvedType::Unknown => "unknown",
+                        wado_compiler::tir::ResolvedType::Error => "error",
+                    };
+                    println!("  [{id}] {kind}: {name}");
                 }
             }
         } else {
@@ -645,22 +592,12 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     // TIR resolved section (after type resolution, before lowering)
     if opts.show_tir_resolved {
         if let Some(ref tir_modules) = result.tir_modules {
-            if opts.inspect {
-                println!("=== TIR Resolved (inspect) ===");
-                for (module_source, module) in tir_modules {
-                    let path_str = module_source.to_string();
-                    println!("--- Module: {path_str} ---");
-                    println!("{module:#?}");
-                    println!();
-                }
-            } else {
-                println!("=== TIR Resolved ===");
-                for (module_source, module) in tir_modules {
-                    let path_str = module_source.to_string();
-                    println!("// --- Module: {path_str} ---");
-                    let unparsed = wado_compiler::unparse::unparse_tir(module);
-                    println!("{unparsed}");
-                }
+            println!("=== TIR Resolved ===");
+            for (module_source, module) in tir_modules {
+                let path_str = module_source.to_string();
+                println!("// --- Module: {path_str} ---");
+                let unparsed = wado_compiler::unparse::unparse_tir(module);
+                println!("{unparsed}");
             }
         } else {
             println!("=== TIR Resolved ===");
@@ -671,17 +608,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
 
     // TIR monomorphized section
     if opts.show_tir_monomorphized {
-        if opts.inspect {
-            if let Some(ref text) = result.monomorphized_tir_inspect {
-                println!("=== TIR Monomorphized (inspect) ===");
-                println!("{text}");
-                println!();
-            } else {
-                println!("=== TIR Monomorphized ===");
-                println!("(Monomorphization failed or not available)");
-                println!();
-            }
-        } else if let Some(ref text) = result.monomorphized_tir_text {
+        if let Some(ref text) = result.monomorphized_tir_text {
             println!("=== TIR Monomorphized ===");
             println!("{text}");
         } else {
@@ -693,17 +620,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
 
     // TIR lowered section (after lowering, before optimization)
     if opts.show_tir_lowered {
-        if opts.inspect {
-            if let Some(ref text) = result.lowered_tir_inspect {
-                println!("=== TIR Lowered (inspect) ===");
-                println!("{text}");
-                println!();
-            } else {
-                println!("=== TIR Lowered ===");
-                println!("(TIR lowering failed or not available)");
-                println!();
-            }
-        } else if let Some(ref text) = result.lowered_tir_text {
+        if let Some(ref text) = result.lowered_tir_text {
             println!("=== TIR Lowered ===");
             println!("{text}");
         } else {
@@ -716,14 +633,9 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     // Final TIR section (after optimization)
     if opts.show_tir {
         if let Some(ref project) = result.optimized_package {
-            if opts.inspect {
-                println!("=== TIR (inspect) ===");
-                println!("{project:#?}");
-            } else {
-                println!("=== TIR ===");
-                let unparsed = wado_compiler::unparse::unparse_flat_package(project);
-                println!("{unparsed}");
-            }
+            println!("=== TIR ===");
+            let unparsed = wado_compiler::unparse::unparse_flat_package(project);
+            println!("{unparsed}");
             println!();
         } else {
             println!("=== TIR ===");
@@ -735,16 +647,11 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     // Final WIR section (after optimization)
     if opts.show_wir {
         if let Some(ref wir_package) = result.wir_package {
-            if opts.inspect {
-                println!("=== WIR (inspect) ===");
-                println!("{wir_package:#?}");
+            let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_package, None);
+            if unparsed.is_empty() {
+                println!("(empty module)");
             } else {
-                let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_package, None);
-                if unparsed.is_empty() {
-                    println!("(empty module)");
-                } else {
-                    print!("{unparsed}");
-                }
+                print!("{unparsed}");
             }
             println!();
         } else {

@@ -121,12 +121,8 @@ pub struct DumpResult {
     pub tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
     /// Monomorphized TIR snapshot (unparsed text)
     pub monomorphized_tir_text: Option<String>,
-    /// Monomorphized TIR snapshot (inspect/debug text)
-    pub monomorphized_tir_inspect: Option<String>,
     /// Lowered TIR snapshot (unparsed text)
     pub lowered_tir_text: Option<String>,
-    /// Lowered TIR snapshot (inspect/debug text)
-    pub lowered_tir_inspect: Option<String>,
     /// Linked package after optimization (contains usage analysis results)
     pub optimized_package: Option<FlatPackage>,
     /// WIR module (after `tir_to_wir` translation)
@@ -584,9 +580,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // matching the compile_with_options pipeline.
     let (
         monomorphized_tir_text,
-        monomorphized_tir_inspect,
         lowered_tir_text,
-        lowered_tir_inspect,
         optimized_package,
         wir_package,
     ) = if let Some(resolved_modules) = tir_modules_by_source.clone() {
@@ -654,16 +648,16 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             monomorphize(&mut flat);
         }
 
+        // Snapshot monomorphized state (only unparse; Debug format is deferred)
         let mono_text = Some(unparse::unparse_flat_package(&flat));
-        let mono_inspect = Some(format!("{flat:#?}"));
 
         // Lower
         {
             let _span = logger.span("lower");
             lower(&mut flat);
         }
+        // Snapshot lowered state (only unparse; Debug format is deferred)
         let lower_text = Some(unparse::unparse_flat_package(&flat));
-        let lower_inspect = Some(format!("{flat:#?}"));
 
         // Optimize
         let flat = {
@@ -681,14 +675,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 
         (
             mono_text,
-            mono_inspect,
             lower_text,
-            lower_inspect,
             optimized,
             wir_package,
         )
     } else {
-        (None, None, None, None, None, None)
+        (None, None, None, None)
     };
 
     Ok(DumpResult {
@@ -702,9 +694,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         entry_module_source: load_result.entry_module_source,
         tir_modules: tir_modules_by_source,
         monomorphized_tir_text,
-        monomorphized_tir_inspect,
         lowered_tir_text,
-        lowered_tir_inspect,
         optimized_package,
         wir_package,
         comments: comment_map,

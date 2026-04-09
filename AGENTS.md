@@ -79,7 +79,7 @@ wado serve --addr 127.0.0.1:3000 file.wado  # serve on custom address
 ### Dump Command
 
 Use `wado dump` to inspect compiler internal state for debugging.
-Output defaults to unparsed Wado source code; use `--inspect` for internal Debug format. See `wado dump --help` for the full help.
+See `wado dump --help` for the full help.
 
 ```sh
 wado dump file.wado                  # show final WIR (default)

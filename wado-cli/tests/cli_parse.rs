@@ -458,14 +458,6 @@ fn dump_single_phase() {
 }
 
 #[test]
-fn dump_inspect() {
-    let parser = Parser::from_args(&["--ast", "--inspect", "input.wado"]);
-    let opts = wado_cli::dump::parse_args(parser).unwrap();
-    assert!(opts.show_ast);
-    assert!(opts.inspect);
-}
-
-#[test]
 fn dump_opt_level() {
     let parser = Parser::from_args(&["--tir", "-O3", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
