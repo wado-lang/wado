@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775726126688,
+  "lastUpdate": 1775733594172,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11060,6 +11060,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/95ba162bf5024944d951910373a0dff5acc6e021"
         },
         "date": 1775726126429,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e56f6bf6376c59a57caf2355e4e5f6de6938a15",
+          "message": "Merge pull request #794 from wado-lang/claude/fix-http-get-warnings-Oz3Rv\n\nFix unresolved Inspect/Display for WASI-defined types",
+          "timestamp": "2026-04-09T20:16:23+09:00",
+          "tree_id": "96c2a8b1bd01b94edde7772947069bc036cc4e5c",
+          "url": "https://github.com/wado-lang/wado/commit/5e56f6bf6376c59a57caf2355e4e5f6de6938a15"
+        },
+        "date": 1775733594124,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
