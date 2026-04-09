@@ -4,6 +4,7 @@
 /// parsing is not supported without predicate evaluation. These tests
 /// verify tokenization of various Rust constructs.
 use rust from "./golden/rust.wado";
+use { normalize_tree } from "./golden/rust.wado";
 
 test "tokenize fn declaration" {
     let tokens = rust::tokenize(&"fn main() {}");
@@ -87,4 +88,251 @@ test "parse fails with identifiers" {
     // due to missing semantic predicates for identifier tokenization.
     let result = rust::parse(&"fn main() {}");
     assert result matches { Err(_) }, "expected parse to fail due to missing semantic predicates";
+}
+
+// --- S-expression tree tests ---
+// The Rust lexer cannot handle ASCII identifiers or space characters due to
+// unsupported Unicode property classes (\p{L}, \p{Zs}). Curly braces are also
+// misclassified. These tests use newlines as whitespace and build expressions
+// inside `const _: Self = EXPR;` to exercise complex parser paths.
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = rust::parse(input).unwrap();
+    let tree = rust::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "tree: operator precedence chain" {
+    // 1 + (2*3) - 4: mul binds tighter than add/sub
+    assert_tree(&"const\n_:\nSelf\n=\n1+2*3-4;", &"
+        (crate (item (visItem (constantItem
+            const _ :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment Self)))))))
+            =
+            (expression
+                (expression
+                    (expression (literalExpression 1))
+                    +
+                    (expression
+                        (expression (literalExpression 2))
+                        *
+                        (expression (literalExpression 3))))
+                -
+                (expression (literalExpression 4)))
+            ;))))
+    ");
+}
+
+test "tree: deeply nested grouping" {
+    assert_tree(&"const\n_:\nSelf\n=\n((((42))));", &"
+        (crate (item (visItem (constantItem
+            const _ :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment Self)))))))
+            =
+            (expression (
+                (expression (
+                    (expression (
+                        (expression (
+                            (expression (literalExpression 42))
+                        ))
+                    ))
+                ))
+            ))
+            ;))))
+    ");
+}
+
+test "tree: negation wraps boolean and comparison" {
+    // ! greedily wraps the entire RHS: !(true && (1 != 2) || false)
+    assert_tree(&"const\n_:\nSelf\n=\n!true&&1!=2||false;", &"
+        (crate (item (visItem (constantItem
+            const _ :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment Self)))))))
+            =
+            (expression !
+                (expression
+                    (expression
+                        (expression (literalExpression true))
+                        &&
+                        (expression
+                            (expression (literalExpression 1))
+                            (comparisonOperator !=)
+                            (expression (literalExpression 2))))
+                    ||
+                    (expression (literalExpression false))))
+            ;))))
+    ");
+}
+
+test "tree: array with complex element expressions" {
+    assert_tree(&"const\n_:\nSelf\n=\n[1+2,!true,&42];", &"
+        (crate (item (visItem (constantItem
+            const _ :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment Self)))))))
+            =
+            (expression [
+                (arrayElements
+                    (expression
+                        (expression (literalExpression 1))
+                        +
+                        (expression (literalExpression 2)))
+                    ,
+                    (expression ! (expression (literalExpression true)))
+                    ,
+                    (expression & (expression (literalExpression 42))))
+            ])
+            ;))))
+    ");
+}
+
+test "tree: bitwise operator precedence" {
+    // & > ^ > |, and + > all bitwise: (1 ^ (2 & 3)) | (4 + 5)
+    assert_tree(&"const\n_:\nSelf\n=\n1^2&3|4+5;", &"
+        (crate (item (visItem (constantItem
+            const _ :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment Self)))))))
+            =
+            (expression
+                (expression
+                    (expression (literalExpression 1))
+                    ^
+                    (expression
+                        (expression (literalExpression 2))
+                        &
+                        (expression (literalExpression 3))))
+                |
+                (expression
+                    (expression (literalExpression 4))
+                    +
+                    (expression (literalExpression 5))))
+            ;))))
+    ");
+}
+
+test "tree: closure returning closure with typed param" {
+    assert_tree(&"const\n_:\nSelf\n=\n|_:\nSelf|\n||42;", &"
+        (crate (item (visItem (constantItem
+            const _ :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment Self)))))))
+            =
+            (expression (closureExpression
+                |
+                (closureParameters
+                    (closureParam
+                        (pattern (patternNoTopAlt (patternWithoutRange (wildcardPattern _))))
+                        :
+                        (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                            (typePath (typePathSegment (pathIdentSegment Self)))))))))
+                |
+                (expression (closureExpression || (expression (literalExpression 42))))))
+            ;))))
+    ");
+}
+
+test "tree: alternating reference and dereference" {
+    assert_tree(&"const\n_:\nSelf\n=\n&*&*&42;", &"
+        (crate (item (visItem (constantItem
+            const _ :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment Self)))))))
+            =
+            (expression &
+                (expression *
+                    (expression &
+                        (expression *
+                            (expression &
+                                (expression (literalExpression 42)))))))
+            ;))))
+    ");
+}
+
+test "tree: array index with error propagation" {
+    assert_tree(&"const\n_:\nSelf\n=\n[1,2][0]??;", &"
+        (crate (item (visItem (constantItem
+            const _ :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment Self)))))))
+            =
+            (expression
+                (expression
+                    (expression
+                        (expression [
+                            (arrayElements
+                                (expression (literalExpression 1))
+                                ,
+                                (expression (literalExpression 2)))
+                        ])
+                        [ (expression (literalExpression 0)) ])
+                    ?)
+                ?)
+            ;))))
+    ");
+}
+
+test "tree: multiple items with diverse constructs" {
+    assert_tree(&"use\n::*;\nconst\n_:\nSelf\n=\n&[1][0];\nconst\n_:\nSelf\n=\n42\nas\nSelf;", &"
+        (crate
+            (item (visItem (useDeclaration use (useTree :: *) ;)))
+            (item (visItem (constantItem
+                const _ :
+                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment Self)))))))
+                =
+                (expression &
+                    (expression
+                        (expression [ (arrayElements (expression (literalExpression 1))) ])
+                        [ (expression (literalExpression 0)) ]))
+                ;)))
+            (item (visItem (constantItem
+                const _ :
+                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment Self)))))))
+                =
+                (expression
+                    (expression (literalExpression 42))
+                    as
+                    (typeNoBounds (traitObjectTypeOneBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment Self)))))))
+                ;))))
+    ");
+}
+
+test "tree: move closure with ref body and comparison in const" {
+    // move |_: Self| 1+2 == 3+4
+    assert_tree(&"const\n_:\nSelf\n=\nmove\n|_:\nSelf|\n1+2==3+4;", &"
+        (crate (item (visItem (constantItem
+            const _ :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment Self)))))))
+            =
+            (expression (closureExpression
+                move
+                |
+                (closureParameters
+                    (closureParam
+                        (pattern (patternNoTopAlt (patternWithoutRange (wildcardPattern _))))
+                        :
+                        (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                            (typePath (typePathSegment (pathIdentSegment Self)))))))))
+                |
+                (expression
+                    (expression
+                        (expression (literalExpression 1))
+                        +
+                        (expression (literalExpression 2)))
+                    (comparisonOperator ==)
+                    (expression
+                        (expression (literalExpression 3))
+                        +
+                        (expression (literalExpression 4))))))
+            ;))))
+    ");
 }
