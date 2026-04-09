@@ -1,10 +1,12 @@
 /// Driver test for the Rust grammar parser.
 ///
-/// The Rust grammar uses semantic predicates for disambiguation, so full
-/// parsing is not supported without predicate evaluation. These tests
-/// verify tokenization of various Rust constructs.
+/// The Rust grammar uses semantic predicates for disambiguation, so some
+/// constructs (fn, match, use paths) are not supported without predicate
+/// evaluation. These tests cover items and expressions that parse correctly.
 use rust from "./golden/rust.wado";
 use { normalize_tree } from "./golden/rust.wado";
+
+// --- Tokenize tests ---
 
 test "tokenize fn declaration" {
     let tokens = rust::tokenize(&"fn main() {}");
@@ -70,31 +72,23 @@ test "tokenize macro invocation" {
     assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
 }
 
-// --- Parser tests ---
-// The Rust lexer uses semantic predicates to distinguish identifiers from
-// keywords, so most identifiers are tokenized incorrectly (e.g., "main" becomes
-// separate tokens). Only inputs without identifiers can parse successfully.
+// --- Parse tests ---
 
 test "parse empty crate" {
-    // Empty input is valid: crate rule is `innerAttribute* item* EOF`
     let result = rust::parse(&"");
     if let Err(e) = &result {
         panic(`parse failed: {e.message}`);
     }
 }
 
-test "parse fails with identifiers" {
-    // "fn main() {}" fails because the lexer splits "main" into fragments
-    // due to missing semantic predicates for identifier tokenization.
+test "fn keyword requires semantic predicates" {
+    // "fn main() {}" fails because the Rust grammar uses semantic predicates
+    // for the `fn` keyword that gale does not evaluate.
     let result = rust::parse(&"fn main() {}");
     assert result matches { Err(_) }, "expected parse to fail due to missing semantic predicates";
 }
 
 // --- S-expression tree tests ---
-// The Rust lexer cannot handle ASCII identifiers or space characters due to
-// unsupported Unicode property classes (\p{L}, \p{Zs}). Curly braces are also
-// misclassified. These tests use newlines as whitespace and build expressions
-// inside `const _: Self = EXPR;` to exercise complex parser paths.
 
 fn assert_tree(input: &String, expected: &String) {
     let root = rust::parse(input).unwrap();
@@ -104,13 +98,14 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
 }
 
-test "tree: operator precedence chain" {
-    // 1 + (2*3) - 4: mul binds tighter than add/sub
-    assert_tree(&"const\n_:\nSelf\n=\n1+2*3-4;", &"
+// Expression tests
+
+test "tree: operator precedence" {
+    assert_tree(&"const X: i32 = 1 + 2 * 3 - 4;", &"
         (crate (item (visItem (constantItem
-            const _ :
+            const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath (typePathSegment (pathIdentSegment Self)))))))
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
             =
             (expression
                 (expression
@@ -127,11 +122,11 @@ test "tree: operator precedence chain" {
 }
 
 test "tree: deeply nested grouping" {
-    assert_tree(&"const\n_:\nSelf\n=\n((((42))));", &"
+    assert_tree(&"const X: i32 = ((((42))));", &"
         (crate (item (visItem (constantItem
-            const _ :
+            const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath (typePathSegment (pathIdentSegment Self)))))))
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
             =
             (expression (
                 (expression (
@@ -146,13 +141,12 @@ test "tree: deeply nested grouping" {
     ");
 }
 
-test "tree: negation wraps boolean and comparison" {
-    // ! greedily wraps the entire RHS: !(true && (1 != 2) || false)
-    assert_tree(&"const\n_:\nSelf\n=\n!true&&1!=2||false;", &"
+test "tree: negation scoping with boolean and comparison" {
+    assert_tree(&"const X: i32 = !true && 1 != 2 || false;", &"
         (crate (item (visItem (constantItem
-            const _ :
+            const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath (typePathSegment (pathIdentSegment Self)))))))
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
             =
             (expression !
                 (expression
@@ -169,12 +163,12 @@ test "tree: negation wraps boolean and comparison" {
     ");
 }
 
-test "tree: array with complex element expressions" {
-    assert_tree(&"const\n_:\nSelf\n=\n[1+2,!true,&42];", &"
+test "tree: array with complex elements" {
+    assert_tree(&"const X: i32 = [1 + 2, !true, &42];", &"
         (crate (item (visItem (constantItem
-            const _ :
+            const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath (typePathSegment (pathIdentSegment Self)))))))
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
             =
             (expression [
                 (arrayElements
@@ -192,12 +186,11 @@ test "tree: array with complex element expressions" {
 }
 
 test "tree: bitwise operator precedence" {
-    // & > ^ > |, and + > all bitwise: (1 ^ (2 & 3)) | (4 + 5)
-    assert_tree(&"const\n_:\nSelf\n=\n1^2&3|4+5;", &"
+    assert_tree(&"const X: i32 = 1 ^ 2 & 3 | 4 + 5;", &"
         (crate (item (visItem (constantItem
-            const _ :
+            const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath (typePathSegment (pathIdentSegment Self)))))))
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
             =
             (expression
                 (expression
@@ -216,21 +209,22 @@ test "tree: bitwise operator precedence" {
     ");
 }
 
-test "tree: closure returning closure with typed param" {
-    assert_tree(&"const\n_:\nSelf\n=\n|_:\nSelf|\n||42;", &"
+test "tree: closure returning closure" {
+    assert_tree(&"const X: i32 = |x: i32| || 42;", &"
         (crate (item (visItem (constantItem
-            const _ :
+            const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath (typePathSegment (pathIdentSegment Self)))))))
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
             =
             (expression (closureExpression
                 |
                 (closureParameters
                     (closureParam
-                        (pattern (patternNoTopAlt (patternWithoutRange (wildcardPattern _))))
+                        (pattern (patternNoTopAlt (patternWithoutRange
+                            (identifierPattern (identifier x)))))
                         :
                         (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                            (typePath (typePathSegment (pathIdentSegment Self)))))))))
+                            (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))))
                 |
                 (expression (closureExpression || (expression (literalExpression 42))))))
             ;))))
@@ -238,11 +232,11 @@ test "tree: closure returning closure with typed param" {
 }
 
 test "tree: alternating reference and dereference" {
-    assert_tree(&"const\n_:\nSelf\n=\n&*&*&42;", &"
+    assert_tree(&"const X: i32 = &*&*&42;", &"
         (crate (item (visItem (constantItem
-            const _ :
+            const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath (typePathSegment (pathIdentSegment Self)))))))
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
             =
             (expression &
                 (expression *
@@ -255,11 +249,11 @@ test "tree: alternating reference and dereference" {
 }
 
 test "tree: array index with error propagation" {
-    assert_tree(&"const\n_:\nSelf\n=\n[1,2][0]??;", &"
+    assert_tree(&"const X: i32 = [1, 2][0]??;", &"
         (crate (item (visItem (constantItem
-            const _ :
+            const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath (typePathSegment (pathIdentSegment Self)))))))
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
             =
             (expression
                 (expression
@@ -277,14 +271,14 @@ test "tree: array index with error propagation" {
     ");
 }
 
-test "tree: multiple items with diverse constructs" {
-    assert_tree(&"use\n::*;\nconst\n_:\nSelf\n=\n&[1][0];\nconst\n_:\nSelf\n=\n42\nas\nSelf;", &"
+test "tree: multiple items with use, const, and as cast" {
+    assert_tree(&"use ::*; const X: i32 = &[1][0]; const Y: i32 = 42 as i64;", &"
         (crate
             (item (visItem (useDeclaration use (useTree :: *) ;)))
             (item (visItem (constantItem
-                const _ :
+                const (identifier X) :
                 (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                    (typePath (typePathSegment (pathIdentSegment Self)))))))
+                    (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
                 =
                 (expression &
                     (expression
@@ -292,167 +286,36 @@ test "tree: multiple items with diverse constructs" {
                         [ (expression (literalExpression 0)) ]))
                 ;)))
             (item (visItem (constantItem
-                const _ :
+                const (identifier Y) :
                 (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                    (typePath (typePathSegment (pathIdentSegment Self)))))))
+                    (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
                 =
                 (expression
                     (expression (literalExpression 42))
                     as
                     (typeNoBounds (traitObjectTypeOneBound (traitBound
-                        (typePath (typePathSegment (pathIdentSegment Self)))))))
+                        (typePath (typePathSegment (pathIdentSegment (identifier i64))))))))
                 ;))))
     ");
 }
 
-// --- Struct, lifetime, and type tests ---
-// Due to \p{L} misparse, only chars l, p, L, N (and XID_Continue: c, d, n, M, P)
-// are valid identifier characters. Lifetimes 'l, 'p, 'N work via LIFETIME_OR_LABEL.
-
-test "tree: unit struct with lifetime generic param" {
-    assert_tree(&"struct\nl<'p>;", &"
-        (crate (item (visItem (struct_ (structStruct
-            struct (identifier l)
-            (genericParams < (genericParam (lifetimeParam 'p)) >)
-            ;)))))
-    ");
-}
-
-test "tree: unit struct with type generic param" {
-    assert_tree(&"struct\nl<N>;", &"
-        (crate (item (visItem (struct_ (structStruct
-            struct (identifier l)
-            (genericParams < (genericParam (typeParam (identifier N))) >)
-            ;)))))
-    ");
-}
-
-test "tree: type alias with lifetime reference" {
-    assert_tree(&"type\nl<'p>\n=\n&'p\nSelf;", &"
-        (crate (item (visItem (typeAlias
-            type (identifier l)
-            (genericParams < (genericParam (lifetimeParam 'p)) >)
-            =
-            (type_ (typeNoBounds (referenceType
-                & (lifetime 'p)
-                (typeNoBounds (traitObjectTypeOneBound (traitBound
-                    (typePath (typePathSegment (pathIdentSegment Self)))))))))
-            ;))))
-    ");
-}
-
-test "tree: type alias with mutable lifetime reference" {
-    assert_tree(&"type\nl<'p>\n=\n&'p\nmut\nSelf;", &"
-        (crate (item (visItem (typeAlias
-            type (identifier l)
-            (genericParams < (genericParam (lifetimeParam 'p)) >)
-            =
-            (type_ (typeNoBounds (referenceType
-                & (lifetime 'p) mut
-                (typeNoBounds (traitObjectTypeOneBound (traitBound
-                    (typePath (typePathSegment (pathIdentSegment Self)))))))))
-            ;))))
-    ");
-}
-
-test "tree: pub struct and pub static mut" {
-    assert_tree(&"pub\nstruct\nl;\npub\nstatic\nmut\nNp:\nSelf\n=\n42;", &"
-        (crate
-            (item (visItem (visibility pub) (struct_ (structStruct
-                struct (identifier l) ;))))
-            (item (visItem (visibility pub) (staticItem
-                static mut (identifier Np) :
-                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                    (typePath (typePathSegment (pathIdentSegment Self)))))))
-                = (expression (literalExpression 42)) ;))))
-    ");
-}
-
-test "tree: extern crate self" {
-    assert_tree(&"extern\ncrate\nself;", &"
-        (crate (item (visItem (externCrate extern crate (crateRef self) ;))))
-    ");
-}
-
-test "tree: const with qualified root path expression" {
-    assert_tree(&"const\nl:\nSelf\n=\n::l;", &"
+test "tree: move closure with comparison" {
+    assert_tree(&"const X: i32 = move |x: i32| 1 + 2 == 3 + 4;", &"
         (crate (item (visItem (constantItem
-            const (identifier l) :
+            const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath (typePathSegment (pathIdentSegment Self)))))))
-            =
-            (expression (pathExpression (pathInExpression
-                :: (pathExprSegment (pathIdentSegment (identifier l))))))
-            ;))))
-    ");
-}
-
-test "tree: type alias with root path type" {
-    assert_tree(&"type\nl\n=\n::l;", &"
-        (crate (item (visItem (typeAlias
-            type (identifier l)
-            =
-            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath :: (typePathSegment (pathIdentSegment (identifier l))))))))
-            ;))))
-    ");
-}
-
-test "tree: struct type and const items combined" {
-    assert_tree(&"struct\nl<'p>;\ntype\nN<'p>\n=\n&'p\nSelf;\nconst\np:\nSelf\n=\n42;", &"
-        (crate
-            (item (visItem (struct_ (structStruct
-                struct (identifier l)
-                (genericParams < (genericParam (lifetimeParam 'p)) >)
-                ;))))
-            (item (visItem (typeAlias
-                type (identifier N)
-                (genericParams < (genericParam (lifetimeParam 'p)) >)
-                =
-                (type_ (typeNoBounds (referenceType
-                    & (lifetime 'p)
-                    (typeNoBounds (traitObjectTypeOneBound (traitBound
-                        (typePath (typePathSegment (pathIdentSegment Self)))))))))
-                ;)))
-            (item (visItem (constantItem
-                const (identifier p) :
-                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                    (typePath (typePathSegment (pathIdentSegment Self)))))))
-                = (expression (literalExpression 42)) ;))))
-    ");
-}
-
-test "tree: pub type alias with mutable lifetime reference" {
-    assert_tree(&"pub\ntype\nl<'p>\n=\n&'p\nmut\nSelf;", &"
-        (crate (item (visItem (visibility pub) (typeAlias
-            type (identifier l)
-            (genericParams < (genericParam (lifetimeParam 'p)) >)
-            =
-            (type_ (typeNoBounds (referenceType
-                & (lifetime 'p) mut
-                (typeNoBounds (traitObjectTypeOneBound (traitBound
-                    (typePath (typePathSegment (pathIdentSegment Self)))))))))
-            ;))))
-    ");
-}
-
-test "tree: move closure with ref body and comparison in const" {
-    // move |_: Self| 1+2 == 3+4
-    assert_tree(&"const\n_:\nSelf\n=\nmove\n|_:\nSelf|\n1+2==3+4;", &"
-        (crate (item (visItem (constantItem
-            const _ :
-            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                (typePath (typePathSegment (pathIdentSegment Self)))))))
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
             =
             (expression (closureExpression
                 move
                 |
                 (closureParameters
                     (closureParam
-                        (pattern (patternNoTopAlt (patternWithoutRange (wildcardPattern _))))
+                        (pattern (patternNoTopAlt (patternWithoutRange
+                            (identifierPattern (identifier x)))))
                         :
                         (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
-                            (typePath (typePathSegment (pathIdentSegment Self)))))))))
+                            (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))))
                 |
                 (expression
                     (expression
@@ -465,5 +328,294 @@ test "tree: move closure with ref body and comparison in const" {
                         +
                         (expression (literalExpression 4))))))
             ;))))
+    ");
+}
+
+// Item and type tests
+
+test "tree: struct with fields" {
+    assert_tree(&"struct Point { x: i32, y: i32 }", &"
+        (crate (item (visItem (struct_ (structStruct
+            struct (identifier Point)
+            { (structFields
+                (structField (identifier x) :
+                    (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment (identifier i32)))))))))
+                ,
+                (structField (identifier y) :
+                    (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))))
+            })))))
+    ");
+}
+
+test "tree: type alias with lifetime reference" {
+    assert_tree(&"type Ref<'a> = &'a i32;", &"
+        (crate (item (visItem (typeAlias
+            type (identifier Ref)
+            (genericParams < (genericParam (lifetimeParam 'a)) >)
+            =
+            (type_ (typeNoBounds (referenceType
+                & (lifetime 'a)
+                (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))))
+            ;))))
+    ");
+}
+
+test "tree: type alias with mutable lifetime reference" {
+    assert_tree(&"type MutRef<'a> = &'a mut i32;", &"
+        (crate (item (visItem (typeAlias
+            type (identifier MutRef)
+            (genericParams < (genericParam (lifetimeParam 'a)) >)
+            =
+            (type_ (typeNoBounds (referenceType
+                & (lifetime 'a) mut
+                (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))))
+            ;))))
+    ");
+}
+
+test "tree: pub struct and pub static mut" {
+    assert_tree(&"pub struct Foo; pub static mut COUNT: i32 = 0;", &"
+        (crate
+            (item (visItem (visibility pub) (struct_ (structStruct
+                struct (identifier Foo) ;))))
+            (item (visItem (visibility pub) (staticItem
+                static mut (identifier COUNT) :
+                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
+                = (expression (literalExpression 0)) ;))))
+    ");
+}
+
+test "tree: extern crate with rename" {
+    assert_tree(&"extern crate alloc as core;", &"
+        (crate (item (visItem (externCrate
+            extern crate (crateRef (identifier alloc))
+            (asClause as (identifier core)) ;))))
+    ");
+}
+
+test "tree: three items combined" {
+    assert_tree(&"struct Foo<'a>; type Ref<'a> = &'a i32; const X: i32 = 42;", &"
+        (crate
+            (item (visItem (struct_ (structStruct
+                struct (identifier Foo)
+                (genericParams < (genericParam (lifetimeParam 'a)) >)
+                ;))))
+            (item (visItem (typeAlias
+                type (identifier Ref)
+                (genericParams < (genericParam (lifetimeParam 'a)) >)
+                =
+                (type_ (typeNoBounds (referenceType
+                    & (lifetime 'a)
+                    (typeNoBounds (traitObjectTypeOneBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))))
+                ;)))
+            (item (visItem (constantItem
+                const (identifier X) :
+                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
+                = (expression (literalExpression 42)) ;))))
+    ");
+}
+
+// Trait and impl tests
+
+test "tree: trait with associated type" {
+    assert_tree(&"trait Iterator { type Item; }", &"
+        (crate (item (visItem (trait_
+            trait (identifier Iterator) {
+                (associatedItem (typeAlias type (identifier Item) ;))
+            }))))
+    ");
+}
+
+test "tree: impl trait for type" {
+    assert_tree(&"impl Clone for Foo {}", &"
+        (crate (item (visItem (implementation (traitImpl
+            impl
+            (typePath (typePathSegment (pathIdentSegment (identifier Clone))))
+            for
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment (identifier Foo))))))))
+            { })))))
+    ");
+}
+
+test "tree: impl with associated const" {
+    assert_tree(&"impl Foo { const MAX: i32 = 100; }", &"
+        (crate (item (visItem (implementation (inherentImpl
+            impl
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment (identifier Foo))))))))
+            {
+                (associatedItem (constantItem
+                    const (identifier MAX) :
+                    (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
+                    = (expression (literalExpression 100)) ;))
+            })))))
+    ");
+}
+
+test "tree: enum with tuple, struct, and unit variants" {
+    assert_tree(&"enum Expr { Lit(i32), Add { left: i32, right: i32 }, Unit }", &"
+        (crate (item (visItem (enumeration
+            enum (identifier Expr) {
+                (enumItems
+                    (enumItem (identifier Lit)
+                        (enumItemTuple ( (tupleFields
+                            (tupleField (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))))
+                        )))
+                    ,
+                    (enumItem (identifier Add)
+                        (enumItemStruct { (structFields
+                            (structField (identifier left) :
+                                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                                    (typePath (typePathSegment (pathIdentSegment (identifier i32)))))))))
+                            ,
+                            (structField (identifier right) :
+                                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                                    (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))))
+                        }))
+                    ,
+                    (enumItem (identifier Unit)))
+            }))))
+    ");
+}
+
+// Expression with block tests
+
+test "tree: if else expression" {
+    assert_tree(&"const X: i32 = if true { 1 } else { 2 };", &"
+        (crate (item (visItem (constantItem
+            const (identifier X) :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
+            =
+            (expression (expressionWithBlock (ifExpression
+                if (expression (literalExpression true))
+                (blockExpression { (statements (expression (literalExpression 1))) })
+                else
+                (blockExpression { (statements (expression (literalExpression 2))) }))))
+            ;))))
+    ");
+}
+
+test "tree: block expression" {
+    assert_tree(&"const X: i32 = { 1 + 2 };", &"
+        (crate (item (visItem (constantItem
+            const (identifier X) :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
+            =
+            (expression (expressionWithBlock (blockExpression {
+                (statements (expression
+                    (expression (literalExpression 1))
+                    +
+                    (expression (literalExpression 2))))
+            })))
+            ;))))
+    ");
+}
+
+test "tree: method call chain" {
+    assert_tree(&"const X: i32 = x.foo().bar();", &"
+        (crate (item (visItem (constantItem
+            const (identifier X) :
+            (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
+            =
+            (expression
+                (expression
+                    (expression (pathExpression (pathInExpression
+                        (pathExprSegment (pathIdentSegment (identifier x))))))
+                    . (pathExprSegment (pathIdentSegment (identifier foo))) ( ))
+                . (pathExprSegment (pathIdentSegment (identifier bar))) ( ))
+            ;))))
+    ");
+}
+
+// Advanced type tests
+
+test "tree: struct with trait bounds" {
+    assert_tree(&"struct Bounded<T: Clone + Send> { x: T }", &"
+        (crate (item (visItem (struct_ (structStruct
+            struct (identifier Bounded)
+            (genericParams < (genericParam (typeParam
+                (identifier T) :
+                (typeParamBounds
+                    (typeParamBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment (identifier Clone))))))
+                    +
+                    (typeParamBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment (identifier Send))))))))) >)
+            { (structFields
+                (structField (identifier x) :
+                    (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment (identifier T))))))))))
+            })))))
+    ");
+}
+
+test "tree: never type and slice type" {
+    assert_tree(&"type Never = !; type Slice = [u8];", &"
+        (crate
+            (item (visItem (typeAlias
+                type (identifier Never) = (type_ (typeNoBounds (neverType !))) ;)))
+            (item (visItem (typeAlias
+                type (identifier Slice) =
+                (type_ (typeNoBounds (sliceType [
+                    (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment (identifier u8))))))))
+                ])))
+                ;))))
+    ");
+}
+
+test "tree: array type with const size" {
+    assert_tree(&"const X: [i32; 3] = [1, 2, 3];", &"
+        (crate (item (visItem (constantItem
+            const (identifier X) :
+            (type_ (typeNoBounds (arrayType [
+                (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                    (typePath (typePathSegment (pathIdentSegment (identifier i32))))))))
+                ; (expression (literalExpression 3))
+            ])))
+            =
+            (expression [
+                (arrayElements
+                    (expression (literalExpression 1)) ,
+                    (expression (literalExpression 2)) ,
+                    (expression (literalExpression 3)))
+            ])
+            ;))))
+    ");
+}
+
+test "tree: nested generics" {
+    assert_tree(&"struct Wrap<T> { inner: Option<Vec<T>> }", &"
+        (crate (item (visItem (struct_ (structStruct
+            struct (identifier Wrap)
+            (genericParams < (genericParam (typeParam (identifier T))) >)
+            { (structFields
+                (structField (identifier inner) :
+                    (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                        (typePath (typePathSegment (pathIdentSegment (identifier Option))
+                            (genericArgs <
+                                (genericArgsTypes
+                                    (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                                        (typePath (typePathSegment (pathIdentSegment (identifier Vec))
+                                            (genericArgs <
+                                                (genericArgsTypes
+                                                    (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
+                                                        (typePath (typePathSegment (pathIdentSegment (identifier T)))))))))
+                                            >))))))))
+                            >)))))))))
+            })))))
     ");
 }
