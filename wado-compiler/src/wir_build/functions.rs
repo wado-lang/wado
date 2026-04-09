@@ -322,9 +322,6 @@ fn register_methods(ctx: &mut WirContext<'_>) {
     for func_rc in &ctx.package.functions {
         let tir_func = func_rc.borrow();
         let module_source = &tir_func.module_source;
-        if module_source.is_wasi() {
-            continue;
-        }
 
         // Only methods
         if tir_func.method_info.is_none() {
