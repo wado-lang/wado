@@ -627,6 +627,8 @@ pub enum Expr {
     /// Spread expression inside a tuple literal: `[..expr]`
     /// At compile time, splices the tuple's elements into the enclosing tuple.
     Spread(Box<Expr>, Span),
+    /// Range expression: `a..<b` (exclusive) or `a..=b` (inclusive)
+    Range(Box<RangeExpr>),
 }
 
 /// Labeled block expression: `label: { ... }` that produces a value
@@ -642,6 +644,22 @@ pub struct LabeledBlockExpr {
 #[derive(Debug, Clone)]
 pub struct TryOpExpr {
     pub expr: Expr,
+    pub span: Span,
+}
+
+/// Range kind: exclusive (..<) or inclusive (..=)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RangeKind {
+    Exclusive, // ..<
+    Inclusive, // ..=
+}
+
+/// Range expression: `start..<end` or `start..=end`
+#[derive(Debug, Clone)]
+pub struct RangeExpr {
+    pub start: Expr,
+    pub end: Expr,
+    pub kind: RangeKind,
     pub span: Span,
 }
 
@@ -673,6 +691,7 @@ impl Expr {
             Expr::LabeledBlock(e) => e.span,
             Expr::TryOp(e) => e.span,
             Expr::Spread(_, span) => *span,
+            Expr::Range(e) => e.span,
         }
     }
 
@@ -773,6 +792,10 @@ impl Expr {
                 Expr::TryOp(e)
             }
             Expr::Spread(inner, _) => Expr::Spread(inner, new_span),
+            Expr::Range(mut e) => {
+                e.span = new_span;
+                Expr::Range(e)
+            }
         }
     }
 }
@@ -1059,6 +1082,13 @@ pub enum Pattern {
     },
     /// Or pattern: `Red | Blue` or `Some(x) | Other(x)`
     Or(Vec<Pattern>),
+    /// Range pattern: `0..<10` or `'a'..='z'`
+    Range {
+        start: Box<Pattern>,
+        end: Box<Pattern>,
+        kind: RangeKind,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone)]

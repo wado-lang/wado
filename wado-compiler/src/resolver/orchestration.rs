@@ -86,6 +86,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         if comp_features & crate::wir::COMP_FEATURE_BOX != 0 {
                             type_table.borrow_mut().box_module_source = Some(module_source.clone());
                         }
+                        if comp_features & crate::wir::COMP_FEATURE_RANGE_EXCLUSIVE != 0 {
+                            type_table.borrow_mut().range_exclusive_module_source =
+                                Some(module_source.clone());
+                        }
+                        if comp_features & crate::wir::COMP_FEATURE_RANGE_INCLUSIVE != 0 {
+                            type_table.borrow_mut().range_inclusive_module_source =
+                                Some(module_source.clone());
+                        }
                     }
                     Item::Variant(variant_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
@@ -1904,6 +1912,22 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             ast::Expr::Spread(inner, _) => {
                 Self::validate_expr_type_names(
                     inner,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Range(range) => {
+                Self::validate_expr_type_names(
+                    &range.start,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &range.end,
                     known_type_names,
                     resource_type_names,
                     type_params,

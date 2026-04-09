@@ -1,0 +1,27 @@
+// Range patterns in match expressions
+use { println, Stdout } from "core:cli";
+
+fn classify(score: i32) -> String {
+    let grade = match score {
+        0..<60 => "F",
+        60..<70 => "D",
+        70..<80 => "C",
+        80..<90 => "B",
+        90..=100 => "A",
+        _ => "invalid",
+    };
+    return grade;
+}
+
+export fn run() with Stdout {
+    println(classify(55));
+    println(classify(65));
+    println(classify(75));
+    println(classify(85));
+    println(classify(95));
+    println(classify(100));
+    println(classify(101));
+}
+
+__DATA__
+{"stdout": "F\nD\nC\nB\nA\nA\ninvalid\n"}

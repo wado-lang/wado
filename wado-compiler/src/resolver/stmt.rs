@@ -469,6 +469,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 });
                 false
             }
+            Pattern::Range { .. } => {
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: "refutable pattern in `let` binding: range patterns may not match; use `if let` instead".to_string(),
+                    span,
+                });
+                false
+            }
         }
     }
 
@@ -711,7 +718,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Refutable pattern: error was already emitted by check_irrefutable_pattern.
                 TirPattern::Wildcard
             }
-            ast::Pattern::Or(_) => {
+            ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
                 // Refutable pattern: error was already emitted by check_irrefutable_pattern.
                 TirPattern::Wildcard
             }
@@ -1493,6 +1500,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 TirPattern::Or(resolved)
             }
+            Pattern::Range {
+                start,
+                end,
+                kind,
+                span: range_span,
+            } => self.resolve_range_pattern(start, end, *kind, scrutinee_type, *range_span),
         }
     }
 
@@ -1517,6 +1530,106 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
         } else {
             None
+        }
+    }
+
+    /// Resolve a range pattern: `0..<10` or `'a'..='z'`
+    fn resolve_range_pattern(
+        &mut self,
+        start: &Pattern,
+        end: &Pattern,
+        kind: crate::ast::RangeKind,
+        scrutinee_type: TypeId,
+        span: Span,
+    ) -> TirPattern {
+        let scrutinee_resolved = self.type_table.borrow().get(scrutinee_type).clone();
+        let is_unsigned = matches!(
+            scrutinee_resolved,
+            ResolvedType::Primitive(
+                PrimitiveType::U8
+                    | PrimitiveType::U16
+                    | PrimitiveType::U32
+                    | PrimitiveType::U64
+                    | PrimitiveType::U128
+            )
+        ) || matches!(
+            scrutinee_resolved,
+            ResolvedType::Struct { ref name, .. } if name == "u128"
+        );
+
+        let start_val = Self::pattern_to_i128(start, is_unsigned);
+        let end_val = Self::pattern_to_i128(end, is_unsigned);
+
+        let (Some(start_val), Some(end_val)) = (start_val, end_val) else {
+            let _ = self.logger.error(TypeError::InvalidPattern {
+                message: "range pattern bounds must be integer or char literals".to_string(),
+                span,
+            });
+            return TirPattern::Wildcard;
+        };
+
+        // Check for empty range
+        let inclusive = matches!(kind, crate::ast::RangeKind::Inclusive);
+        let is_empty = if inclusive {
+            start_val > end_val
+        } else {
+            start_val >= end_val
+        };
+        if is_empty {
+            let _ = self.logger.error(TypeError::InvalidPattern {
+                message: "empty range pattern".to_string(),
+                span,
+            });
+            return TirPattern::Wildcard;
+        }
+
+        TirPattern::Range {
+            start: start_val,
+            end: end_val,
+            inclusive,
+            is_unsigned,
+        }
+    }
+
+    fn pattern_to_i128(pattern: &Pattern, is_unsigned: bool) -> Option<i128> {
+        match pattern {
+            Pattern::Literal(Literal::Number(repr)) => {
+                if is_unsigned {
+                    util::parse_u128_literal(repr).ok().map(|v| v as i128)
+                } else {
+                    util::parse_i128_literal(repr).ok()
+                }
+            }
+            Pattern::Literal(Literal::Char(raw)) => {
+                util::unescape_char(raw).ok().map(|c| c as i128)
+            }
+            Pattern::Variant {
+                variant_name,
+                bindings,
+                ..
+            } if bindings.is_empty() => {
+                // Could be an associated constant like i32::MAX, i32::MIN
+                match variant_name.as_str() {
+                    "i8::MAX" => Some(i128::from(i8::MAX)),
+                    "i8::MIN" => Some(i128::from(i8::MIN)),
+                    "i16::MAX" => Some(i128::from(i16::MAX)),
+                    "i16::MIN" => Some(i128::from(i16::MIN)),
+                    "i32::MAX" => Some(i128::from(i32::MAX)),
+                    "i32::MIN" => Some(i128::from(i32::MIN)),
+                    "i64::MAX" => Some(i128::from(i64::MAX)),
+                    "i64::MIN" => Some(i128::from(i64::MIN)),
+                    "u8::MAX" => Some(i128::from(u8::MAX)),
+                    "u8::MIN" => Some(i128::from(u8::MIN)),
+                    "u16::MAX" => Some(i128::from(u16::MAX)),
+                    "u16::MIN" => Some(i128::from(u16::MIN)),
+                    "u32::MAX" => Some(i128::from(u32::MAX)),
+                    "u32::MIN" => Some(i128::from(u32::MIN)),
+                    "u64::MAX" => Some(i128::from(u64::MAX)),
+                    "u64::MIN" => Some(i128::from(u64::MIN)),
+                    _ => None,
+                }
+            }
+            _ => None,
         }
     }
 
@@ -2283,7 +2396,8 @@ fn collect_pattern_bindings_with_index_inner(
         TirPattern::Wildcard
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
-        | TirPattern::ConstantValue { .. } => {}
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Range { .. } => {}
     }
 }
 
@@ -2318,6 +2432,7 @@ fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) {
         TirPattern::Wildcard
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
-        | TirPattern::ConstantValue { .. } => {}
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Range { .. } => {}
     }
 }

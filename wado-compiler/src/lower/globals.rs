@@ -590,7 +590,8 @@ fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
         TirPattern::Wildcard
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
-        | TirPattern::ConstantValue { .. } => {}
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Range { .. } => {}
         TirPattern::Or(alternatives) => {
             for p in alternatives {
                 renumber_locals_in_pattern(p, offset);

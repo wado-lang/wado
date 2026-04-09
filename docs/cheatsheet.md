@@ -428,6 +428,9 @@ See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-prece
 'A' as i32              // char -> i32: 65
 // 65 as char           // compile error: use char::from_u32()
 
+// Range (see Range section below)
+..<  ..=
+
 // Pattern testing (returns bool)
 opt matches { Some(_) }
 ```
@@ -478,6 +481,11 @@ for let mut i = 0; i < 10; i += 1 {
 for let item of items {
     println(`{item}`);
 }
+
+// Range for-of
+for let i of 0..<10 { println(`{i}`); }    // 0 to 9
+for let i of 1..=10 { println(`{i}`); }    // 1 to 10
+for let c of 'a'..='z' { print(`{c}`); }   // abcdefghijklmnopqrstuvwxyz
 
 // Tuple for-of (compile-time expansion, each element may have a different type)
 let t = [42, "hello", true];
@@ -545,6 +553,19 @@ let desc = match value {
     },
     None => "no value",
 };
+
+// Range patterns
+let grade = match score {
+    0..<60 => "F",
+    60..<70 => "D",
+    70..<80 => "C",
+    80..<90 => "B",
+    90..=100 => "A",
+    _ => "invalid",
+};
+
+// Range in matches operator
+if code matches { 0..<128 } { println("ASCII"); }
 
 // Nested sub-patterns in tuples/structs
 match [a, b] {
@@ -950,6 +971,46 @@ let result = arr.iter()
 ### Custom Iterables
 
 Implement `IntoIterator` to make custom types work with `for-of`. See [Core Standard Library Reference](./cheatsheet-stdlib-core.md) for trait definitions.
+
+## Ranges
+
+See [WEP: Range Object](./wep-2026-03-03-range-object.md).
+
+Two range types: `RangeExclusive<T>` (half-open) and `RangeInclusive<T>` (inclusive). Both are generic structs in `core:prelude`.
+
+```wado
+// Range expressions
+0..<10             // RangeExclusive<i32>: [0, 10)
+1..=10             // RangeInclusive<i32>: [1, 10]
+'a'..='z'          // RangeInclusive<char>
+
+// Iteration (integers and char via Step trait)
+for let i of 0..<5 { println(`{i}`); }    // 0, 1, 2, 3, 4
+for let c of 'a'..='e' { print(`{c}`); }  // abcde
+
+// Iterator combinators
+let sum = (1..=100).fold(0, |acc: i32, x: i32| acc + x);  // 5050
+let evens = (0..<20).filter(|x: i32| x % 2 == 0).collect();  // [0, 2, ..., 18]
+
+// Pattern matching with ranges
+let grade = match score {
+    90..=100 => "A",
+    80..<90 => "B",
+    _ => "other",
+};
+
+// Exhaustiveness checking (integer types)
+let bit: u8 = get_bit();
+let name = match bit {
+    0 => "zero",
+    1..=255 => "nonzero",
+};  // exhaustive — no wildcard needed
+
+// Overlap detection (compile error)
+// match n { 0..=10 => "a", 5..=15 => "b", _ => "c" }  // error: overlapping ranges
+```
+
+Operator precedence: `..<` and `..=` sit between assignment and logical OR, and are non-associative (`a..<b..<c` is a compile error).
 
 ## Effects
 

@@ -1312,8 +1312,11 @@ impl<'a> PatternLowerer<'a> {
                     );
                 }
             }
-            TirPattern::Literal(_) | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } => {
-                // Literal/Enum/ConstantValue patterns don't bind anything, just evaluate for side effects
+            TirPattern::Literal(_)
+            | TirPattern::Enum { .. }
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. } => {
+                // Literal/Enum/ConstantValue/Range patterns don't bind anything, just evaluate for side effects
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
             }
             TirPattern::Or(alternatives) => {
@@ -1566,7 +1569,10 @@ impl<'a> PatternLowerer<'a> {
                     );
                 }
             }
-            TirPattern::Literal(_) | TirPattern::Enum { .. } | TirPattern::ConstantValue { .. } => {
+            TirPattern::Literal(_)
+            | TirPattern::Enum { .. }
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. } => {
                 // Just evaluate for side effects (no bindings)
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
             }
@@ -2109,6 +2115,64 @@ impl<'a> PatternLowerer<'a> {
                     TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
                     binding_stmts,
                 )
+            }
+            TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                ..
+            } => {
+                // Range pattern: generate scrutinee >= start && scrutinee < end (or <= end if inclusive)
+                let scrut_type = scrutinee.type_id;
+                let upper_op = if *inclusive {
+                    TirBinaryOp::LtEq
+                } else {
+                    TirBinaryOp::Lt
+                };
+                let start_expr = TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: *start as u64,
+                        repr: format!("{start}"),
+                    },
+                    scrut_type,
+                    span,
+                );
+                let end_expr = TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: *end as u64,
+                        repr: format!("{end}"),
+                    },
+                    scrut_type,
+                    span,
+                );
+                let ge_cond = TirExpr::new(
+                    TirExprKind::Binary {
+                        left: Box::new(scrutinee.clone()),
+                        op: TirBinaryOp::GtEq,
+                        right: Box::new(start_expr),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+                let upper_cond = TirExpr::new(
+                    TirExprKind::Binary {
+                        left: Box::new(scrutinee),
+                        op: upper_op,
+                        right: Box::new(end_expr),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+                let condition = TirExpr::new(
+                    TirExprKind::Binary {
+                        op: TirBinaryOp::And,
+                        left: Box::new(ge_cond),
+                        right: Box::new(upper_cond),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+                (condition, binding_stmts)
             }
             TirPattern::ConstantValue { .. } => {
                 panic!(

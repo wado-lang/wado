@@ -951,6 +951,8 @@ pub const COMP_FEATURE_FROM: u32 = 1 << 6;
 pub const COMP_FEATURE_TUPLE: u32 = 1 << 7;
 /// Compiler feature flag: struct is the canonical `Box<T>` type for primitive boxing.
 pub const COMP_FEATURE_BOX: u32 = 1 << 8;
+pub const COMP_FEATURE_RANGE_EXCLUSIVE: u32 = 1 << 9;
+pub const COMP_FEATURE_RANGE_INCLUSIVE: u32 = 1 << 10;
 
 /// A function declaration with optional body.
 #[derive(Debug)]

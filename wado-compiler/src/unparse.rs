@@ -1589,6 +1589,14 @@ impl<'a> Unparser<'a> {
                 self.output.push_str("..");
                 self.unparse_expr(inner);
             }
+            Expr::Range(range) => {
+                self.unparse_expr(&range.start);
+                match range.kind {
+                    crate::ast::RangeKind::Exclusive => self.output.push_str("..<"),
+                    crate::ast::RangeKind::Inclusive => self.output.push_str("..="),
+                }
+                self.unparse_expr(&range.end);
+            }
         }
     }
 
@@ -1934,6 +1942,7 @@ impl<'a> Unparser<'a> {
                 | Expr::Cast(_)
                 | Expr::Assign(_)
                 | Expr::CompoundAssign(_)
+                | Expr::Range(_)
         );
         if needs_parens {
             self.output.push('(');
@@ -2325,6 +2334,16 @@ impl<'a> Unparser<'a> {
                     self.unparse_pattern(p);
                 }
             }
+            Pattern::Range {
+                start, end, kind, ..
+            } => {
+                self.unparse_pattern(start);
+                match kind {
+                    crate::ast::RangeKind::Exclusive => self.output.push_str("..<"),
+                    crate::ast::RangeKind::Inclusive => self.output.push_str("..="),
+                }
+                self.unparse_pattern(end);
+            }
         }
     }
 
@@ -2407,6 +2426,16 @@ impl<'a> Unparser<'a> {
                     }
                     self.unparse_let_pattern(p);
                 }
+            }
+            Pattern::Range {
+                start, end, kind, ..
+            } => {
+                self.unparse_pattern(start);
+                match kind {
+                    crate::ast::RangeKind::Exclusive => self.output.push_str("..<"),
+                    crate::ast::RangeKind::Inclusive => self.output.push_str("..="),
+                }
+                self.unparse_pattern(end);
             }
         }
     }
@@ -3092,6 +3121,14 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
             output.push_str("..");
             unparse_expr_into(inner, output, false);
         }
+        Expr::Range(range) => {
+            unparse_expr_into(&range.start, output, false);
+            match range.kind {
+                crate::ast::RangeKind::Exclusive => output.push_str("..<"),
+                crate::ast::RangeKind::Inclusive => output.push_str("..="),
+            }
+            unparse_expr_into(&range.end, output, false);
+        }
     }
 }
 
@@ -3379,6 +3416,16 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
                 }
                 unparse_pattern_into(p, output);
             }
+        }
+        Pattern::Range {
+            start, end, kind, ..
+        } => {
+            unparse_pattern_into(start, output);
+            match kind {
+                crate::ast::RangeKind::Exclusive => output.push_str("..<"),
+                crate::ast::RangeKind::Inclusive => output.push_str("..="),
+            }
+            unparse_pattern_into(end, output);
         }
     }
 }
@@ -4095,6 +4142,16 @@ impl<'a> TirUnparser<'a> {
             TirPattern::ConstantValue { expr } => {
                 self.unparse_expr(expr);
             }
+            TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                ..
+            } => {
+                self.output.push_str(&start.to_string());
+                self.output.push_str(if *inclusive { "..=" } else { "..<" });
+                self.output.push_str(&end.to_string());
+            }
         }
     }
 
@@ -4642,6 +4699,16 @@ impl<'a> TirUnparser<'a> {
             }
             TirPattern::ConstantValue { expr } => {
                 self.unparse_expr(expr);
+            }
+            TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                ..
+            } => {
+                self.output.push_str(&start.to_string());
+                self.output.push_str(if *inclusive { "..=" } else { "..<" });
+                self.output.push_str(&end.to_string());
             }
         }
     }

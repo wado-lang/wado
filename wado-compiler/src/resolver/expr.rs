@@ -108,6 +108,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 panic!("Spread expression should only appear inside TupleLiteral handling")
             }
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
+            Expr::Range(range) => self.resolve_range(range, ctx),
         }
     }
 
@@ -1391,6 +1392,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     fn check_match_exhaustiveness(&self, arms: &[TirMatchArm], scrutinee_type: TypeId, span: Span) {
+        // Always check for overlapping range patterns first
+        self.check_range_overlaps(arms, span);
+
         // If any arm has a wildcard or binding pattern (without a guard), the match is exhaustive
         if arms
             .iter()
@@ -1461,9 +1465,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     });
                 }
             }
+            ResolvedType::Primitive(prim) => {
+                if let Some((type_min, type_max)) = Self::primitive_range(*prim) {
+                    self.check_integer_range_exhaustiveness(arms, type_min, type_max, span);
+                }
+            }
             _ => {
-                // For other types (integers, strings, etc.) we don't check exhaustiveness
-                // since they have infinite domains. A wildcard/binding arm is expected.
+                // For other types (strings, structs, etc.) we don't check exhaustiveness.
             }
         }
     }
@@ -1546,6 +1554,145 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|c| format!("`{c}`"))
                     .collect();
                 format!("cases {}, and `{last}`", rest.join(", "))
+            }
+        }
+    }
+
+    fn primitive_range(prim: crate::tir::PrimitiveType) -> Option<(i128, i128)> {
+        use crate::tir::PrimitiveType;
+        match prim {
+            PrimitiveType::I8 => Some((i128::from(i8::MIN), i128::from(i8::MAX))),
+            PrimitiveType::I16 => Some((i128::from(i16::MIN), i128::from(i16::MAX))),
+            PrimitiveType::I32 => Some((i128::from(i32::MIN), i128::from(i32::MAX))),
+            PrimitiveType::I64 => Some((i128::from(i64::MIN), i128::from(i64::MAX))),
+            PrimitiveType::U8 => Some((0, i128::from(u8::MAX))),
+            PrimitiveType::U16 => Some((0, i128::from(u16::MAX))),
+            PrimitiveType::U32 => Some((0, i128::from(u32::MAX))),
+            PrimitiveType::U64 => Some((0, i128::from(u64::MAX))),
+            PrimitiveType::Char => Some((0, 0x10FFFF)),
+            _ => None,
+        }
+    }
+
+    fn collect_ranges_from_pattern(pattern: &TirPattern) -> Vec<(i128, i128)> {
+        match pattern {
+            TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                ..
+            } => {
+                let hi = if *inclusive { *end } else { *end - 1 };
+                vec![(*start, hi)]
+            }
+            TirPattern::Literal(lit) => {
+                let val = match lit {
+                    crate::tir::TirLiteralPattern::I128(v) => *v,
+                    crate::tir::TirLiteralPattern::U128(v) => *v as i128,
+                    crate::tir::TirLiteralPattern::Char(c) => *c as i128,
+                    crate::tir::TirLiteralPattern::Bool(b) => i128::from(*b),
+                    _ => return vec![],
+                };
+                vec![(val, val)]
+            }
+            TirPattern::Or(alts) => {
+                let mut result = Vec::new();
+                for alt in alts {
+                    result.extend(Self::collect_ranges_from_pattern(alt));
+                }
+                result
+            }
+            _ => vec![],
+        }
+    }
+
+    fn check_integer_range_exhaustiveness(
+        &self,
+        arms: &[TirMatchArm],
+        type_min: i128,
+        type_max: i128,
+        span: Span,
+    ) {
+        // Collect all ranges from all arms (only arms without guards count)
+        let mut all_ranges: Vec<(i128, i128)> = Vec::new();
+        let mut has_catch_all = false;
+
+        for arm in arms {
+            if arm.guard.is_none() && Self::is_catch_all_pattern(&arm.pattern) {
+                has_catch_all = true;
+            }
+            if arm.guard.is_some() {
+                continue;
+            }
+            all_ranges.extend(Self::collect_ranges_from_pattern(&arm.pattern));
+        }
+
+        if has_catch_all {
+            return;
+        }
+
+        // Check exhaustiveness: sort ranges and verify they cover [type_min, type_max]
+        if all_ranges.is_empty() {
+            let _ = self.logger.error(TypeError::InvalidPattern {
+                message: "non-exhaustive match: integer type requires a wildcard `_` or full range coverage".to_string(),
+                span,
+            });
+            return;
+        }
+
+        all_ranges.sort_unstable();
+        // Merge overlapping/adjacent ranges
+        let mut merged: Vec<(i128, i128)> = Vec::new();
+        for (lo, hi) in all_ranges {
+            if let Some(last) = merged.last_mut() {
+                if lo <= last.1 + 1 {
+                    last.1 = last.1.max(hi);
+                } else {
+                    merged.push((lo, hi));
+                }
+            } else {
+                merged.push((lo, hi));
+            }
+        }
+
+        // Check if merged ranges cover [type_min, type_max]
+        let covers = merged.len() == 1 && merged[0].0 <= type_min && merged[0].1 >= type_max;
+        if !covers {
+            let _ = self.logger.error(TypeError::InvalidPattern {
+                message: "non-exhaustive match: not all values in the integer range are covered"
+                    .to_string(),
+                span,
+            });
+        }
+    }
+
+    fn check_range_overlaps(&self, arms: &[TirMatchArm], span: Span) {
+        // Collect ranges per arm (only guardless arms)
+        let mut arm_ranges: Vec<Vec<(i128, i128)>> = Vec::new();
+        for arm in arms {
+            if arm.guard.is_some() {
+                continue;
+            }
+            let ranges = Self::collect_ranges_from_pattern(&arm.pattern);
+            if !ranges.is_empty() {
+                arm_ranges.push(ranges);
+            }
+        }
+
+        // Check for overlaps between different arms
+        for i in 0..arm_ranges.len() {
+            for j in (i + 1)..arm_ranges.len() {
+                for &(a_lo, a_hi) in &arm_ranges[i] {
+                    for &(b_lo, b_hi) in &arm_ranges[j] {
+                        if a_lo <= b_hi && b_lo <= a_hi {
+                            let _ = self.logger.error(TypeError::InvalidPattern {
+                                message: "overlapping range patterns in match arms".to_string(),
+                                span,
+                            });
+                            return;
+                        }
+                    }
+                }
             }
         }
     }
@@ -3128,5 +3275,90 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Fallback: use current module (the From impl may be synthesized later)
         self.current_module_source.clone()
+    }
+
+    /// Resolve a range expression: `a..<b` or `a..=b`
+    pub(super) fn resolve_range(
+        &mut self,
+        range: &crate::ast::RangeExpr,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        use crate::ast::RangeKind;
+        use crate::name::ModuleSource;
+        use crate::tir::{TirExprKind, TirStructField};
+
+        let start = self.resolve_expr(&range.start, ctx, None);
+        let end = self.resolve_expr(&range.end, ctx, Some(start.type_id));
+        let element_type = start.type_id;
+
+        let (struct_name, module_source, fields) = match range.kind {
+            RangeKind::Exclusive => {
+                let ms = self
+                    .type_table
+                    .borrow()
+                    .range_exclusive_module_source
+                    .clone()
+                    .unwrap_or_else(|| ModuleSource::core("prelude/range"));
+                let fields = vec![
+                    TirStructField {
+                        name: "start".to_string(),
+                        value: start,
+                        field_index: 0,
+                    },
+                    TirStructField {
+                        name: "end".to_string(),
+                        value: end,
+                        field_index: 1,
+                    },
+                ];
+                ("RangeExclusive".to_string(), ms, fields)
+            }
+            RangeKind::Inclusive => {
+                let ms = self
+                    .type_table
+                    .borrow()
+                    .range_inclusive_module_source
+                    .clone()
+                    .unwrap_or_else(|| ModuleSource::core("prelude/range"));
+                let fields = vec![
+                    TirStructField {
+                        name: "start".to_string(),
+                        value: start,
+                        field_index: 0,
+                    },
+                    TirStructField {
+                        name: "end".to_string(),
+                        value: end,
+                        field_index: 1,
+                    },
+                    TirStructField {
+                        name: "exhausted".to_string(),
+                        value: TirExpr::new(
+                            TirExprKind::BoolLiteral(false),
+                            TypeTable::BOOL,
+                            range.span,
+                        ),
+                        field_index: 2,
+                    },
+                ];
+                ("RangeInclusive".to_string(), ms, fields)
+            }
+        };
+
+        let struct_type = self.type_table.borrow_mut().make_generic_instance(
+            struct_name.clone(),
+            module_source,
+            vec![element_type],
+        );
+
+        TirExpr::new(
+            TirExprKind::StructLiteral {
+                struct_type,
+                struct_name,
+                fields,
+            },
+            struct_type,
+            range.span,
+        )
     }
 }

@@ -2062,6 +2062,17 @@ impl ClosureLowerer {
                     .collect(),
             ),
             TirPattern::ConstantValue { expr } => TirPattern::ConstantValue { expr: expr.clone() },
+            TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            } => TirPattern::Range {
+                start: *start,
+                end: *end,
+                inclusive: *inclusive,
+                is_unsigned: *is_unsigned,
+            },
         }
     }
 

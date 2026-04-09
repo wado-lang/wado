@@ -199,6 +199,9 @@ fn expr_references_var(expr: &Expr, name: &str) -> bool {
         Expr::Cast(c) => expr_references_var(&c.expr, name),
         Expr::TryOp(t) => expr_references_var(&t.expr, name),
         Expr::Spread(inner, _) => expr_references_var(inner, name),
+        Expr::Range(range) => {
+            expr_references_var(&range.start, name) || expr_references_var(&range.end, name)
+        }
 
         Expr::If(if_expr) => {
             condition_references_var(&if_expr.condition, name)
@@ -562,7 +565,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     self.bind_let_pattern_uninit(&field.pattern, is_mut, is_reactive, span)?;
                 }
             }
-            crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Variant { .. } => {}
+            crate::ast::Pattern::Literal(_)
+            | crate::ast::Pattern::Variant { .. }
+            | crate::ast::Pattern::Range { .. } => {}
             crate::ast::Pattern::Or(alternatives) => {
                 // Bind variables from the first alternative (all alternatives must bind the same names)
                 if let Some(first) = alternatives.first() {
@@ -603,8 +608,10 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     self.bind_let_pattern(first, is_mut, is_reactive, span)?;
                 }
             }
-            crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Variant { .. } => {
-                // Literal and variant patterns are not valid in let statements
+            crate::ast::Pattern::Literal(_)
+            | crate::ast::Pattern::Variant { .. }
+            | crate::ast::Pattern::Range { .. } => {
+                // Literal, variant, and range patterns are not valid in let statements
                 // This would be caught by the type checker
             }
         }
@@ -945,6 +952,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.bind_expr(inner)?;
             }
 
+            Expr::Range(range) => {
+                self.bind_expr(&range.start)?;
+                self.bind_expr(&range.end)?;
+            }
+
             // Literals don't reference variables
             Expr::Literal(_) => {}
         }
@@ -1087,7 +1099,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     self.bind_pattern(&field.pattern, span)?;
                 }
             }
-            crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Wildcard => {
+            crate::ast::Pattern::Literal(_)
+            | crate::ast::Pattern::Wildcard
+            | crate::ast::Pattern::Range { .. } => {
                 // No variables introduced
             }
             crate::ast::Pattern::Or(alternatives) => {

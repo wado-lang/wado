@@ -1,0 +1,14 @@
+// Non-exhaustive range match on u8 should be an error
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let b: u8 = 42;
+    let name = match b {
+        0 => "zero",
+        1..=100 => "low",
+    };
+    println(name);
+}
+
+__DATA__
+{"compile_error": "non-exhaustive"}

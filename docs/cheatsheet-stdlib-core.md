@@ -407,6 +407,10 @@ pub trait FromIterator<T> {
     type Iter;
     fn from_iter(iter: Self::Iter) -> Self;
 }
+
+pub trait Step {
+    fn next_step(&self) -> Option<Self>;
+}
 ```
 
 ### Structs
@@ -1142,6 +1146,37 @@ impl Iterator for ArrayIter<T> {
 }
 ```
 
+```wado
+pub struct RangeExclusive<T> {
+    start: T,
+    end: T,
+}
+
+impl Iterator for RangeExclusive<T> {
+    fn next(&mut self) -> Option<T>;
+}
+
+impl IntoIterator for RangeExclusive<T> {
+    fn into_iter(&self) -> RangeExclusive<T>;
+}
+```
+
+```wado
+pub struct RangeInclusive<T> {
+    start: T,
+    end: T,
+    ..
+}
+
+impl Iterator for RangeInclusive<T> {
+    fn next(&mut self) -> Option<T>;
+}
+
+impl IntoIterator for RangeInclusive<T> {
+    fn into_iter(&self) -> RangeInclusive<T>;
+}
+```
+
 ### Primitive Types
 
 ```wado
@@ -1217,6 +1252,10 @@ impl Ord for char {
 
 impl Default for char {
     pub fn default() -> char;
+}
+
+impl Step for char {
+    fn next_step(&self) -> Option<char>;
 }
 ```
 
@@ -1296,6 +1335,10 @@ impl TryFrom<i32> for i8 {
 impl TryFrom<i16> for i8 {
     pub fn try_from(value: i16) -> Result<i8, ConvertError>;
 }
+
+impl Step for i8 {
+    fn next_step(&self) -> Option<i8>;
+}
 ```
 
 ```wado
@@ -1369,6 +1412,10 @@ impl TryFrom<u32> for u8 {
 
 impl TryFrom<u16> for u8 {
     pub fn try_from(value: u16) -> Result<u8, ConvertError>;
+}
+
+impl Step for u8 {
+    fn next_step(&self) -> Option<u8>;
 }
 ```
 
@@ -1452,6 +1499,10 @@ impl TryFrom<i64> for i16 {
 impl TryFrom<i32> for i16 {
     pub fn try_from(value: i32) -> Result<i16, ConvertError>;
 }
+
+impl Step for i16 {
+    fn next_step(&self) -> Option<i16>;
+}
 ```
 
 ```wado
@@ -1525,6 +1576,10 @@ impl From<u8> for u16 {
 
 impl TryFrom<u32> for u16 {
     pub fn try_from(value: u32) -> Result<u16, ConvertError>;
+}
+
+impl Step for u16 {
+    fn next_step(&self) -> Option<u16>;
 }
 ```
 
@@ -1619,6 +1674,10 @@ impl From<bool> for i32 {
 impl TryFrom<i64> for i32 {
     pub fn try_from(value: i64) -> Result<i32, ConvertError>;
 }
+
+impl Step for i32 {
+    fn next_step(&self) -> Option<i32>;
+}
 ```
 
 ```wado
@@ -1704,6 +1763,10 @@ impl TryFrom<i64> for u32 {
 
 impl TryFrom<u64> for u32 {
     pub fn try_from(value: u64) -> Result<u32, ConvertError>;
+}
+
+impl Step for u32 {
+    fn next_step(&self) -> Option<u32>;
 }
 ```
 
@@ -1806,6 +1869,10 @@ impl TryFrom<u64> for i64 {
 impl TryFrom<i128> for i64 {
     pub fn try_from(value: i128) -> Result<i64, ConvertError>;
 }
+
+impl Step for i64 {
+    fn next_step(&self) -> Option<i64>;
+}
 ```
 
 ```wado
@@ -1891,6 +1958,10 @@ impl TryFrom<i64> for u64 {
 
 impl TryFrom<u128> for u64 {
     pub fn try_from(value: u128) -> Result<u64, ConvertError>;
+}
+
+impl Step for u64 {
+    fn next_step(&self) -> Option<u64>;
 }
 ```
 

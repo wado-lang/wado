@@ -10,11 +10,11 @@ use crate::ast::{
     FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
     IndexExpr, InnerAttribute, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
     MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
-    Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
-    StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
-    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    Newtype, Param, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
+    StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr,
+    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
+    VariantCase, VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -1737,7 +1737,28 @@ impl Parser {
     }
 
     fn parse_pattern(&mut self) -> ParseResult<Pattern> {
+        let start_span = self.peek().span;
         let first = self.parse_pattern_atom()?;
+
+        // Check for range pattern: `literal..<literal` or `literal..=literal`
+        let range_kind = match self.peek_kind() {
+            TokenKind::DotDotLt => Some(RangeKind::Exclusive),
+            TokenKind::DotDotEq => Some(RangeKind::Inclusive),
+            _ => None,
+        };
+        if let Some(kind) = range_kind {
+            self.advance();
+            let end_span = self.peek().span;
+            let end = self.parse_pattern_atom()?;
+            let span = start_span.merge(&end_span);
+            return Ok(Pattern::Range {
+                start: Box::new(first),
+                end: Box::new(end),
+                kind,
+                span,
+            });
+        }
+
         if self.check(&TokenKind::Pipe) {
             let mut alternatives = vec![first];
             while self.check(&TokenKind::Pipe) {
@@ -1972,7 +1993,7 @@ impl Parser {
     /// Compound assignments (+=, -=, *=, /=, %=) are desugared to `target = target op value`
     fn parse_assignment_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
-        let expr = self.parse_or_expr()?;
+        let expr = self.parse_range_expr()?;
 
         // Check for simple assignment
         if self.check(&TokenKind::Eq) {
@@ -2014,6 +2035,42 @@ impl Parser {
         }
 
         Ok(expr)
+    }
+
+    /// Parse range expression: `a..<b` or `a..=b`
+    /// Range operators are non-associative and sit between logical OR and assignment.
+    fn parse_range_expr(&mut self) -> ParseResult<Expr> {
+        let left = self.parse_or_expr()?;
+
+        let kind = match self.peek_kind() {
+            TokenKind::DotDotLt => Some(RangeKind::Exclusive),
+            TokenKind::DotDotEq => Some(RangeKind::Inclusive),
+            _ => None,
+        };
+
+        if let Some(kind) = kind {
+            let left_span = left.span();
+            self.advance();
+            let right = self.parse_or_expr()?;
+
+            // Non-associative: reject `a..<b..<c`
+            if matches!(self.peek_kind(), TokenKind::DotDotLt | TokenKind::DotDotEq) {
+                return Err(self.error_at_span(
+                    self.peek().span,
+                    "range operators are non-associative; use parentheses",
+                ));
+            }
+
+            let span = left_span.merge(&right.span());
+            return Ok(Expr::Range(Box::new(RangeExpr {
+                start: left,
+                end: right,
+                kind,
+                span,
+            })));
+        }
+
+        Ok(left)
     }
 
     fn parse_or_expr(&mut self) -> ParseResult<Expr> {

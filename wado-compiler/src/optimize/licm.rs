@@ -490,7 +490,8 @@ fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut ModifiedVars) {
         TirPattern::Wildcard
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
-        | TirPattern::ConstantValue { .. } => {
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Range { .. } => {
             // No bindings
         }
         TirPattern::Or(alternatives) => {

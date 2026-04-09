@@ -35,6 +35,7 @@ pub const CORE_PRELUDE_FORMAT: &str = include_str!("../lib/core/prelude/format.w
 pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wado");
 pub const CORE_PRELUDE_FPFMT: &str = include_str!("../lib/core/prelude/fpfmt.wado");
 pub const CORE_PRELUDE_TUPLE: &str = include_str!("../lib/core/prelude/tuple.wado");
+pub const CORE_PRELUDE_RANGE: &str = include_str!("../lib/core/prelude/range.wado");
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
 pub const CORE_ZLIB: &str = include_str!("../lib/core/zlib.wado");
 pub const CORE_BASE64: &str = include_str!("../lib/core/base64.wado");
@@ -166,6 +167,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:prelude/array.wado" => Some(CORE_PRELUDE_ARRAY),
         "core:prelude/fpfmt.wado" => Some(CORE_PRELUDE_FPFMT),
         "core:prelude/tuple.wado" => Some(CORE_PRELUDE_TUPLE),
+        "core:prelude/range.wado" => Some(CORE_PRELUDE_RANGE),
         "core:collections" => Some(CORE_COLLECTIONS),
         "core:cli" => Some(CORE_CLI),
         "core:internal" => Some(CORE_INTERNAL),

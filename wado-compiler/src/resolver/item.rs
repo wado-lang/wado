@@ -29,6 +29,12 @@ pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
                     "from" => features |= crate::wir::COMP_FEATURE_FROM,
                     "tuple" => features |= crate::wir::COMP_FEATURE_TUPLE,
                     "box" => features |= crate::wir::COMP_FEATURE_BOX,
+                    "range_exclusive" => {
+                        features |= crate::wir::COMP_FEATURE_RANGE_EXCLUSIVE;
+                    }
+                    "range_inclusive" => {
+                        features |= crate::wir::COMP_FEATURE_RANGE_INCLUSIVE;
+                    }
                     _ => {}
                 }
             }
