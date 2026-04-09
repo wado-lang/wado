@@ -1069,10 +1069,10 @@ fn count_field_accesses_in_stmt(
             // However, if the value is a Local reference (e.g. `__local_47 = pos`),
             // this creates an alias. Any field modifications through the alias
             // won't be tracked by the scalarization, so mark the original as aliased.
-            if let TirExprKind::Local { index, .. } = &value.kind {
-                if is_gc_heap_type(value.type_id, type_table) {
-                    mark_local_aliased(*index, counts);
-                }
+            if let TirExprKind::Local { index, .. } = &value.kind
+                && is_gc_heap_type(value.type_id, type_table)
+            {
+                mark_local_aliased(*index, counts);
             }
             count_field_accesses_in_expr(value, counts, false, type_table);
         }
@@ -1148,10 +1148,10 @@ fn count_field_accesses_in_expr(
                 mark_local_fully_assigned(*index, counts);
             }
             // If value is a local reference (e.g., `other = pos`), the source is aliased
-            if let TirExprKind::Local { index, .. } = &value.kind {
-                if is_gc_heap_type(value.type_id, type_table) {
-                    mark_local_aliased(*index, counts);
-                }
+            if let TirExprKind::Local { index, .. } = &value.kind
+                && is_gc_heap_type(value.type_id, type_table)
+            {
+                mark_local_aliased(*index, counts);
             }
         }
         TirExprKind::FieldAccess {
