@@ -124,9 +124,9 @@ type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "c
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/template-string-generic.wado/Box<String>::both" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(53)
+type "functype//wado-compiler/tests/fixtures/template-string-generic.wado/Wrapper<String>::both" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/template-string-generic.wado/Box<i32>::both" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(54)
+type "functype//wado-compiler/tests/fixtures/template-string-generic.wado/Wrapper<i32>::both" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(54)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -319,7 +319,7 @@ fn "wado-compiler/tests/fixtures/template-string-generic.wado/__test_4_both_disp
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    __v0 = "wado-compiler/tests/fixtures/template-string-generic.wado/Box<i32>::both"(99);
+    __v0 = "wado-compiler/tests/fixtures/template-string-generic.wado/Wrapper<i32>::both"(99);
     __cond = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("display=99 inspect=99"), used: 21 });
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -354,7 +354,7 @@ fn "wado-compiler/tests/fixtures/template-string-generic.wado/__test_5_both_disp
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    __v0 = "wado-compiler/tests/fixtures/template-string-generic.wado/Box<String>::both"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 });
+    __v0 = "wado-compiler/tests/fixtures/template-string-generic.wado/Wrapper<String>::both"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 });
     __cond = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("display=world inspect=\"world\""), used: 29 });
     if __cond == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -1001,7 +1001,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
 }
 
-fn "wado-compiler/tests/fixtures/template-string-generic.wado/Box<String>::both"(self) {
+fn "wado-compiler/tests/fixtures/template-string-generic.wado/Wrapper<String>::both"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
@@ -1027,7 +1027,7 @@ fn "wado-compiler/tests/fixtures/template-string-generic.wado/Box<String>::both"
     };
 }
 
-fn "wado-compiler/tests/fixtures/template-string-generic.wado/Box<i32>::both"(self) {
+fn "wado-compiler/tests/fixtures/template-string-generic.wado/Wrapper<i32>::both"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/format.wado//Formatter";
