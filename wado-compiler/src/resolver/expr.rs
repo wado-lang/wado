@@ -1561,14 +1561,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
     fn primitive_range(prim: crate::tir::PrimitiveType) -> Option<(i128, i128)> {
         use crate::tir::PrimitiveType;
         match prim {
-            PrimitiveType::I8 => Some((i8::MIN as i128, i8::MAX as i128)),
-            PrimitiveType::I16 => Some((i16::MIN as i128, i16::MAX as i128)),
-            PrimitiveType::I32 => Some((i32::MIN as i128, i32::MAX as i128)),
-            PrimitiveType::I64 => Some((i64::MIN as i128, i64::MAX as i128)),
-            PrimitiveType::U8 => Some((0, u8::MAX as i128)),
-            PrimitiveType::U16 => Some((0, u16::MAX as i128)),
-            PrimitiveType::U32 => Some((0, u32::MAX as i128)),
-            PrimitiveType::U64 => Some((0, u64::MAX as i128)),
+            PrimitiveType::I8 => Some((i128::from(i8::MIN), i128::from(i8::MAX))),
+            PrimitiveType::I16 => Some((i128::from(i16::MIN), i128::from(i16::MAX))),
+            PrimitiveType::I32 => Some((i128::from(i32::MIN), i128::from(i32::MAX))),
+            PrimitiveType::I64 => Some((i128::from(i64::MIN), i128::from(i64::MAX))),
+            PrimitiveType::U8 => Some((0, i128::from(u8::MAX))),
+            PrimitiveType::U16 => Some((0, i128::from(u16::MAX))),
+            PrimitiveType::U32 => Some((0, i128::from(u32::MAX))),
+            PrimitiveType::U64 => Some((0, i128::from(u64::MAX))),
             PrimitiveType::Char => Some((0, 0x10FFFF)),
             _ => None,
         }
@@ -1640,7 +1640,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return;
         }
 
-        all_ranges.sort();
+        all_ranges.sort_unstable();
         // Merge overlapping/adjacent ranges
         let mut merged: Vec<(i128, i128)> = Vec::new();
         for (lo, hi) in all_ranges {

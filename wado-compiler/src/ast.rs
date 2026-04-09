@@ -651,7 +651,7 @@ pub struct TryOpExpr {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RangeKind {
     Exclusive, // ..<
-    Inclusive,  // ..=
+    Inclusive, // ..=
 }
 
 /// Range expression: `start..<end` or `start..=end`

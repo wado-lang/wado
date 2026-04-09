@@ -10360,6 +10360,531 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J:
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
+fn "i8^Step::next_step"(self: Box<i8>) -> Option<i8> {
+    if (self.value == 127) {
+        return null;
+    }
+    return Option<i8>::Some((self.value + 1 as i8));
+}
+
+fn "i16^Step::next_step"(self: Box<i16>) -> Option<i16> {
+    if (self.value == 32767) {
+        return null;
+    }
+    return Option<i16>::Some((self.value + 1 as i16));
+}
+
+fn "i32^Step::next_step"(self: Box<i32>) -> Option<i32> {
+    if (self.value == 2147483647) {
+        return null;
+    }
+    return Option<i32>::Some((self.value + 1));
+}
+
+fn "i64^Step::next_step"(self: Box<i64>) -> Option<i64> {
+    if (self.value == 9223372036854775807) {
+        return null;
+    }
+    return Option<i64>::Some((self.value + 1 as i64));
+}
+
+fn "u8^Step::next_step"(self: Box<u8>) -> Option<u8> {
+    if (self.value == 255) {
+        return null;
+    }
+    return Option<u8>::Some((self.value + 1 as u8));
+}
+
+fn "u16^Step::next_step"(self: Box<u16>) -> Option<u16> {
+    if (self.value == 65535) {
+        return null;
+    }
+    return Option<u16>::Some((self.value + 1 as u16));
+}
+
+fn "u32^Step::next_step"(self: Box<u32>) -> Option<u32> {
+    if (self.value == 4294967295) {
+        return null;
+    }
+    return Option<u32>::Some((self.value + 1 as u32));
+}
+
+fn "u64^Step::next_step"(self: Box<u64>) -> Option<u64> {
+    if (self.value == 18446744073709551615) {
+        return null;
+    }
+    return Option<u64>::Some((self.value + 1 as u64));
+}
+
+fn "char^Step::next_step"(self: Box<char>) -> Option<char> {
+    let code: u32 = (self.value as u32 + 1 as u32);
+    return "core::prelude/primitive.wado::char::from_u32"(code);
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|I::Item| -> bool");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Future<Result<unit,ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), ErrorCode>>");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(ArraySlice<T>) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|ArraySlice<T>| -> bool");
+}
+
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: &fn(ArraySlice<T>, ArraySlice<T>) -> ArraySlice<T>, f: &mut Formatter) {
+    f.Formatter::write_str("|ArraySlice<T>, ArraySlice<T>| -> ArraySlice<T>");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|u8| -> bool");
+}
+
+pub fn "Fn<2,u8>^Inspect::inspect"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    f.Formatter::write_str("|u8, u8| -> u8");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(char) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> bool");
+}
+
+pub fn "Fn<2,char>^Inspect::inspect"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char, char| -> char");
+}
+
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(String) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|String| -> bool");
+}
+
+pub fn "Fn<2,String>^Inspect::inspect"(self: &fn(String, String) -> String, f: &mut Formatter) {
+    f.Formatter::write_str("|String, String| -> String");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn([i32, char]) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|[i32, char]| -> bool");
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: &fn([i32, char], [i32, char]) -> [i32, char], f: &mut Formatter) {
+    f.Formatter::write_str("|[i32, char], [i32, char]| -> [i32, char]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Fn<2,i32>^Inspect::inspect"(self: &fn(i32, i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32, i32| -> i32");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(i32) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> bool");
+}
+
+pub fn "Fn<1,String>^Inspect::inspect"(self: &fn(String) -> String, f: &mut Formatter) {
+    f.Formatter::write_str("|String| -> String");
+}
+
+pub fn "Fn<0,unit>^Inspect::inspect"(self: &fn() -> (), f: &mut Formatter) {
+    f.Formatter::write_str("|| -> ()");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Fn<2,I::Item>^Inspect::inspect"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    f.Formatter::write_str("|I::Item, I::Item| -> I::Item");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|[i32, I::Item]| -> bool");
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    f.Formatter::write_str("|[i32, I::Item], [i32, I::Item]| -> [i32, I::Item]");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|[I::Item, J::Item]| -> bool");
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    f.Formatter::write_str("|[I::Item, J::Item], [I::Item, J::Item]| -> [I::Item, J::Item]");
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(ArraySlice<T>) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: &fn(ArraySlice<T>, ArraySlice<T>) -> ArraySlice<T>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    self."Fn<2,u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(char) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    self."Fn<2,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(String) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: &fn(String, String) -> String, f: &mut Formatter) {
+    self."Fn<2,String>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn([i32, char]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: &fn([i32, char], [i32, char]) -> [i32, char], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,i32>^InspectAlt::inspect_alt"(self: &fn(i32, i32) -> i32, f: &mut Formatter) {
+    self."Fn<2,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(i32) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,String>^InspectAlt::inspect_alt"(self: &fn(String) -> String, f: &mut Formatter) {
+    self."Fn<1,String>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<0,unit>^InspectAlt::inspect_alt"(self: &fn() -> (), f: &mut Formatter) {
+    self."Fn<0,unit>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    self."Fn<2,I::Item>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(ArraySlice<T>) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: &fn(ArraySlice<T>, ArraySlice<T>) -> ArraySlice<T>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,u8>^Display::fmt"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    self."Fn<2,u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(char) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,char>^Display::fmt"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    self."Fn<2,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(String) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,String>^Display::fmt"(self: &fn(String, String) -> String, f: &mut Formatter) {
+    self."Fn<2,String>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn([i32, char]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: &fn([i32, char], [i32, char]) -> [i32, char], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,i32>^Display::fmt"(self: &fn(i32, i32) -> i32, f: &mut Formatter) {
+    self."Fn<2,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(i32) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,String>^Display::fmt"(self: &fn(String) -> String, f: &mut Formatter) {
+    self."Fn<1,String>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<0,unit>^Display::fmt"(self: &fn() -> (), f: &mut Formatter) {
+    self."Fn<0,unit>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,I::Item>^Display::fmt"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    self."Fn<2,I::Item>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,ErrorCode>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(ArraySlice<T>) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: &fn(ArraySlice<T>, ArraySlice<T>) -> ArraySlice<T>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    self."Fn<2,u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(char) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,char>^DisplayAlt::fmt_alt"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    self."Fn<2,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(String) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: &fn(String, String) -> String, f: &mut Formatter) {
+    self."Fn<2,String>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn([i32, char]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: &fn([i32, char], [i32, char]) -> [i32, char], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,i32>^DisplayAlt::fmt_alt"(self: &fn(i32, i32) -> i32, f: &mut Formatter) {
+    self."Fn<2,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(i32) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,String>^DisplayAlt::fmt_alt"(self: &fn(String) -> String, f: &mut Formatter) {
+    self."Fn<1,String>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<0,unit>^DisplayAlt::fmt_alt"(self: &fn() -> (), f: &mut Formatter) {
+    self."Fn<0,unit>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+}
+
 fn i32_min(a: i32, b: i32) -> i32 {
     return "core::builtin::core/builtin/select<i32>"((a < b), a, b);
 }

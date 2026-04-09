@@ -920,6 +920,12 @@ syntax which is not yet supported.
 
 ##### `fn from_iter(iter: Self::Iter) -> Self`
 
+#### `pub trait Step`
+
+Types that can be incremented by one step (for range iteration).
+
+##### `fn next_step(&self) -> Option<Self>`
+
 ### Structs
 
 #### `pub struct IterMap<I: Iterator, U>`
@@ -2124,6 +2130,38 @@ _Fields are private._
 
 ###### `fn next(&mut self) -> Option<Self::Item>`
 
+#### `pub struct RangeExclusive<T>`
+
+Half-open range [start, end)
+
+##### `start: T`
+
+##### `end: T`
+
+##### `impl Iterator for RangeExclusive<T>`
+
+###### `fn next(&mut self) -> Option<T>`
+
+##### `impl IntoIterator for RangeExclusive<T>`
+
+###### `fn into_iter(&self) -> RangeExclusive<T>`
+
+#### `pub struct RangeInclusive<T>`
+
+Inclusive range [start, end]
+
+##### `start: T`
+
+##### `end: T`
+
+##### `impl Iterator for RangeInclusive<T>`
+
+###### `fn next(&mut self) -> Option<T>`
+
+##### `impl IntoIterator for RangeInclusive<T>`
+
+###### `fn into_iter(&self) -> RangeInclusive<T>`
+
 ### Primitive Types
 
 #### `bool`
@@ -2250,6 +2288,10 @@ Panics if the character is not a valid hex digit.
 
 ###### `pub fn default() -> char`
 
+##### `impl Step for char`
+
+###### `fn next_step(&self) -> Option<char>`
+
 #### `i8`
 
 ##### `pub const MAX: i8`
@@ -2330,6 +2372,10 @@ Panics if the character is not a valid hex digit.
 
 ###### `pub fn try_from(value: i16) -> Result<i8, ConvertError>`
 
+##### `impl Step for i8`
+
+###### `fn next_step(&self) -> Option<i8>`
+
 #### `u8`
 
 ##### `pub const MAX: u8`
@@ -2405,6 +2451,10 @@ Panics if the character is not a valid hex digit.
 ##### `impl TryFrom<u16> for u8`
 
 ###### `pub fn try_from(value: u16) -> Result<u8, ConvertError>`
+
+##### `impl Step for u8`
+
+###### `fn next_step(&self) -> Option<u8>`
 
 #### `i16`
 
@@ -2490,6 +2540,10 @@ Panics if the character is not a valid hex digit.
 
 ###### `pub fn try_from(value: i32) -> Result<i16, ConvertError>`
 
+##### `impl Step for i16`
+
+###### `fn next_step(&self) -> Option<i16>`
+
 #### `u16`
 
 ##### `pub const MAX: u16`
@@ -2565,6 +2619,10 @@ Panics if the character is not a valid hex digit.
 ##### `impl TryFrom<u32> for u16`
 
 ###### `pub fn try_from(value: u32) -> Result<u16, ConvertError>`
+
+##### `impl Step for u16`
+
+###### `fn next_step(&self) -> Option<u16>`
 
 #### `i32`
 
@@ -2670,6 +2728,10 @@ Counts the number of set bits (population count).
 
 ###### `pub fn try_from(value: i64) -> Result<i32, ConvertError>`
 
+##### `impl Step for i32`
+
+###### `fn next_step(&self) -> Option<i32>`
+
 #### `u32`
 
 ##### `pub const MAX: u32`
@@ -2757,6 +2819,10 @@ Counts the number of set bits (population count).
 ##### `impl TryFrom<u64> for u32`
 
 ###### `pub fn try_from(value: u64) -> Result<u32, ConvertError>`
+
+##### `impl Step for u32`
+
+###### `fn next_step(&self) -> Option<u32>`
 
 #### `i64`
 
@@ -2870,6 +2936,10 @@ Counts the number of set bits (population count).
 
 ###### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
 
+##### `impl Step for i64`
+
+###### `fn next_step(&self) -> Option<i64>`
+
 #### `u64`
 
 ##### `pub const MAX: u64`
@@ -2957,6 +3027,10 @@ Counts the number of set bits (population count).
 ##### `impl TryFrom<u128> for u64`
 
 ###### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
+
+##### `impl Step for u64`
+
+###### `fn next_step(&self) -> Option<u64>`
 
 #### `f32`
 

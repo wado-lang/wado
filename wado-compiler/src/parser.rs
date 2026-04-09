@@ -11,11 +11,10 @@ use crate::ast::{
     IndexExpr, InnerAttribute, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
     MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
     Newtype, Param, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt,
-    StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
-    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr,
+    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
+    VariantCase, VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 

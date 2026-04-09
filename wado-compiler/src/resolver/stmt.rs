@@ -1595,9 +1595,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         match pattern {
             Pattern::Literal(Literal::Number(repr)) => {
                 if is_unsigned {
-                    util::parse_u128_literal(repr)
-                        .ok()
-                        .map(|v| v as i128)
+                    util::parse_u128_literal(repr).ok().map(|v| v as i128)
                 } else {
                     util::parse_i128_literal(repr).ok()
                 }
@@ -1612,22 +1610,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } if bindings.is_empty() => {
                 // Could be an associated constant like i32::MAX, i32::MIN
                 match variant_name.as_str() {
-                    "i8::MAX" => Some(i8::MAX as i128),
-                    "i8::MIN" => Some(i8::MIN as i128),
-                    "i16::MAX" => Some(i16::MAX as i128),
-                    "i16::MIN" => Some(i16::MIN as i128),
-                    "i32::MAX" => Some(i32::MAX as i128),
-                    "i32::MIN" => Some(i32::MIN as i128),
-                    "i64::MAX" => Some(i64::MAX as i128),
-                    "i64::MIN" => Some(i64::MIN as i128),
-                    "u8::MAX" => Some(u8::MAX as i128),
-                    "u8::MIN" => Some(u8::MIN as i128),
-                    "u16::MAX" => Some(u16::MAX as i128),
-                    "u16::MIN" => Some(u16::MIN as i128),
-                    "u32::MAX" => Some(u32::MAX as i128),
-                    "u32::MIN" => Some(u32::MIN as i128),
-                    "u64::MAX" => Some(u64::MAX as i128),
-                    "u64::MIN" => Some(u64::MIN as i128),
+                    "i8::MAX" => Some(i128::from(i8::MAX)),
+                    "i8::MIN" => Some(i128::from(i8::MIN)),
+                    "i16::MAX" => Some(i128::from(i16::MAX)),
+                    "i16::MIN" => Some(i128::from(i16::MIN)),
+                    "i32::MAX" => Some(i128::from(i32::MAX)),
+                    "i32::MIN" => Some(i128::from(i32::MIN)),
+                    "i64::MAX" => Some(i128::from(i64::MAX)),
+                    "i64::MIN" => Some(i128::from(i64::MIN)),
+                    "u8::MAX" => Some(i128::from(u8::MAX)),
+                    "u8::MIN" => Some(i128::from(u8::MIN)),
+                    "u16::MAX" => Some(i128::from(u16::MAX)),
+                    "u16::MIN" => Some(i128::from(u16::MIN)),
+                    "u32::MAX" => Some(i128::from(u32::MAX)),
+                    "u32::MIN" => Some(i128::from(u32::MIN)),
+                    "u64::MAX" => Some(i128::from(u64::MAX)),
+                    "u64::MIN" => Some(i128::from(u64::MIN)),
                     _ => None,
                 }
             }

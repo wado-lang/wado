@@ -1942,6 +1942,7 @@ impl<'a> Unparser<'a> {
                 | Expr::Cast(_)
                 | Expr::Assign(_)
                 | Expr::CompoundAssign(_)
+                | Expr::Range(_)
         );
         if needs_parens {
             self.output.push('(');
