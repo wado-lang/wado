@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775696506886,
+  "lastUpdate": 1775726126688,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11021,6 +11021,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7e5a19555569775556c8e72ef575bff514991b84"
         },
         "date": 1775696506633,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1794,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8969,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "95ba162bf5024944d951910373a0dff5acc6e021",
+          "message": "Merge pull request #793 from wado-lang/claude/optimize-sqlite-benchmark-JmuUr\n\nOptimize sqlite-parse benchmark: value_copy elision and bounds check elimination",
+          "timestamp": "2026-04-09T18:11:59+09:00",
+          "tree_id": "5b4d3679ff5c31ec70159d46c17dcfa519402d41",
+          "url": "https://github.com/wado-lang/wado/commit/95ba162bf5024944d951910373a0dff5acc6e021"
+        },
+        "date": 1775726126429,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
