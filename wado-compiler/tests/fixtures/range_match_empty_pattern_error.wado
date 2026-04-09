@@ -1,0 +1,14 @@
+// Empty range patterns should be a compile error
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let x = 5;
+    let r = match x {
+        5..<5 => "empty",
+        _ => "ok",
+    };
+    println(r);
+}
+
+__DATA__
+{"compile_error": "empty range pattern"}

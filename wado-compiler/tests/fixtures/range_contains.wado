@@ -1,0 +1,37 @@
+#![TODO]
+// Range contains() and is_empty() methods (WEP Phase 4)
+
+test "exclusive range contains" {
+    let r = 0..<10;
+    assert r.contains(&5);
+    assert !r.contains(&10);
+    assert !r.contains(&-1);
+}
+
+test "inclusive range contains" {
+    let r = 0..=10;
+    assert r.contains(&5);
+    assert r.contains(&10);
+    assert !r.contains(&11);
+}
+
+test "exclusive range is_empty" {
+    assert (5..<5).is_empty();
+    assert (5..<3).is_empty();
+    assert !(0..<1).is_empty();
+}
+
+test "inclusive range is_empty" {
+    assert !(5..=5).is_empty();
+    assert (5..=3).is_empty();
+    assert !(0..=0).is_empty();
+}
+
+test "float range contains" {
+    let r = 0.0..<1.0;
+    assert r.contains(&0.5);
+    assert !r.contains(&1.0);
+}
+
+__DATA__
+{"test": {}}
