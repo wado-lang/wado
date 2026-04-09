@@ -104,7 +104,7 @@ Replaces `GlobalVarGet` references to immutable global variables with their cons
 
 ### Constant Folding (`const_folding.rs`)
 
-Evaluates compile-time-known expressions into literal values: integer/float arithmetic and comparison, boolean logic, bitwise operations, integer casts. Guards against division by zero and signed `MIN / -1` traps.
+Evaluates compile-time-known expressions into literal values: integer/float arithmetic and comparison, boolean logic, bitwise operations, integer casts. Guards against division by zero and signed `MIN / -1` traps. Also folds boolean identity expressions: `false || x` → `x`, `true && x` → `x`, `x || false` → `x`, `x && true` → `x`.
 
 ### Constant Global Promotion (`const_global_promotion.rs`)
 
@@ -129,6 +129,10 @@ Hoists loop-invariant field accesses out of loops when the target variable does 
 Eliminates conditions implied false by dominating guards. When a loop guard proves `i < bound`, any inner condition `i >= bound` is known false and can be replaced with `false`. The existing `const_branch_prune` pass then removes the dead branch on the next iteration.
 
 Also handles dominating if-conditions: when `if (var + offset) < bound { ... }`, bounds checks `(var + k) >= bound` for `k <= offset` inside the then-block are known false.
+
+Short-circuit `||` elimination: in `(var + k) >= bound || expr`, the right operand only executes when `var + k < bound`, so any inner `if (index >= bound) { panic }` inside `expr` is always false.
+
+Early-exit guard propagation: when `if (var >= bound) { return/break; }` is followed by subsequent statements, those statements know `var < bound`, eliminating redundant bounds checks below the guard.
 
 This subsumes the former WIR-level bounds check elimination pass, handling both strict `<` and inclusive `<=` guard patterns at the TIR level.
 
@@ -188,7 +192,7 @@ After parameter SROA, substitutes `StructGet(LocalGet(x), field)` with the inner
 
 ### Phase 5: Peephole and Multi-Field Struct Elimination
 
-- **Peephole** — constant folding, copy elision (including cross-scope fresh value tracing for unwrap patterns), multi-value struct elision at WIR level
+- **Peephole** — constant folding, copy elision (including cross-scope fresh value tracing for unwrap patterns, StructNew/ArrayNewFixed field usage, and Return/Br instructions containing StructNew with the variable as a field), multi-value struct elision at WIR level
 - **Flatten seq assignments** — exposes multi-field struct locals for elimination
 - **Multi-field struct local elimination** — substitutes `StructGet(LocalGet(x), field_k)` with the corresponding field expression when all fields are accessed exactly once
 
@@ -223,7 +227,7 @@ After parameter SROA, substitutes `StructGet(LocalGet(x), field)` with the inner
 - **Reassociation** — reorder associative operations to group constants
 - **SimplifyCFG** — general control flow graph simplification
 - **Tail Call Optimization** — emit `return_call` for tail-recursive calls
-- **Bounds Check Elimination (outside loops)** — redundant consecutive checks (loop-guarded bounds checks are handled by `condition_implication`)
+- **Bounds Check Elimination (chained sequential access)** — `arr[0]; arr[1]; arr[2]` where a single length check could guard all accesses
 
 ## Tried and Found Ineffective
 

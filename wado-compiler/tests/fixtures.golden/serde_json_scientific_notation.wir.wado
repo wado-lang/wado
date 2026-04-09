@@ -5762,7 +5762,7 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_u32"(self) {
         return struct.new "core:prelude/types.wado//Result<u32,DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i32_wrap_i64(v) };
     }
     if ref.test "core:prelude/types.wado//Result<i64,DeserializeError>::Err"(ir) {
-        e = value_copy "core:serde//DeserializeError"(ref.cast "core:prelude/types.wado//Result<i64,DeserializeError>::Err"(ir).payload_0);
+        e = ref.cast "core:prelude/types.wado//Result<i64,DeserializeError>::Err"(ir).payload_0;
         return struct.new "core:prelude/types.wado//Result<u32,DeserializeError>::Err" { discriminant: 1, payload_0: e };
     }
     "core:internal/unreachable"();
@@ -5818,7 +5818,7 @@ fn "core:json/JsonDeserializer^Deserializer::deserialize_f32"(self) {
         return struct.new "core:prelude/types.wado//Result<f32,DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::f32_demote_f64(v) };
     }
     if ref.test "core:prelude/types.wado//Result<f64,DeserializeError>::Err"(r) {
-        e = value_copy "core:serde//DeserializeError"(ref.cast "core:prelude/types.wado//Result<f64,DeserializeError>::Err"(r).payload_0);
+        e = ref.cast "core:prelude/types.wado//Result<f64,DeserializeError>::Err"(r).payload_0;
         return struct.new "core:prelude/types.wado//Result<f32,DeserializeError>::Err" { discriminant: 1, payload_0: e };
     }
     "core:internal/unreachable"();

@@ -81,6 +81,51 @@ impl TirOptVisitor for ConstFoldVisitor<'_> {
             expr.kind = folded.into_expr_kind();
             changed = true;
         }
+        // Identity folding for boolean short-circuit operators:
+        // `false || X` → X, `true || X` → true (already handled above)
+        // `true && X` → X, `false && X` → false (already handled above)
+        if let TirExprKind::Binary { left, op, right } = &mut expr.kind {
+            match (&left.kind, *op) {
+                (TirExprKind::BoolLiteral(false), TirBinaryOp::Or)
+                | (TirExprKind::BoolLiteral(true), TirBinaryOp::And) => {
+                    let rhs = std::mem::replace(
+                        right.as_mut(),
+                        TirExpr {
+                            kind: TirExprKind::Unit,
+                            type_id: expr.type_id,
+                            span: expr.span,
+                        },
+                    );
+                    *expr = rhs;
+                    changed = true;
+                }
+                (_, TirBinaryOp::Or) if matches!(right.kind, TirExprKind::BoolLiteral(false)) => {
+                    let lhs = std::mem::replace(
+                        left.as_mut(),
+                        TirExpr {
+                            kind: TirExprKind::Unit,
+                            type_id: expr.type_id,
+                            span: expr.span,
+                        },
+                    );
+                    *expr = lhs;
+                    changed = true;
+                }
+                (_, TirBinaryOp::And) if matches!(right.kind, TirExprKind::BoolLiteral(true)) => {
+                    let lhs = std::mem::replace(
+                        left.as_mut(),
+                        TirExpr {
+                            kind: TirExprKind::Unit,
+                            type_id: expr.type_id,
+                            span: expr.span,
+                        },
+                    );
+                    *expr = lhs;
+                    changed = true;
+                }
+                _ => {}
+            }
+        }
         changed
     }
 }

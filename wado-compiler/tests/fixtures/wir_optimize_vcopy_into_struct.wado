@@ -1,0 +1,48 @@
+// Test: value_copy is elided when the result is stored into a StructNew field.
+//
+// Pattern:
+//   inner = value_copy Inner(variant_payload)
+//   w = struct.new Wrapper { inner: inner, label: 1 }
+//
+// Storing into a fresh struct field is a safe read-only use — no deep copy needed.
+
+use { println } from "core:cli";
+
+struct Inner {
+    value: i32,
+}
+
+struct Wrapper {
+    inner: Inner,
+    label: i32,
+}
+
+fn make_inner() -> Inner {
+    return Inner { value: 42 };
+}
+
+variant MaybeInner {
+    Some(Inner),
+    None,
+}
+
+#[inline(never)]
+fn wrap(c: MaybeInner) -> Wrapper {
+    if let Some(inner) = c {
+        let w = Wrapper { inner: inner, label: 1 };
+        return w;
+    }
+    return Wrapper { inner: Inner { value: 0 }, label: 0 };
+}
+
+export fn run() with Stdout {
+    let c = MaybeInner::Some(make_inner());
+    let w = wrap(c);
+    println(`{w.inner.value},{w.label}`);
+}
+
+__DATA__
+{
+    "stdout": "42,1\n",
+    "wir_not_expect:O2": ["value_copy"]
+}

@@ -2968,7 +2968,7 @@ fn "core:json/JsonDeserializer^Deserializer::begin_seq"(self) {
     let e: ref "core:serde//DeserializeError";
     r = "core:json/JsonDeserializer::expect_char"(self, 91);
     if ref.is_null(r) == 0 {
-        e = value_copy "core:serde//DeserializeError"(ref.as_non_null(r));
+        e = ref.as_non_null(r);
         return struct.new "core:prelude/types.wado//Result<JsonSeqAccess,DeserializeError>::Err" { discriminant: 1, payload_0: e };
     }
     return struct.new "core:prelude/types.wado//Result<JsonSeqAccess,DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:json//JsonSeqAccess" { de: self, first: 1 } };
@@ -3458,7 +3458,7 @@ fn "wado-compiler/tests/fixtures/serde_json_tuple.wado/String^Deserialize::deser
         unreachable;
     }));
     if ref.is_null(opt) == 0 {
-        v = value_copy "core:prelude/string.wado//String"(ref.as_non_null(opt));
+        v = ref.as_non_null(opt);
         return struct.new "core:prelude/types.wado//Result<String,DeserializeError>::Ok" { discriminant: 0, payload_0: v };
     }
     return struct.new "core:prelude/types.wado//Result<String,DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: -1_i64 } };
@@ -3494,18 +3494,18 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<String>"(self) {
     if self.first == 0 {
         r = "core:json/JsonDeserializer::expect_char"(self.de, 44);
         if ref.is_null(r) == 0 {
-            e_2 = value_copy "core:serde//DeserializeError"(ref.as_non_null(r));
+            e_2 = ref.as_non_null(r);
             return struct.new "core:prelude/types.wado//Result<Option<String>,DeserializeError>::Err" { discriminant: 1, payload_0: e_2 };
         }
     }
     self.first = 0;
     elem = "wado-compiler/tests/fixtures/serde_json_tuple.wado/String^Deserialize::deserialize<JsonDeserializer>"(self.de);
     if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(elem) {
-        v = value_copy "core:prelude/string.wado//String"(ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(elem).payload_0);
+        v = ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(elem).payload_0;
         return struct.new "core:prelude/types.wado//Result<Option<String>,DeserializeError>::Ok" { discriminant: 0, payload_0: v };
     }
     if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Err"(elem) {
-        e_5 = value_copy "core:serde//DeserializeError"(ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Err"(elem).payload_0);
+        e_5 = ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Err"(elem).payload_0;
         return struct.new "core:prelude/types.wado//Result<Option<String>,DeserializeError>::Err" { discriminant: 1, payload_0: e_5 };
     }
     "core:internal/unreachable"();
@@ -3574,7 +3574,7 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<i32>"(self) {
     if self.first == 0 {
         r = "core:json/JsonDeserializer::expect_char"(self.de, 44);
         if ref.is_null(r) == 0 {
-            e_2 = value_copy "core:serde//DeserializeError"(ref.as_non_null(r));
+            e_2 = ref.as_non_null(r);
             return struct.new "core:prelude/types.wado//Result<Option<i32>,DeserializeError>::Err" { discriminant: 1, payload_0: e_2 };
         }
     }
@@ -3585,7 +3585,7 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<i32>"(self) {
         return struct.new "core:prelude/types.wado//Result<Option<i32>,DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: v } };
     }
     if ref.test "core:prelude/types.wado//Result<i32,DeserializeError>::Err"(elem) {
-        e_5 = value_copy "core:serde//DeserializeError"(ref.cast "core:prelude/types.wado//Result<i32,DeserializeError>::Err"(elem).payload_0);
+        e_5 = ref.cast "core:prelude/types.wado//Result<i32,DeserializeError>::Err"(elem).payload_0;
         return struct.new "core:prelude/types.wado//Result<Option<i32>,DeserializeError>::Err" { discriminant: 1, payload_0: e_5 };
     }
     "core:internal/unreachable"();

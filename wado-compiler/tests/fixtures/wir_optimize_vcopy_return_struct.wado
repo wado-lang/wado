@@ -1,0 +1,55 @@
+// Test: value_copy elision when result is stored into a StructNew field
+// inside a return statement.
+//
+// Pattern:
+//   x = value_copy T(expr)
+//   return struct.new { ..., x, ... }
+//
+// The copy is unnecessary because the variable is only used as a field
+// in a fresh struct allocation inside the return.
+
+use { println } from "core:cli";
+
+struct Inner {
+    value: i32,
+    name: String,
+}
+
+struct Outer {
+    inner: Inner,
+    tag: i32,
+}
+
+#[inline(never)]
+fn make_inner(v: i32) -> Result<Inner, String> {
+    if v < 0 {
+        return Result::<Inner, String>::Err("negative");
+    }
+    return Result::<Inner, String>::Ok(Inner { value: v, name: `item_{v}` });
+}
+
+#[inline(never)]
+fn make_outer(v: i32) -> Result<Outer, String> {
+    let inner = match make_inner(v) {
+        Ok(i) => i,
+        Err(e) => { return Result::<Outer, String>::Err(e); },
+    };
+    return Result::<Outer, String>::Ok(Outer { inner, tag: v * 10 });
+}
+
+export fn run() with Stdout {
+    let r = make_outer(5);
+    if let Ok(o) = r {
+        println(`{o.inner.value} {o.inner.name} {o.tag}`);
+    }
+    let r2 = make_outer(-1);
+    if let Err(e) = r2 {
+        println(`{e}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "5 item_5 50\nnegative\n",
+    "wir_not_expect:O2": ["value_copy"]
+}

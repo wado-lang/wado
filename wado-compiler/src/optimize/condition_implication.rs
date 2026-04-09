@@ -82,11 +82,21 @@ fn process_function(func: &mut TirFunction) -> bool {
 
 fn process_block(block: &mut TirBlock, defs: &mut DefMap) -> bool {
     let mut changed = false;
-    for stmt in &mut block.stmts {
-        record_def_from_stmt(stmt, defs);
-        record_defs_from_nested(stmt, defs);
-        changed |= BitmaskEliminator { defs }.visit_stmt(stmt);
-        changed |= process_stmt(stmt, defs);
+    let mut guards: Vec<ShortCircuitGuard> = Vec::new();
+    for i in 0..block.stmts.len() {
+        record_def_from_stmt(&block.stmts[i], defs);
+        record_defs_from_nested(&block.stmts[i], defs);
+        // Apply accumulated guards from previous early-exit stmts to this stmt
+        for guard in &guards {
+            changed |= guard.eliminate_in_stmt(&mut block.stmts[i], defs);
+        }
+        changed |= BitmaskEliminator { defs }.visit_stmt(&mut block.stmts[i]);
+        changed |= ShortCircuitEliminator { defs }.visit_stmt(&mut block.stmts[i]);
+        changed |= process_stmt(&mut block.stmts[i], defs);
+        // If this is `if (var >= bound) { return/break }`, extract a guard
+        if let Some(guard) = extract_early_exit_guard(&block.stmts[i], defs) {
+            guards.push(guard);
+        }
     }
     changed
 }
@@ -682,6 +692,310 @@ impl TirOptVisitor for BitmaskEliminator<'_> {
             return true;
         }
         opt_walk_stmt(self, stmt)
+    }
+}
+
+/// Extract a guard from an early-exit if-statement.
+///
+/// Matches: `if (var + k) >= bound { return/break }` → after this stmt,
+/// we know `(var + k) < bound`.
+fn extract_early_exit_guard(stmt: &TirStmt, defs: &DefMap) -> Option<ShortCircuitGuard> {
+    let TirStmtKind::If {
+        condition,
+        then_block,
+        else_block: None,
+    } = &stmt.kind
+    else {
+        return None;
+    };
+
+    // then_block must be all early exits (return/break)
+    if !block_always_exits(then_block) {
+        return None;
+    }
+
+    ShortCircuitGuard::extract(condition, defs)
+}
+
+fn block_always_exits(block: &TirBlock) -> bool {
+    block.stmts.iter().any(|s| {
+        matches!(
+            s.kind,
+            TirStmtKind::Return { .. } | TirStmtKind::Break { .. }
+        )
+    })
+}
+
+/// Eliminate redundant bounds checks inside short-circuit `||` expressions.
+///
+/// Pattern: `(start + k) >= bound || expr`
+/// The right operand `expr` only executes when `(start + k) < bound`.
+/// Any `if (index >= bound) { panic }` inside `expr` where `index` resolves
+/// to the same value as `start + k` (or `start + j` with `j <= k`) is always false.
+///
+/// This handles both `Local` and `FieldAccess` bounds (e.g., `chars.used`).
+struct ShortCircuitEliminator<'a> {
+    defs: &'a DefMap,
+}
+
+impl TirOptVisitor for ShortCircuitEliminator<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+        if let TirExprKind::Binary {
+            left,
+            op: TirBinaryOp::Or,
+            right,
+        } = &mut expr.kind
+        {
+            let mut changed = self.visit_expr(left);
+            if let Some(guard) = ShortCircuitGuard::extract(left, self.defs) {
+                changed |= guard.eliminate_in_expr(right, self.defs);
+            }
+            changed |= self.visit_expr(right);
+            return changed;
+        }
+        opt_walk_expr(self, expr)
+    }
+}
+
+/// A guard extracted from the left side of `||` being false.
+///
+/// From `(var + offset) >= bound` being false, we know `(var + k) < bound`
+/// for all `k <= offset`.
+struct ShortCircuitGuard {
+    /// The base variable (e.g., `pos` or `start`)
+    var: u32,
+    /// Maximum offset proven safe: `var + max_offset < bound`
+    max_offset: i64,
+    /// The bound expression — either a local index or a field access descriptor
+    bound: BoundExpr,
+}
+
+#[derive(Clone)]
+enum BoundExpr {
+    Local(u32),
+    FieldAccess { local: u32, field_index: u32 },
+}
+
+impl ShortCircuitGuard {
+    /// Extract a guard from `(var + k) >= bound` being false.
+    fn extract(condition: &TirExpr, defs: &DefMap) -> Option<Self> {
+        let TirExprKind::Binary { left, op, right } = &condition.kind else {
+            return None;
+        };
+        if *op != TirBinaryOp::GtEq {
+            return None;
+        }
+
+        let bound = match &right.kind {
+            TirExprKind::Local { index, .. } => BoundExpr::Local(*index),
+            TirExprKind::FieldAccess {
+                expr, field_index, ..
+            } => {
+                let TirExprKind::Local { index, .. } = &expr.kind else {
+                    return None;
+                };
+                BoundExpr::FieldAccess {
+                    local: *index,
+                    field_index: *field_index,
+                }
+            }
+            _ => return None,
+        };
+
+        let (var, max_offset) = match &left.kind {
+            TirExprKind::Local { index, .. } => (*index, 0),
+            TirExprKind::Binary {
+                left: inner_left,
+                op: TirBinaryOp::Add,
+                right: inner_right,
+            } => {
+                let TirExprKind::Local { index: var, .. } = &inner_left.kind else {
+                    return None;
+                };
+                let offset = match &inner_right.kind {
+                    TirExprKind::IntLiteral { value, .. } => *value as i64,
+                    TirExprKind::Local { index, .. } => resolve_constant(*index, defs)?,
+                    _ => return None,
+                };
+                if offset < 0 {
+                    return None;
+                }
+                (*var, offset)
+            }
+            _ => return None,
+        };
+
+        Some(ShortCircuitGuard {
+            var,
+            max_offset,
+            bound,
+        })
+    }
+
+    /// Check if `check_var >= check_bound` is implied false by this guard.
+    fn implies_false(&self, condition: &TirExpr, defs: &DefMap) -> bool {
+        let TirExprKind::Binary { left, op, right } = &condition.kind else {
+            return false;
+        };
+        if *op != TirBinaryOp::GtEq {
+            return false;
+        }
+
+        // Check that the bound matches
+        if !self.bound_matches(right, defs) {
+            return false;
+        }
+
+        // Check that check_var resolves to var + k where k <= max_offset
+        self.var_in_range(left, defs)
+    }
+
+    fn bound_matches(&self, expr: &TirExpr, defs: &DefMap) -> bool {
+        match (&self.bound, &expr.kind) {
+            (BoundExpr::Local(guard_bound), TirExprKind::Local { index, .. }) => {
+                resolves_to(*index, *guard_bound, defs)
+            }
+            (
+                BoundExpr::FieldAccess {
+                    local: guard_local,
+                    field_index: guard_field,
+                },
+                TirExprKind::FieldAccess {
+                    expr: inner,
+                    field_index,
+                    ..
+                },
+            ) => {
+                if let TirExprKind::Local { index, .. } = &inner.kind {
+                    *field_index == *guard_field && resolves_to(*index, *guard_local, defs)
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+
+    fn var_in_range(&self, expr: &TirExpr, defs: &DefMap) -> bool {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => {
+                if resolves_to(*index, self.var, defs) {
+                    return true; // offset 0 <= max_offset
+                }
+                // Check if it resolves to var + k through defs
+                resolve_offset_from(*index, self.var, defs)
+                    .is_some_and(|offset| offset >= 0 && offset <= self.max_offset)
+            }
+            TirExprKind::Binary {
+                left,
+                op: TirBinaryOp::Add,
+                right,
+            } => {
+                let TirExprKind::Local { index, .. } = &left.kind else {
+                    return false;
+                };
+                if !resolves_to(*index, self.var, defs) {
+                    return false;
+                }
+                let offset = match &right.kind {
+                    TirExprKind::IntLiteral { value, .. } => *value as i64,
+                    TirExprKind::Local { index, .. } => {
+                        if let Some(c) = resolve_constant(*index, defs) {
+                            c
+                        } else {
+                            return false;
+                        }
+                    }
+                    _ => return false,
+                };
+                offset >= 0 && offset <= self.max_offset
+            }
+            _ => false,
+        }
+    }
+
+    fn eliminate_in_expr(&self, expr: &mut TirExpr, defs: &DefMap) -> bool {
+        match &mut expr.kind {
+            TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
+                self.eliminate_in_block(block, defs)
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                let mut changed = self.eliminate_in_expr(left, defs);
+                changed |= self.eliminate_in_expr(right, defs);
+                changed
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. } => self.eliminate_in_expr(inner, defs),
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let mut changed = self.eliminate_in_expr(condition, defs);
+                changed |= self.eliminate_in_block(then_branch, defs);
+                if let Some(eb) = else_branch {
+                    changed |= self.eliminate_in_block(eb, defs);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
+
+    fn eliminate_in_block(&self, block: &mut TirBlock, defs: &DefMap) -> bool {
+        let mut changed = false;
+        for stmt in &mut block.stmts {
+            changed |= self.eliminate_in_stmt(stmt, defs);
+        }
+        changed
+    }
+
+    fn eliminate_in_stmt(&self, stmt: &mut TirStmt, defs: &DefMap) -> bool {
+        // Check if this is a bounds-check `if (index >= bound) { panic() }` implied false
+        if let TirStmtKind::If {
+            condition,
+            then_block,
+            else_block: None,
+        } = &mut stmt.kind
+            && is_panic_block(then_block)
+            && self.implies_false(condition, defs)
+        {
+            let type_id = condition.type_id;
+            let span = condition.span;
+            *condition = TirExpr {
+                kind: TirExprKind::BoolLiteral(false),
+                type_id,
+                span,
+            };
+            return true;
+        }
+
+        // Recurse into sub-expressions and sub-statements
+        match &mut stmt.kind {
+            TirStmtKind::Let { value, .. } => self.eliminate_in_expr(value, defs),
+            TirStmtKind::Expr(expr) => self.eliminate_in_expr(expr, defs),
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let mut changed = self.eliminate_in_expr(condition, defs);
+                changed |= self.eliminate_in_block(then_block, defs);
+                if let Some(eb) = else_block {
+                    changed |= self.eliminate_in_block(eb, defs);
+                }
+                changed
+            }
+            TirStmtKind::Return { value: Some(expr) }
+            | TirStmtKind::Break {
+                value: Some(expr), ..
+            } => self.eliminate_in_expr(expr, defs),
+            TirStmtKind::LabeledBlock { block, .. } | TirStmtKind::Loop { body: block } => {
+                self.eliminate_in_block(block, defs)
+            }
+            _ => false,
+        }
     }
 }
 
