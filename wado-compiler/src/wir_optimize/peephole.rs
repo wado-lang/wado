@@ -580,6 +580,14 @@ fn uses_of_var_are_reads_only(instr: &WirInstr, var_name: &str) -> bool {
         WirInstr::LocalGet { name, .. } if name == var_name => true,
         // Br carrying a value: check if the value mentions var
         WirInstr::Br { .. } => !instr_contains_local_get(instr, var_name),
+        // Return: safe if var appears only in StructNew fields within the value
+        WirInstr::Return { value: Some(v) } => {
+            if value_uses_var_only_in_struct_new_fields(v, var_name) {
+                return true;
+            }
+            !instr_contains_local_get(instr, var_name)
+        }
+        WirInstr::Return { value: None } => true,
         // StructSet on the variable — mutation!
         WirInstr::StructSet { expr, .. } => {
             !matches!(expr.as_ref(), WirInstr::LocalGet { name, .. } if name == var_name)
@@ -758,6 +766,14 @@ fn uses_of_var_are_field_reads_only(instr: &WirInstr, var_name: &str) -> bool {
                         .all(|i| uses_of_var_are_field_reads_only(i, var_name))
                 })
         }
+        // Return: safe if var appears only in StructNew fields within the value
+        WirInstr::Return { value: Some(v) } => {
+            if value_uses_var_only_in_struct_new_fields(v, var_name) {
+                return true;
+            }
+            !instr_contains_local_get(instr, var_name)
+        }
+        WirInstr::Return { value: None } => true,
         _ => !instr_contains_local_get(instr, var_name),
     }
 }
@@ -782,6 +798,48 @@ fn is_safe_condition_use(instr: &WirInstr, var_name: &str) -> bool {
             is_safe_condition_use(a, var_name) && is_safe_condition_use(b, var_name)
         }
         _ => !instr_contains_local_get(instr, var_name),
+    }
+}
+
+/// Returns `true` if `var_name` appears in the return/break value expression only
+/// as a direct `LocalGet(var_name)` inside `StructNew` or `ArrayNewFixed` fields.
+///
+/// Handles multi-value returns (Seq), nested StructNew, and Block expressions.
+/// This is safe because each `StructNew` creates a fresh allocation — the variable
+/// reference is consumed into a new struct, not aliased or mutated.
+fn value_uses_var_only_in_struct_new_fields(instr: &WirInstr, var_name: &str) -> bool {
+    match instr {
+        // StructNew/ArrayNewFixed: var must appear only as direct LocalGet in fields
+        WirInstr::StructNew { fields, .. } | WirInstr::ArrayNewFixed { elements: fields, .. } => {
+            for field in fields {
+                if is_direct_local_get_or_non_null(field, var_name) {
+                    continue;
+                }
+                // Recurse into nested StructNew fields
+                if instr_contains_local_get(field, var_name) {
+                    if !value_uses_var_only_in_struct_new_fields(field, var_name) {
+                        return false;
+                    }
+                }
+            }
+            true
+        }
+        // Seq: multi-value return — check each element
+        WirInstr::Seq(instrs) => instrs
+            .iter()
+            .all(|i| value_uses_var_only_in_struct_new_fields(i, var_name)),
+        // RefAsNonNull wrapping — look through to the inner instruction
+        WirInstr::RefAsNonNull(inner) => {
+            value_uses_var_only_in_struct_new_fields(inner, var_name)
+        }
+        // Block: check body and break values
+        WirInstr::Block { body, .. } => body
+            .iter()
+            .all(|i| value_uses_var_only_in_struct_new_fields(i, var_name)),
+        // Doesn't contain var at all — OK
+        _ if !instr_contains_local_get(instr, var_name) => true,
+        // Contains var but not in a safe position
+        _ => false,
     }
 }
 
