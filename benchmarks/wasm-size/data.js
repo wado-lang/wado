@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775794838156,
+  "lastUpdate": 1775819716284,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11255,6 +11255,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e550d4ae049d181fb9ce6459f71bba61a68b84b3"
         },
         "date": 1775794837887,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1799,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8974,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19360,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "20fc38b8d01b963df213b3ba955361842a9252ee",
+          "message": "Merge pull request #799 from wado-lang/claude/optimize-sqlite-benchmark-SXXre\n\nOptimize Gale lexer codegen: first-char dispatch and token priority fix",
+          "timestamp": "2026-04-10T20:11:41+09:00",
+          "tree_id": "bcb8b9f978b4bcf7ad8933046be865fa282b6353",
+          "url": "https://github.com/wado-lang/wado/commit/20fc38b8d01b963df213b3ba955361842a9252ee"
+        },
+        "date": 1775819716023,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
