@@ -3,17 +3,24 @@
 // Usage: wado run example/http-get.wado
 
 use { println, Stdout } from "core:cli";
+use { Url } from "core:url";
 use { Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
-fn send_get(authority: String, path: String) -> Response {
+fn scheme_of(url: &Url) -> Scheme {
+    if url.scheme == "http" { return Scheme::Http; }
+    if url.scheme == "https" { return Scheme::Https; }
+    return Scheme::Other(url.scheme);
+}
+
+fn send_get(url: &Url) -> Response {
     let headers = Fields::new();
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _req_future] = Request::new(headers, null, trailers_rx, null);
 
-    req.set_scheme(Option::Some(Scheme::Https));
-    req.set_authority(Option::Some(authority));
-    req.set_path_with_query(Option::Some(path));
+    req.set_scheme(Option::Some(scheme_of(url)));
+    req.set_authority(Option::Some(url.host_and_port()));
+    req.set_path_with_query(Option::Some(url.path_and_query()));
 
     let result = Client::send(req);
     trailers_tx.write(Result::Ok(null));
@@ -45,7 +52,8 @@ fn read_body(resp: Response) -> String {
 }
 
 export fn run() with Stdout, Client {
-    let resp = send_get("httpbin.org", "/get");
+    let url = Url::parse("https://httpbin.org/get").unwrap();
+    let resp = send_get(&url);
     let status = resp.get_status_code();
     println(`Status: {status as i32}`);
 
