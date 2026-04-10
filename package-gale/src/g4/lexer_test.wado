@@ -1,10 +1,10 @@
-use { Token } from "../runtime.wado";
+use { Token, LexerSlice } from "../runtime.wado";
 use { G4Token } from "./token.wado";
 use { tokenize } from "./lexer.wado";
 
 fn assert_token(tok: &Token, expected_kind: G4Token, expected_text: String) {
     assert tok.kind == expected_kind as i32, `expected kind {expected_kind.name()}, got {tok.kind}`;
-    assert tok.text == expected_text, `expected text "{expected_text}", got "{tok.text}"`;
+    assert LexerSlice::eq_str(&expected_text, &tok.text), `expected text "{expected_text}", got "{tok.text}"`;
 }
 
 test "empty input produces EOF" {

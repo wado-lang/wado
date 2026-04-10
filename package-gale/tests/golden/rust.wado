@@ -29,30 +29,114 @@ impl Eq for Span {
     }
 }
 
+/// LexerSlice is a lazy reference to a range of characters in the source input.
+/// It avoids allocating a String for every token during tokenization.
+pub struct LexerSlice {
+    pub chars: &Array<char>,
+    pub start: i32,
+    pub end: i32,
+}
+
+impl LexerSlice {
+    pub fn new(chars: &Array<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+        return LexerSlice { chars, start, end };
+    }
+
+    pub fn empty(chars: &Array<char>) -> LexerSlice with stores[chars] {
+        return LexerSlice { chars, start: 0, end: 0 };
+    }
+
+    pub fn from_string(s: String) -> LexerSlice {
+        let chars = s.chars().collect();
+        return LexerSlice { chars: &chars, start: 0, end: chars.len() };
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.start >= self.end;
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn push_to(&self, out: &mut String) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            out.push(self.chars[i]);
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut s = String::with_capacity(self.end - self.start);
+        self.push_to(&mut s);
+        return s;
+    }
+
+    pub fn eq_str(a: &String, b: &LexerSlice) -> bool {
+        let a_chars = a.chars();
+        let mut a_iter = a_chars;
+        let mut i = b.start;
+        loop {
+            let a_next = a_iter.next();
+            if i >= b.end {
+                return a_next matches { None };
+            }
+            if let Some(ac) = a_next {
+                if ac != b.chars[i] {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+            i += 1;
+        }
+    }
+}
+
+impl Display for LexerSlice {
+    fn fmt(&self, f: &mut Formatter) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            f.write_char(self.chars[i]);
+        }
+    }
+}
+
+impl Eq for LexerSlice {
+    fn eq(&self, other: &Self) -> bool {
+        let len = self.end - self.start;
+        if len != other.end - other.start {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if self.chars[self.start + i] != other.chars[other.start + i] {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
 /// Token represents a lexed token with its kind, text, and position.
 /// Leading trivia (whitespace, comments) is attached to each token.
 pub struct Token {
     pub kind: i32,
-    pub text: String,
+    pub text: LexerSlice,
     pub span: Span,
     pub leading_trivia: Array<Token>,
 }
 
 impl Token {
-    pub fn new(kind: i32, text: String, span: Span) -> Token {
+    pub fn new(kind: i32, text: LexerSlice, span: Span) -> Token {
         return Token { kind, text, span, leading_trivia: [] };
     }
 
-    pub fn with_trivia(kind: i32, text: String, span: Span, leading_trivia: Array<Token>) -> Token {
+    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
         return Token { kind, text, span, leading_trivia };
     }
 }
 
-impl Eq for Token {
-    fn eq(&self, other: &Self) -> bool {
-        return self.kind == other.kind && self.text == other.text && self.span == other.span;
-    }
-}
+// Note: Token Eq is intentionally omitted. Auto-derived Eq on recursive structs
+// with reference-containing fields triggers a compiler bug
+// (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
 /// ParseError represents a parse failure with location and expected tokens.
 pub struct ParseError {
@@ -4683,12 +4767,8 @@ impl Lexer {
         return self.pos >= self.chars.len();
     }
 
-    fn slice(&self, start: i32, end: i32) -> String {
-        let mut s = String::with_capacity(end - start);
-        for let mut i = start; i < end; i += 1 {
-            s.push(self.chars[i]);
-        }
-        return s;
+    fn slice(&self, start: i32, end: i32) -> LexerSlice {
+        return LexerSlice::new(&self.chars, start, end);
     }
 }
 
@@ -8660,7 +8740,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             lexer.pos = best_end;
         }
     }
-    tokens.push(Token::with_trivia(TK_EOF, "", Span::new(lexer.pos, lexer.pos), trivia));
+    tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
     return tokens;
 }
 

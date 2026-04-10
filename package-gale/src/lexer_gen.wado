@@ -137,13 +137,9 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
     f3.set_receiver("&self");
     f3.add_param("start", "i32");
     f3.add_param("end", "i32");
-    f3.set_return_type("String");
+    f3.set_return_type("LexerSlice");
     f3.emit_begin(w);
-    w.line("let mut s = String::with_capacity(end - start);");
-    w.begin("for let mut i = start; i < end; i += 1");
-    w.line("s.push(self.chars[i]);");
-    w.end();
-    w.line("return s;");
+    w.line("return LexerSlice::new(&self.chars, start, end);");
     w.end();
 
     w.end();  // impl
@@ -1176,7 +1172,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.line("lexer.pos = best_end;");
     w.end();  // else
     w.end();  // while
-    w.line("tokens.push(Token::with_trivia(TK_EOF, \"\", Span::new(lexer.pos, lexer.pos), trivia));");
+    w.line("tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));");
     w.line("return tokens;");
     w.end();  // fn
     w.blank();

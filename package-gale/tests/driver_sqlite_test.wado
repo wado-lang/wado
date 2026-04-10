@@ -15,11 +15,11 @@ fn unparse_xml(node: &CstNode) -> String {
     for let child of &node.children {
         if let Token(t) = *child {
             for let trivia of &t.leading_trivia {
-                out.push_str(trivia.text);
+                trivia.text.push_to(&mut out);
             }
             let kind_name = sqlite::token_kind_name(t.kind);
             out.push_str(`<{kind_name}>`);
-            out.push_str(t.text);
+            t.text.push_to(&mut out);
             out.push_str(`</{kind_name}>`);
         } else if let Node(n) = *child {
             out.push_str(unparse_xml(n));
