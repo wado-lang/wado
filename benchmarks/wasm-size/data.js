@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775772183272,
+  "lastUpdate": 1775790200705,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11192,6 +11192,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b57fdc27bde36cd06600ffde2e84799840992dad",
+          "message": "Merge pull request #797 from wado-lang/claude/long-living-allocator-design-N0xRt\n\nAdd freelist allocator for memory reclamation in long-running processes",
+          "timestamp": "2026-04-10T11:59:38+09:00",
+          "tree_id": "4292ba013ac7168db4dafc08096c38caed6e92c8",
+          "url": "https://github.com/wado-lang/wado/commit/b57fdc27bde36cd06600ffde2e84799840992dad"
+        },
+        "date": 1775790200442,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1799,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8974,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19360,
             "unit": "bytes"
           }
         ]
