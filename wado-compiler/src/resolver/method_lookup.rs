@@ -2088,15 +2088,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
         _index_type: TypeId,
     ) -> Option<IndexMutTraitInfo> {
         // Look for impl IndexMut<...> for StructName
-        self.find_indexing_trait_impl(struct_name, base_type_id, "IndexMut", "index_mut", "Output", None)
-            .map(
-                |(output_type, self_kind, trait_name, impl_module_source)| IndexMutTraitInfo {
-                    output_type,
-                    self_kind,
-                    trait_name,
-                    impl_module_source,
-                },
-            )
+        self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "IndexMut",
+            "index_mut",
+            "Output",
+            None,
+        )
+        .map(
+            |(output_type, self_kind, trait_name, impl_module_source)| IndexMutTraitInfo {
+                output_type,
+                self_kind,
+                trait_name,
+                impl_module_source,
+            },
+        )
     }
 
     /// Find `IndexValue` trait implementation for a type
@@ -2510,16 +2517,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // is `RangeExclusive<i32>` which must match the actual index expression type.
             if let Some(expected_idx_type) = expected_index_type {
                 let impl_block = self.get_impl_block(impl_ref);
-                let trait_index_arg = impl_block
-                    .trait_type
-                    .as_ref()
-                    .and_then(|t| {
-                        if let ast::Type::Generic(g) = t {
-                            g.args.first().cloned()
-                        } else {
-                            None
-                        }
-                    });
+                let trait_index_arg = impl_block.trait_type.as_ref().and_then(|t| {
+                    if let ast::Type::Generic(g) = t {
+                        g.args.first().cloned()
+                    } else {
+                        None
+                    }
+                });
                 if let Some(ref arg) = trait_index_arg {
                     let resolved_trait_idx =
                         self.resolve_type_with_param_mapping(arg, &type_param_mapping);

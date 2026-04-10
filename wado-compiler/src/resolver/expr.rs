@@ -3306,18 +3306,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if s.contains('.') {
                         s.parse::<f64>().ok().map(LiteralOrdValue::Float)
                     } else if s.starts_with("0x") || s.starts_with("0X") {
-                        i128::from_str_radix(&s[2..], 16).ok().map(LiteralOrdValue::Int)
+                        i128::from_str_radix(&s[2..], 16)
+                            .ok()
+                            .map(LiteralOrdValue::Int)
                     } else if s.starts_with("0b") || s.starts_with("0B") {
-                        i128::from_str_radix(&s[2..], 2).ok().map(LiteralOrdValue::Int)
+                        i128::from_str_radix(&s[2..], 2)
+                            .ok()
+                            .map(LiteralOrdValue::Int)
                     } else if s.starts_with("0o") || s.starts_with("0O") {
-                        i128::from_str_radix(&s[2..], 8).ok().map(LiteralOrdValue::Int)
+                        i128::from_str_radix(&s[2..], 8)
+                            .ok()
+                            .map(LiteralOrdValue::Int)
                     } else {
                         s.parse::<i128>().ok().map(LiteralOrdValue::Int)
                     }
                 }
-                Literal::Char(s) => {
-                    super::util::unescape_char(s).ok().map(|c| LiteralOrdValue::Char(c as u32))
-                }
+                Literal::Char(s) => super::util::unescape_char(s)
+                    .ok()
+                    .map(|c| LiteralOrdValue::Char(c as u32)),
                 _ => None,
             },
             Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => {
@@ -3371,7 +3377,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 };
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: start_name,
-                    found: format!("{end_name} (range `{op_str}` requires both operands to have the same type)"),
+                    found: format!(
+                        "{end_name} (range `{op_str}` requires both operands to have the same type)"
+                    ),
                     span: range.span,
                 });
                 return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
@@ -3381,9 +3389,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let element_type = start.type_id;
 
         // Check that the element type implements Ord
-        if element_type != TypeTable::ERROR
-            && !self.type_implements_trait(element_type, "Ord")
-        {
+        if element_type != TypeTable::ERROR && !self.type_implements_trait(element_type, "Ord") {
             let type_name = self.type_id_to_string(element_type);
             let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                 type_name,
