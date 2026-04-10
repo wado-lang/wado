@@ -44,6 +44,7 @@ pub const CORE_JSON: &str = include_str!("../lib/core/json.wado");
 pub const CORE_JSON_NSD: &str = include_str!("../lib/core/json_nsd.wado");
 pub const CORE_JSON_VALUE: &str = include_str!("../lib/core/json_value.wado");
 pub const CORE_SIMD: &str = include_str!("../lib/core/simd.wado");
+pub const CORE_URL: &str = include_str!("../lib/core/url.wado");
 
 // WASI flat package files — re-export from all sub-interfaces (backward compat)
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
@@ -180,6 +181,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:json_nsd" => Some(CORE_JSON_NSD),
         "core:json_value" => Some(CORE_JSON_VALUE),
         "core:simd" => Some(CORE_SIMD),
+        "core:url" => Some(CORE_URL),
 
         // WASI interfaces
         _ => ALL_WASI_MODULES

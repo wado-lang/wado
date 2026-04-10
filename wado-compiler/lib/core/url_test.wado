@@ -1,0 +1,719 @@
+use { Url, ParseError, percent_encode, percent_decode, parse_query, format_query } from "core:url";
+
+// --- Url::parse basic ---
+
+test "parse simple http" {
+    if let Ok(url) = Url::parse("http://example.com") {
+        assert url.scheme == "http";
+        assert url.host == "example.com";
+        assert url.path == "/";
+        assert url.username == "";
+        assert url.password == "";
+        assert url.port matches { None };
+        assert url.query matches { None };
+        assert url.fragment matches { None };
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse https with path" {
+    if let Ok(url) = Url::parse("https://example.com/foo/bar") {
+        assert url.scheme == "https";
+        assert url.host == "example.com";
+        assert url.path == "/foo/bar";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse with query and fragment" {
+    if let Ok(url) = Url::parse("http://example.com/path?key=val&a=b#sec") {
+        assert url.path == "/path";
+        assert url.query matches { Some("key=val&a=b") };
+        assert url.fragment matches { Some("sec") };
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse with userinfo" {
+    if let Ok(url) = Url::parse("https://user:pass@example.com/path") {
+        assert url.username == "user";
+        assert url.password == "pass";
+        assert url.host == "example.com";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse with username only" {
+    if let Ok(url) = Url::parse("https://admin@example.com/") {
+        assert url.username == "admin";
+        assert url.password == "";
+        assert url.host == "example.com";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse with explicit port" {
+    if let Ok(url) = Url::parse("http://example.com:8080/path") {
+        assert url.host == "example.com";
+        assert url.port matches { Some(8080) };
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse default port normalized to None" {
+    if let Ok(url) = Url::parse("http://example.com:80/path") {
+        assert url.port matches { None };
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse https default port" {
+    if let Ok(url) = Url::parse("https://example.com:443/") {
+        assert url.port matches { None };
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse ws scheme" {
+    if let Ok(url) = Url::parse("ws://localhost:9090/ws") {
+        assert url.scheme == "ws";
+        assert url.host == "localhost";
+        assert url.port matches { Some(9090) };
+        assert url.path == "/ws";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse wss scheme" {
+    if let Ok(url) = Url::parse("wss://example.com/chat") {
+        assert url.scheme == "wss";
+        assert url.host == "example.com";
+        assert url.path == "/chat";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse case insensitive scheme" {
+    if let Ok(url) = Url::parse("HTTP://EXAMPLE.COM/PATH") {
+        assert url.scheme == "http";
+        assert url.host == "example.com";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse IPv6 host" {
+    if let Ok(url) = Url::parse("http://[::1]:8080/path") {
+        assert url.host == "::1";
+        assert url.port matches { Some(8080) };
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "parse full URL with all components" {
+    if let Ok(url) = Url::parse("https://user:pass@example.com:8443/api/v1?key=val&lang=ja#sec1") {
+        assert url.scheme == "https";
+        assert url.username == "user";
+        assert url.password == "pass";
+        assert url.host == "example.com";
+        assert url.port matches { Some(8443) };
+        assert url.path == "/api/v1";
+        assert url.query matches { Some("key=val&lang=ja") };
+        assert url.fragment matches { Some("sec1") };
+    } else {
+        panic("parse failed");
+    }
+}
+
+// --- Parse errors ---
+
+test "parse empty input" {
+    assert Url::parse("") matches { Err(EmptyInput) };
+}
+
+test "parse invalid scheme" {
+    assert Url::parse("mailto:user@host") matches { Err(InvalidScheme) };
+}
+
+test "parse ftp rejected" {
+    assert Url::parse("ftp://files.example.com/") matches { Err(InvalidScheme) };
+}
+
+test "parse missing host" {
+    assert Url::parse("http://") matches { Err(MissingHost) };
+}
+
+test "parse no scheme" {
+    assert Url::parse("/path/to/resource") matches { Err(InvalidScheme) };
+}
+
+test "parse invalid port" {
+    assert Url::parse("http://example.com:99999/") matches { Err(InvalidPort) };
+}
+
+test "parse non-numeric port" {
+    assert Url::parse("http://example.com:abc/") matches { Err(InvalidPort) };
+}
+
+// --- to_string ---
+
+test "to_string simple" {
+    if let Ok(url) = Url::parse("https://example.com/path") {
+        assert url.to_string() == "https://example.com/path";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "to_string with query and fragment" {
+    if let Ok(url) = Url::parse("http://example.com/path?q=1#frag") {
+        assert url.to_string() == "http://example.com/path?q=1#frag";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "to_string with credentials" {
+    if let Ok(url) = Url::parse("https://user:pass@example.com:8443/path") {
+        assert url.to_string() == "https://user:pass@example.com:8443/path";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "to_string default port omitted" {
+    if let Ok(url) = Url::parse("http://example.com:80/path") {
+        assert url.to_string() == "http://example.com/path";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "to_string IPv6" {
+    if let Ok(url) = Url::parse("http://[::1]:8080/") {
+        assert url.to_string() == "http://[::1]:8080/";
+    } else {
+        panic("parse failed");
+    }
+}
+
+// --- Derived accessors ---
+
+test "authority with credentials and port" {
+    if let Ok(url) = Url::parse("https://user:pass@example.com:8443/path") {
+        assert url.authority() == "user:pass@example.com:8443";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "authority simple" {
+    if let Ok(url) = Url::parse("http://example.com/path") {
+        assert url.authority() == "example.com";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "origin" {
+    if let Ok(url) = Url::parse("https://user:pass@example.com:8443/path") {
+        assert url.origin() == "https://example.com:8443";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "path_and_query with query" {
+    if let Ok(url) = Url::parse("http://example.com/api?key=val") {
+        assert url.path_and_query() == "/api?key=val";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "path_and_query without query" {
+    if let Ok(url) = Url::parse("http://example.com/api") {
+        assert url.path_and_query() == "/api";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "host_and_port with port" {
+    if let Ok(url) = Url::parse("http://example.com:8080/") {
+        assert url.host_and_port() == "example.com:8080";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "host_and_port without port" {
+    if let Ok(url) = Url::parse("http://example.com/") {
+        assert url.host_and_port() == "example.com";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "effective_port explicit" {
+    if let Ok(url) = Url::parse("http://example.com:9090/") {
+        assert url.effective_port() == 9090;
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "effective_port default http" {
+    if let Ok(url) = Url::parse("http://example.com/") {
+        assert url.effective_port() == 80;
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "effective_port default https" {
+    if let Ok(url) = Url::parse("https://example.com/") {
+        assert url.effective_port() == 443;
+    } else {
+        panic("parse failed");
+    }
+}
+
+// --- Query parameters ---
+
+test "query_pairs" {
+    if let Ok(url) = Url::parse("http://example.com/?a=1&b=2&c=3") {
+        let pairs = url.query_pairs();
+        assert pairs.len() == 3;
+        assert pairs[0].0 == "a";
+        assert pairs[0].1 == "1";
+        assert pairs[1].0 == "b";
+        assert pairs[1].1 == "2";
+        assert pairs[2].0 == "c";
+        assert pairs[2].1 == "3";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "query_get" {
+    if let Ok(url) = Url::parse("http://example.com/?name=Alice&age=30") {
+        assert url.query_get("name") matches { Some("Alice") };
+        assert url.query_get("age") matches { Some("30") };
+        assert url.query_get("missing") matches { None };
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "query_get_all duplicate keys" {
+    if let Ok(url) = Url::parse("http://example.com/?tag=a&tag=b&tag=c") {
+        let vals = url.query_get_all("tag");
+        assert vals.len() == 3;
+        assert vals[0] == "a";
+        assert vals[1] == "b";
+        assert vals[2] == "c";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "query_pairs empty query" {
+    if let Ok(url) = Url::parse("http://example.com/") {
+        assert url.query_pairs().len() == 0;
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "with_query_pairs" {
+    if let Ok(url) = Url::parse("http://example.com/path") {
+        let pairs: Array<[String, String]> = [["key", "val"], ["name", "Alice"]] as Array<[String, String]>;
+        let updated = url.with_query_pairs(&pairs);
+        assert updated.query_get("key") matches { Some("val") };
+        assert updated.query_get("name") matches { Some("Alice") };
+        assert updated.path == "/path";
+    } else {
+        panic("parse failed");
+    }
+}
+
+// --- Resolve ---
+
+test "resolve absolute reference" {
+    if let Ok(base) = Url::parse("http://example.com/a/b") {
+        if let Ok(resolved) = base.resolve("http://other.com/c") {
+            assert resolved.host == "other.com";
+            assert resolved.path == "/c";
+        } else {
+            panic("resolve failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "resolve absolute path" {
+    if let Ok(base) = Url::parse("http://example.com/a/b") {
+        if let Ok(resolved) = base.resolve("/c/d") {
+            assert resolved.host == "example.com";
+            assert resolved.path == "/c/d";
+        } else {
+            panic("resolve failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "resolve relative path" {
+    if let Ok(base) = Url::parse("http://example.com/a/b") {
+        if let Ok(resolved) = base.resolve("c") {
+            assert resolved.host == "example.com";
+            assert resolved.path == "/a/c";
+        } else {
+            panic("resolve failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "resolve dot segments" {
+    if let Ok(base) = Url::parse("http://example.com/a/b/c") {
+        if let Ok(resolved) = base.resolve("../d") {
+            assert resolved.path == "/a/d";
+        } else {
+            panic("resolve failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "resolve double dot" {
+    if let Ok(base) = Url::parse("http://example.com/a/b/c") {
+        if let Ok(resolved) = base.resolve("../../d") {
+            assert resolved.path == "/d";
+        } else {
+            panic("resolve failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "resolve empty reference preserves base" {
+    if let Ok(base) = Url::parse("http://example.com/path?q=1") {
+        if let Ok(resolved) = base.resolve("") {
+            assert resolved.path == "/path";
+            assert resolved.query matches { Some("q=1") };
+        } else {
+            panic("resolve failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "resolve query-only reference" {
+    if let Ok(base) = Url::parse("http://example.com/path?old=1") {
+        if let Ok(resolved) = base.resolve("?new=2") {
+            assert resolved.path == "/path";
+            assert resolved.query matches { Some("new=2") };
+        } else {
+            panic("resolve failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "resolve fragment-only reference" {
+    if let Ok(base) = Url::parse("http://example.com/path") {
+        if let Ok(resolved) = base.resolve("#section") {
+            assert resolved.path == "/path";
+            assert resolved.fragment matches { Some("section") };
+        } else {
+            panic("resolve failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "resolve with new authority" {
+    if let Ok(base) = Url::parse("http://example.com/a") {
+        if let Ok(resolved) = base.resolve("//other.com/b") {
+            assert resolved.scheme == "http";
+            assert resolved.host == "other.com";
+            assert resolved.path == "/b";
+        } else {
+            panic("resolve failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+// --- Normalize ---
+
+test "normalize scheme and host lowercase" {
+    let url = Url {
+        scheme: "HTTPS",
+        username: "",
+        password: "",
+        host: "EXAMPLE.COM",
+        port: null,
+        path: "/path",
+        query: null,
+        fragment: null,
+    };
+    let norm = url.normalize();
+    assert norm.scheme == "https";
+    assert norm.host == "example.com";
+}
+
+test "normalize removes default port" {
+    let url = Url {
+        scheme: "http",
+        username: "",
+        password: "",
+        host: "example.com",
+        port: Option::Some(80 as u16),
+        path: "/",
+        query: null,
+        fragment: null,
+    };
+    let norm = url.normalize();
+    assert norm.port matches { None };
+}
+
+test "normalize dot segments" {
+    let url = Url {
+        scheme: "http",
+        username: "",
+        password: "",
+        host: "example.com",
+        port: null,
+        path: "/a/b/../c/./d",
+        query: null,
+        fragment: null,
+    };
+    let norm = url.normalize();
+    assert norm.path == "/a/c/d";
+}
+
+// --- Eq (via normalization) ---
+
+test "eq same url" {
+    if let Ok(a) = Url::parse("http://example.com/path") {
+        if let Ok(b) = Url::parse("http://example.com/path") {
+            assert a == b;
+        }
+    }
+}
+
+test "eq different case scheme and host" {
+    if let Ok(a) = Url::parse("HTTP://EXAMPLE.COM/path") {
+        if let Ok(b) = Url::parse("http://example.com/path") {
+            assert a == b;
+        }
+    }
+}
+
+test "eq default port vs no port" {
+    if let Ok(a) = Url::parse("http://example.com:80/") {
+        if let Ok(b) = Url::parse("http://example.com/") {
+            assert a == b;
+        }
+    }
+}
+
+test "not eq different paths" {
+    if let Ok(a) = Url::parse("http://example.com/a") {
+        if let Ok(b) = Url::parse("http://example.com/b") {
+            assert !(a == b);
+        }
+    }
+}
+
+// --- from_http_parts ---
+
+test "from_http_parts simple" {
+    if let Ok(url) = Url::from_http_parts("https", "example.com", "/path?q=1") {
+        assert url.scheme == "https";
+        assert url.host == "example.com";
+        assert url.path == "/path";
+        assert url.query matches { Some("q=1") };
+    } else {
+        panic("from_http_parts failed");
+    }
+}
+
+test "from_http_parts with port" {
+    if let Ok(url) = Url::from_http_parts("http", "example.com:8080", "/") {
+        assert url.host == "example.com";
+        assert url.port matches { Some(8080) };
+    } else {
+        panic("from_http_parts failed");
+    }
+}
+
+// --- percent_encode / percent_decode ---
+
+test "percent_encode unreserved pass through" {
+    assert percent_encode("hello") == "hello";
+    assert percent_encode("test-value_123.txt~") == "test-value_123.txt~";
+}
+
+test "percent_encode special chars" {
+    assert percent_encode("hello world") == "hello%20world";
+    assert percent_encode("a/b") == "a%2Fb";
+    assert percent_encode("key=val") == "key%3Dval";
+}
+
+test "percent_encode empty" {
+    assert percent_encode("") == "";
+}
+
+test "percent_decode simple" {
+    assert percent_decode("hello%20world") matches { Ok("hello world") };
+    assert percent_decode("a%2Fb") matches { Ok("a/b") };
+}
+
+test "percent_decode no encoding" {
+    assert percent_decode("hello") matches { Ok("hello") };
+}
+
+test "percent_decode empty" {
+    assert percent_decode("") matches { Ok("") };
+}
+
+test "percent_decode invalid hex" {
+    assert percent_decode("%GG") matches { Err(InvalidPercentEncoding) };
+}
+
+test "percent_decode truncated" {
+    assert percent_decode("%2") matches { Err(InvalidPercentEncoding) };
+}
+
+test "percent_encode roundtrip" {
+    let original = "hello world/foo?bar=baz&x=y";
+    let encoded = percent_encode(original);
+    if let Ok(decoded) = percent_decode(encoded) {
+        assert decoded == original;
+    } else {
+        panic("roundtrip failed");
+    }
+}
+
+// --- parse_query / format_query ---
+
+test "parse_query simple" {
+    let pairs = parse_query("a=1&b=2");
+    assert pairs.len() == 2;
+    assert pairs[0].0 == "a";
+    assert pairs[0].1 == "1";
+    assert pairs[1].0 == "b";
+    assert pairs[1].1 == "2";
+}
+
+test "parse_query plus as space" {
+    let pairs = parse_query("name=hello+world");
+    assert pairs.len() == 1;
+    assert pairs[0].0 == "name";
+    assert pairs[0].1 == "hello world";
+}
+
+test "parse_query percent encoded" {
+    let pairs = parse_query("key=hello%20world");
+    assert pairs.len() == 1;
+    assert pairs[0].1 == "hello world";
+}
+
+test "parse_query empty value" {
+    let pairs = parse_query("key=");
+    assert pairs.len() == 1;
+    assert pairs[0].0 == "key";
+    assert pairs[0].1 == "";
+}
+
+test "parse_query no value" {
+    let pairs = parse_query("key");
+    assert pairs.len() == 1;
+    assert pairs[0].0 == "key";
+    assert pairs[0].1 == "";
+}
+
+test "parse_query empty" {
+    assert parse_query("").len() == 0;
+}
+
+test "parse_query duplicate keys" {
+    let pairs = parse_query("a=1&a=2&a=3");
+    assert pairs.len() == 3;
+}
+
+test "format_query simple" {
+    let pairs: Array<[String, String]> = [["a", "1"], ["b", "2"]] as Array<[String, String]>;
+    assert format_query(&pairs) == "a=1&b=2";
+}
+
+test "format_query encodes spaces" {
+    let pairs: Array<[String, String]> = [["name", "hello world"]] as Array<[String, String]>;
+    assert format_query(&pairs) == "name=hello+world";
+}
+
+test "format_query empty" {
+    let pairs: Array<[String, String]> = [];
+    assert format_query(&pairs) == "";
+}
+
+test "parse_query format_query roundtrip" {
+    let original: Array<[String, String]> = [["key", "value"], ["name", "Alice Bob"]] as Array<[String, String]>;
+    let formatted = format_query(&original);
+    let parsed = parse_query(formatted);
+    assert parsed.len() == original.len();
+    assert parsed[0].0 == "key";
+    assert parsed[0].1 == "value";
+    assert parsed[1].0 == "name";
+    assert parsed[1].1 == "Alice Bob";
+}
+
+// --- Struct construction ---
+
+test "construct Url from fields" {
+    let url = Url {
+        scheme: "https",
+        username: "",
+        password: "",
+        host: "example.com",
+        port: null,
+        path: "/search",
+        query: Option::Some("q=hello%20world"),
+        fragment: null,
+    };
+    assert url.to_string() == "https://example.com/search?q=hello%20world";
+}
+
+// --- Display ---
+
+test "display via template string" {
+    if let Ok(url) = Url::parse("https://example.com/path") {
+        assert `{url}` == "https://example.com/path";
+    } else {
+        panic("parse failed");
+    }
+}
