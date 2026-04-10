@@ -686,6 +686,10 @@ impl From<u32> for u128 {
 impl From<u64> for u128 {
     pub fn from(value: u64) -> u128;
 }
+
+impl Step for u128 {
+    fn next_step(&self) -> Option<u128>;
+}
 ```
 
 ```wado
@@ -829,6 +833,10 @@ impl From<i32> for i128 {
 
 impl From<i64> for i128 {
     pub fn from(value: i64) -> i128;
+}
+
+impl Step for i128 {
+    fn next_step(&self) -> Option<i128>;
 }
 ```
 
@@ -1110,6 +1118,14 @@ impl Ord for Array<T> {
     pub fn cmp(&self, other: &Self) -> Ordering;
 }
 
+impl IndexValue<RangeExclusive<i32>> for Array<T> {
+    fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T>;
+}
+
+impl IndexValue<RangeInclusive<i32>> for Array<T> {
+    fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T>;
+}
+
 impl IntoIterator for Array<T> {
     fn into_iter(&self) -> Self::Iter;
 }
@@ -1147,9 +1163,14 @@ impl Iterator for ArrayIter<T> {
 ```
 
 ```wado
-pub struct RangeExclusive<T> {
+pub struct RangeExclusive<T: Ord> {
     start: T,
     end: T,
+}
+
+impl RangeExclusive {
+    pub fn contains(&self, value: &T) -> bool;
+    pub fn is_empty(&self) -> bool;
 }
 
 impl Iterator for RangeExclusive<T> {
@@ -1159,13 +1180,26 @@ impl Iterator for RangeExclusive<T> {
 impl IntoIterator for RangeExclusive<T> {
     fn into_iter(&self) -> RangeExclusive<T>;
 }
+
+impl Eq for RangeExclusive<T> {
+    fn eq(&self, other: &Self) -> bool;
+}
+
+impl Display for RangeExclusive<T> {
+    pub fn fmt(&self, f: &mut Formatter);
+}
 ```
 
 ```wado
-pub struct RangeInclusive<T> {
+pub struct RangeInclusive<T: Ord> {
     start: T,
     end: T,
     ..
+}
+
+impl RangeInclusive {
+    pub fn contains(&self, value: &T) -> bool;
+    pub fn is_empty(&self) -> bool;
 }
 
 impl Iterator for RangeInclusive<T> {
@@ -1174,6 +1208,14 @@ impl Iterator for RangeInclusive<T> {
 
 impl IntoIterator for RangeInclusive<T> {
     fn into_iter(&self) -> RangeInclusive<T>;
+}
+
+impl Eq for RangeInclusive<T> {
+    fn eq(&self, other: &Self) -> bool;
+}
+
+impl Display for RangeInclusive<T> {
+    pub fn fmt(&self, f: &mut Formatter);
 }
 ```
 

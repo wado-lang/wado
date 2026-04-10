@@ -1569,7 +1569,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             PrimitiveType::U16 => Some((0, i128::from(u16::MAX))),
             PrimitiveType::U32 => Some((0, i128::from(u32::MAX))),
             PrimitiveType::U64 => Some((0, i128::from(u64::MAX))),
-            PrimitiveType::Char => Some((0, 0x10FFFF)),
+            PrimitiveType::Char => Some((0, 0x0010_FFFF)),
             _ => None,
         }
     }
@@ -3402,22 +3402,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check for reversed range literals (start > end)
         if let Some(start_val) = Self::extract_literal_ord_value(&range.start)
-            && let Some(end_val) = Self::extract_literal_ord_value(&range.end) {
-                let is_reversed = start_val.is_greater_than(&end_val);
-                if is_reversed {
-                    let op_str = match range.kind {
-                        RangeKind::Exclusive => "..<",
-                        RangeKind::Inclusive => "..=",
-                    };
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
-                        message: format!(
-                            "reversed range `{op_str}` is not supported (start must be less than end)"
-                        ),
-                        span: range.span,
-                    });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
-                }
+            && let Some(end_val) = Self::extract_literal_ord_value(&range.end)
+        {
+            let is_reversed = start_val.is_greater_than(&end_val);
+            if is_reversed {
+                let op_str = match range.kind {
+                    RangeKind::Exclusive => "..<",
+                    RangeKind::Inclusive => "..=",
+                };
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: format!(
+                        "reversed range `{op_str}` is not supported (start must be less than end)"
+                    ),
+                    span: range.span,
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
             }
+        }
 
         let (struct_name, module_source, fields) = match range.kind {
             RangeKind::Exclusive => {
