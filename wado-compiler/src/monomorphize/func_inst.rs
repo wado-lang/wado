@@ -444,7 +444,8 @@ impl Monomorphizer {
                     let mut names_to_try = Vec::new();
                     // For ref-type impls (e.g., impl Trait for &Array<T>),
                     // try the ref struct name FIRST so it takes priority
-                    if let Some(ref info) = method_func.method_info.clone()
+                    let is_ref_blanket_impl = if let Some(ref info) =
+                        method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
                         && info.base_struct_name != base_struct
                     {
@@ -453,7 +454,10 @@ impl Monomorphizer {
                             Some(trait_name),
                             &method_name,
                         ));
-                    }
+                        true
+                    } else {
+                        false
+                    };
                     names_to_try.push(MethodName::format_local(&base_struct, None, &method_name));
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
@@ -468,13 +472,55 @@ impl Monomorphizer {
                     for generic_method_name in &names_to_try {
                         if let Some(generic_func_rc) = generic_functions.get(generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
+                            // For true ref blanket impls (e.g., impl<T> Inspect for &T),
+                            // the impl_type_args should be the full inner type of the ref,
+                            // not the inner struct's own type args.
+                            // e.g., for &Array<i32>, we need [Array<i32>], not [i32].
+                            //
+                            // But for specific ref impls (e.g., impl<T> IntoIterator for &Array<T>),
+                            // the impl_type_args from get_struct_info_from_type are correct as-is.
+                            // Distinguish by checking the generic function's self param:
+                            //   - &T blanket: self is &&TypeParam → for-type is TypeParam
+                            //   - &Array<T>:  self is &&GenericInstance → for-type is GenericInstance
+                            let effective_impl_type_args = if is_ref_blanket_impl
+                                && generic_method_name == &names_to_try[0]
+                            {
+                                let is_true_ref_blanket = generic_func
+                                    .params
+                                    .first()
+                                    .map(|p| {
+                                        let mut t = p.type_id;
+                                        for _ in 0..2 {
+                                            match type_table.get(t) {
+                                                ResolvedType::Ref(inner)
+                                                | ResolvedType::MutRef(inner) => t = *inner,
+                                                _ => break,
+                                            }
+                                        }
+                                        matches!(type_table.get(t), ResolvedType::TypeParam { .. })
+                                    })
+                                    .unwrap_or(false);
+                                if is_true_ref_blanket {
+                                    match type_table.get(receiver.type_id) {
+                                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                                            vec![*inner]
+                                        }
+                                        _ => impl_type_args.clone(),
+                                    }
+                                } else {
+                                    impl_type_args.clone()
+                                }
+                            } else {
+                                impl_type_args.clone()
+                            };
                             // Check if method has its own type params (double generics)
                             let has_method_type_params = generic_func.has_real_type_params();
                             // Queue if we have at least enough impl type args.
                             // impl_type_args may be longer than impl_type_params when the impl
                             // fixes some struct type params to concrete types
                             // (e.g., `impl Trait for Foo<Array<String>, V>` where only V is free).
-                            if impl_type_args.len() >= generic_func.impl_type_params.len() {
+                            if effective_impl_type_args.len() >= generic_func.impl_type_params.len()
+                            {
                                 let method_type_args_for_key =
                                     if has_method_type_params && !type_args.is_empty() {
                                         type_args.clone()
@@ -485,14 +531,14 @@ impl Monomorphizer {
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
                                     module_source: method_func.module_source.clone(),
-                                    impl_type_args: impl_type_args.clone(),
+                                    impl_type_args: effective_impl_type_args.clone(),
                                     method_type_args: method_type_args_for_key,
                                     method_info,
                                 };
                                 let mangled = self.method_instantiation_name(
                                     &key,
                                     type_table,
-                                    impl_type_args.len(),
+                                    effective_impl_type_args.len(),
                                 );
                                 self.try_queue_function(key, mangled);
                                 break;

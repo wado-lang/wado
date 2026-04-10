@@ -580,7 +580,7 @@ impl MethodName {
         let struct_part = if type_args.is_empty() {
             struct_name.to_string()
         } else {
-            format!("{}<{}>", struct_name, type_args.join(","))
+            mangle_ref_aware(struct_name, type_args)
         };
         match trait_name {
             Some(trait_n) => format!("{struct_part}^{trait_n}"),
@@ -738,7 +738,7 @@ impl LocalMethodName {
         let mangled_struct = if impl_type_args.is_empty() {
             self.struct_name.clone()
         } else {
-            format!("{}<{}>", self.base_struct_name, impl_type_args.join(","))
+            mangle_ref_aware(&self.base_struct_name, impl_type_args)
         };
         Self {
             struct_name: mangled_struct,
@@ -1238,6 +1238,22 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
     }
 }
 
+/// Build a mangled name that handles reference prefixes correctly.
+///
+/// For `&` and `&mut` base names, formats as prefix: `&Array<i32>`, `&mut Array<i32>`.
+/// For other base names, formats as generic: `Array<i32>`, `Map<String,i32>`.
+fn mangle_ref_aware(base_name: &str, type_args: &[String]) -> String {
+    if (base_name == "&" || base_name == "&mut") && type_args.len() == 1 {
+        if base_name == "&mut" {
+            format!("&mut {}", type_args[0])
+        } else {
+            format!("&{}", type_args[0])
+        }
+    } else {
+        mangle_generic_name(base_name, type_args)
+    }
+}
+
 /// Build a monomorphized type name from base name and type arguments.
 ///
 /// Examples:
@@ -1658,5 +1674,18 @@ mod tests {
             let source = ModuleSource::from_path(&path);
             assert_eq!(source.to_path(), path, "Roundtrip failed for {path:?}");
         }
+    }
+
+    #[test]
+    fn test_mangle_ref_aware() {
+        assert_eq!(mangle_ref_aware("&", &["i32".into()]), "&i32");
+        assert_eq!(mangle_ref_aware("&", &["Array<i32>".into()]), "&Array<i32>");
+        assert_eq!(mangle_ref_aware("&mut", &["String".into()]), "&mut String");
+        assert_eq!(
+            mangle_ref_aware("&mut", &["Array<i32>".into()]),
+            "&mut Array<i32>"
+        );
+        // Non-ref base names fall through to mangle_generic_name
+        assert_eq!(mangle_ref_aware("Array", &["i32".into()]), "Array<i32>");
     }
 }
