@@ -58,3 +58,98 @@ test "tree: nested lists" {
             ))))
     ");
 }
+
+test "tree: number atom" {
+    assert_tree(&"42", &"(sexpr (item (atom 42)))");
+}
+
+test "tree: negative number" {
+    assert_tree(&"-3.14", &"(sexpr (item (atom -3.14)))");
+}
+
+test "tree: string atom" {
+    assert_tree(&"\"hello world\"", &"
+        (sexpr (item (atom \"hello world\")))
+    ");
+}
+
+test "tree: dot atom" {
+    assert_tree(&".", &"(sexpr (item (atom .)))");
+}
+
+test "tree: dotted pair" {
+    assert_tree(&"(a . b)", &"
+        (sexpr
+          (item
+            (list_ ( (item (atom a)) (item (atom .)) (item (atom b)) ))))
+    ");
+}
+
+test "tree: empty list" {
+    assert_tree(&"()", &"
+        (sexpr (item (list_ ( ))))
+    ");
+}
+
+test "tree: multiple top-level items" {
+    assert_tree(&"a b c", &"
+        (sexpr
+          (item (atom a))
+          (item (atom b))
+          (item (atom c)))
+    ");
+}
+
+test "tree: deeply nested" {
+    assert_tree(&"(((x)))", &"
+        (sexpr
+          (item
+            (list_ (
+              (item
+                (list_ (
+                  (item
+                    (list_ ( (item (atom x)) )))
+                )))
+            ))))
+    ");
+}
+
+test "tree: mixed atoms in list" {
+    assert_tree(&"(hello 42 \"world\")", &"
+        (sexpr
+          (item
+            (list_ (
+              (item (atom hello))
+              (item (atom 42))
+              (item (atom \"world\"))
+            ))))
+    ");
+}
+
+test "tree: lambda expression" {
+    assert_tree(&"(lambda (x y) (+ x y))", &"
+        (sexpr
+          (item
+            (list_ (
+              (item (atom lambda))
+              (item (list_ ( (item (atom x)) (item (atom y)) )))
+              (item (list_ ( (item (atom +)) (item (atom x)) (item (atom y)) )))
+            ))))
+    ");
+}
+
+test "tree: let expression" {
+    assert_tree(&"(let ((x 1) (y 2)) (+ x y))", &"
+        (sexpr
+          (item
+            (list_ (
+              (item (atom let))
+              (item
+                (list_ (
+                  (item (list_ ( (item (atom x)) (item (atom 1)) )))
+                  (item (list_ ( (item (atom y)) (item (atom 2)) )))
+                )))
+              (item (list_ ( (item (atom +)) (item (atom x)) (item (atom y)) )))
+            ))))
+    ");
+}

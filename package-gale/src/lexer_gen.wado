@@ -724,6 +724,7 @@ struct TryCall {
     extra: String,
     first_chars: Array<[char, char]>,
     is_wildcard: bool,
+    is_catch_all: bool,
     match_length: i32,
 }
 
@@ -742,7 +743,11 @@ fn compute_first_chars(rule: &LexerRule, all_rules: &Array<LexerRule>) -> TryCal
     }
     let mut chars: Array<[char, char]> = [];
     let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars);
-    return TryCall { fn_name, token_kind, extra, first_chars: chars, is_wildcard: is_wc, match_length: -1 };
+    // A catch-all rule (e.g., UNEXPECTED_CHAR: .) matches any single character.
+    // It's only useful in the wildcard fallback, never in specific dispatch branches
+    // where another rule already matches at least 1 character.
+    let catch_all = is_wc && rule.body.len() == 1 && rule.body[0].elements.len() == 1 && rule.body[0].elements[0] matches { AnyChar };
+    return TryCall { fn_name, token_kind, extra, first_chars: chars, is_wildcard: is_wc, is_catch_all: catch_all, match_length: -1 };
 }
 
 /// Analyze first elements of rule body alternatives to find first-char set.
@@ -839,10 +844,11 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
 
     let mut groups: Array<DispatchGroup> = [];
 
-    // For each unique single char, find all matching calls
+    // For each unique single char, find all matching calls (excluding catch-all rules)
     for let c of &all_chars {
         let mut matching: Array<i32> = [];
         for let mut i = 0; i < calls.len(); i += 1 {
+            if calls[i].is_catch_all { continue; }
             if calls[i].is_wildcard || char_matches_ranges(*c, &calls[i].first_chars) {
                 matching.push(i);
             }
@@ -902,9 +908,9 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
                 if !found_group {
                     let mut cs: Array<i32> = [];
                     cs.push(i);
-                    // Also add wildcards
+                    // Also add non-catch-all wildcards
                     for let mut j = 0; j < calls.len(); j += 1 {
-                        if calls[j].is_wildcard { cs.push(j); }
+                        if calls[j].is_wildcard && !calls[j].is_catch_all { cs.push(j); }
                     }
                     groups.push(DispatchGroup { guard, calls: cs });
                 }
@@ -912,12 +918,32 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
         }
     }
 
-    // Wildcard fallback: all calls
+    // Wildcard fallback: only include wildcard calls, range-based calls,
+    // and calls whose first_chars include characters not covered by specific groups.
+    // Single-char-only calls are fully covered by their specific dispatch branches.
     let mut wildcard_calls: Array<i32> = [];
     for let mut i = 0; i < calls.len(); i += 1 {
-        wildcard_calls.push(i);
+        if calls[i].is_wildcard {
+            wildcard_calls.push(i);
+            continue;
+        }
+        let mut has_range = false;
+        for let r of &calls[i].first_chars {
+            if r[0] != r[1] { has_range = true; }
+        }
+        if has_range { wildcard_calls.push(i); }
     }
-    groups.push(DispatchGroup { guard: String::from("true"), calls: wildcard_calls });
+    if !wildcard_calls.is_empty() {
+        groups.push(DispatchGroup { guard: String::from("true"), calls: wildcard_calls });
+    }
+
+    // Sort each group's calls by original index to preserve grammar priority order.
+    // When wildcards and range-based calls are mixed in a group, the insertion order
+    // may not match grammar order — sorting restores it so that same-length matches
+    // respect ANTLR4-style "first rule in grammar wins" priority.
+    for let g of &mut groups {
+        g.calls.sort();
+    }
 
     return groups;
 }
@@ -1072,6 +1098,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                 extra: String::from(""),
                 first_chars: fc,
                 is_wildcard: false,
+                is_catch_all: false,
                 match_length: mlen,
             });
         }
@@ -1084,38 +1111,10 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
         emit_dispatch_groups(w, &all_calls, &groups, false);
     }
 
-    // Keyword reclassification: after matching a non-keyword token,
-    // check if the matched text is actually a keyword.
-    // Guard: only call classify_keyword when the first char could start a keyword.
+    // Keyword reclassification: check if the matched text is actually a keyword.
+    // classify_keyword does length-based dispatch internally, so no first-char guard needed.
     if !keywords.is_empty() {
-        // Collect unique first chars of all keywords (lowercase)
-        let mut first_chars: Array<char> = [];
-        for let kw of keywords {
-            let fc = kw.lowercase_text.chars().next().unwrap();
-            let mut found = false;
-            for let existing of &first_chars {
-                if *existing == fc { found = true; }
-            }
-            if !found { first_chars.push(fc); }
-        }
-        // Build the guard condition
-        let mut guard = String::with_capacity(128);
-        guard.push_str("if best_end > start");
-        // Check both lower and upper case of each first char
-        guard.push_str(" && (");
-        let mut first = true;
-        for let fc of &first_chars {
-            if !first { guard.push_str(" || "); }
-            first = false;
-            let uc = fc.to_ascii_uppercase();
-            if *fc == uc {
-                guard.push_str(`first_char == {escape_char(*fc)}`);
-            } else {
-                guard.push_str(`first_char == {escape_char(*fc)} || first_char == {escape_char(uc)}`);
-            }
-        }
-        guard.push(')');
-        w.begin(&guard);
+        w.begin("if best_end > start");
         w.line("let kw_kind = classify_keyword(&lexer.chars, start, best_end);");
         w.line("if kw_kind >= 0 { best_kind = kw_kind; }");
         w.end();

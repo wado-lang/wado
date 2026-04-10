@@ -8602,288 +8602,44 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
         } else if '\u{2000}' <= first_char <= '\u{200a}' {
-            end = try_whitespace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WHITESPACE; }
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SHEBANG; }
+            end = try_whitespace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WHITESPACE; }
             end = try_integer_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
         } else if '0' <= first_char <= '9' {
-            end = try_dec_literal(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DEC_LITERAL; }
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SHEBANG; }
             end = try_integer_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
+            end = try_dec_literal(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_DEC_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
         } else {
-            end = try_kw_as(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_AS; }
-            end = try_kw_break(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_BREAK; }
-            end = try_kw_const(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_CONST; }
-            end = try_kw_continue(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_CONTINUE; }
-            end = try_kw_crate(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_CRATE; }
-            end = try_kw_else(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_ELSE; }
-            end = try_kw_enum(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_ENUM; }
-            end = try_kw_extern(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_EXTERN; }
-            end = try_kw_false(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_FALSE; }
-            end = try_kw_fn(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_FN; }
-            end = try_kw_for(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_FOR; }
-            end = try_kw_if(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_IF; }
-            end = try_kw_impl(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_IMPL; }
-            end = try_kw_in(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_IN; }
-            end = try_kw_let(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_LET; }
-            end = try_kw_loop(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_LOOP; }
-            end = try_kw_match(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_MATCH; }
-            end = try_kw_mod(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_MOD; }
-            end = try_kw_move(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_MOVE; }
-            end = try_kw_mut(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_MUT; }
-            end = try_kw_pub(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_PUB; }
-            end = try_kw_ref(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_REF; }
-            end = try_kw_return(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_RETURN; }
-            end = try_kw_selfvalue(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_SELFVALUE; }
-            end = try_kw_selftype(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_SELFTYPE; }
-            end = try_kw_static(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_STATIC; }
-            end = try_kw_struct(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_STRUCT; }
-            end = try_kw_super(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_SUPER; }
-            end = try_kw_trait(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_TRAIT; }
-            end = try_kw_true(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_TRUE; }
-            end = try_kw_type(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_TYPE; }
-            end = try_kw_unsafe(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_UNSAFE; }
-            end = try_kw_use(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_USE; }
-            end = try_kw_where(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_WHERE; }
-            end = try_kw_while(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_WHILE; }
-            end = try_kw_async(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_ASYNC; }
-            end = try_kw_await(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_AWAIT; }
-            end = try_kw_dyn(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_DYN; }
-            end = try_kw_abstract(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_ABSTRACT; }
-            end = try_kw_become(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_BECOME; }
-            end = try_kw_box(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_BOX; }
-            end = try_kw_do(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_DO; }
-            end = try_kw_final(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_FINAL; }
-            end = try_kw_macro(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_MACRO; }
-            end = try_kw_override(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_OVERRIDE; }
-            end = try_kw_priv(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_PRIV; }
-            end = try_kw_typeof(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_TYPEOF; }
-            end = try_kw_unsized(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_UNSIZED; }
-            end = try_kw_virtual(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_VIRTUAL; }
-            end = try_kw_yield(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_YIELD; }
-            end = try_kw_try(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_TRY; }
-            end = try_kw_union(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_UNION; }
-            end = try_kw_staticlifetime(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_STATICLIFETIME; }
-            end = try_kw_macrorules(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_MACRORULES; }
-            end = try_kw_underlinelifetime(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_UNDERLINELIFETIME; }
-            end = try_kw_dollarcrate(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW_DOLLARCRATE; }
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
-            end = try_raw_identifier(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RAW_IDENTIFIER; }
-            end = try_line_comment(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LINE_COMMENT; }
-            end = try_block_comment(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT; }
-            end = try_inner_line_doc(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INNER_LINE_DOC; }
-            end = try_inner_block_doc(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INNER_BLOCK_DOC; }
-            end = try_outer_line_doc(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OUTER_LINE_DOC; }
-            end = try_outer_block_doc(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OUTER_BLOCK_DOC; }
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SHEBANG; }
             end = try_whitespace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WHITESPACE; }
-            end = try_newline(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NEWLINE; }
-            end = try_char_literal(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CHAR_LITERAL; }
-            end = try_string_literal(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; }
-            end = try_raw_string_literal(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RAW_STRING_LITERAL; }
-            end = try_byte_literal(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BYTE_LITERAL; }
-            end = try_byte_string_literal(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BYTE_STRING_LITERAL; }
-            end = try_raw_byte_string_literal(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RAW_BYTE_STRING_LITERAL; }
             end = try_integer_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_dec_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DEC_LITERAL; }
-            end = try_hex_literal(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_HEX_LITERAL; }
-            end = try_oct_literal(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OCT_LITERAL; }
-            end = try_bin_literal(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BIN_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-            end = try_lifetime_or_label(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIFETIME_OR_LABEL; }
-            end = try_plus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PLUS; }
-            end = try_minus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MINUS; }
-            end = try_star(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STAR; }
-            end = try_slash(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SLASH; }
-            end = try_percent(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PERCENT; }
-            end = try_caret(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CARET; }
-            end = try_not(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NOT; }
-            end = try_and(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_AND; }
-            end = try_or(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OR; }
-            end = try_andand(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ANDAND; }
-            end = try_oror(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OROR; }
-            end = try_pluseq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PLUSEQ; }
-            end = try_minuseq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MINUSEQ; }
-            end = try_stareq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STAREQ; }
-            end = try_slasheq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SLASHEQ; }
-            end = try_percenteq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PERCENTEQ; }
-            end = try_careteq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CARETEQ; }
-            end = try_andeq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ANDEQ; }
-            end = try_oreq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OREQ; }
-            end = try_shleq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SHLEQ; }
-            end = try_shreq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SHREQ; }
-            end = try_eq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_EQ; }
-            end = try_eqeq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_EQEQ; }
-            end = try_ne(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NE; }
-            end = try_gt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GT; }
-            end = try_lt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LT; }
-            end = try_ge(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GE; }
-            end = try_le(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LE; }
-            end = try_at(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_AT; }
-            end = try_dot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOT; }
-            end = try_dotdot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOTDOT; }
-            end = try_dotdotdot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOTDOTDOT; }
-            end = try_dotdoteq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOTDOTEQ; }
-            end = try_comma(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_COMMA; }
-            end = try_semi(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SEMI; }
-            end = try_colon(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_COLON; }
-            end = try_pathsep(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATHSEP; }
-            end = try_rarrow(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RARROW; }
-            end = try_fatarrow(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_FATARROW; }
-            end = try_pound(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_POUND; }
-            end = try_dollar(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOLLAR; }
-            end = try_question(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_QUESTION; }
-            end = try_lcurlybrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LCURLYBRACE; }
-            end = try_rcurlybrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RCURLYBRACE; }
-            end = try_lsquarebracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LSQUAREBRACKET; }
-            end = try_rsquarebracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RSQUAREBRACKET; }
-            end = try_lparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LPAREN; }
-            end = try_rparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RPAREN; }
         }
-        if best_end > start && (first_char == '_') {
+        if best_end > start {
             let kw_kind = classify_keyword(&lexer.chars, start, best_end);
             if kw_kind >= 0 { best_kind = kw_kind; }
         }

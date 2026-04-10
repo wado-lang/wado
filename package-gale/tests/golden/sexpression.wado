@@ -890,30 +890,20 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_dot(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DOT; }
         } else if 'a' <= first_char <= 'z' {
-            end = try_symbol(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
             end = try_number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
+            end = try_symbol(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
         } else if 'A' <= first_char <= 'Z' {
-            end = try_symbol(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
             end = try_number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
+            end = try_symbol(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
         } else {
-            end = try_string(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STRING; }
-            end = try_whitespace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WHITESPACE; }
             end = try_number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
             end = try_symbol(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
-            end = try_lparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LPAREN; }
-            end = try_rparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RPAREN; }
-            end = try_dot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOT; }
         }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
