@@ -157,9 +157,13 @@ impl Url {
     /// Returns the value for the given query parameter key.
     pub fn query_get(&self, key: String) -> Option<String>
 
+    /// Returns all values for the given query parameter key.
+    /// Computed from the raw query string to preserve duplicate keys.
+    pub fn query_get_all(&self, key: String) -> Array<String>
+
     /// Returns a new Url with the query string replaced by the given params.
     /// Keys and values are percent-encoded.
-    pub fn with_query_pairs(&self, params: &TreeMap<String, String>) -> Url
+    pub fn with_query_pairs(&self, params: TreeMap<String, String>) -> Url
 }
 ```
 
@@ -262,7 +266,7 @@ pub fn parse_query(query: String) -> TreeMap<String, String>
 /// Formats a TreeMap into a query string (insertion-order preserved).
 /// Output does not include the leading "?".
 /// Keys and values are percent-encoded; spaces become "+".
-pub fn format_query(params: &TreeMap<String, String>) -> String
+pub fn format_query(params: TreeMap<String, String>) -> String
 ```
 
 ### Complete API Summary
@@ -280,13 +284,14 @@ pub fn format_query(params: &TreeMap<String, String>) -> String
 | `.normalize()`             | `&self -> Url`                                      | Normalize URL             |
 | `.query_pairs()`            | `&self -> TreeMap<String, String>`                  | Parse query params        |
 | `.query_get(key)`           | `&self, String -> Option<String>`                   | Get param value           |
-| `.with_query_pairs(params)` | `&self, &TreeMap<String, String> -> Url`            | Replace query params      |
+| `.query_get_all(key)`       | `&self, String -> Array<String>`                    | Get all values for key    |
+| `.with_query_pairs(params)` | `&self, TreeMap<String, String> -> Url`             | Replace query params      |
 | `percent_encode`            | `String -> String`                                  | Encode for URI component  |
 | `percent_decode`            | `String -> Result<String, ParseError>`              | Decode %XX sequences      |
 | `parse_query`               | `String -> TreeMap<String, String>`                 | Parse query string        |
-| `format_query`              | `&TreeMap<String, String> -> String`                | Format query string       |
+| `format_query`              | `TreeMap<String, String> -> String`                 | Format query string       |
 
-8 pub fields. 13 methods. 4 module functions. 1 error variant.
+8 pub fields. 14 methods. 4 module functions. 1 error variant.
 
 ### Usage Examples
 
@@ -352,7 +357,7 @@ export fn run() with Stdout {
     let mut qp = TreeMap::<String, String>::new();
     qp["key"] = "hello world";
     qp["lang"] = "日本語";
-    let qs = format_query(&qp);
+    let qs = format_query(qp);
     // "key=hello+world&lang=%E6%97%A5%E6%9C%AC%E8%AA%9E"
 
     // Error handling

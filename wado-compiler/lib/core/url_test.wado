@@ -327,6 +327,26 @@ test "query_get duplicate keys last wins" {
     }
 }
 
+test "query_get_all duplicate keys" {
+    if let Ok(url) = Url::parse("http://example.com/?tag=a&tag=b&tag=c") {
+        let vals = url.query_get_all("tag");
+        assert vals.len() == 3;
+        assert vals[0] == "a";
+        assert vals[1] == "b";
+        assert vals[2] == "c";
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "query_get_all missing key" {
+    if let Ok(url) = Url::parse("http://example.com/?a=1") {
+        assert url.query_get_all("missing").len() == 0;
+    } else {
+        panic("parse failed");
+    }
+}
+
 test "query_pairs empty query" {
     if let Ok(url) = Url::parse("http://example.com/") {
         assert url.query_pairs().len() == 0;
@@ -340,7 +360,7 @@ test "with_query_pairs" {
         let mut params = TreeMap::<String, String>::new();
         params["key"] = "val";
         params["name"] = "Alice";
-        let updated = url.with_query_pairs(&params);
+        let updated = url.with_query_pairs(params);
         assert updated.query_get("key") matches { Some("val") };
         assert updated.query_get("name") matches { Some("Alice") };
         assert updated.path == "/path";
@@ -657,34 +677,38 @@ test "parse_query empty" {
 }
 
 test "parse_query duplicate keys last wins" {
-    let params = parse_query("a=1&a=2&a=3");
-    assert params.len() == 1;
+    let params = parse_query("a=1&b=2&a=3");
+    assert params.len() == 2;
     assert params.get("a") matches { Some("3") };
+    assert params.get("b") matches { Some("2") };
+    let keys = params.keys();
+    assert keys[0] == "a";
+    assert keys[1] == "b";
 }
 
 test "format_query simple" {
     let mut params = TreeMap::<String, String>::new();
     params["a"] = "1";
     params["b"] = "2";
-    assert format_query(&params) == "a=1&b=2";
+    assert format_query(params) == "a=1&b=2";
 }
 
 test "format_query encodes spaces" {
     let mut params = TreeMap::<String, String>::new();
     params["name"] = "hello world";
-    assert format_query(&params) == "name=hello+world";
+    assert format_query(params) == "name=hello+world";
 }
 
 test "format_query empty" {
     let params = TreeMap::<String, String>::new();
-    assert format_query(&params) == "";
+    assert format_query(params) == "";
 }
 
 test "parse_query format_query roundtrip" {
     let mut original = TreeMap::<String, String>::new();
     original["key"] = "value";
     original["name"] = "Alice Bob";
-    let formatted = format_query(&original);
+    let formatted = format_query(original);
     let parsed = parse_query(formatted);
     assert parsed.len() == 2;
     assert parsed.get("key") matches { Some("value") };
@@ -764,7 +788,7 @@ test "parse_query with non-ASCII value" {
 test "format_query with non-ASCII value" {
     let mut params = TreeMap::<String, String>::new();
     params["city"] = "東京";
-    let formatted = format_query(&params);
+    let formatted = format_query(params);
     let parsed = parse_query(formatted);
     assert parsed.get("city") matches { Some("東京") };
 }
