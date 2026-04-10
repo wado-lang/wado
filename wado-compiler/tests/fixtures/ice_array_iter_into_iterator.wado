@@ -1,0 +1,14 @@
+// Passing ArrayIter<u8> where IntoIterator<Item = u8> is expected
+// should produce a compile error, not an internal compiler panic.
+//
+// ArrayIter<T> does not implement IntoIterator (unlike IterMap, IterFilter, etc.).
+// The compiler panics at wir_build/translate.rs with:
+//   [WIR] unresolved MethodCall: name="ArrayIter<u8>^IntoIterator::into_iter"
+
+export fn run() {
+    let arr: Array<u8> = [1, 2, 3] as Array<u8>;
+    let _ = String::from_utf8(arr.iter());
+}
+
+__DATA__
+{"compile_error": "IntoIterator"}
