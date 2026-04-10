@@ -85,11 +85,11 @@ type "functype//wado-compiler/tests/fixtures/index_trait_full_struct.wado/Value:
 
 type "functype//wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container::stats" = fn(ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Container") -> ref "core:prelude/string.wado//String";  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^Index::index" = fn(ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Container", i32) -> ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value";  // TypeId(31)
+type "functype//wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^Index<i32>::index" = fn(ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Container", i32) -> ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value";  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut::index_mut" = fn(ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Container", i32) -> ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value";  // TypeId(32)
+type "functype//wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut<i32>::index_mut" = fn(ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Container", i32) -> ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value";  // TypeId(32)
 
-type "functype//wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexAssign::index_assign" = fn(ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Container", i32, ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value");  // TypeId(33)
+type "functype//wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexAssign<i32>::index_assign" = fn(ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Container", i32, ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value");  // TypeId(33)
 
 type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(34)
 
@@ -158,7 +158,7 @@ fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/run"() with Stdout
         };
         break __inline_Container__from_values_2: struct.new "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Container" { v0: __local_15, v1: __local_16, v2: __local_17, read_count: 0, write_count: 0 };
     };
-    v0 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^Index::index"(c, 0);
+    v0 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^Index<i32>::index"(c, 0);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
         "core:prelude/string.wado/String::push"(__local_3, 118);
@@ -168,7 +168,7 @@ fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/run"() with Stdout
         "core:prelude/string.wado/String::push_str"(__local_3, "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Value::describe"(v0));
         break __tmpl: __local_3;
     });
-    v1 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^Index::index"(c, 1);
+    v1 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^Index<i32>::index"(c, 1);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
         "core:prelude/string.wado/String::push"(__local_4, 118);
@@ -178,11 +178,11 @@ fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/run"() with Stdout
         "core:prelude/string.wado/String::push_str"(__local_4, "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Value::describe"(v1));
         break __tmpl: __local_4;
     });
-    self_26 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut::index_mut"(c, 0);
+    self_26 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut<i32>::index_mut"(c, 0);
     self_26.n = self_26.n + 1;
-    self_27 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut::index_mut"(c, 1);
+    self_27 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut<i32>::index_mut"(c, 1);
     self_27.n = self_27.n + 100;
-    self_29 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut::index_mut"(c, 2);
+    self_29 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut<i32>::index_mut"(c, 2);
     self_29.n = self_29.n + 200;
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("After mutations:"), used: 16 });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -212,7 +212,7 @@ fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/run"() with Stdout
         "core:prelude/string.wado/String::push_str"(__local_7, "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Value::describe"(c.v2));
         break __tmpl: __local_7;
     });
-    "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexAssign::index_assign"(c, 2, __inline_Value__new_14: block -> ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value" {
+    "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexAssign<i32>::index_assign"(c, 2, __inline_Value__new_14: block -> ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value" {
         __local_35 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("replaced"), used: 8 };
         break __inline_Value__new_14: struct.new "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value" { n: 999, tag: __local_35 };
     });
@@ -255,9 +255,9 @@ fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/run"() with Stdout
         "core:prelude/string.wado/String::push_str"(__local_12, "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container::stats"(c));
         break __tmpl: __local_12;
     });
-    self_47 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut::index_mut"(c, 0);
+    self_47 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut<i32>::index_mut"(c, 0);
     self_47.n = self_47.n + 1;
-    self_48 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut::index_mut"(c, 1);
+    self_48 = "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut<i32>::index_mut"(c, 1);
     self_48.n = self_48.n + 1;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
@@ -539,7 +539,7 @@ fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container::stats"(
     };
 }
 
-fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^Index::index"(self, idx) {
+fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^Index<i32>::index"(self, idx) {
     if idx == 0 {
         return self.v0;
     } else if idx == 1 {
@@ -549,7 +549,7 @@ fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^Index::i
     }
 }
 
-fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut::index_mut"(self, idx) {
+fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut<i32>::index_mut"(self, idx) {
     self.write_count = self.write_count + 1;
     if idx == 0 {
         return self.v0;
@@ -560,7 +560,7 @@ fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexMut
     }
 }
 
-fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexAssign::index_assign"(self, idx, value) {
+fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Container^IndexAssign<i32>::index_assign"(self, idx, value) {
     self.write_count = self.write_count + 1;
     if idx == 0 {
         self.v0 = value;

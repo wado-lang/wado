@@ -268,6 +268,17 @@ pub struct "IterFilter<StrUtf8ByteIter>" {
     pub pred: fn(u8) -> bool,
 }
 
+pub struct "RangeInclusive<i32>" {
+    pub start: i32,
+    pub end: i32,
+    exhausted: bool,
+}
+
+pub struct "RangeExclusive<i32>" {
+    pub start: i32,
+    pub end: i32,
+}
+
 pub struct "Box<f64>" {
     value: f64,
 }
@@ -2021,7 +2032,7 @@ pub fn env(name: String) -> Option<String> with Environment {
                 break __for_0;
             }
             __for_0_body: {
-                let pair: [String, String] = vars."Array<Tuple<String,String>>^IndexValue::index_value"(i);
+                let pair: [String, String] = vars."Array<Tuple<String,String>>^IndexValue<i32>::index_value"(i);
                 if pair.0."String^Eq::eq"(&name) {
                     return Option<String>::Some(pair.1);
                 }
@@ -3850,7 +3861,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J:
 }
 
 pub fn pow10(n: i32) -> u64 {
-    return core::prelude/fpfmt.wado::POW10."Array<u64>^IndexValue::index_value"(n);
+    return core::prelude/fpfmt.wado::POW10."Array<u64>^IndexValue<i32>::index_value"(n);
 }
 
 pub fn u64_bit_len(x: u64) -> i32 {
@@ -6298,6 +6309,22 @@ pub fn "f32^TryFrom<u128>::try_from"(value: u128) -> Result<f32, ConvertError> {
         return Result<f32, ConvertError>::Err("core::prelude/traits.wado::ConvertError::new"("value out of range for f32"));
     }
     return Result<f32, ConvertError>::Ok(value.u128::low() as f32);
+}
+
+fn "u128^Step::next_step"(self: &u128) -> Option<u128> {
+    let max: u128 = "core::prelude/int128.wado::u128::from_pair"(18446744073709551615, 18446744073709551615);
+    if *self."u128^Eq::eq"(&max) {
+        return null;
+    }
+    return Option<u128>::Some(*self."u128^Add::add"(&"core::prelude/int128.wado::u128::from_u64"(1)));
+}
+
+fn "i128^Step::next_step"(self: &i128) -> Option<i128> {
+    let max: i128 = "core::prelude/int128.wado::i128::from_pair"(18446744073709551615, 9223372036854775807);
+    if *self."i128^Eq::eq"(&max) {
+        return null;
+    }
+    return Option<i128>::Some(*self."i128^Add::add"(&"core::prelude/int128.wado::i128::from_i64"(1)));
 }
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
@@ -21892,7 +21919,7 @@ fn "core/builtin/select<u8>"(cond: bool, if_true: u8, if_false: u8) -> u8;
 
 fn "core/builtin/select<i8>"(cond: bool, if_true: i8, if_false: i8) -> i8;
 
-fn "Array<u64>^IndexValue::index_value"(self: &Array<u64>, index: i32) -> u64 {
+fn "Array<u64>^IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
     if (index >= self.used) {
         core::internal::panic("index out of bounds");
     }
@@ -21921,7 +21948,7 @@ pub fn "Array<u8>::internal_raw_data"(self: &Array<u8>) -> builtin::array<u8> {
     return self.repr;
 }
 
-fn "Array<Tuple<String,String>>^IndexValue::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
+fn "Array<Tuple<String,String>>^IndexValue<i32>::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
     if (index >= self.used) {
         core::internal::panic("index out of bounds");
     }

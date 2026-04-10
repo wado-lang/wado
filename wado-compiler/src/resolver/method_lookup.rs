@@ -2469,7 +2469,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             base_type_id,
             trait_base_name.to_string(),
             method_name.to_string(),
-            format!("{}:{:?}", assoc_type_name, expected_index_type),
+            format!("{assoc_type_name}:{expected_index_type:?}"),
         );
         if let Some(cached) = self.indexing_trait_cache.get(&cache_key) {
             return cached.clone();

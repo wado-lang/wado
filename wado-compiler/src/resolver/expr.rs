@@ -3401,8 +3401,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Check for reversed range literals (start > end)
-        if let Some(start_val) = Self::extract_literal_ord_value(&range.start) {
-            if let Some(end_val) = Self::extract_literal_ord_value(&range.end) {
+        if let Some(start_val) = Self::extract_literal_ord_value(&range.start)
+            && let Some(end_val) = Self::extract_literal_ord_value(&range.end) {
                 let is_reversed = start_val.is_greater_than(&end_val);
                 if is_reversed {
                     let op_str = match range.kind {
@@ -3418,7 +3418,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
                 }
             }
-        }
 
         let (struct_name, module_source, fields) = match range.kind {
             RangeKind::Exclusive => {
