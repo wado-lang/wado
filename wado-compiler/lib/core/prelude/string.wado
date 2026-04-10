@@ -471,7 +471,7 @@ impl String {
                 break;
             }
         }
-        return self.internal_substr_bytes(start, self.used);
+        return self.substr_bytes(start, self.used);
     }
 
     /// Returns a new string with trailing ASCII whitespace removed.
@@ -485,7 +485,7 @@ impl String {
                 break;
             }
         }
-        return self.internal_substr_bytes(0, end);
+        return self.substr_bytes(0, end);
     }
 
     /// Returns a new string with leading and trailing ASCII whitespace removed.
@@ -517,7 +517,7 @@ impl String {
                 break;
             }
         }
-        return self.internal_substr_bytes(start, self.used);
+        return self.substr_bytes(start, self.used);
     }
 
     /// Returns a new string with trailing Unicode whitespace removed.
@@ -558,7 +558,7 @@ impl String {
                 break;
             }
         }
-        return self.internal_substr_bytes(0, end);
+        return self.substr_bytes(0, end);
     }
 
     /// Returns a new string with leading and trailing Unicode whitespace removed.
@@ -597,8 +597,8 @@ impl String {
         return true;
     }
 
-    /// Internal: extract a substring by byte range [start, end).
-    fn internal_substr_bytes(&self, start: i32, end: i32) -> String {
+    /// Extract a substring by byte range [start, end).
+    pub fn substr_bytes(&self, start: i32, end: i32) -> String {
         let len = end - start;
         if len <= 0 {
             return String::with_capacity(0);

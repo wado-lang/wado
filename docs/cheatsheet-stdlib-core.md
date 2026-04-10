@@ -888,6 +888,7 @@ impl String {
     pub fn to_ascii_lowercase(&self) -> String;
     pub fn to_ascii_uppercase(&self) -> String;
     pub fn eq_ignore_ascii_case(&self, other: String) -> bool;
+    pub fn substr_bytes(&self, start: i32, end: i32) -> String;
     pub fn contains(&self, pat: String) -> bool;
     pub fn starts_with(&self, pat: String) -> bool;
     pub fn ends_with(&self, pat: String) -> bool;

@@ -4550,463 +4550,9 @@ fn try_regularexpressionliteral(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_openbracket(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '[' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_closebracket(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ']' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_openparen(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '(' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_closeparen(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ')' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_openbrace(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '{' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_templateclosebrace(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '}' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_closebrace(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '}' { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn try_semicolon(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ';' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_comma(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ',' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_assign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_questionmark(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '?' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_questionmarkdot(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '?' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_colon(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ':' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_ellipsis(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_dot(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_plusplus(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '+' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '+' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_minusminus(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '-' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '-' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_plus(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '+' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_minus(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '-' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_bitnot(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '~' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_not(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_multiply(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_divide(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_modulus(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '%' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_power(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_nullcoalesce(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '?' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '?' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_hashtag(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '#' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_leftshiftarithmetic(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_lessthan(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_morethan(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_lessthanequals(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_greaterthanequals(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_equals_(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_notequals(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_identityequals(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_identitynotequals(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_bitand(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '&' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_bitxor(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '^' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_bitor(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '|' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_and(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '&' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '&' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_or(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '|' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '|' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_multiplyassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_divideassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_modulusassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '%' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_plusassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '+' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_minusassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '-' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_leftshiftarithmeticassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_rightshiftarithmeticassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_rightshiftlogicalassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_bitandassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '&' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_bitxorassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '^' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_bitorassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '|' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_powerassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_nullishcoalescingassign(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '?' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '?' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_arrow(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
     pos += 1;
     return pos;
 }
@@ -5526,23 +5072,6 @@ fn try_instanceof(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_typeof(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'y' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn try_case(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
@@ -5565,17 +5094,6 @@ fn try_else(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 's' { return -1; }
     pos += 1;
     if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_new(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'w' { return -1; }
     pos += 1;
     return pos;
 }
@@ -6000,25 +5518,6 @@ fn try_enum(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_extends(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'x' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn try_super(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 's' { return -1; }
@@ -6414,19 +5913,6 @@ fn try_keyof(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_typealias(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'y' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn try_constructor(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
@@ -6558,13 +6044,6 @@ fn try_is(chars: &Array<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
     if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_at(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
     return pos;
 }
@@ -7729,6 +7208,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
+        let first_char = lexer.chars[start];
         let mut best_push_mode: i32 = -1;
         let mut best_pop_mode = false;
         if current_mode == 0 {
@@ -7854,116 +7334,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_SingleLineComment; best_push_mode = -1; best_pop_mode = false; }
             end = try_regularexpressionliteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RegularExpressionLiteral; best_push_mode = -1; best_pop_mode = false; }
-            end = try_openbracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OpenBracket; best_push_mode = -1; best_pop_mode = false; }
-            end = try_closebracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CloseBracket; best_push_mode = -1; best_pop_mode = false; }
-            end = try_openparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OpenParen; best_push_mode = -1; best_pop_mode = false; }
-            end = try_closeparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CloseParen; best_push_mode = -1; best_pop_mode = false; }
-            end = try_openbrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OpenBrace; best_push_mode = -1; best_pop_mode = false; }
-            end = try_templateclosebrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_TemplateCloseBrace; best_push_mode = -1; best_pop_mode = true; }
-            end = try_closebrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CloseBrace; best_push_mode = -1; best_pop_mode = false; }
             end = try_semicolon(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SemiColon; best_push_mode = -1; best_pop_mode = false; }
-            end = try_comma(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Comma; best_push_mode = -1; best_pop_mode = false; }
-            end = try_assign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Assign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_questionmark(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_QuestionMark; best_push_mode = -1; best_pop_mode = false; }
-            end = try_questionmarkdot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_QuestionMarkDot; best_push_mode = -1; best_pop_mode = false; }
-            end = try_colon(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Colon; best_push_mode = -1; best_pop_mode = false; }
-            end = try_ellipsis(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Ellipsis; best_push_mode = -1; best_pop_mode = false; }
-            end = try_dot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dot; best_push_mode = -1; best_pop_mode = false; }
-            end = try_plusplus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PlusPlus; best_push_mode = -1; best_pop_mode = false; }
-            end = try_minusminus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MinusMinus; best_push_mode = -1; best_pop_mode = false; }
-            end = try_plus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Plus; best_push_mode = -1; best_pop_mode = false; }
-            end = try_minus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Minus; best_push_mode = -1; best_pop_mode = false; }
-            end = try_bitnot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitNot; best_push_mode = -1; best_pop_mode = false; }
-            end = try_not(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Not; best_push_mode = -1; best_pop_mode = false; }
-            end = try_multiply(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Multiply; best_push_mode = -1; best_pop_mode = false; }
-            end = try_divide(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Divide; best_push_mode = -1; best_pop_mode = false; }
-            end = try_modulus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Modulus; best_push_mode = -1; best_pop_mode = false; }
-            end = try_power(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Power; best_push_mode = -1; best_pop_mode = false; }
-            end = try_nullcoalesce(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NullCoalesce; best_push_mode = -1; best_pop_mode = false; }
-            end = try_hashtag(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Hashtag; best_push_mode = -1; best_pop_mode = false; }
-            end = try_leftshiftarithmetic(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LeftShiftArithmetic; best_push_mode = -1; best_pop_mode = false; }
-            end = try_lessthan(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LessThan; best_push_mode = -1; best_pop_mode = false; }
-            end = try_morethan(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MoreThan; best_push_mode = -1; best_pop_mode = false; }
-            end = try_lessthanequals(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LessThanEquals; best_push_mode = -1; best_pop_mode = false; }
-            end = try_greaterthanequals(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GreaterThanEquals; best_push_mode = -1; best_pop_mode = false; }
-            end = try_equals_(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Equals_; best_push_mode = -1; best_pop_mode = false; }
-            end = try_notequals(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NotEquals; best_push_mode = -1; best_pop_mode = false; }
-            end = try_identityequals(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IdentityEquals; best_push_mode = -1; best_pop_mode = false; }
-            end = try_identitynotequals(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IdentityNotEquals; best_push_mode = -1; best_pop_mode = false; }
-            end = try_bitand(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitAnd; best_push_mode = -1; best_pop_mode = false; }
-            end = try_bitxor(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitXOr; best_push_mode = -1; best_pop_mode = false; }
-            end = try_bitor(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitOr; best_push_mode = -1; best_pop_mode = false; }
-            end = try_and(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_And; best_push_mode = -1; best_pop_mode = false; }
-            end = try_or(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Or; best_push_mode = -1; best_pop_mode = false; }
-            end = try_multiplyassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MultiplyAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_divideassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DivideAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_modulusassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ModulusAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_plusassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PlusAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_minusassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MinusAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_leftshiftarithmeticassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LeftShiftArithmeticAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_rightshiftarithmeticassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RightShiftArithmeticAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_rightshiftlogicalassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RightShiftLogicalAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_bitandassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitAndAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_bitxorassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitXorAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_bitorassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitOrAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_powerassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PowerAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_nullishcoalescingassign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NullishCoalescingAssign; best_push_mode = -1; best_pop_mode = false; }
-            end = try_arrow(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARROW; best_push_mode = -1; best_pop_mode = false; }
             end = try_nullliteral(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NullLiteral; best_push_mode = -1; best_pop_mode = false; }
             end = try_booleanliteral(&lexer.chars, start);
@@ -7992,14 +7364,10 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Do; best_push_mode = -1; best_pop_mode = false; }
             end = try_instanceof(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Instanceof; best_push_mode = -1; best_pop_mode = false; }
-            end = try_typeof(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Typeof; best_push_mode = -1; best_pop_mode = false; }
             end = try_case(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Case; best_push_mode = -1; best_pop_mode = false; }
             end = try_else(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Else; best_push_mode = -1; best_pop_mode = false; }
-            end = try_new(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_New; best_push_mode = -1; best_pop_mode = false; }
             end = try_var(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Var; best_push_mode = -1; best_pop_mode = false; }
             end = try_catch(&lexer.chars, start);
@@ -8056,8 +7424,6 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Class; best_push_mode = -1; best_pop_mode = false; }
             end = try_enum(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Enum; best_push_mode = -1; best_pop_mode = false; }
-            end = try_extends(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Extends; best_push_mode = -1; best_pop_mode = false; }
             end = try_super(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Super; best_push_mode = -1; best_pop_mode = false; }
             end = try_const(&lexer.chars, start);
@@ -8104,8 +7470,6 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Of; best_push_mode = -1; best_pop_mode = false; }
             end = try_keyof(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KeyOf; best_push_mode = -1; best_pop_mode = false; }
-            end = try_typealias(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_TypeAlias; best_push_mode = -1; best_pop_mode = false; }
             end = try_constructor(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Constructor; best_push_mode = -1; best_pop_mode = false; }
             end = try_namespace(&lexer.chars, start);
@@ -8120,8 +7484,6 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Abstract; best_push_mode = -1; best_pop_mode = false; }
             end = try_is(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Is; best_push_mode = -1; best_pop_mode = false; }
-            end = try_at(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_At; best_push_mode = -1; best_pop_mode = false; }
             end = try_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Identifier; best_push_mode = -1; best_pop_mode = false; }
             end = try_stringliteral(&lexer.chars, start);

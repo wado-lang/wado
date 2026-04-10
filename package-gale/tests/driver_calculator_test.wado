@@ -52,3 +52,155 @@ test "tree: multiplication" {
             (multiplyingExpression (powExpression (signedAtom (atom (scientific 6)))))))
     ");
 }
+
+test "tree: division" {
+    assert_tree(&"10 / 2 = 5", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression (signedAtom (atom (scientific 10))))
+              / (powExpression (signedAtom (atom (scientific 2))))))
+          (relop =)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 5)))))))
+    ");
+}
+
+test "tree: power" {
+    assert_tree(&"2 ^ 3 = 8", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression
+                (signedAtom (atom (scientific 2)))
+                ^ (signedAtom (atom (scientific 3))))))
+          (relop =)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 8)))))))
+    ");
+}
+
+test "tree: unary minus" {
+    assert_tree(&"-1 = -1", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression (signedAtom - (signedAtom (atom (scientific 1)))))))
+          (relop =)
+          (expression
+            (multiplyingExpression
+              (powExpression (signedAtom - (signedAtom (atom (scientific 1))))))))
+    ");
+}
+
+test "tree: parenthesized expression" {
+    assert_tree(&"(1 + 2) * 3 = 9", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression
+                (signedAtom
+                  (atom (
+                    (expression
+                      (multiplyingExpression (powExpression (signedAtom (atom (scientific 1)))))
+                      + (multiplyingExpression (powExpression (signedAtom (atom (scientific 2))))))
+                    ))))
+              * (powExpression (signedAtom (atom (scientific 3))))))
+          (relop =)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 9)))))))
+    ");
+}
+
+test "tree: function call sin" {
+    assert_tree(&"sin(0) = 0", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression
+                (signedAtom
+                  (func_ (funcname sin) ( (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 0)))))) ))))))
+          (relop =)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 0)))))))
+    ");
+}
+
+test "tree: function call with multiple args" {
+    assert_tree(&"log(10, 2) > 3", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression
+                (signedAtom
+                  (func_ (funcname log) (
+                    (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 10))))))
+                    , (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 2))))))
+                  ))))))
+          (relop >)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 3)))))))
+    ");
+}
+
+test "tree: constant pi" {
+    assert_tree(&"pi > 3", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression (signedAtom (atom (constant pi))))))
+          (relop >)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 3)))))))
+    ");
+}
+
+test "tree: variable" {
+    assert_tree(&"x = 1", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression (signedAtom (atom (variable x))))))
+          (relop =)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 1)))))))
+    ");
+}
+
+test "tree: scientific notation" {
+    assert_tree(&"1.5E2 = 150", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression (signedAtom (atom (scientific 1.5E2))))))
+          (relop =)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 150)))))))
+    ");
+}
+
+test "tree: complex nested" {
+    assert_tree(&"2 * x + 1 = 3", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression (signedAtom (atom (scientific 2))))
+              * (powExpression (signedAtom (atom (variable x)))))
+            + (multiplyingExpression (powExpression (signedAtom (atom (scientific 1))))))
+          (relop =)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 3)))))))
+    ");
+}
+
+test "tree: relop less than" {
+    assert_tree(&"x < 10", &"
+        (equation
+          (expression
+            (multiplyingExpression
+              (powExpression (signedAtom (atom (variable x))))))
+          (relop <)
+          (expression
+            (multiplyingExpression (powExpression (signedAtom (atom (scientific 10)))))))
+    ");
+}
