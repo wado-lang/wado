@@ -3276,32 +3276,56 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Fallback: use current module (the From impl may be synthesized later)
         self.current_module_source.clone()
     }
+}
 
+enum LiteralOrdValue {
+    Int(i128),
+    Float(f64),
+    Char(u32),
+}
+
+impl LiteralOrdValue {
+    fn is_greater_than(&self, other: &Self) -> bool {
+        match (self, other) {
+            (LiteralOrdValue::Int(a), LiteralOrdValue::Int(b)) => a > b,
+            (LiteralOrdValue::Float(a), LiteralOrdValue::Float(b)) => a > b,
+            (LiteralOrdValue::Char(a), LiteralOrdValue::Char(b)) => a > b,
+            _ => false, // different kinds — type mismatch error handles this
+        }
+    }
+}
+
+impl<H: CompilerHost> Resolver<'_, H> {
     /// Extract a compile-time orderable value from a literal expression.
-    /// Returns `Some(value)` for integer, float, and char literals (including negated ones).
-    /// Returns `None` for non-constant expressions.
-    fn extract_literal_ord_value(expr: &Expr) -> Option<f64> {
+    /// Returns the value in its native representation to avoid precision loss.
+    fn extract_literal_ord_value(expr: &Expr) -> Option<LiteralOrdValue> {
         match expr {
             Expr::Literal(lit) => match &lit.value {
                 Literal::Number(s) => {
                     let s = s.replace('_', "");
-                    if s.starts_with("0x") || s.starts_with("0X") {
-                        i128::from_str_radix(&s[2..], 16).ok().map(|v| v as f64)
+                    if s.contains('.') {
+                        s.parse::<f64>().ok().map(LiteralOrdValue::Float)
+                    } else if s.starts_with("0x") || s.starts_with("0X") {
+                        i128::from_str_radix(&s[2..], 16).ok().map(LiteralOrdValue::Int)
                     } else if s.starts_with("0b") || s.starts_with("0B") {
-                        i128::from_str_radix(&s[2..], 2).ok().map(|v| v as f64)
+                        i128::from_str_radix(&s[2..], 2).ok().map(LiteralOrdValue::Int)
                     } else if s.starts_with("0o") || s.starts_with("0O") {
-                        i128::from_str_radix(&s[2..], 8).ok().map(|v| v as f64)
+                        i128::from_str_radix(&s[2..], 8).ok().map(LiteralOrdValue::Int)
                     } else {
-                        s.parse::<f64>().ok()
+                        s.parse::<i128>().ok().map(LiteralOrdValue::Int)
                     }
                 }
                 Literal::Char(s) => {
-                    super::util::unescape_char(s).ok().map(|c| c as u32 as f64)
+                    super::util::unescape_char(s).ok().map(|c| LiteralOrdValue::Char(c as u32))
                 }
                 _ => None,
             },
             Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => {
-                Self::extract_literal_ord_value(&unary.expr).map(|v| -v)
+                match Self::extract_literal_ord_value(&unary.expr)? {
+                    LiteralOrdValue::Int(v) => Some(LiteralOrdValue::Int(-v)),
+                    LiteralOrdValue::Float(v) => Some(LiteralOrdValue::Float(-v)),
+                    LiteralOrdValue::Char(_) => None,
+                }
             }
             Expr::Cast(cast) => Self::extract_literal_ord_value(&cast.expr),
             _ => None,
@@ -3373,7 +3397,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Check for reversed range literals (start > end)
         if let Some(start_val) = Self::extract_literal_ord_value(&range.start) {
             if let Some(end_val) = Self::extract_literal_ord_value(&range.end) {
-                let is_reversed = start_val > end_val;
+                let is_reversed = start_val.is_greater_than(&end_val);
                 if is_reversed {
                     let op_str = match range.kind {
                         RangeKind::Exclusive => "..<",
