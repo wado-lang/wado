@@ -1680,18 +1680,12 @@ mod tests {
     fn test_mangle_ref_aware() {
         assert_eq!(mangle_ref_aware("&", &["i32".into()]), "&i32");
         assert_eq!(mangle_ref_aware("&", &["Array<i32>".into()]), "&Array<i32>");
-        assert_eq!(
-            mangle_ref_aware("&mut", &["String".into()]),
-            "&mut String"
-        );
+        assert_eq!(mangle_ref_aware("&mut", &["String".into()]), "&mut String");
         assert_eq!(
             mangle_ref_aware("&mut", &["Array<i32>".into()]),
             "&mut Array<i32>"
         );
         // Non-ref base names fall through to mangle_generic_name
-        assert_eq!(
-            mangle_ref_aware("Array", &["i32".into()]),
-            "Array<i32>"
-        );
+        assert_eq!(mangle_ref_aware("Array", &["i32".into()]), "Array<i32>");
     }
 }
