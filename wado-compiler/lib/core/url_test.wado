@@ -234,33 +234,33 @@ test "origin" {
     }
 }
 
-test "path_and_query with query" {
+test "path_with_query with query" {
     if let Ok(url) = Url::parse("http://example.com/api?key=val") {
-        assert url.path_and_query() == "/api?key=val";
+        assert url.path_with_query() == "/api?key=val";
     } else {
         panic("parse failed");
     }
 }
 
-test "path_and_query without query" {
+test "path_with_query without query" {
     if let Ok(url) = Url::parse("http://example.com/api") {
-        assert url.path_and_query() == "/api";
+        assert url.path_with_query() == "/api";
     } else {
         panic("parse failed");
     }
 }
 
-test "host_and_port with port" {
+test "authority with port" {
     if let Ok(url) = Url::parse("http://example.com:8080/") {
-        assert url.host_and_port() == "example.com:8080";
+        assert url.authority() == "example.com:8080";
     } else {
         panic("parse failed");
     }
 }
 
-test "host_and_port without port" {
+test "authority without port" {
     if let Ok(url) = Url::parse("http://example.com/") {
-        assert url.host_and_port() == "example.com";
+        assert url.authority() == "example.com";
     } else {
         panic("parse failed");
     }

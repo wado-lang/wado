@@ -19,8 +19,9 @@ fn send_get(url: Url) -> Response {
     let [req, _req_future] = Request::new(headers, null, trailers_rx, null);
 
     req.set_scheme(Option::Some(scheme_of(url)));
-    req.set_authority(Option::Some(url.host_and_port()));
-    req.set_path_with_query(Option::Some(url.path_and_query()));
+    req.set_authority(Option::Some(url.authority()));
+    req.set_path_with_query(Option::Some(url.path_with_query()));
+
 
 
     let result = Client::send(req);

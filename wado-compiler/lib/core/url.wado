@@ -7,7 +7,7 @@
 //!
 //!   let url = Url::parse("https://example.com/path?key=val");
 //!   if let Ok(url) = url {
-//!       let pq = url.path_and_query();  // "/path?key=val"
+//!       let pq = url.path_with_query();  // "/path?key=val"
 //!   }
 
 /// Error type for URL parsing failures.
@@ -457,7 +457,7 @@ impl Url {
         return out;
     }
 
-    /// Returns the authority component: [username:password@]host[:port].
+    /// Returns the authority: [userinfo@]host[:port].
     pub fn authority(&self) -> String {
         let mut out = String::with_capacity(32);
         if !self.username.is_empty() {
@@ -499,8 +499,8 @@ impl Url {
         return out;
     }
 
-    /// Returns path and query combined: /path[?query].
-    pub fn path_and_query(&self) -> String {
+    /// Returns path with query: /path[?query]. Matches wasi:http path_with_query.
+    pub fn path_with_query(&self) -> String {
         if let Some(q) = self.query {
             let mut out = String::with_capacity(self.path.len() + 1 + q.len());
             out.push_str(self.path);
@@ -509,22 +509,6 @@ impl Url {
             return out;
         }
         return self.path;
-    }
-
-    /// Returns host and non-default port combined: host[:port].
-    pub fn host_and_port(&self) -> String {
-        let mut out = String::with_capacity(self.host.len() + 8);
-        if self.host.contains(":") {
-            out.push('[');
-            out.push_str(self.host);
-            out.push(']');
-        } else {
-            out.push_str(self.host);
-        }
-        if let Some(p) = self.port {
-            out.push_str(`:{p}`);
-        }
-        return out;
     }
 
     /// Returns the effective port (explicit port or default for the scheme).

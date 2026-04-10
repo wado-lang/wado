@@ -123,19 +123,16 @@ impl Url {
     /// Serializes the URL back to a string.
     pub fn to_string(&self) -> String
 
-    /// Returns the authority component: [username:password@]host[:port].
+    /// Returns the authority: [userinfo@]host[:port].
+    /// Suitable for wasi:http Request.set_authority().
     pub fn authority(&self) -> String
 
     /// Returns the origin: scheme://host[:port] (excludes credentials).
     pub fn origin(&self) -> String
 
-    /// Returns path and query combined: /path[?query].
+    /// Returns path with query: /path[?query].
     /// Suitable for wasi:http Request.set_path_with_query().
-    pub fn path_and_query(&self) -> String
-
-    /// Returns host and non-default port combined: host[:port].
-    /// Suitable for wasi:http Request.set_authority().
-    pub fn host_and_port(&self) -> String
+    pub fn path_with_query(&self) -> String
 
     /// Returns the effective port (explicit port or default for the scheme).
     pub fn effective_port(&self) -> u16
@@ -199,8 +196,8 @@ if let Ok(url) = url {
     let req = Request::new();
     let scheme = if url.scheme == "https" { Scheme::Https } else { Scheme::Http };
     req.set_scheme(Option::Some(scheme));
-    req.set_authority(Option::Some(url.host_and_port()));
-    req.set_path_with_query(Option::Some(url.path_and_query()));
+    req.set_authority(Option::Some(url.authority()));
+    req.set_path_with_query(Option::Some(url.path_with_query()));
 }
 
 // Parse URL from incoming request
@@ -280,8 +277,7 @@ pub fn format_query(pairs: &Array<[String, String]>) -> String
 | `.to_string()`             | `&self -> String`                                   | Serialize to string       |
 | `.authority()`             | `&self -> String`                                   | `[user:pass@]host[:port]` |
 | `.origin()`                | `&self -> String`                                   | `scheme://host[:port]`    |
-| `.path_and_query()`        | `&self -> String`                                   | `/path[?query]`           |
-| `.host_and_port()`         | `&self -> String`                                   | `host[:port]`             |
+| `.path_with_query()`      | `&self -> String`                                   | `/path[?query]`           |
 | `.effective_port()`        | `&self -> u16`                                      | Port or scheme default    |
 | `.resolve(ref)`            | `&self, String -> Result<Url, ParseError>`          | Relative resolution       |
 | `.normalize()`             | `&self -> Url`                                      | Normalize URL             |
@@ -316,8 +312,7 @@ export fn run() with Stdout {
         // Derived accessors
         assert url.authority() == "user:pass@example.com:8443";
         assert url.origin() == "https://example.com:8443";
-        assert url.path_and_query() == "/api/v1?key=val&lang=ja";
-        assert url.host_and_port() == "example.com:8443";
+        assert url.path_with_query() == "/api/v1?key=val&lang=ja";
         assert url.effective_port() == 8443;
 
         // Query parameters
@@ -391,7 +386,7 @@ Key implementation details:
 ### Positive
 
 - **Option-light API**: Only 3 of 8 fields are optional, compared to 6 of 7 in a RFC 3986 URI type — less unwrapping at every use site
-- **`wasi:http` ready**: `host_and_port()`, `path_and_query()`, and `from_http_parts()` map directly to the wasi:http Request API
+- **`wasi:http` ready**: `authority()`, `path_with_query()`, and `from_http_parts()` map directly to the wasi:http Request API
 - **Practical scope**: Special schemes cover the vast majority of Wado use cases (HTTP clients, servers, WebSocket endpoints)
 - **No effects**: Pure functions, usable in any world
 - **Familiar model**: Developers who know JavaScript's `URL` or Rust's `url` crate will find the API unsurprising
