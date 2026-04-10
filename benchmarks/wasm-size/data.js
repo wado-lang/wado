@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775790200705,
+  "lastUpdate": 1775794838156,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11216,6 +11216,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b57fdc27bde36cd06600ffde2e84799840992dad"
         },
         "date": 1775790200442,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1799,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8974,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19360,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e550d4ae049d181fb9ce6459f71bba61a68b84b3",
+          "message": "Merge pull request #798 from wado-lang/claude/range-tests-negative-cases-QVJ9T\n\nRange: negative tests, Ord bound, reversed range errors, trait mangling fix",
+          "timestamp": "2026-04-10T13:17:05+09:00",
+          "tree_id": "a107b64ff288e80dde3f26948f58b29412e9a274",
+          "url": "https://github.com/wado-lang/wado/commit/e550d4ae049d181fb9ce6459f71bba61a68b84b3"
+        },
+        "date": 1775794837887,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
