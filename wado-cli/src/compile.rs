@@ -143,7 +143,7 @@ impl Opt {
                 long: Some("allocator"),
                 short: None,
                 value: Some("<mode>"),
-                desc: "Allocator mode: bump (default), debug (no-reuse + 0xFF poison)",
+                desc: "Allocator mode: bump (default for CLI), freelist (default for HTTP), debug (no-reuse + 0xFF poison)",
             },
             Self::Lib => args::OptSpec {
                 long: Some("lib"),

@@ -294,6 +294,8 @@ fn compile_after_load<H: CompilerHost>(
         let allocator_tag = options.allocator.unwrap_or_else(|| {
             if package.is_test_world() {
                 "debug".to_string()
+            } else if package.target_world == "wasi:http/service" {
+                "freelist".to_string()
             } else {
                 "bump".to_string()
             }

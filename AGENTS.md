@@ -56,13 +56,18 @@ To inspect invalid Wasm when debugging codegen bugs, use `--no-validate`:
 wado compile --no-validate --wat-to-stdout file.wado
 ```
 
-### Debug Allocator
+### Allocators
 
-Use `--allocator debug` to enable the debug allocator, which never reuses freed memory and poisons freed regions with `0xFF` bytes for use-after-free detection:
+Three allocators are available via `--allocator <mode>`:
+
+- `bump` (default for CLI): Bump pointer, never frees. Fast, minimal code.
+- `freelist` (default for HTTP): Reclaims freed memory via free list. For long-living processes.
+- `debug` (default for test): Never reuses freed memory, poisons with `0xFF`. For use-after-free detection.
 
 ```sh
-wado compile --allocator debug file.wado
-wado run --allocator debug file.wado      # not yet wired, use compile + wasmtime
+wado compile --allocator freelist file.wado  # free-list allocator
+wado compile --allocator debug file.wado     # debug allocator
+wado compile --allocator bump file.wado      # bump allocator
 ```
 
 The debug allocator is selected when compiling for the test world, and enabled in E2E tests as well.
