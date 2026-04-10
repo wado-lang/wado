@@ -312,6 +312,42 @@ impl char {
         }
         panic("char::hex_digit_value: not a hex digit");
     }
+
+    /// Returns the number of bytes this character needs in UTF-8 encoding.
+    pub fn len_utf8(&self) -> i32 {
+        let cp = *self as i32;
+        if cp < 0x80 { return 1; }
+        if cp < 0x800 { return 2; }
+        if cp < 0x10000 { return 3; }
+        return 4;
+    }
+
+    /// Encodes this character as UTF-8, returning the bytes.
+    pub fn encode_utf8(&self) -> Array<u8> {
+        let cp = *self as i32;
+        if cp < 0x80 {
+            return [cp as u8] as Array<u8>;
+        }
+        if cp < 0x800 {
+            let mut buf: Array<u8> = Array::<u8>::with_capacity(2);
+            buf.push((0xC0 | cp >> 6) as u8);
+            buf.push((0x80 | cp & 0x3F) as u8);
+            return buf;
+        }
+        if cp < 0x10000 {
+            let mut buf: Array<u8> = Array::<u8>::with_capacity(3);
+            buf.push((0xE0 | cp >> 12) as u8);
+            buf.push((0x80 | cp >> 6 & 0x3F) as u8);
+            buf.push((0x80 | cp & 0x3F) as u8);
+            return buf;
+        }
+        let mut buf: Array<u8> = Array::<u8>::with_capacity(4);
+        buf.push((0xF0 | cp >> 18) as u8);
+        buf.push((0x80 | cp >> 12 & 0x3F) as u8);
+        buf.push((0x80 | cp >> 6 & 0x3F) as u8);
+        buf.push((0x80 | cp & 0x3F) as u8);
+        return buf;
+    }
 }
 
 impl i8 {

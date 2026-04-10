@@ -717,3 +717,76 @@ test "display via template string" {
         panic("parse failed");
     }
 }
+
+// --- Non-ASCII / Unicode ---
+
+test "percent_encode emoji" {
+    let encoded = percent_encode("🍣");
+    assert encoded == "%F0%9F%8D%A3";
+}
+
+test "percent_encode Japanese" {
+    let encoded = percent_encode("東京");
+    assert encoded == "%E6%9D%B1%E4%BA%AC";
+}
+
+test "percent_encode mixed ASCII and non-ASCII" {
+    let encoded = percent_encode("café");
+    assert encoded == "caf%C3%A9";
+}
+
+test "percent_decode emoji roundtrip" {
+    let original = "hello 🌍 world";
+    let encoded = percent_encode(original);
+    if let Ok(decoded) = percent_decode(encoded) {
+        assert decoded == original;
+    } else {
+        panic("roundtrip failed");
+    }
+}
+
+test "percent_decode Japanese roundtrip" {
+    let original = "検索キーワード";
+    let encoded = percent_encode(original);
+    if let Ok(decoded) = percent_decode(encoded) {
+        assert decoded == original;
+    } else {
+        panic("roundtrip failed");
+    }
+}
+
+test "parse_query with non-ASCII value" {
+    let pairs = parse_query("city=%E6%9D%B1%E4%BA%AC&tag=%F0%9F%8D%A3");
+    assert pairs.len() == 2;
+    assert pairs[0].0 == "city";
+    assert pairs[0].1 == "東京";
+    assert pairs[1].0 == "tag";
+    assert pairs[1].1 == "🍣";
+}
+
+test "format_query with non-ASCII value" {
+    let pairs: Array<[String, String]> = [["city", "東京"]] as Array<[String, String]>;
+    let formatted = format_query(&pairs);
+    let parsed = parse_query(formatted);
+    assert parsed[0].1 == "東京";
+}
+
+test "char len_utf8" {
+    assert 'A'.len_utf8() == 1;
+    assert 'é'.len_utf8() == 2;
+    assert '東'.len_utf8() == 3;
+    assert '🍣'.len_utf8() == 4;
+}
+
+test "char encode_utf8" {
+    let bytes = 'A'.encode_utf8();
+    assert bytes.len() == 1;
+    assert bytes[0] == 65;
+
+    let bytes = '🍣'.encode_utf8();
+    assert bytes.len() == 4;
+    assert bytes[0] == 0xF0;
+    assert bytes[1] == 0x9F;
+    assert bytes[2] == 0x8D;
+    assert bytes[3] == 0xA3;
+}

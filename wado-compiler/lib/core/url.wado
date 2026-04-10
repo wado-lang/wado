@@ -78,18 +78,23 @@ fn is_unreserved_char(c: char) -> bool {
     return c == '-' || c == '.' || c == '_' || c == '~';
 }
 
+fn percent_encode_char(c: char, out: &mut String) {
+    if is_unreserved_char(c) {
+        out.push(c);
+    } else {
+        for let b of c.encode_utf8() {
+            let n = b as i32;
+            out.push_str(`%{n:02X}`);
+        }
+    }
+}
+
 /// Percent-encodes a string. Encodes all characters except unreserved
 /// characters (A-Z, a-z, 0-9, '-', '.', '_', '~') per RFC 3986 §2.3.
 pub fn percent_encode(input: String) -> String {
     let mut out = String::with_capacity(input.len());
-    for let b of input.bytes() {
-        let c = b as char;
-        if is_unreserved_char(c) {
-            out.push(c);
-        } else {
-            let n = b as i32;
-            out.push_str(`%{n:02X}`);
-        }
+    for let c of input.chars() {
+        percent_encode_char(c, &mut out);
     }
     return out;
 }
@@ -118,24 +123,24 @@ pub fn percent_decode(input: String) -> Result<String, ParseError> {
             i += 1;
         }
     }
-    let result = String::from_utf8(bytes);
-    if let Ok(s) = result {
-        return Result::<String, ParseError>::Ok(s);
-    }
-    return Result::<String, ParseError>::Err(ParseError::InvalidPercentEncoding);
+    return match String::from_utf8(bytes) {
+        Ok(s) => Result::<String, ParseError>::Ok(s),
+        Err(_) => Result::<String, ParseError>::Err(ParseError::InvalidPercentEncoding),
+    };
 }
 
 fn percent_encode_query_component(input: &String) -> String {
     let mut out = String::with_capacity(input.len());
-    for let b of input.bytes() {
-        let c = b as char;
+    for let c of input.chars() {
         if c == ' ' {
             out.push('+');
         } else if is_unreserved_char(c) {
             out.push(c);
         } else {
-            let n = b as i32;
-            out.push_str(`%{n:02X}`);
+            for let b of c.encode_utf8() {
+                let n = b as i32;
+                out.push_str(`%{n:02X}`);
+            }
         }
     }
     return out;
@@ -143,29 +148,32 @@ fn percent_encode_query_component(input: &String) -> String {
 
 fn percent_decode_query_component(input: &String) -> String {
     let len = input.len();
-    let mut out = String::with_capacity(len);
+    let mut bytes: Array<u8> = Array::<u8>::with_capacity(len);
     let mut i = 0;
     while i < len {
         let c = input.get_byte(i) as char;
         if c == '+' {
-            out.push(' ');
+            bytes.push(' ' as u8);
             i += 1;
         } else if c == '%' && i + 2 < len {
             let hi = input.get_byte(i + 1) as char;
             let lo = input.get_byte(i + 2) as char;
             if hi.is_hexdigit() && lo.is_hexdigit() {
-                out.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8 as char);
+                bytes.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
                 i += 3;
             } else {
-                out.push('%');
+                bytes.push('%' as u8);
                 i += 1;
             }
         } else {
-            out.push(c);
+            bytes.push(input.get_byte(i));
             i += 1;
         }
     }
-    return out;
+    if let Ok(s) = String::from_utf8(bytes) {
+        return s;
+    }
+    return *input;
 }
 
 /// Parses a query string into key-value pairs.
@@ -176,8 +184,7 @@ pub fn parse_query(query: String) -> Array<[String, String]> {
     if query.is_empty() {
         return result;
     }
-    let parts = query.split("&");
-    for let part of parts {
+    for let part of query.split("&") {
         if part.is_empty() {
             continue;
         }
@@ -210,69 +217,29 @@ pub fn format_query(pairs: &Array<[String, String]>) -> String {
 }
 
 fn remove_dot_segments(path: String) -> String {
-    let mut input = path;
-    let mut out: Array<String> = [];
-
-    while !input.is_empty() {
-        if input.starts_with("../") {
-            input = input.substr_bytes(3, input.len());
-            continue;
-        }
-        if input.starts_with("./") {
-            input = input.substr_bytes(2, input.len());
-            continue;
-        }
-        if input.starts_with("/./") {
-            input = input.substr_bytes(2, input.len());
-            continue;
-        }
-        if input == "/." {
-            input = "/";
-            continue;
-        }
-        if input.starts_with("/../") {
-            input = input.substr_bytes(3, input.len());
-            if !out.is_empty() {
-                out.pop();
+    let segments = path.split("/");
+    let mut stack: Array<String> = [];
+    for let seg of segments {
+        if seg == ".." {
+            if stack.len() > 1 {
+                stack.pop();
             }
-            continue;
-        }
-        if input == "/.." {
-            input = "/";
-            if !out.is_empty() {
-                out.pop();
-            }
-            continue;
-        }
-        if input == "." || input == ".." {
-            break;
-        }
-        if input.starts_with("/") {
-            let next_slash = input.substr_bytes(1, input.len()).find("/");
-            if let Some(ns) = next_slash {
-                let seg = input.substr_bytes(0, ns + 1);
-                out.push(seg);
-                input = input.substr_bytes(ns + 1, input.len());
-            } else {
-                out.push(input);
-                input = "";
-            }
-        } else {
-            let next_slash = input.find("/");
-            if let Some(ns) = next_slash {
-                let seg = input.substr_bytes(0, ns);
-                out.push(seg);
-                input = input.substr_bytes(ns, input.len());
-            } else {
-                out.push(input);
-                input = "";
-            }
+        } else if seg != "." {
+            stack.push(seg);
         }
     }
-
+    if stack.is_empty() {
+        return "";
+    }
+    if stack.len() == 1 && stack[0] == "" {
+        return "/";
+    }
     let mut result = String::with_capacity(64);
-    for let seg of out {
-        result.push_str(seg);
+    for let mut i = 0; i < stack.len(); i += 1 {
+        if i > 0 {
+            result.push('/');
+        }
+        result.push_str(stack[i]);
     }
     return result;
 }
@@ -292,6 +259,14 @@ fn parse_port_str(s: &String) -> Result<u16, ParseError> {
         }
     }
     return Result::<u16, ParseError>::Ok(val as u16);
+}
+
+fn apply_port(url: &mut Url, port_val: u16) {
+    if port_val == default_port_for_scheme(&url.scheme) {
+        url.port = null;
+    } else {
+        url.port = Option::Some(port_val);
+    }
 }
 
 fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> {
@@ -320,14 +295,9 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
             if !after.is_empty() {
                 if after.starts_with(":") {
                     let port_str = after.substr_bytes(1, after.len());
-                    let p = parse_port_str(&port_str);
-                    if let Err(e) = p { return Result::<(), ParseError>::Err(e); }
-                    if let Ok(port_val) = p {
-                        if port_val == default_port_for_scheme(&url.scheme) {
-                            url.port = null;
-                        } else {
-                            url.port = Option::Some(port_val);
-                        }
+                    match parse_port_str(&port_str) {
+                        Err(e) => { return Result::<(), ParseError>::Err(e); },
+                        Ok(port_val) => { apply_port(url, port_val); },
                     }
                 } else {
                     return Result::<(), ParseError>::Err(ParseError::InvalidHost);
@@ -352,15 +322,12 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
         if host_part.is_empty() {
             return Result::<(), ParseError>::Err(ParseError::MissingHost);
         }
-        let p = parse_port_str(&port_str);
-        if let Err(e) = p { return Result::<(), ParseError>::Err(e); }
-        url.host = host_part.to_ascii_lowercase();
-        if let Ok(port_val) = p {
-            if port_val == default_port_for_scheme(&url.scheme) {
-                url.port = null;
-            } else {
-                url.port = Option::Some(port_val);
-            }
+        match parse_port_str(&port_str) {
+            Err(e) => { return Result::<(), ParseError>::Err(e); },
+            Ok(port_val) => {
+                url.host = host_part.to_ascii_lowercase();
+                apply_port(url, port_val);
+            },
         }
         return Result::<(), ParseError>::Ok(());
     }
@@ -377,11 +344,10 @@ impl Url {
             return Result::<Url, ParseError>::Err(ParseError::EmptyInput);
         }
 
-        let colon_pos = input.find(":");
-        if colon_pos matches { None } {
-            return Result::<Url, ParseError>::Err(ParseError::InvalidScheme);
-        }
-        let colon = colon_pos.unwrap();
+        let colon = match input.find(":") {
+            Some(pos) => pos,
+            None => { return Result::<Url, ParseError>::Err(ParseError::InvalidScheme); },
+        };
         if colon == 0 {
             return Result::<Url, ParseError>::Err(ParseError::InvalidScheme);
         }
@@ -428,8 +394,7 @@ impl Url {
             fragment: fragment,
         };
 
-        let auth_result = parse_authority(&authority_str, &mut url);
-        if let Err(e) = auth_result {
+        if let Err(e) = parse_authority(&authority_str, &mut url) {
             return Result::<Url, ParseError>::Err(e);
         }
 
@@ -564,10 +529,10 @@ impl Url {
 
     /// Returns the effective port (explicit port or default for the scheme).
     pub fn effective_port(&self) -> u16 {
-        if let Some(p) = self.port {
-            return p;
-        }
-        return default_port_for_scheme(&self.scheme);
+        return match self.port {
+            Some(p) => p,
+            None => default_port_for_scheme(&self.scheme),
+        };
     }
 
     /// Resolves a relative URL reference against this URL as the base.
@@ -619,8 +584,7 @@ impl Url {
                 query: r_query,
                 fragment: r_fragment,
             };
-            let auth_result = parse_authority(&r_authority, &mut result);
-            if let Err(e) = auth_result {
+            if let Err(e) = parse_authority(&r_authority, &mut result) {
                 return Result::<Url, ParseError>::Err(e);
             }
             return Result::<Url, ParseError>::Ok(result);
@@ -698,10 +662,10 @@ impl Url {
 
     /// Parses the query string into key-value pairs.
     pub fn query_pairs(&self) -> Array<[String, String]> {
-        if let Some(q) = self.query {
-            return parse_query(q);
-        }
-        return [];
+        return match self.query {
+            Some(q) => parse_query(q),
+            None => [],
+        };
     }
 
     /// Returns the first value for the given query parameter key.
