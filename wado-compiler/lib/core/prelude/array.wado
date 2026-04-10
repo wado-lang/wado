@@ -464,6 +464,15 @@ impl<T> Iterator for ArrayIter<T> {
     }
 }
 
+impl<T> IntoIterator for ArrayIter<T> {
+    type Item = T;
+    type Iter = ArrayIter<T>;
+
+    fn into_iter(&self) -> ArrayIter<T> {
+        return *self;
+    }
+}
+
 impl<T> IntoIterator for Array<T> {
     type Item = T;
     type Iter = ArrayIter<T>;
