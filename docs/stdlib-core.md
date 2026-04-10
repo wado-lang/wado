@@ -1701,6 +1701,10 @@ Non-ASCII bytes are left unchanged.
 Checks that two strings are an ASCII case-insensitive match.
 Non-ASCII bytes are compared exactly.
 
+##### `pub fn substr_bytes(&self, start: i32, end: i32) -> String`
+
+Extract a substring by byte range [start, end).
+
 ##### `pub fn contains(&self, pat: String) -> bool`
 
 Returns true if this string contains the given substring.

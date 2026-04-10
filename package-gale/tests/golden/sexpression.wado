@@ -856,44 +856,45 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
-        if lexer.chars[start] == '\t' || lexer.chars[start] == '\n' || lexer.chars[start] == '\r' || lexer.chars[start] == ' ' {
+        let first_char = lexer.chars[start];
+        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
             end = try_whitespace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WHITESPACE; }
             end = try_number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
-        } else if lexer.chars[start] == '"' {
+        } else if first_char == '"' {
             end = try_string(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STRING; }
             end = try_number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
-        } else if lexer.chars[start] == '(' {
+        } else if first_char == '(' {
             end = try_number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
             end = try_lparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LPAREN; }
-        } else if lexer.chars[start] == ')' {
+        } else if first_char == ')' {
             end = try_number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
             end = try_rparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RPAREN; }
-        } else if lexer.chars[start] == '*' || lexer.chars[start] == '+' || lexer.chars[start] == '-' || lexer.chars[start] == '/' {
+        } else if first_char == '*' || first_char == '+' || first_char == '-' || first_char == '/' {
             end = try_number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
             end = try_symbol(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
-        } else if lexer.chars[start] == '.' {
+        } else if first_char == '.' {
             end = try_number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
             end = try_symbol(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
             end = try_dot(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DOT; }
-        } else if 'a' <= lexer.chars[start] <= 'z' {
+        } else if 'a' <= first_char <= 'z' {
             end = try_symbol(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
             end = try_number(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
-        } else if 'A' <= lexer.chars[start] <= 'Z' {
+        } else if 'A' <= first_char <= 'Z' {
             end = try_symbol(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SYMBOL; }
             end = try_number(&lexer.chars, start);

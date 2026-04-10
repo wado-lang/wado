@@ -7655,7 +7655,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
-        if lexer.chars[start] == '\n' || lexer.chars[start] == '\r' {
+        let first_char = lexer.chars[start];
+        if first_char == '\n' || first_char == '\r' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7666,7 +7667,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == ' ' || lexer.chars[start] == '\u{a0}' || lexer.chars[start] == '\u{1680}' || lexer.chars[start] == '\u{202f}' || lexer.chars[start] == '\u{205f}' || lexer.chars[start] == '\u{3000}' {
+        } else if first_char == ' ' || first_char == '\u{a0}' || first_char == '\u{1680}' || first_char == '\u{202f}' || first_char == '\u{205f}' || first_char == '\u{3000}' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7677,7 +7678,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == '!' {
+        } else if first_char == '!' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7690,7 +7691,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_NOT; }
             end = try_ne(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NE; }
-        } else if lexer.chars[start] == '"' {
+        } else if first_char == '"' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7701,7 +7702,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == '#' {
+        } else if first_char == '#' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7712,7 +7713,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_pound(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_POUND; }
-        } else if lexer.chars[start] == '$' {
+        } else if first_char == '$' {
             end = try_kw_dollarcrate(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_DOLLARCRATE; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -7725,7 +7726,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_dollar(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DOLLAR; }
-        } else if lexer.chars[start] == '%' {
+        } else if first_char == '%' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7738,7 +7739,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_PERCENT; }
             end = try_percenteq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PERCENTEQ; }
-        } else if lexer.chars[start] == '&' {
+        } else if first_char == '&' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7753,7 +7754,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_ANDAND; }
             end = try_andeq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ANDEQ; }
-        } else if lexer.chars[start] == '\'' {
+        } else if first_char == '\'' {
             end = try_kw_staticlifetime(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_STATICLIFETIME; }
             end = try_kw_underlinelifetime(&lexer.chars, start);
@@ -7770,7 +7771,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_lifetime_or_label(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIFETIME_OR_LABEL; }
-        } else if lexer.chars[start] == '(' {
+        } else if first_char == '(' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7781,7 +7782,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_lparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LPAREN; }
-        } else if lexer.chars[start] == ')' {
+        } else if first_char == ')' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7792,7 +7793,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_rparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RPAREN; }
-        } else if lexer.chars[start] == '*' {
+        } else if first_char == '*' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7805,7 +7806,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_STAR; }
             end = try_stareq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STAREQ; }
-        } else if lexer.chars[start] == '+' {
+        } else if first_char == '+' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7818,7 +7819,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_PLUS; }
             end = try_pluseq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PLUSEQ; }
-        } else if lexer.chars[start] == ',' {
+        } else if first_char == ',' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7829,7 +7830,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_comma(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_COMMA; }
-        } else if lexer.chars[start] == '-' {
+        } else if first_char == '-' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7844,7 +7845,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_MINUSEQ; }
             end = try_rarrow(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RARROW; }
-        } else if lexer.chars[start] == '.' {
+        } else if first_char == '.' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7861,7 +7862,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_DOTDOTDOT; }
             end = try_dotdoteq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DOTDOTEQ; }
-        } else if lexer.chars[start] == '/' {
+        } else if first_char == '/' {
             end = try_line_comment(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LINE_COMMENT; }
             end = try_block_comment(&lexer.chars, start);
@@ -7886,7 +7887,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_SLASH; }
             end = try_slasheq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SLASHEQ; }
-        } else if lexer.chars[start] == '0' {
+        } else if first_char == '0' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7903,7 +7904,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_BIN_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == ':' {
+        } else if first_char == ':' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7916,7 +7917,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_COLON; }
             end = try_pathsep(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PATHSEP; }
-        } else if lexer.chars[start] == ';' {
+        } else if first_char == ';' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7927,7 +7928,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_semi(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SEMI; }
-        } else if lexer.chars[start] == '<' {
+        } else if first_char == '<' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7942,7 +7943,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_LT; }
             end = try_le(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LE; }
-        } else if lexer.chars[start] == '=' {
+        } else if first_char == '=' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7957,7 +7958,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_EQEQ; }
             end = try_fatarrow(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FATARROW; }
-        } else if lexer.chars[start] == '>' {
+        } else if first_char == '>' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7972,7 +7973,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_GT; }
             end = try_ge(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_GE; }
-        } else if lexer.chars[start] == '?' {
+        } else if first_char == '?' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7983,7 +7984,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_question(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_QUESTION; }
-        } else if lexer.chars[start] == '@' {
+        } else if first_char == '@' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -7994,7 +7995,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_at(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_AT; }
-        } else if lexer.chars[start] == 'S' {
+        } else if first_char == 'S' {
             end = try_kw_selftype(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_SELFTYPE; }
             end = try_non_keyword_identifier(&lexer.chars, start);
@@ -8007,7 +8008,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == '[' {
+        } else if first_char == '[' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -8018,7 +8019,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_lsquarebracket(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LSQUAREBRACKET; }
-        } else if lexer.chars[start] == ']' {
+        } else if first_char == ']' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -8029,7 +8030,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_rsquarebracket(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RSQUAREBRACKET; }
-        } else if lexer.chars[start] == '^' {
+        } else if first_char == '^' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -8042,7 +8043,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_CARET; }
             end = try_careteq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_CARETEQ; }
-        } else if lexer.chars[start] == '_' || lexer.chars[start] == '\u{2118}' || lexer.chars[start] == '\u{212e}' {
+        } else if first_char == '_' || first_char == '\u{2118}' || first_char == '\u{212e}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8053,7 +8054,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'a' {
+        } else if first_char == 'a' {
             end = try_kw_as(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_AS; }
             end = try_kw_async(&lexer.chars, start);
@@ -8072,7 +8073,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'b' {
+        } else if first_char == 'b' {
             end = try_kw_break(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_BREAK; }
             end = try_kw_become(&lexer.chars, start);
@@ -8095,7 +8096,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'c' {
+        } else if first_char == 'c' {
             end = try_kw_const(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_CONST; }
             end = try_kw_continue(&lexer.chars, start);
@@ -8112,7 +8113,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'd' {
+        } else if first_char == 'd' {
             end = try_kw_dyn(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_DYN; }
             end = try_kw_do(&lexer.chars, start);
@@ -8127,7 +8128,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'e' {
+        } else if first_char == 'e' {
             end = try_kw_else(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_ELSE; }
             end = try_kw_enum(&lexer.chars, start);
@@ -8144,7 +8145,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'f' {
+        } else if first_char == 'f' {
             end = try_kw_false(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_FALSE; }
             end = try_kw_fn(&lexer.chars, start);
@@ -8163,7 +8164,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'i' {
+        } else if first_char == 'i' {
             end = try_kw_if(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_IF; }
             end = try_kw_impl(&lexer.chars, start);
@@ -8180,7 +8181,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'l' {
+        } else if first_char == 'l' {
             end = try_kw_let(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_LET; }
             end = try_kw_loop(&lexer.chars, start);
@@ -8195,7 +8196,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'm' {
+        } else if first_char == 'm' {
             end = try_kw_match(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_MATCH; }
             end = try_kw_mod(&lexer.chars, start);
@@ -8218,7 +8219,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'o' {
+        } else if first_char == 'o' {
             end = try_kw_override(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_OVERRIDE; }
             end = try_non_keyword_identifier(&lexer.chars, start);
@@ -8231,7 +8232,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'p' {
+        } else if first_char == 'p' {
             end = try_kw_pub(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_PUB; }
             end = try_kw_priv(&lexer.chars, start);
@@ -8246,7 +8247,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'r' {
+        } else if first_char == 'r' {
             end = try_kw_ref(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_REF; }
             end = try_kw_return(&lexer.chars, start);
@@ -8265,7 +8266,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 's' {
+        } else if first_char == 's' {
             end = try_kw_selfvalue(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_SELFVALUE; }
             end = try_kw_static(&lexer.chars, start);
@@ -8284,7 +8285,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 't' {
+        } else if first_char == 't' {
             end = try_kw_trait(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_TRAIT; }
             end = try_kw_true(&lexer.chars, start);
@@ -8305,7 +8306,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'u' {
+        } else if first_char == 'u' {
             end = try_kw_unsafe(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_UNSAFE; }
             end = try_kw_use(&lexer.chars, start);
@@ -8324,7 +8325,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'v' {
+        } else if first_char == 'v' {
             end = try_kw_virtual(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_VIRTUAL; }
             end = try_non_keyword_identifier(&lexer.chars, start);
@@ -8337,7 +8338,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'w' {
+        } else if first_char == 'w' {
             end = try_kw_where(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_WHERE; }
             end = try_kw_while(&lexer.chars, start);
@@ -8352,7 +8353,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == 'y' {
+        } else if first_char == 'y' {
             end = try_kw_yield(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_KW_YIELD; }
             end = try_non_keyword_identifier(&lexer.chars, start);
@@ -8365,7 +8366,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if lexer.chars[start] == '{' {
+        } else if first_char == '{' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -8376,7 +8377,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_lcurlybrace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LCURLYBRACE; }
-        } else if lexer.chars[start] == '|' {
+        } else if first_char == '|' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -8391,7 +8392,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_OROR; }
             end = try_oreq(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OREQ; }
-        } else if lexer.chars[start] == '}' {
+        } else if first_char == '}' {
             end = try_block_comment_or_doc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; }
             end = try_shebang(&lexer.chars, start);
@@ -8402,7 +8403,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
             end = try_rcurlybrace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RCURLYBRACE; }
-        } else if 'A' <= lexer.chars[start] <= 'Z' {
+        } else if 'A' <= first_char <= 'Z' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8413,7 +8414,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if 'a' <= lexer.chars[start] <= 'z' {
+        } else if 'a' <= first_char <= 'z' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8424,7 +8425,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{c0}' <= lexer.chars[start] <= '\u{d6}' {
+        } else if '\u{c0}' <= first_char <= '\u{d6}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8435,7 +8436,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{d8}' <= lexer.chars[start] <= '\u{f6}' {
+        } else if '\u{d8}' <= first_char <= '\u{f6}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8446,7 +8447,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{f8}' <= lexer.chars[start] <= '\u{ff}' {
+        } else if '\u{f8}' <= first_char <= '\u{ff}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8457,7 +8458,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{100}' <= lexer.chars[start] <= '\u{24f}' {
+        } else if '\u{100}' <= first_char <= '\u{24f}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8468,7 +8469,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{370}' <= lexer.chars[start] <= '\u{3ff}' {
+        } else if '\u{370}' <= first_char <= '\u{3ff}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8479,7 +8480,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{400}' <= lexer.chars[start] <= '\u{4ff}' {
+        } else if '\u{400}' <= first_char <= '\u{4ff}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8490,7 +8491,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{600}' <= lexer.chars[start] <= '\u{6ff}' {
+        } else if '\u{600}' <= first_char <= '\u{6ff}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8501,7 +8502,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{900}' <= lexer.chars[start] <= '\u{97f}' {
+        } else if '\u{900}' <= first_char <= '\u{97f}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8512,7 +8513,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{4e00}' <= lexer.chars[start] <= '\u{9fff}' {
+        } else if '\u{4e00}' <= first_char <= '\u{9fff}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8523,7 +8524,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{3040}' <= lexer.chars[start] <= '\u{309f}' {
+        } else if '\u{3040}' <= first_char <= '\u{309f}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8534,7 +8535,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{30a0}' <= lexer.chars[start] <= '\u{30ff}' {
+        } else if '\u{30a0}' <= first_char <= '\u{30ff}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8545,7 +8546,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{ac00}' <= lexer.chars[start] <= '\u{d7af}' {
+        } else if '\u{ac00}' <= first_char <= '\u{d7af}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8556,7 +8557,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{2160}' <= lexer.chars[start] <= '\u{2188}' {
+        } else if '\u{2160}' <= first_char <= '\u{2188}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8567,7 +8568,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{16ee}' <= lexer.chars[start] <= '\u{16f0}' {
+        } else if '\u{16ee}' <= first_char <= '\u{16f0}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8578,7 +8579,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{1885}' <= lexer.chars[start] <= '\u{1886}' {
+        } else if '\u{1885}' <= first_char <= '\u{1886}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8589,7 +8590,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{309b}' <= lexer.chars[start] <= '\u{309c}' {
+        } else if '\u{309b}' <= first_char <= '\u{309c}' {
             end = try_non_keyword_identifier(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8600,7 +8601,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '\u{2000}' <= lexer.chars[start] <= '\u{200a}' {
+        } else if '\u{2000}' <= first_char <= '\u{200a}' {
             end = try_whitespace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WHITESPACE; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8611,7 +8612,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; }
             end = try_float_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; }
-        } else if '0' <= lexer.chars[start] <= '9' {
+        } else if '0' <= first_char <= '9' {
             end = try_dec_literal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DEC_LITERAL; }
             end = try_block_comment_or_doc(&lexer.chars, start);
@@ -8882,7 +8883,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_rparen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_RPAREN; }
         }
-        if best_end > start && (lexer.chars[start] == '_') {
+        if best_end > start && (first_char == '_') {
             let kw_kind = classify_keyword(&lexer.chars, start, best_end);
             if kw_kind >= 0 { best_kind = kw_kind; }
         }

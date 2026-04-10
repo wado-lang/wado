@@ -10188,7 +10188,7 @@ pub fn String::trim_ascii_start(self: &String) -> String {
             break;
         }
     }
-    return self.String::internal_substr_bytes(start, self.used);
+    return self.String::substr_bytes(start, self.used);
 }
 
 pub fn String::trim_ascii_end(self: &String) -> String {
@@ -10204,7 +10204,7 @@ pub fn String::trim_ascii_end(self: &String) -> String {
             break;
         }
     }
-    return self.String::internal_substr_bytes(0, end);
+    return self.String::substr_bytes(0, end);
 }
 
 pub fn String::trim_ascii(self: &String) -> String {
@@ -10240,7 +10240,7 @@ pub fn String::trim_start(self: &String) -> String {
             break;
         }
     }
-    return self.String::internal_substr_bytes(start, self.used);
+    return self.String::substr_bytes(start, self.used);
 }
 
 pub fn String::trim_end(self: &String) -> String {
@@ -10288,7 +10288,7 @@ pub fn String::trim_end(self: &String) -> String {
             break;
         }
     }
-    return self.String::internal_substr_bytes(0, end);
+    return self.String::substr_bytes(0, end);
 }
 
 pub fn String::trim(self: &String) -> String {
@@ -10329,7 +10329,7 @@ pub fn String::eq_ignore_ascii_case(self: &String, other: String) -> bool {
     return true;
 }
 
-fn String::internal_substr_bytes(self: &String, start: i32, end: i32) -> String {
+pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
     let len: i32 = (end - start);
     if (len <= 0) {
         return "core::prelude/string.wado::String::with_capacity"(0);

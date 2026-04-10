@@ -724,6 +724,7 @@ struct TryCall {
     extra: String,
     first_chars: Array<[char, char]>,
     is_wildcard: bool,
+    match_length: i32,
 }
 
 /// Compute the first-char set for a lexer rule body's first element.
@@ -741,7 +742,7 @@ fn compute_first_chars(rule: &LexerRule, all_rules: &Array<LexerRule>) -> TryCal
     }
     let mut chars: Array<[char, char]> = [];
     let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars);
-    return TryCall { fn_name, token_kind, extra, first_chars: chars, is_wildcard: is_wc };
+    return TryCall { fn_name, token_kind, extra, first_chars: chars, is_wildcard: is_wc, match_length: -1 };
 }
 
 /// Analyze first elements of rule body alternatives to find first-char set.
@@ -851,13 +852,13 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
         for let g of &mut groups {
             if arrays_equal(&g.calls, &matching) {
                 // Add char to existing group's guard
-                g.guard.push_str(` || lexer.chars[start] == {escape_char(*c)}`);
+                g.guard.push_str(` || first_char == {escape_char(*c)}`);
                 merged = true;
             }
         }
         if !merged {
             groups.push(DispatchGroup {
-                guard: `lexer.chars[start] == {escape_char(*c)}`,
+                guard: `first_char == {escape_char(*c)}`,
                 calls: matching,
             });
         }
@@ -885,7 +886,7 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
         for let r of &calls[i].first_chars {
             if r[0] != r[1] {
                 // Build range guard
-                let guard = `{escape_char(r[0])} <= lexer.chars[start] <= {escape_char(r[1])}`;
+                let guard = `{escape_char(r[0])} <= first_char <= {escape_char(r[1])}`;
                 // Find or create group
                 let mut found_group = false;
                 for let g of &mut groups {
@@ -924,14 +925,15 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
 fn emit_dispatch_groups(w: &mut CodeWriter, calls: &Array<TryCall>, groups: &Array<DispatchGroup>, use_modes: bool) {
     // If only a wildcard group exists, emit calls directly without dispatch
     if groups.len() == 1 && groups[0].guard == "true" {
-        emit_group_calls(w, calls, &groups[0].calls, use_modes);
+        emit_group_calls(w, calls, &groups[0].calls, use_modes, true);
         return;
     }
     let mut first_group = true;
     for let g of groups {
-        if g.guard == "true" {
+        let is_wc = g.guard == "true";
+        if is_wc {
             if first_group {
-                emit_group_calls(w, calls, &g.calls, use_modes);
+                emit_group_calls(w, calls, &g.calls, use_modes, true);
                 continue;
             }
             w.else_begin("else");
@@ -941,16 +943,31 @@ fn emit_dispatch_groups(w: &mut CodeWriter, calls: &Array<TryCall>, groups: &Arr
             w.else_begin(`else if {g.guard}`);
         }
         first_group = false;
-        emit_group_calls(w, calls, &g.calls, use_modes);
+        emit_group_calls(w, calls, &g.calls, use_modes, is_wc);
     }
     if !first_group {
         w.end();
     }
 }
 
-fn emit_group_calls(w: &mut CodeWriter, calls: &Array<TryCall>, indices: &Array<i32>, use_modes: bool) {
+fn emit_group_calls(w: &mut CodeWriter, calls: &Array<TryCall>, indices: &Array<i32>, use_modes: bool, is_wildcard_group: bool) {
     for let ci of indices {
         let call = &calls[*ci];
+        // In specific dispatch branches, single-char literals are guaranteed to match
+        // (the dispatch already confirmed the character). Inline the result
+        // instead of calling the try_* function.
+        if !is_wildcard_group && call.match_length == 1 {
+            if use_modes {
+                let mut extra = String::from(call.extra);
+                if extra.is_empty() {
+                    extra = String::from(" best_push_mode = -1; best_pop_mode = false;");
+                }
+                w.line(`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind};{extra} \}`);
+            } else {
+                w.line(`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind}; \}`);
+            }
+            continue;
+        }
         w.line(`end = {call.fn_name}(&lexer.chars, start);`);
         if use_modes {
             let mut extra = String::from(call.extra);
@@ -994,6 +1011,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.line("let mut best_end: i32 = -1;");
     w.line("let mut best_kind: i32 = TK_ERROR;");
     w.line("let mut end: i32 = -1;");
+    w.line("let first_char = lexer.chars[start];");
 
     if use_modes {
         w.line("let mut best_push_mode: i32 = -1;");
@@ -1047,12 +1065,14 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
             let mut fc: Array<[char, char]> = [];
             fc.push([c, c]);
             let tk = lit.const_name;
+            let mlen = lit.text.chars().count();
             all_calls.push(TryCall {
                 fn_name,
                 token_kind: tk,
                 extra: String::from(""),
                 first_chars: fc,
                 is_wildcard: false,
+                match_length: mlen,
             });
         }
         for let rule of lexer_rules {
@@ -1089,9 +1109,9 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
             first = false;
             let uc = fc.to_ascii_uppercase();
             if *fc == uc {
-                guard.push_str(`lexer.chars[start] == {escape_char(*fc)}`);
+                guard.push_str(`first_char == {escape_char(*fc)}`);
             } else {
-                guard.push_str(`lexer.chars[start] == {escape_char(*fc)} || lexer.chars[start] == {escape_char(uc)}`);
+                guard.push_str(`first_char == {escape_char(*fc)} || first_char == {escape_char(uc)}`);
             }
         }
         guard.push(')');

@@ -28398,7 +28398,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
-        if lexer.chars[start] == '\t' || lexer.chars[start] == '\n' || lexer.chars[start] == '\r' || lexer.chars[start] == ' ' {
+        let first_char = lexer.chars[start];
+        if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
             end = try_space(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Space; }
             end = try_percentage(&lexer.chars, start);
@@ -28415,7 +28416,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '!' {
+        } else if first_char == '!' {
             end = try_important(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Important; }
             end = try_percentage(&lexer.chars, start);
@@ -28432,7 +28433,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '"' || lexer.chars[start] == '\'' {
+        } else if first_char == '"' || first_char == '\'' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28449,7 +28450,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '#' {
+        } else if first_char == '#' {
             end = try_hash(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Hash; }
             end = try_percentage(&lexer.chars, start);
@@ -28466,7 +28467,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '$' {
+        } else if first_char == '$' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28483,9 +28484,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '(' {
-            end = try_lit_lparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
+        } else if first_char == '(' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LPAREN; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28500,9 +28500,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == ')' {
-            end = try_lit_rparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
+        } else if first_char == ')' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RPAREN; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28517,9 +28516,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '*' {
-            end = try_lit_star(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
+        } else if first_char == '*' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_STAR; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28536,7 +28534,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '+' {
+        } else if first_char == '+' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28553,7 +28551,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == ',' {
+        } else if first_char == ',' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28570,7 +28568,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '-' {
+        } else if first_char == '-' {
             end = try_cdc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Cdc; }
             end = try_percentage(&lexer.chars, start);
@@ -28591,9 +28589,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '.' {
-            end = try_lit_dot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
+        } else if first_char == '.' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_DOT; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28608,9 +28605,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '/' {
-            end = try_lit_slash(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
+        } else if first_char == '/' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SLASH; }
             end = try_comment(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Comment; }
             end = try_percentage(&lexer.chars, start);
@@ -28627,9 +28623,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == ':' {
-            end = try_lit_colon(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
+        } else if first_char == ':' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_COLON; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28646,9 +28641,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == ';' {
-            end = try_lit_semi(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
+        } else if first_char == ';' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_SEMI; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28663,7 +28657,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '<' {
+        } else if first_char == '<' {
             end = try_cdo(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Cdo; }
             end = try_percentage(&lexer.chars, start);
@@ -28680,9 +28674,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '=' {
-            end = try_lit_eq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
+        } else if first_char == '=' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_EQ; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28697,7 +28690,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '>' {
+        } else if first_char == '>' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28714,7 +28707,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '@' {
+        } else if first_char == '@' {
             end = try_import(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Import; }
             end = try_page(&lexer.chars, start);
@@ -28753,7 +28746,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'A' || lexer.chars[start] == 'a' {
+        } else if first_char == 'A' || first_char == 'a' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_and(&lexer.chars, start);
@@ -28770,7 +28763,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'F' {
+        } else if first_char == 'F' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28787,7 +28780,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'N' || lexer.chars[start] == 'n' {
+        } else if first_char == 'N' || first_char == 'n' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_not(&lexer.chars, start);
@@ -28804,7 +28797,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'O' || lexer.chars[start] == 'o' {
+        } else if first_char == 'O' || first_char == 'o' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_mediaonly(&lexer.chars, start);
@@ -28823,7 +28816,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'T' || lexer.chars[start] == 't' {
+        } else if first_char == 'T' || first_char == 't' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28840,7 +28833,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'U' {
+        } else if first_char == 'U' {
             end = try_url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; }
             end = try_percentage(&lexer.chars, start);
@@ -28859,9 +28852,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '[' {
-            end = try_lit_lbracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
+        } else if first_char == '[' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LBRACKET; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28876,7 +28868,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '\\' {
+        } else if first_char == '\\' {
             end = try_url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; }
             end = try_percentage(&lexer.chars, start);
@@ -28905,9 +28897,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == ']' {
-            end = try_lit_rbracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
+        } else if first_char == ']' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RBRACKET; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28922,7 +28913,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '^' {
+        } else if first_char == '^' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28939,9 +28930,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '_' {
-            end = try_lit__(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT__; }
+        } else if first_char == '_' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT__; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28956,7 +28946,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'c' {
+        } else if first_char == 'c' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -28973,7 +28963,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'f' {
+        } else if first_char == 'f' {
             end = try_space(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Space; }
             end = try_percentage(&lexer.chars, start);
@@ -28992,7 +28982,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'p' {
+        } else if first_char == 'p' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -29009,7 +28999,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'u' {
+        } else if first_char == 'u' {
             end = try_url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; }
             end = try_percentage(&lexer.chars, start);
@@ -29030,7 +29020,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == 'v' {
+        } else if first_char == 'v' {
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -29047,9 +29037,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '{' {
-            end = try_lit_lbrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; }
+        } else if first_char == '{' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_LBRACE; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -29064,9 +29053,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '|' {
-            end = try_lit_pipe(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
+        } else if first_char == '|' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_PIPE; }
             end = try_dashmatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DashMatch; }
             end = try_percentage(&lexer.chars, start);
@@ -29085,9 +29073,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '}' {
-            end = try_lit_rbrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; }
+        } else if first_char == '}' {
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_RBRACE; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; }
             end = try_dimension(&lexer.chars, start);
@@ -29102,7 +29089,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_Function_; }
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
-        } else if lexer.chars[start] == '~' {
+        } else if first_char == '~' {
             end = try_includes(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Includes; }
             end = try_percentage(&lexer.chars, start);
@@ -29251,7 +29238,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_unexpectedcharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
         }
-        if best_end > start && (lexer.chars[start] == '_') {
+        if best_end > start && (first_char == '_') {
             let kw_kind = classify_keyword(&lexer.chars, start, best_end);
             if kw_kind >= 0 { best_kind = kw_kind; }
         }
