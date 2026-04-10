@@ -1275,3 +1275,19 @@ impl TryFrom<u128> for f32 {
         return Result::<f32, ConvertError>::Ok(value.low() as f32);
     }
 }
+
+impl Step for u128 {
+    fn next_step(&self) -> Option<u128> {
+        let max = u128::from_pair(u64::MAX, u64::MAX);
+        if *self == max { return null; }
+        return Option::Some(*self + 1 as u128);
+    }
+}
+
+impl Step for i128 {
+    fn next_step(&self) -> Option<i128> {
+        let max = i128::from_pair(u64::MAX, i64::MAX);
+        if *self == max { return null; }
+        return Option::Some(*self + 1 as i128);
+    }
+}

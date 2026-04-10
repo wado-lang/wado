@@ -2,7 +2,8 @@
 // Range types for the Wado Prelude.
 
 use { Option } from "core:prelude/types.wado";
-use { Eq, Ord, Iterator, IntoIterator } from "core:prelude/traits.wado";
+use { Eq, Ord, Display, Iterator, IntoIterator } from "core:prelude/traits.wado";
+use { Formatter } from "core:prelude/format.wado";
 
 /// Types that can be incremented by one step (for range iteration).
 pub trait Step {
@@ -72,16 +73,18 @@ impl Step for char {
     }
 }
 
-/// Half-open range [start, end)
+/// Half-open range [start, end).
+/// Constructed via the `..<` operator: `0..<10` produces `RangeExclusive<i32>`.
 #[comp_feature("range_exclusive")]
-pub struct RangeExclusive<T> {
+pub struct RangeExclusive<T: Ord> {
     pub start: T,
     pub end: T,
 }
 
-/// Inclusive range [start, end]
+/// Inclusive range [start, end].
+/// Constructed via the `..=` operator: `0..=10` produces `RangeInclusive<i32>`.
 #[comp_feature("range_inclusive")]
-pub struct RangeInclusive<T> {
+pub struct RangeInclusive<T: Ord> {
     pub start: T,
     pub end: T,
     exhausted: bool,
@@ -143,5 +146,57 @@ impl<T: Step + Ord> IntoIterator for RangeInclusive<T> {
 
     fn into_iter(&self) -> RangeInclusive<T> {
         return *self;
+    }
+}
+
+impl<T: Ord> RangeExclusive<T> {
+    /// Returns true if the value is within [start, end).
+    pub fn contains(&self, value: &T) -> bool {
+        return *value >= self.start && *value < self.end;
+    }
+
+    /// Returns true if the range contains no elements.
+    pub fn is_empty(&self) -> bool {
+        return self.start >= self.end;
+    }
+}
+
+impl<T: Ord> RangeInclusive<T> {
+    /// Returns true if the value is within [start, end].
+    pub fn contains(&self, value: &T) -> bool {
+        return *value >= self.start && *value <= self.end;
+    }
+
+    /// Returns true if the range contains no elements.
+    pub fn is_empty(&self) -> bool {
+        return self.start > self.end;
+    }
+}
+
+impl<T: Eq + Ord> Eq for RangeExclusive<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.start == other.start && self.end == other.end;
+    }
+}
+
+impl<T: Eq + Ord> Eq for RangeInclusive<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.start == other.start && self.end == other.end;
+    }
+}
+
+impl<T: Display + Ord> Display for RangeExclusive<T> {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.start.fmt(f);
+        f.write_str("..<");
+        self.end.fmt(f);
+    }
+}
+
+impl<T: Display + Ord> Display for RangeInclusive<T> {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.start.fmt(f);
+        f.write_str("..=");
+        self.end.fmt(f);
     }
 }

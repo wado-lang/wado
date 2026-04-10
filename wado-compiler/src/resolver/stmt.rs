@@ -1568,14 +1568,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return TirPattern::Wildcard;
         };
 
-        // Check for empty range
+        // Check for reversed or empty range
         let inclusive = matches!(kind, crate::ast::RangeKind::Inclusive);
-        let is_empty = if inclusive {
-            start_val > end_val
-        } else {
-            start_val >= end_val
-        };
-        if is_empty {
+        if start_val > end_val {
+            let _ = self.logger.error(TypeError::InvalidPattern {
+                message: "reversed range pattern".to_string(),
+                span,
+            });
+            return TirPattern::Wildcard;
+        }
+        if !inclusive && start_val >= end_val {
             let _ = self.logger.error(TypeError::InvalidPattern {
                 message: "empty range pattern".to_string(),
                 span,

@@ -2875,6 +2875,9 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
             }
             false
         }
+        // Range expressions have lower precedence than all binary operators,
+        // so they always need parentheses when nested inside a binary expression.
+        Expr::Range(_) => true,
         // `x as T < y` is re-parsed as `x as T<y>` (generic type), so the cast
         // must be parenthesized when it appears as the left operand of `<`.
         Expr::Cast(_) if is_left && parent_op == BinaryOp::Lt => true,

@@ -16,6 +16,7 @@ use {
 } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { Formatter } from "core:prelude/format.wado";
+use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { panic } from "core:internal";
 
 fn i32_min(a: i32, b: i32) -> i32 {
@@ -425,6 +426,22 @@ impl Array<T> {
             start: i32_min(s, self.used),
             end: i32_max(s, e),
         };
+    }
+}
+
+impl IndexValue<RangeExclusive<i32>> for Array<T> {
+    type Output = ArraySlice<T>;
+
+    fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T> {
+        return self.slice(range.start, range.end);
+    }
+}
+
+impl IndexValue<RangeInclusive<i32>> for Array<T> {
+    type Output = ArraySlice<T>;
+
+    fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T> {
+        return self.slice(range.start, range.end + 1);
     }
 }
 

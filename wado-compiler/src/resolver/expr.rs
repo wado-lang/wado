@@ -1569,7 +1569,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             PrimitiveType::U16 => Some((0, i128::from(u16::MAX))),
             PrimitiveType::U32 => Some((0, i128::from(u32::MAX))),
             PrimitiveType::U64 => Some((0, i128::from(u64::MAX))),
-            PrimitiveType::Char => Some((0, 0x10FFFF)),
+            PrimitiveType::Char => Some((0, 0x0010_FFFF)),
             _ => None,
         }
     }
@@ -3276,6 +3276,67 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Fallback: use current module (the From impl may be synthesized later)
         self.current_module_source.clone()
     }
+}
+
+enum LiteralOrdValue {
+    Int(i128),
+    Float(f64),
+    Char(u32),
+}
+
+impl LiteralOrdValue {
+    fn is_greater_than(&self, other: &Self) -> bool {
+        match (self, other) {
+            (LiteralOrdValue::Int(a), LiteralOrdValue::Int(b)) => a > b,
+            (LiteralOrdValue::Float(a), LiteralOrdValue::Float(b)) => a > b,
+            (LiteralOrdValue::Char(a), LiteralOrdValue::Char(b)) => a > b,
+            _ => false, // different kinds — type mismatch error handles this
+        }
+    }
+}
+
+impl<H: CompilerHost> Resolver<'_, H> {
+    /// Extract a compile-time orderable value from a literal expression.
+    /// Returns the value in its native representation to avoid precision loss.
+    fn extract_literal_ord_value(expr: &Expr) -> Option<LiteralOrdValue> {
+        match expr {
+            Expr::Literal(lit) => match &lit.value {
+                Literal::Number(s) => {
+                    let s = s.replace('_', "");
+                    if s.contains('.') {
+                        s.parse::<f64>().ok().map(LiteralOrdValue::Float)
+                    } else if s.starts_with("0x") || s.starts_with("0X") {
+                        i128::from_str_radix(&s[2..], 16)
+                            .ok()
+                            .map(LiteralOrdValue::Int)
+                    } else if s.starts_with("0b") || s.starts_with("0B") {
+                        i128::from_str_radix(&s[2..], 2)
+                            .ok()
+                            .map(LiteralOrdValue::Int)
+                    } else if s.starts_with("0o") || s.starts_with("0O") {
+                        i128::from_str_radix(&s[2..], 8)
+                            .ok()
+                            .map(LiteralOrdValue::Int)
+                    } else {
+                        s.parse::<i128>().ok().map(LiteralOrdValue::Int)
+                    }
+                }
+                Literal::Char(s) => super::util::unescape_char(s)
+                    .ok()
+                    .map(|c| LiteralOrdValue::Char(c as u32)),
+                _ => None,
+            },
+            Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => {
+                match Self::extract_literal_ord_value(&unary.expr)? {
+                    LiteralOrdValue::Int(v) => Some(LiteralOrdValue::Int(-v)),
+                    LiteralOrdValue::Float(v) => Some(LiteralOrdValue::Float(-v)),
+                    LiteralOrdValue::Char(_) => None,
+                }
+            }
+            Expr::Cast(cast) => Self::extract_literal_ord_value(&cast.expr),
+            _ => None,
+        }
+    }
 
     /// Resolve a range expression: `a..<b` or `a..=b`
     pub(super) fn resolve_range(
@@ -3287,9 +3348,77 @@ impl<H: CompilerHost> Resolver<'_, H> {
         use crate::name::ModuleSource;
         use crate::tir::{TirExprKind, TirStructField};
 
-        let start = self.resolve_expr(&range.start, ctx, None);
-        let end = self.resolve_expr(&range.end, ctx, Some(start.type_id));
+        // Bidirectional coercion: resolve non-literal first to infer the element type
+        let start_is_literal = self.is_numeric_literal(&range.start);
+        let end_is_literal = self.is_numeric_literal(&range.end);
+
+        let (start, end) = if start_is_literal && !end_is_literal {
+            let end = self.resolve_expr(&range.end, ctx, None);
+            let start = self.resolve_expr(&range.start, ctx, Some(end.type_id));
+            (start, end)
+        } else {
+            let start = self.resolve_expr(&range.start, ctx, None);
+            let end = self.resolve_expr(&range.end, ctx, Some(start.type_id));
+            (start, end)
+        };
+
+        // Check type mismatch between start and end
+        if start.type_id != end.type_id
+            && start.type_id != TypeTable::ERROR
+            && end.type_id != TypeTable::ERROR
+        {
+            let type_table = self.type_table.borrow();
+            let start_name = type_table.type_name(start.type_id);
+            let end_name = type_table.type_name(end.type_id);
+            if start_name != end_name {
+                let op_str = match range.kind {
+                    RangeKind::Exclusive => "..<",
+                    RangeKind::Inclusive => "..=",
+                };
+                let _ = self.logger.error(TypeError::TypeMismatch {
+                    expected: start_name,
+                    found: format!(
+                        "{end_name} (range `{op_str}` requires both operands to have the same type)"
+                    ),
+                    span: range.span,
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+            }
+        }
+
         let element_type = start.type_id;
+
+        // Check that the element type implements Ord
+        if element_type != TypeTable::ERROR && !self.type_implements_trait(element_type, "Ord") {
+            let type_name = self.type_id_to_string(element_type);
+            let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
+                type_name,
+                trait_name: "Ord".to_string(),
+                param_name: "T".to_string(),
+                span: range.span,
+            });
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+        }
+
+        // Check for reversed range literals (start > end)
+        if let Some(start_val) = Self::extract_literal_ord_value(&range.start)
+            && let Some(end_val) = Self::extract_literal_ord_value(&range.end)
+        {
+            let is_reversed = start_val.is_greater_than(&end_val);
+            if is_reversed {
+                let op_str = match range.kind {
+                    RangeKind::Exclusive => "..<",
+                    RangeKind::Inclusive => "..=",
+                };
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: format!(
+                        "reversed range `{op_str}` is not supported (start must be less than end)"
+                    ),
+                    span: range.span,
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+            }
+        }
 
         let (struct_name, module_source, fields) = match range.kind {
             RangeKind::Exclusive => {

@@ -1330,6 +1330,10 @@ Convert u128 to String (for template string interpolation)
 
 ###### `pub fn from(value: u64) -> u128`
 
+##### `impl Step for u128`
+
+###### `fn next_step(&self) -> Option<u128>`
+
 #### `pub struct i128`
 
 Signed 128-bit integer
@@ -1523,6 +1527,10 @@ Convert i128 to String (for template string interpolation)
 ##### `impl From<i64> for i128`
 
 ###### `pub fn from(value: i64) -> i128`
+
+##### `impl Step for i128`
+
+###### `fn next_step(&self) -> Option<i128>`
 
 #### `pub struct WaitEvent`
 
@@ -2094,6 +2102,14 @@ Joins elements into a string with the given separator.
 
 ###### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+##### `impl IndexValue<RangeExclusive<i32>> for Array<T>`
+
+###### `fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T>`
+
+##### `impl IndexValue<RangeInclusive<i32>> for Array<T>`
+
+###### `fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T>`
+
 ##### `impl IntoIterator for Array<T>`
 
 ###### `fn into_iter(&self) -> Self::Iter`
@@ -2130,13 +2146,22 @@ _Fields are private._
 
 ###### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `pub struct RangeExclusive<T>`
+#### `pub struct RangeExclusive<T: Ord>`
 
-Half-open range [start, end)
+Half-open range [start, end).
+Constructed via the `..<` operator: `0..<10` produces `RangeExclusive<i32>`.
 
 ##### `start: T`
 
 ##### `end: T`
+
+##### `pub fn contains(&self, value: &T) -> bool`
+
+Returns true if the value is within [start, end).
+
+##### `pub fn is_empty(&self) -> bool`
+
+Returns true if the range contains no elements.
 
 ##### `impl Iterator for RangeExclusive<T>`
 
@@ -2146,13 +2171,30 @@ Half-open range [start, end)
 
 ###### `fn into_iter(&self) -> RangeExclusive<T>`
 
-#### `pub struct RangeInclusive<T>`
+##### `impl Eq for RangeExclusive<T>`
 
-Inclusive range [start, end]
+###### `fn eq(&self, other: &Self) -> bool`
+
+##### `impl Display for RangeExclusive<T>`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `pub struct RangeInclusive<T: Ord>`
+
+Inclusive range [start, end].
+Constructed via the `..=` operator: `0..=10` produces `RangeInclusive<i32>`.
 
 ##### `start: T`
 
 ##### `end: T`
+
+##### `pub fn contains(&self, value: &T) -> bool`
+
+Returns true if the value is within [start, end].
+
+##### `pub fn is_empty(&self) -> bool`
+
+Returns true if the range contains no elements.
 
 ##### `impl Iterator for RangeInclusive<T>`
 
@@ -2161,6 +2203,14 @@ Inclusive range [start, end]
 ##### `impl IntoIterator for RangeInclusive<T>`
 
 ###### `fn into_iter(&self) -> RangeInclusive<T>`
+
+##### `impl Eq for RangeInclusive<T>`
+
+###### `fn eq(&self, other: &Self) -> bool`
+
+##### `impl Display for RangeInclusive<T>`
+
+###### `pub fn fmt(&self, f: &mut Formatter)`
 
 ### Primitive Types
 

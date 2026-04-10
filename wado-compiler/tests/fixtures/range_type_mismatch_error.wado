@@ -1,0 +1,12 @@
+// Range operands must have the same type
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let x: i32 = 0;
+    let y: i64 = 10 as i64;
+    let r = x..<y;
+    println(`{r.start}`);
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

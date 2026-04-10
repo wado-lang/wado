@@ -1669,7 +1669,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             let mut method_found = false;
             if let Some((return_type_ast, self_kind, params, method_type_params)) = method_data {
-                let trait_name = self.get_type_name(&trait_type_for_name);
+                let trait_name = self.get_type_name_full(&trait_type_for_name);
 
                 // Set up method-level type params (e.g., V in deserialize_any<V: Visitor>)
                 let impl_offset = self.trait_ctx.type_params.len() as u32;
@@ -1732,8 +1732,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // If the method wasn't found in the impl block, check the trait
             // declaration for a default method with that name
             if !method_found {
-                let trait_name_str = self.get_type_name(&trait_type_for_name);
-                if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_str) {
+                let trait_name_base = self.get_type_name(&trait_type_for_name);
+                let trait_name_str = self.get_type_name_full(&trait_type_for_name);
+                if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_base) {
                     for default_method in &trait_methods {
                         if default_method.name == method_name && default_method.body.is_some() {
                             // Set up Self type so that `Self` in the default method's
@@ -1843,7 +1844,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         _index_type: TypeId,
     ) -> Option<IndexTraitInfo> {
         // Look for impl Index<...> for StructName
-        self.find_indexing_trait_impl(struct_name, base_type_id, "Index", "index", "Output")
+        self.find_indexing_trait_impl(struct_name, base_type_id, "Index", "index", "Output", None)
             .map(
                 |(output_type, self_kind, trait_name, impl_module_source)| IndexTraitInfo {
                     output_type,
@@ -1871,6 +1872,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "KeyValueLiteralBuilder",
             "insert_literal",
             "Value",
+            None,
         ) {
             // Check if Output = Self (self-as-builder pattern)
             let output_type = self
@@ -1907,6 +1909,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "KeyValueLiteralBuilder",
             "insert_literal",
             "Value",
+            None,
         ) {
             return Some(KeyValueLiteralTraitInfo {
                 value_type,
@@ -1991,6 +1994,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 "SequenceLiteralBuilder",
                 "push_literal",
                 "Element",
+                None,
             )
         {
             let output_type = self
@@ -2026,6 +2030,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 "SequenceLiteralBuilder",
                 "push_literal",
                 "Element",
+                None,
             )
         {
             let output_type = self
@@ -2063,6 +2068,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "IndexAssign",
             "index_assign",
             "Input",
+            None,
         )
         .map(
             |(input_type, self_kind, trait_name, impl_module_source)| IndexAssignTraitInfo {
@@ -2082,15 +2088,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
         _index_type: TypeId,
     ) -> Option<IndexMutTraitInfo> {
         // Look for impl IndexMut<...> for StructName
-        self.find_indexing_trait_impl(struct_name, base_type_id, "IndexMut", "index_mut", "Output")
-            .map(
-                |(output_type, self_kind, trait_name, impl_module_source)| IndexMutTraitInfo {
-                    output_type,
-                    self_kind,
-                    trait_name,
-                    impl_module_source,
-                },
-            )
+        self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "IndexMut",
+            "index_mut",
+            "Output",
+            None,
+        )
+        .map(
+            |(output_type, self_kind, trait_name, impl_module_source)| IndexMutTraitInfo {
+                output_type,
+                self_kind,
+                trait_name,
+                impl_module_source,
+            },
+        )
     }
 
     /// Find `IndexValue` trait implementation for a type
@@ -2098,15 +2111,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        _index_type: TypeId,
+        index_type: TypeId,
     ) -> Option<IndexValueTraitInfo> {
-        // Look for impl IndexValue<...> for StructName
+        // Look for impl IndexValue<...> for StructName, matching the index type
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
             "IndexValue",
             "index_value",
             "Output",
+            Some(index_type),
         )
         .map(
             |(output_type, self_kind, trait_name, impl_module_source)| IndexValueTraitInfo {
@@ -2447,14 +2461,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         trait_base_name: &str,
         method_name: &str,
         assoc_type_name: &str,
+        expected_index_type: Option<TypeId>,
     ) -> Option<(TypeId, ast::SelfKind, String, crate::name::ModuleSource)> {
-        // Check cache first
+        // Check cache first (include expected_index_type in key)
         let cache_key = (
             struct_name.to_string(),
             base_type_id,
             trait_base_name.to_string(),
             method_name.to_string(),
-            assoc_type_name.to_string(),
+            format!("{assoc_type_name}:{expected_index_type:?}"),
         );
         if let Some(cached) = self.indexing_trait_cache.get(&cache_key) {
             return cached.clone();
@@ -2481,10 +2496,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Check if this is the target trait (Index or IndexAssign)
             let impl_block = self.get_impl_block(impl_ref);
-            let trait_name = self.get_type_name(impl_block.trait_type.as_ref().unwrap());
-            if !trait_name.starts_with(trait_base_name) {
+            let trait_base = self.get_type_name(impl_block.trait_type.as_ref().unwrap());
+            if !trait_base.starts_with(trait_base_name) {
                 continue;
             }
+            let trait_name = self.get_type_name_full(impl_block.trait_type.as_ref().unwrap());
 
             let impl_block = self.get_impl_block(impl_ref);
             let declared_type_params = self.build_declared_type_params(impl_block);
@@ -2495,6 +2511,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 &concrete_type_args,
                 &declared_type_params,
             );
+
+            // If an expected index type is provided, check the trait's type argument matches.
+            // e.g., for `impl IndexValue<RangeExclusive<i32>> for Array<T>`, the trait type arg
+            // is `RangeExclusive<i32>` which must match the actual index expression type.
+            if let Some(expected_idx_type) = expected_index_type {
+                let impl_block = self.get_impl_block(impl_ref);
+                let trait_index_arg = impl_block.trait_type.as_ref().and_then(|t| {
+                    if let ast::Type::Generic(g) = t {
+                        g.args.first().cloned()
+                    } else {
+                        None
+                    }
+                });
+                if let Some(ref arg) = trait_index_arg {
+                    let resolved_trait_idx =
+                        self.resolve_type_with_param_mapping(arg, &type_param_mapping);
+                    if resolved_trait_idx != expected_idx_type {
+                        continue;
+                    }
+                }
+            }
 
             // Verify non-type-parameter positions match the concrete type args
             let impl_block = self.get_impl_block(impl_ref);

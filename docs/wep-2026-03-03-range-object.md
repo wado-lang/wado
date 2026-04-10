@@ -117,13 +117,13 @@ Wado defines two range types as generic structs in `core:prelude`:
 
 ```wado
 /// Half-open range [start, end)
-pub struct RangeExclusive<T> {
+pub struct RangeExclusive<T: Ord> {
     pub start: T,
     pub end: T,
 }
 
 /// Inclusive range [start, end]
-pub struct RangeInclusive<T> {
+pub struct RangeInclusive<T: Ord> {
     pub start: T,
     pub end: T,
     exhausted: bool,  // private: tracks whether the iterator has yielded `end`
@@ -161,6 +161,38 @@ Range operators `..<` and `..=` sit at precedence level 14 (between logical OR a
 - **Frees `..` for other syntax**: Wado already uses `..` for struct rest patterns (`let { name, .. } = p`). Keeping `..` out of range syntax avoids ambiguity.
 - **Familiar components**: `..<` is from Swift; `..=` is from Rust. The combination takes the clearest element from each.
 - `...` (Swift/Zig inclusive) is avoided because it conflicts with potential variadic syntax and is visually similar to `..`.
+
+### Ord Bound
+
+Both range types require `T: Ord`. Constructing a range with a type that does not implement `Ord` is a compile error:
+
+```wado
+let r = 0..<10;             // OK: i32 implements Ord
+let r = 0.0..<1.0;          // OK: f64 implements Ord
+
+fn foo(a: i32, b: i32) {}
+let r = foo..<foo;           // error: fn(i32, i32) does not implement trait 'Ord'
+```
+
+### Reversed Range Literals
+
+When both operands are compile-time literals and start > end, the compiler rejects the range as a compile error. This catches common mistakes where the programmer accidentally swapped the bounds:
+
+```wado
+let r = 10..<5;              // error: reversed range `..<` is not supported
+let r = 10..=5;              // error: reversed range `..=` is not supported
+let r = 'z'..='a';           // error: reversed range `..=` is not supported
+let r = -3..<-10;            // error: reversed range `..<` is not supported
+```
+
+Empty ranges are valid and produce zero iterations:
+
+```wado
+let r = 5..<5;               // OK: empty exclusive range
+assert r.is_empty();
+```
+
+The check applies only to literal expressions (integer, float, and character literals, optionally negated or cast). Non-literal reversed ranges (via variables or function calls) are valid at compile time and behave as empty ranges at runtime.
 
 ### Iteration
 
@@ -436,9 +468,13 @@ let sign = match n {
     1..=i32::MAX => "positive",
 };
 
-// Empty range pattern is a compile error
+// Reversed range pattern is a compile error
+// 10..<5 => ...    // error: reversed range pattern
+// 10..=5 => ...    // error: reversed range pattern
+// 'z'..='a' => ... // error: reversed range pattern
+
+// Empty exclusive range pattern is a compile error (matches nothing)
 // 5..<5 => ...     // error: empty range pattern
-// 10..=5 => ...    // error: empty range pattern
 ```
 
 #### Exhaustiveness
@@ -563,33 +599,6 @@ A general `.rev()` iterator combinator can be added later to the `Iterator` trai
 ```
 
 For iteration, the `exhausted` flag is only present in `RangeInclusive` and only when it is used as an iterator (monomorphization can elide it when only `contains` is used).
-
-## Implementation Strategy
-
-### Phase 1: Lexer and Parser
-
-1. Add `DotDotLt` (`..<`) and `DotDotEq` (`..=`) tokens to the lexer
-2. Add `RangeExclusive` and `RangeInclusive` expression AST nodes
-3. Parse range expressions at precedence level 14 (non-associative)
-4. Update the operator precedence WEP to reflect `..<` and `..=` (replacing `..` and `..=`)
-
-### Phase 2: Type Checking
-
-1. Define `RangeExclusive<T>` and `RangeInclusive<T>` as built-in generic structs in `core:prelude`
-2. Infer `T` from the operands (both must have the same type after literal coercion)
-3. Add `Step` trait and implement for integer types and `char`
-
-### Phase 3: Iterator Integration
-
-1. Implement `Iterator` for `RangeExclusive<T: Step + Ord>` and `RangeInclusive<T: Step + Ord>`
-2. Implement `IntoIterator` for both types
-3. Verify for-of desugaring works with range expressions
-
-### Phase 4: Methods and Traits
-
-1. Implement `contains`, `is_empty` methods
-2. Implement `Display`, `Inspect`, and `Eq` traits
-3. Implement `IndexValue<RangeExclusive<i32>>` and `IndexValue<RangeInclusive<i32>>` for `Array<T>`
 
 ## Consequences
 
