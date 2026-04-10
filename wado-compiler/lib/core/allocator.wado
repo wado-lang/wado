@@ -4,13 +4,15 @@
 /// This module defines the linear memory allocator for the Component Model.
 /// All items here are compiled into a separate Wasm core module named "mem".
 ///
-/// Two allocator implementations are provided:
+/// Three allocator implementations are provided:
 /// - `bump_realloc`: Default bump allocator with free-rewind optimization.
 /// - `debug_realloc`: Debug allocator that poisons freed memory with 0xFF
 ///   and never reuses freed addresses (for use-after-free detection).
+/// - `freelist_realloc`: Free-list allocator that reclaims freed memory.
+///   Suitable for long-living processes (e.g. HTTP servers).
 ///
 /// The compiler selects one based on `--allocator` flag or target world,
-/// and DCE removes the unused implementation.
+/// and DCE removes the unused implementations.
 
 /// Bump allocator heap pointer. Starts at 8 to avoid returning address 0 (null sentinel).
 global mut heap_offset: i32 = 8;
@@ -75,5 +77,68 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
 
     heap_offset = new_offset;
 
+    return aligned;
+}
+
+/// Free-list allocator — reclaims freed memory via a singly-linked free list.
+/// Uses first-fit search with block splitting. Falls back to bump allocation
+/// when no suitable free block exists. All sizes are rounded to 8-byte alignment.
+/// Selected by `--allocator freelist` (default for HTTP service world).
+global mut free_list: i32 = 0;
+
+#[allocator("freelist")]
+export fn freelist_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    if newsize == 0 {
+        if oldsize == 0 {
+            return 0;
+        }
+        // Trap on immediate double-free (oldptr already at head of free list)
+        if oldptr == free_list {
+            builtin::unreachable();
+        }
+        // Free: add block to free list
+        let size = builtin::i32_and(oldsize + 7, -8);
+        builtin::i32_store(oldptr, size);
+        builtin::i32_store(oldptr + 4, free_list);
+        free_list = oldptr;
+        return 0;
+    }
+
+    let size = builtin::i32_and(newsize + 7, -8);
+
+    // Search free list for first fit
+    let mut prev = 0;
+    let mut curr = free_list;
+    while curr != 0 {
+        let block_size = builtin::i32_load(curr);
+        let next = builtin::i32_load(curr + 4);
+        if block_size >= size && builtin::i32_and(curr, align - 1) == 0 {
+            // Remove from free list
+            if prev == 0 {
+                free_list = next;
+            } else {
+                builtin::i32_store(prev + 4, next);
+            }
+            // Split if remainder is large enough (>= 16 bytes)
+            let remainder = block_size - size;
+            if remainder >= 16 {
+                let rem_ptr = curr + size;
+                builtin::i32_store(rem_ptr, remainder);
+                builtin::i32_store(rem_ptr + 4, free_list);
+                free_list = rem_ptr;
+            }
+            return curr;
+        }
+        prev = curr;
+        curr = next;
+    }
+
+    // No fit: bump allocate
+    let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
+    let new_offset = aligned + size;
+    if builtin::unlikely(new_offset > builtin::memory_size() * 65536) {
+        grow_memory(new_offset);
+    }
+    heap_offset = new_offset;
     return aligned;
 }

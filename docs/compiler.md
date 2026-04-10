@@ -1201,17 +1201,17 @@ The compiler supports multiple allocator implementations, each tagged with `#[al
 
 Available allocators:
 
-- **`bump`** (default): Simple bump allocator. Never frees memory. Used for production builds.
+- **`bump`** (default for CLI): Simple bump allocator with free-rewind optimization. Never frees memory except the most recent allocation. Suitable for short-lived processes.
+- **`freelist`** (default for HTTP): Free-list allocator that reclaims freed memory via a singly-linked free list with first-fit search and block splitting. Falls back to bump allocation when no suitable free block exists. Suitable for long-living processes.
 - **`debug`**: Never reuses freed memory and poisons freed regions with `0xFF` bytes. Useful for detecting use-after-free bugs.
 
 Selection rules:
 
 1. CLI `--allocator <name>` overrides everything.
 2. Test world (`--world test` / `wado test`) defaults to `"debug"`.
-3. E2E tests (`cargo test`) default to `"debug"` unless the fixture specifies `"allocator"` in its `__DATA__` JSON.
-4. Otherwise, defaults to `"bump"`.
-
-**TODO**: The bump allocator never frees memory and has a fixed 64-page (4 MB) backing memory. Implement a proper allocator that supports freeing and growing.
+3. HTTP service world (`wasi:http/service`) defaults to `"freelist"`.
+4. E2E tests (`cargo test`) default to `"debug"` unless the fixture specifies `"allocator"` in its `__DATA__` JSON.
+5. Otherwise, defaults to `"bump"`.
 
 ---
 
