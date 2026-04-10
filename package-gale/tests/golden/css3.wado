@@ -2263,104 +2263,6 @@ impl Lexer {
     }
 }
 
-fn try_openbracket(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '[' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_closebracket(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ']' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_openparen(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '(' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_closeparen(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ')' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_openbrace(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '{' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_closebrace(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '}' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_semicolon(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ';' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_equal(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_colon(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ':' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_dot(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_multiply(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_divide(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_pipe(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '|' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_underscore(chars: &Array<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '_' { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn try_comment(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
@@ -28479,6 +28381,14 @@ fn try_lit__(chars: &Array<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
+fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
+    let len = end - start;
+    if len == 1 {
+        if chars[start + 0] == '_' { return TK_Underscore; }
+    }
+    return -1;
+}
+
 pub fn tokenize(input: &String) -> Array<Token> {
     let mut lexer = Lexer::new(input);
     let mut tokens: Array<Token> = [];
@@ -28488,162 +28398,863 @@ pub fn tokenize(input: &String) -> Array<Token> {
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
-        end = try_lit_semi(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
-        end = try_lit_lparen(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
-        end = try_lit_colon(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
-        end = try_lit_rparen(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
-        end = try_lit_lbrace(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; }
-        end = try_lit_rbrace(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; }
-        end = try_lit_star(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-        end = try_lit_pipe(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
-        end = try_lit_dot(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
-        end = try_lit_lbracket(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
-        end = try_lit_eq(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
-        end = try_lit_rbracket(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
-        end = try_lit_slash(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
-        end = try_lit__(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_LIT__; }
-        end = try_openbracket(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_OpenBracket; }
-        end = try_closebracket(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_CloseBracket; }
-        end = try_openparen(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_OpenParen; }
-        end = try_closeparen(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_CloseParen; }
-        end = try_openbrace(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_OpenBrace; }
-        end = try_closebrace(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_CloseBrace; }
-        end = try_semicolon(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_SemiColon; }
-        end = try_equal(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Equal; }
-        end = try_colon(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Colon; }
-        end = try_dot(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Dot; }
-        end = try_multiply(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Multiply; }
-        end = try_divide(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Divide; }
-        end = try_pipe(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Pipe; }
-        end = try_underscore(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Underscore; }
-        end = try_comment(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Comment; }
-        end = try_url(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Url; }
-        end = try_space(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Space; }
-        end = try_cdo(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Cdo; }
-        end = try_cdc(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Cdc; }
-        end = try_includes(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Includes; }
-        end = try_dashmatch(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_DashMatch; }
-        end = try_hash(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Hash; }
-        end = try_import(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Import; }
-        end = try_page(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Page; }
-        end = try_media(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Media; }
-        end = try_namespace(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Namespace; }
-        end = try_charset(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Charset; }
-        end = try_important(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Important; }
-        end = try_percentage(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Percentage; }
-        end = try_url_(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Url_; }
-        end = try_unicoderange(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_UnicodeRange; }
-        end = try_mediaonly(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_MediaOnly; }
-        end = try_not(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Not; }
-        end = try_and(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_And; }
-        end = try_dimension(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Dimension; }
-        end = try_unknowndimension(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
-        end = try_plus(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Plus; }
-        end = try_minus(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Minus; }
-        end = try_greater(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Greater; }
-        end = try_comma(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Comma; }
-        end = try_tilde(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Tilde; }
-        end = try_pseudonot(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_PseudoNot; }
-        end = try_number(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Number; }
-        end = try_string_(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_String_; }
-        end = try_prefixmatch(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_PrefixMatch; }
-        end = try_suffixmatch(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_SuffixMatch; }
-        end = try_substringmatch(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_SubstringMatch; }
-        end = try_fontface(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_FontFace; }
-        end = try_supports(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Supports; }
-        end = try_or(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Or; }
-        end = try_keyframes(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Keyframes; }
-        end = try_from(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_From; }
-        end = try_to(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_To; }
-        end = try_calc(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Calc; }
-        end = try_viewport(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Viewport; }
-        end = try_counterstyle(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_CounterStyle; }
-        end = try_fontfeaturevalues(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_FontFeatureValues; }
-        end = try_dximagetransform(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_DxImageTransform; }
-        end = try_atkeyword(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_AtKeyword; }
-        end = try_variable(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Variable; }
-        end = try_var(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Var; }
-        end = try_ident(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Ident; }
-        end = try_function_(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_Function_; }
-        end = try_unexpectedcharacter(&lexer.chars, start);
-        if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        if lexer.chars[start] == '\t' || lexer.chars[start] == '\n' || lexer.chars[start] == '\r' || lexer.chars[start] == ' ' {
+            end = try_space(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Space; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '!' {
+            end = try_important(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Important; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '"' || lexer.chars[start] == '\'' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_string_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_String_; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '#' {
+            end = try_hash(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Hash; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '$' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_suffixmatch(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SuffixMatch; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '(' {
+            end = try_lit_lparen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == ')' {
+            end = try_lit_rparen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '*' {
+            end = try_lit_star(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_substringmatch(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SubstringMatch; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '+' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_plus(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Plus; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == ',' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_comma(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Comma; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '-' {
+            end = try_cdc(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Cdc; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_minus(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Minus; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_variable(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Variable; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '.' {
+            end = try_lit_dot(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '/' {
+            end = try_lit_slash(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
+            end = try_comment(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Comment; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == ':' {
+            end = try_lit_colon(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_pseudonot(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PseudoNot; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == ';' {
+            end = try_lit_semi(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '<' {
+            end = try_cdo(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Cdo; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '=' {
+            end = try_lit_eq(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '>' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_greater(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Greater; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '@' {
+            end = try_import(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Import; }
+            end = try_page(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Page; }
+            end = try_media(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Media; }
+            end = try_namespace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Namespace; }
+            end = try_charset(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Charset; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_fontface(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_FontFace; }
+            end = try_supports(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Supports; }
+            end = try_keyframes(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Keyframes; }
+            end = try_viewport(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Viewport; }
+            end = try_counterstyle(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_CounterStyle; }
+            end = try_fontfeaturevalues(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_FontFeatureValues; }
+            end = try_atkeyword(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_AtKeyword; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'A' || lexer.chars[start] == 'a' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_and(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_And; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'F' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_from(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_From; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'N' || lexer.chars[start] == 'n' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_not(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Not; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'O' || lexer.chars[start] == 'o' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_mediaonly(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_MediaOnly; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_or(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Or; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'T' || lexer.chars[start] == 't' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_to(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_To; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'U' {
+            end = try_url(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Url; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_unicoderange(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnicodeRange; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '[' {
+            end = try_lit_lbracket(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '\\' {
+            end = try_url(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Url; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_mediaonly(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_MediaOnly; }
+            end = try_not(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Not; }
+            end = try_and(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_And; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_or(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Or; }
+            end = try_from(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_From; }
+            end = try_to(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_To; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == ']' {
+            end = try_lit_rbracket(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '^' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_prefixmatch(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PrefixMatch; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '_' {
+            end = try_lit__(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT__; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'c' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_calc(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Calc; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'f' {
+            end = try_space(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Space; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_from(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_From; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'p' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_dximagetransform(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_DxImageTransform; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'u' {
+            end = try_url(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Url; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_url_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Url_; }
+            end = try_unicoderange(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnicodeRange; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == 'v' {
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_var(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Var; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '{' {
+            end = try_lit_lbrace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '|' {
+            end = try_lit_pipe(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
+            end = try_dashmatch(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_DashMatch; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_unicoderange(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnicodeRange; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '}' {
+            end = try_lit_rbrace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else if lexer.chars[start] == '~' {
+            end = try_includes(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Includes; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_tilde(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Tilde; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        } else {
+            end = try_lit_semi(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
+            end = try_lit_lparen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
+            end = try_lit_colon(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
+            end = try_lit_rparen(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
+            end = try_lit_lbrace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; }
+            end = try_lit_rbrace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; }
+            end = try_lit_star(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
+            end = try_lit_pipe(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
+            end = try_lit_dot(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
+            end = try_lit_lbracket(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
+            end = try_lit_eq(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
+            end = try_lit_rbracket(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
+            end = try_lit_slash(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
+            end = try_lit__(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT__; }
+            end = try_comment(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Comment; }
+            end = try_url(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Url; }
+            end = try_space(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Space; }
+            end = try_cdo(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Cdo; }
+            end = try_cdc(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Cdc; }
+            end = try_includes(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Includes; }
+            end = try_dashmatch(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_DashMatch; }
+            end = try_hash(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Hash; }
+            end = try_import(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Import; }
+            end = try_page(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Page; }
+            end = try_media(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Media; }
+            end = try_namespace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Namespace; }
+            end = try_charset(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Charset; }
+            end = try_important(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Important; }
+            end = try_percentage(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Percentage; }
+            end = try_url_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Url_; }
+            end = try_unicoderange(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnicodeRange; }
+            end = try_mediaonly(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_MediaOnly; }
+            end = try_not(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Not; }
+            end = try_and(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_And; }
+            end = try_dimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Dimension; }
+            end = try_unknowndimension(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; }
+            end = try_plus(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Plus; }
+            end = try_minus(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Minus; }
+            end = try_greater(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Greater; }
+            end = try_comma(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Comma; }
+            end = try_tilde(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Tilde; }
+            end = try_pseudonot(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PseudoNot; }
+            end = try_number(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Number; }
+            end = try_string_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_String_; }
+            end = try_prefixmatch(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PrefixMatch; }
+            end = try_suffixmatch(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SuffixMatch; }
+            end = try_substringmatch(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SubstringMatch; }
+            end = try_fontface(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_FontFace; }
+            end = try_supports(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Supports; }
+            end = try_or(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Or; }
+            end = try_keyframes(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Keyframes; }
+            end = try_from(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_From; }
+            end = try_to(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_To; }
+            end = try_calc(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Calc; }
+            end = try_viewport(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Viewport; }
+            end = try_counterstyle(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_CounterStyle; }
+            end = try_fontfeaturevalues(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_FontFeatureValues; }
+            end = try_dximagetransform(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_DxImageTransform; }
+            end = try_atkeyword(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_AtKeyword; }
+            end = try_variable(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Variable; }
+            end = try_var(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Var; }
+            end = try_ident(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Ident; }
+            end = try_function_(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Function_; }
+            end = try_unexpectedcharacter(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; }
+        }
+        if best_end > start && (lexer.chars[start] == '_') {
+            let kw_kind = classify_keyword(&lexer.chars, start, best_end);
+            if kw_kind >= 0 { best_kind = kw_kind; }
+        }
         if best_end <= start {
             let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
             tokens.push(tok);
