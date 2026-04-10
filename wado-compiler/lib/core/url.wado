@@ -10,6 +10,8 @@
 //!       let pq = url.path_with_query();  // "/path?key=val"
 //!   }
 
+use { TreeMap } from "core:collections";
+
 /// Error type for URL parsing failures.
 pub variant ParseError {
     EmptyInput,
@@ -176,11 +178,12 @@ fn percent_decode_query_component(input: &String) -> String {
     return *input;
 }
 
-/// Parses a query string into key-value pairs.
+/// Parses a query string into key-value pairs (insertion-order preserved).
 /// Input should not include the leading "?".
 /// Handles "+" as space and decodes percent-encoding.
-pub fn parse_query(query: String) -> Array<[String, String]> {
-    let mut result: Array<[String, String]> = [];
+/// Duplicate keys use last-value-wins semantics.
+pub fn parse_query(query: String) -> TreeMap<String, String> {
+    let mut result = TreeMap::<String, String>::new();
     if query.is_empty() {
         return result;
     }
@@ -191,27 +194,28 @@ pub fn parse_query(query: String) -> Array<[String, String]> {
         if let Some(eq_pos) = part.find("=") {
             let key = part.substr_bytes(0, eq_pos);
             let val = part.substr_bytes(eq_pos + 1, part.len());
-            result.push([percent_decode_query_component(&key), percent_decode_query_component(&val)]);
+            result[percent_decode_query_component(&key)] = percent_decode_query_component(&val);
         } else {
-            result.push([percent_decode_query_component(&part), ""]);
+            result[percent_decode_query_component(&part)] = "";
         }
     }
     return result;
 }
 
-/// Formats key-value pairs into a query string.
+/// Formats key-value pairs into a query string (insertion-order preserved).
 /// Output does not include the leading "?".
 /// Keys and values are percent-encoded; spaces become "+".
-pub fn format_query(pairs: &Array<[String, String]>) -> String {
+pub fn format_query(params: &TreeMap<String, String>) -> String {
     let mut out = String::with_capacity(64);
-    for let mut i = 0; i < pairs.len(); i += 1 {
+    let entries = params.entries();
+    for let mut i = 0; i < entries.len(); i += 1 {
         if i > 0 {
             out.push('&');
         }
-        let pair = pairs[i];
-        out.push_str(percent_encode_query_component(&pair.0));
+        let entry = entries[i];
+        out.push_str(percent_encode_query_component(&entry.0));
         out.push('=');
-        out.push_str(percent_encode_query_component(&pair.1));
+        out.push_str(percent_encode_query_component(&entry.1));
     }
     return out;
 }
@@ -644,42 +648,24 @@ impl Url {
         };
     }
 
-    /// Parses the query string into key-value pairs.
-    pub fn query_pairs(&self) -> Array<[String, String]> {
+    /// Parses the query string into a TreeMap (insertion-order preserved).
+    pub fn query_pairs(&self) -> TreeMap<String, String> {
         return match self.query {
             Some(q) => parse_query(q),
-            None => [],
+            None => TreeMap::<String, String>::new(),
         };
     }
 
-    /// Returns the first value for the given query parameter key.
+    /// Returns the value for the given query parameter key.
     pub fn query_get(&self, key: String) -> Option<String> {
-        let pairs = self.query_pairs();
-        for let pair of pairs {
-            if pair.0 == key {
-                return Option::Some(pair.1);
-            }
-        }
-        return null;
+        return self.query_pairs().get(key);
     }
 
-    /// Returns all values for the given query parameter key.
-    pub fn query_get_all(&self, key: String) -> Array<String> {
-        let mut result: Array<String> = [];
-        let pairs = self.query_pairs();
-        for let pair of pairs {
-            if pair.0 == key {
-                result.push(pair.1);
-            }
-        }
-        return result;
-    }
-
-    /// Returns a new Url with the query string replaced by the given pairs.
-    pub fn with_query_pairs(&self, pairs: &Array<[String, String]>) -> Url {
+    /// Returns a new Url with the query string replaced by the given params.
+    pub fn with_query_pairs(&self, params: &TreeMap<String, String>) -> Url {
         let mut q: Option<String> = null;
-        if !pairs.is_empty() {
-            q = Option::Some(format_query(pairs));
+        if !params.is_empty() {
+            q = Option::Some(format_query(params));
         }
         return Url {
             scheme: self.scheme,

@@ -30,7 +30,7 @@ Wado programs frequently work with URLs — HTTP clients construct request URLs,
 - Non-special schemes (`mailto:`, `urn:`, `data:`, `file:`, etc.) — can be added as `core:uri` later if needed
 - IRI / IDNA / Punycode (internationalized domain names)
 - WHATWG error recovery (tab/newline stripping, backslash normalization) — Wado is a server/CLI language, not a browser
-- `URLSearchParams` live synchronization — `parse_query` / `format_query` functions are sufficient
+- `URLSearchParams` live synchronization — `TreeMap<String, String>` via `parse_query` / `format_query` is sufficient
 
 ### Prior Art
 
@@ -148,21 +148,18 @@ impl Url {
     /// - Unnecessary percent-encoding decoded (unreserved characters)
     pub fn normalize(&self) -> Url
 
-    /// Parses the query string into key-value pairs.
+    /// Parses the query string into a TreeMap (insertion-order preserved).
     /// Decodes percent-encoding and treats "+" as space.
-    /// Returns an empty array if query is None.
-    pub fn query_pairs(&self) -> Array<[String, String]>
+    /// Duplicate keys use last-value-wins semantics.
+    /// Returns an empty TreeMap if query is None.
+    pub fn query_pairs(&self) -> TreeMap<String, String>
 
-    /// Returns the first value for the given query parameter key.
-    /// Keys are compared after percent-decoding.
+    /// Returns the value for the given query parameter key.
     pub fn query_get(&self, key: String) -> Option<String>
 
-    /// Returns all values for the given query parameter key.
-    pub fn query_get_all(&self, key: String) -> Array<String>
-
-    /// Returns a new Url with the query string replaced by the given pairs.
+    /// Returns a new Url with the query string replaced by the given params.
     /// Keys and values are percent-encoded.
-    pub fn with_query_pairs(&self, pairs: &Array<[String, String]>) -> Url
+    pub fn with_query_pairs(&self, params: &TreeMap<String, String>) -> Url
 }
 ```
 
@@ -256,16 +253,16 @@ pub fn percent_encode(input: String) -> String
 /// (e.g., "%GG") or produces invalid UTF-8.
 pub fn percent_decode(input: String) -> Result<String, ParseError>
 
-/// Parses a query string into key-value pairs.
+/// Parses a query string into a TreeMap (insertion-order preserved).
 /// Input should not include the leading "?".
 /// Handles "+" as space and decodes percent-encoding.
-/// Duplicate keys produce multiple entries.
-pub fn parse_query(query: String) -> Array<[String, String]>
+/// Duplicate keys use last-value-wins semantics.
+pub fn parse_query(query: String) -> TreeMap<String, String>
 
-/// Formats key-value pairs into a query string.
+/// Formats a TreeMap into a query string (insertion-order preserved).
 /// Output does not include the leading "?".
 /// Keys and values are percent-encoded; spaces become "+".
-pub fn format_query(pairs: &Array<[String, String]>) -> String
+pub fn format_query(params: &TreeMap<String, String>) -> String
 ```
 
 ### Complete API Summary
@@ -281,16 +278,15 @@ pub fn format_query(pairs: &Array<[String, String]>) -> String
 | `.effective_port()`        | `&self -> u16`                                      | Port or scheme default    |
 | `.resolve(ref)`            | `&self, String -> Result<Url, ParseError>`          | Relative resolution       |
 | `.normalize()`             | `&self -> Url`                                      | Normalize URL             |
-| `.query_pairs()`           | `&self -> Array<[String, String]>`                  | Parse query params        |
-| `.query_get(key)`          | `&self, String -> Option<String>`                   | Get first param value     |
-| `.query_get_all(key)`      | `&self, String -> Array<String>`                    | Get all param values      |
-| `.with_query_pairs(pairs)` | `&self, &Array<[String, String]> -> Url`            | Replace query params      |
-| `percent_encode`           | `String -> String`                                  | Encode for URI component  |
-| `percent_decode`           | `String -> Result<String, ParseError>`              | Decode %XX sequences      |
-| `parse_query`              | `String -> Array<[String, String]>`                 | Parse query string        |
-| `format_query`             | `&Array<[String, String]> -> String`                | Format query string       |
+| `.query_pairs()`            | `&self -> TreeMap<String, String>`                  | Parse query params        |
+| `.query_get(key)`           | `&self, String -> Option<String>`                   | Get param value           |
+| `.with_query_pairs(params)` | `&self, &TreeMap<String, String> -> Url`            | Replace query params      |
+| `percent_encode`            | `String -> String`                                  | Encode for URI component  |
+| `percent_decode`            | `String -> Result<String, ParseError>`              | Decode %XX sequences      |
+| `parse_query`               | `String -> TreeMap<String, String>`                 | Parse query string        |
+| `format_query`              | `&TreeMap<String, String> -> String`                | Format query string       |
 
-8 pub fields. 14 methods. 4 module functions. 1 error variant.
+8 pub fields. 13 methods. 4 module functions. 1 error variant.
 
 ### Usage Examples
 
@@ -348,13 +344,15 @@ export fn run() with Stdout {
     };
     assert url.to_string() == "https://example.com/search?q=hello%20world";
 
-    // Query string utilities
-    let pairs = parse_query("name=Alice&age=30&name=Bob");
-    assert pairs.len() == 3;
-    assert pairs[0] == ["name", "Alice"];
-    assert pairs[2] == ["name", "Bob"];
+    // Query string utilities (TreeMap preserves insertion order)
+    let params = parse_query("name=Alice&age=30");
+    assert params.get("name") matches { Some("Alice") };
+    assert params.get("age") matches { Some("30") };
 
-    let qs = format_query(&[["key", "hello world"], ["lang", "日本語"]] as Array<[String, String]>);
+    let mut qp = TreeMap::<String, String>::new();
+    qp["key"] = "hello world";
+    qp["lang"] = "日本語";
+    let qs = format_query(&qp);
     // "key=hello+world&lang=%E6%97%A5%E6%9C%AC%E8%AA%9E"
 
     // Error handling

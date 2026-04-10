@@ -1,4 +1,5 @@
 use { Url, ParseError, percent_encode, percent_decode, parse_query, format_query } from "core:url";
+use { TreeMap } from "core:collections";
 
 // --- Url::parse basic ---
 
@@ -296,12 +297,13 @@ test "query_pairs" {
     if let Ok(url) = Url::parse("http://example.com/?a=1&b=2&c=3") {
         let pairs = url.query_pairs();
         assert pairs.len() == 3;
-        assert pairs[0].0 == "a";
-        assert pairs[0].1 == "1";
-        assert pairs[1].0 == "b";
-        assert pairs[1].1 == "2";
-        assert pairs[2].0 == "c";
-        assert pairs[2].1 == "3";
+        assert pairs.get("a") matches { Some("1") };
+        assert pairs.get("b") matches { Some("2") };
+        assert pairs.get("c") matches { Some("3") };
+        let keys = pairs.keys();
+        assert keys[0] == "a";
+        assert keys[1] == "b";
+        assert keys[2] == "c";
     } else {
         panic("parse failed");
     }
@@ -317,13 +319,9 @@ test "query_get" {
     }
 }
 
-test "query_get_all duplicate keys" {
+test "query_get duplicate keys last wins" {
     if let Ok(url) = Url::parse("http://example.com/?tag=a&tag=b&tag=c") {
-        let vals = url.query_get_all("tag");
-        assert vals.len() == 3;
-        assert vals[0] == "a";
-        assert vals[1] == "b";
-        assert vals[2] == "c";
+        assert url.query_get("tag") matches { Some("c") };
     } else {
         panic("parse failed");
     }
@@ -339,8 +337,10 @@ test "query_pairs empty query" {
 
 test "with_query_pairs" {
     if let Ok(url) = Url::parse("http://example.com/path") {
-        let pairs: Array<[String, String]> = [["key", "val"], ["name", "Alice"]] as Array<[String, String]>;
-        let updated = url.with_query_pairs(&pairs);
+        let mut params = TreeMap::<String, String>::new();
+        params["key"] = "val";
+        params["name"] = "Alice";
+        let updated = url.with_query_pairs(&params);
         assert updated.query_get("key") matches { Some("val") };
         assert updated.query_get("name") matches { Some("Alice") };
         assert updated.path == "/path";
@@ -622,74 +622,73 @@ test "percent_encode roundtrip" {
 // --- parse_query / format_query ---
 
 test "parse_query simple" {
-    let pairs = parse_query("a=1&b=2");
-    assert pairs.len() == 2;
-    assert pairs[0].0 == "a";
-    assert pairs[0].1 == "1";
-    assert pairs[1].0 == "b";
-    assert pairs[1].1 == "2";
+    let params = parse_query("a=1&b=2");
+    assert params.len() == 2;
+    assert params.get("a") matches { Some("1") };
+    assert params.get("b") matches { Some("2") };
 }
 
 test "parse_query plus as space" {
-    let pairs = parse_query("name=hello+world");
-    assert pairs.len() == 1;
-    assert pairs[0].0 == "name";
-    assert pairs[0].1 == "hello world";
+    let params = parse_query("name=hello+world");
+    assert params.len() == 1;
+    assert params.get("name") matches { Some("hello world") };
 }
 
 test "parse_query percent encoded" {
-    let pairs = parse_query("key=hello%20world");
-    assert pairs.len() == 1;
-    assert pairs[0].1 == "hello world";
+    let params = parse_query("key=hello%20world");
+    assert params.len() == 1;
+    assert params.get("key") matches { Some("hello world") };
 }
 
 test "parse_query empty value" {
-    let pairs = parse_query("key=");
-    assert pairs.len() == 1;
-    assert pairs[0].0 == "key";
-    assert pairs[0].1 == "";
+    let params = parse_query("key=");
+    assert params.len() == 1;
+    assert params.get("key") matches { Some("") };
 }
 
 test "parse_query no value" {
-    let pairs = parse_query("key");
-    assert pairs.len() == 1;
-    assert pairs[0].0 == "key";
-    assert pairs[0].1 == "";
+    let params = parse_query("key");
+    assert params.len() == 1;
+    assert params.get("key") matches { Some("") };
 }
 
 test "parse_query empty" {
     assert parse_query("").len() == 0;
 }
 
-test "parse_query duplicate keys" {
-    let pairs = parse_query("a=1&a=2&a=3");
-    assert pairs.len() == 3;
+test "parse_query duplicate keys last wins" {
+    let params = parse_query("a=1&a=2&a=3");
+    assert params.len() == 1;
+    assert params.get("a") matches { Some("3") };
 }
 
 test "format_query simple" {
-    let pairs: Array<[String, String]> = [["a", "1"], ["b", "2"]] as Array<[String, String]>;
-    assert format_query(&pairs) == "a=1&b=2";
+    let mut params = TreeMap::<String, String>::new();
+    params["a"] = "1";
+    params["b"] = "2";
+    assert format_query(&params) == "a=1&b=2";
 }
 
 test "format_query encodes spaces" {
-    let pairs: Array<[String, String]> = [["name", "hello world"]] as Array<[String, String]>;
-    assert format_query(&pairs) == "name=hello+world";
+    let mut params = TreeMap::<String, String>::new();
+    params["name"] = "hello world";
+    assert format_query(&params) == "name=hello+world";
 }
 
 test "format_query empty" {
-    let pairs: Array<[String, String]> = [];
-    assert format_query(&pairs) == "";
+    let params = TreeMap::<String, String>::new();
+    assert format_query(&params) == "";
 }
 
 test "parse_query format_query roundtrip" {
-    let original: Array<[String, String]> = [["key", "value"], ["name", "Alice Bob"]] as Array<[String, String]>;
+    let mut original = TreeMap::<String, String>::new();
+    original["key"] = "value";
+    original["name"] = "Alice Bob";
     let formatted = format_query(&original);
     let parsed = parse_query(formatted);
-    assert parsed.len() == original.len();
-    assert parsed[0].0 == "key";
-    assert parsed[0].1 == "value";
-    assert parsed[1].0 == "name";
-    assert parsed[1].1 == "Alice Bob";
+    assert parsed.len() == 2;
+    assert parsed.get("key") matches { Some("value") };
+    assert parsed.get("name") matches { Some("Alice Bob") };
 }
 
 // --- Struct construction ---
@@ -756,19 +755,18 @@ test "percent_decode Japanese roundtrip" {
 }
 
 test "parse_query with non-ASCII value" {
-    let pairs = parse_query("city=%E6%9D%B1%E4%BA%AC&tag=%F0%9F%8D%A3");
-    assert pairs.len() == 2;
-    assert pairs[0].0 == "city";
-    assert pairs[0].1 == "東京";
-    assert pairs[1].0 == "tag";
-    assert pairs[1].1 == "🍣";
+    let params = parse_query("city=%E6%9D%B1%E4%BA%AC&tag=%F0%9F%8D%A3");
+    assert params.len() == 2;
+    assert params.get("city") matches { Some("東京") };
+    assert params.get("tag") matches { Some("🍣") };
 }
 
 test "format_query with non-ASCII value" {
-    let pairs: Array<[String, String]> = [["city", "東京"]] as Array<[String, String]>;
-    let formatted = format_query(&pairs);
+    let mut params = TreeMap::<String, String>::new();
+    params["city"] = "東京";
+    let formatted = format_query(&params);
     let parsed = parse_query(formatted);
-    assert parsed[0].1 == "東京";
+    assert parsed.get("city") matches { Some("東京") };
 }
 
 test "char len_utf8" {
