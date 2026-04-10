@@ -18,13 +18,17 @@ test "inclusive range contains" {
 
 test "exclusive range is_empty" {
     assert (5..<5).is_empty();
-    assert (5..<3).is_empty();
+    let a = 5;
+    let b = 3;
+    assert (a..<b).is_empty();
     assert !(0..<1).is_empty();
 }
 
 test "inclusive range is_empty" {
     assert !(5..=5).is_empty();
-    assert (5..=3).is_empty();
+    let a = 5;
+    let b = 3;
+    assert (a..=b).is_empty();
     assert !(0..=0).is_empty();
 }
 
@@ -81,7 +85,9 @@ test "empty range does not iterate" {
     for let _i of 5..<5 {
         count += 1;
     }
-    for let _i of 5..<3 {
+    let a = 5;
+    let b = 3;
+    for let _i of a..<b {
         count += 1;
     }
     assert count == 0;

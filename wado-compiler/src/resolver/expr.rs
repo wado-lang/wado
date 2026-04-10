@@ -3277,6 +3277,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
         self.current_module_source.clone()
     }
 
+    /// Extract a compile-time orderable value from a literal expression.
+    /// Returns `Some(value)` for integer, float, and char literals (including negated ones).
+    /// Returns `None` for non-constant expressions.
+    fn extract_literal_ord_value(expr: &Expr) -> Option<f64> {
+        match expr {
+            Expr::Literal(lit) => match &lit.value {
+                Literal::Number(s) => {
+                    let s = s.replace('_', "");
+                    if s.starts_with("0x") || s.starts_with("0X") {
+                        i128::from_str_radix(&s[2..], 16).ok().map(|v| v as f64)
+                    } else if s.starts_with("0b") || s.starts_with("0B") {
+                        i128::from_str_radix(&s[2..], 2).ok().map(|v| v as f64)
+                    } else if s.starts_with("0o") || s.starts_with("0O") {
+                        i128::from_str_radix(&s[2..], 8).ok().map(|v| v as f64)
+                    } else {
+                        s.parse::<f64>().ok()
+                    }
+                }
+                Literal::Char(s) => {
+                    super::util::unescape_char(s).ok().map(|c| c as u32 as f64)
+                }
+                _ => None,
+            },
+            Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => {
+                Self::extract_literal_ord_value(&unary.expr).map(|v| -v)
+            }
+            Expr::Cast(cast) => Self::extract_literal_ord_value(&cast.expr),
+            _ => None,
+        }
+    }
+
     /// Resolve a range expression: `a..<b` or `a..=b`
     pub(super) fn resolve_range(
         &mut self,
@@ -3337,6 +3368,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 span: range.span,
             });
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+        }
+
+        // Check for reversed range literals (start > end)
+        if let Some(start_val) = Self::extract_literal_ord_value(&range.start) {
+            if let Some(end_val) = Self::extract_literal_ord_value(&range.end) {
+                let is_reversed = start_val > end_val;
+                if is_reversed {
+                    let op_str = match range.kind {
+                        RangeKind::Exclusive => "..<",
+                        RangeKind::Inclusive => "..=",
+                    };
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message: format!(
+                            "reversed range `{op_str}` is not supported (start must be less than end)"
+                        ),
+                        span: range.span,
+                    });
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+                }
+            }
         }
 
         let (struct_name, module_source, fields) = match range.kind {
