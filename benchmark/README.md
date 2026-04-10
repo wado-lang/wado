@@ -53,7 +53,7 @@ Environment: Wado 2026-04-10, wasmtime 42.0.1, gcc 13.3.0, rustc 1.94.1, Zig 0.1
 
 | Benchmark        | Baseline (native)   | Baseline (ms) | Wado (ms) | Relative |
 | ---------------- | ------------------- | ------------- | --------- | -------- |
-| SQLite parse     | sqlparser-rs (Rust) | 178           | 2,952     | 16.58x   |
+| SQLite parse     | sqlparser-rs (Rust) | 185           | 2,500     | 13.51x   |
 | Syntax highlight | tree-sitter (Rust)  | 519           | 10,158    | 19.57x   |
 
 Syntax highlight Wasm-to-Wasm comparison (both on wasmtime):

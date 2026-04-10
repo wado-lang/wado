@@ -12,35 +12,9 @@
 
 ## Performance: sqlite-parse Benchmark
 
-Profiling the SQLite parser benchmark (13 KB SQL, 100 iterations, ~138 ms/iter) with exhaustive guest profiling (10.4M samples) reveals the following bottlenecks.
+Profiling the SQLite parser benchmark (13 KB SQL, 100 iterations, ~26 ms/iter) with exhaustive guest profiling (6.9M samples) reveals the following bottlenecks.
 
-### Bottleneck 1: `Lexer::slice` String Reconstruction (~33% combined)
-
-| Function | Self-time |
-|----------|-----------|
-| `Lexer::slice` | 21.2% |
-| `String::grow` | 6.3% |
-| `String::push` | 6.0% |
-
-The `slice` method rebuilds every token's text as a new `String` by pushing chars one at a time:
-
-```wado
-fn slice(&self, start: i32, end: i32) -> String {
-    let mut s = String::with_capacity(end - start);
-    for let mut i = start; i < end; i += 1 {
-        s.push(self.chars[i]);
-    }
-    return s;
-}
-```
-
-This is called for every token including trivia (whitespace, comments). The char-by-char `push` loop triggers `String::grow` repeatedly even though `with_capacity` should pre-allocate — the issue is that `push(char)` may need multi-byte encoding, so `with_capacity(end - start)` (number of chars) may undercount bytes for non-ASCII input. For ASCII-heavy SQL this is less of an issue, but the per-token allocation itself is the main cost.
-
-Possible improvements:
-- Avoid storing `text: String` on every `Token`; instead store only `span` and reconstruct text on demand from the original input.
-- Or add a `String::from_chars(chars: &Array<char>, start: i32, end: i32)` built-in that avoids per-char push overhead.
-
-### Bottleneck 2: Backtracking (~44% inclusive)
+### Bottleneck 1: Backtracking (~44% inclusive)
 
 The SLL prediction engine falls back to backtracking when it cannot disambiguate alternatives within depth-5 lookahead. The top backtracking functions by inclusive time:
 
@@ -80,28 +54,36 @@ Since `expr` is called from WHERE, HAVING, SELECT columns, etc., this 4-way back
 
 Most expressions in SQL are column references (bare IDENTIFIERs). The generated code tries `bt_13` (function call: `function_name '(' ...`) before `bt_2` (column reference). Since `function_name` expands to IDENTIFIER, it always matches the first token, then fails at `(`, and backtracks. Every simple column reference pays for one wasted `function_name` parse.
 
-### Bottleneck 3: `Parser::expect` and `Parser::last_end` (17% combined)
+### Bottleneck 2: `Parser::expect` error path (22% combined)
 
 | Function | Self-time |
 |----------|-----------|
-| `Parser::expect` | 8.7% |
-| `Parser::last_end` | 8.2% |
+| `Parser::expect` | 12.0% |
+| `String::push_str` | 4.7% |
+| `LexerSlice^Display::fmt` | 3.4% |
+| `String::push` (from expect) | ~2% |
 
 `expect` constructs a `ParseError` with template string and array literal on every failure. During backtracking, most `expect` calls are speculative — the error is immediately discarded when the caller backtracks. Constructing the error message (`ParseError::new(...)` with string interpolation and `Array<String>` allocation) is pure waste on the failure path.
 
-`last_end` is called after every token consumption to compute node spans via `Span::new(start, p.last_end())`. The function itself is trivial (array index), but at 10M+ calls the overhead accumulates.
+Reducing backtracking (Bottleneck 1) would eliminate most of this cost.
 
-Possible improvements:
-- Split `expect` into a fast check (`try_expect` returning `Option<Token>`) and defer `ParseError` construction to the final failure path.
-- Cache `last_end` in a field on `Parser` updated by `advance()`, avoiding repeated array indexing.
+### Bottleneck 3: `Parser::last_end` (11.7%)
+
+| Function | Self-time |
+|----------|-----------|
+| `Parser::last_end` | 11.7% |
+
+Called after every token consumption to compute node spans via `Span::new(start, p.last_end())`. The function itself is trivial (array index), but at millions of calls the overhead accumulates.
+
+Possible improvement: cache `last_end` in a field on `Parser` updated by `advance()`, avoiding repeated array indexing.
 
 ### Summary
 
 | Category | Estimated share | Priority |
 |----------|----------------|----------|
-| Lexer::slice + String alloc | ~33% | High |
 | Backtracking | ~44% inclusive | High |
-| expect/last_end overhead | ~17% | Medium |
+| expect error path (driven by backtracking) | ~22% | High (addressed by reducing backtracking) |
+| last_end overhead | ~12% | Medium |
 
 ## Generated Parser Bugs
 
