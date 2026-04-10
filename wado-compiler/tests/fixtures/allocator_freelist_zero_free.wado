@@ -1,0 +1,22 @@
+/// Test that the freelist allocator handles zero-size free gracefully.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    let ptr = builtin::realloc(0, 0, 4, 16);
+    // Free with oldsize=0 should be a no-op, not corrupt the free list
+    builtin::realloc(ptr, 0, 4, 0);
+
+    // Allocate again — should still work (bump allocate, not from free list)
+    let ptr2 = builtin::realloc(0, 0, 4, 16);
+    assert ptr2 > 0;
+
+    // Free normally, then re-allocate — should reclaim
+    builtin::realloc(ptr2, 16, 4, 0);
+    let ptr3 = builtin::realloc(0, 0, 4, 16);
+    assert ptr3 == ptr2, `expected recycled: ptr2={ptr2}, ptr3={ptr3}`;
+
+    println("ok");
+}
+
+__DATA__
+{"allocator": "freelist", "stdout": "ok\n"}

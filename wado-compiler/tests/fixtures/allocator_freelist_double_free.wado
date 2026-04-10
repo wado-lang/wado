@@ -1,0 +1,13 @@
+/// Test that the freelist allocator traps on immediate double-free.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    let ptr = builtin::realloc(0, 0, 4, 64);
+    builtin::realloc(ptr, 64, 4, 0);
+    // Double-free: same pointer freed again immediately
+    builtin::realloc(ptr, 64, 4, 0);
+    println("should not reach here");
+}
+
+__DATA__
+{"allocator": "freelist", "trapped": true}

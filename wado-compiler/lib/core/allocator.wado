@@ -89,6 +89,13 @@ global mut free_list: i32 = 0;
 #[allocator("freelist")]
 export fn freelist_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if newsize == 0 {
+        if oldsize == 0 {
+            return 0;
+        }
+        // Trap on immediate double-free (oldptr already at head of free list)
+        if oldptr == free_list {
+            builtin::unreachable();
+        }
         // Free: add block to free list
         let size = builtin::i32_and(oldsize + 7, -8);
         builtin::i32_store(oldptr, size);
