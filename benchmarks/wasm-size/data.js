@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775819716284,
+  "lastUpdate": 1775834986756,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11294,6 +11294,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/20fc38b8d01b963df213b3ba955361842a9252ee"
         },
         "date": 1775819716023,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1799,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8974,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19360,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "25665b491cc22d44dc33836de002808057b95aa4",
+          "message": "Merge pull request #800 from wado-lang/claude/profile-sqlite-parse-xOuVg\n\nAdd LexerSlice for zero-copy parsing and fix compiler ref naming",
+          "timestamp": "2026-04-11T00:26:23+09:00",
+          "tree_id": "0e1719c62a196f7f2a7dd8d50c3d08bee96449ae",
+          "url": "https://github.com/wado-lang/wado/commit/25665b491cc22d44dc33836de002808057b95aa4"
+        },
+        "date": 1775834986495,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
