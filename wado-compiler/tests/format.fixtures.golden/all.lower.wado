@@ -16031,11 +16031,11 @@ pub fn "Mapper^Ord::cmp"(self: &Mapper, other: &Mapper) -> Ordering {
 }
 
 pub fn "Holder^Eq::eq"(self: &Holder, other: &Holder) -> bool {
-    return self.data."&<Point>^Eq::eq"(&other.data);
+    return self.data."&Point^Eq::eq"(&other.data);
 }
 
 pub fn "Holder^Ord::cmp"(self: &Holder, other: &Holder) -> Ordering {
-    let c: Ordering = self.data."&<Point>^Ord::cmp"(&other.data);
+    let c: Ordering = self.data."&Point^Ord::cmp"(&other.data);
     if (c != Ordering::Equal) {
         return c;
     }
@@ -16110,7 +16110,7 @@ pub fn "Mapper^Inspect::inspect"(self: &Mapper, f: &mut Formatter) {
 pub fn "Holder^Inspect::inspect"(self: &Holder, f: &mut Formatter) {
     f.Formatter::write_str("Holder { ");
     f.Formatter::write_str("data: ");
-    self.data."&<Point>^Inspect::inspect"(f);
+    self.data."&Point^Inspect::inspect"(f);
     f.Formatter::write_str(" }");
 }
 
@@ -16320,7 +16320,7 @@ pub fn "Holder^InspectAlt::inspect_alt"(self: &Holder, f: &mut Formatter) {
     f.Formatter::open_brace("Holder {");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str("data: ");
-    self.data."&<Point>^InspectAlt::inspect_alt"(f);
+    self.data."&Point^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(",");
     f.Formatter::close_brace("}");
 }
@@ -23808,7 +23808,7 @@ pub fn "Alignment^Ord::cmp"(self: &Alignment, other: &Alignment) -> Ordering {
 }
 
 pub fn "Formatter^Eq::eq"(self: &Formatter, other: &Formatter) -> bool {
-    return (((((((Box<char> { value: self.fill }."char^Eq::eq"(Box<char> { value: other.fill }) && self.align."Alignment^Eq::eq"(&other.align)) && Box<bool> { value: self.sign_plus }."bool^Eq::eq"(Box<bool> { value: other.sign_plus })) && Box<bool> { value: self.zero_pad }."bool^Eq::eq"(Box<bool> { value: other.zero_pad })) && Box<i32> { value: self.width }."i32^Eq::eq"(Box<i32> { value: other.width })) && Box<i32> { value: self.precision }."i32^Eq::eq"(Box<i32> { value: other.precision })) && Box<i32> { value: self.indent }."i32^Eq::eq"(Box<i32> { value: other.indent })) && self.buf."&mut<String>^Eq::eq"(&other.buf));
+    return (((((((Box<char> { value: self.fill }."char^Eq::eq"(Box<char> { value: other.fill }) && self.align."Alignment^Eq::eq"(&other.align)) && Box<bool> { value: self.sign_plus }."bool^Eq::eq"(Box<bool> { value: other.sign_plus })) && Box<bool> { value: self.zero_pad }."bool^Eq::eq"(Box<bool> { value: other.zero_pad })) && Box<i32> { value: self.width }."i32^Eq::eq"(Box<i32> { value: other.width })) && Box<i32> { value: self.precision }."i32^Eq::eq"(Box<i32> { value: other.precision })) && Box<i32> { value: self.indent }."i32^Eq::eq"(Box<i32> { value: other.indent })) && self.buf."&mutString^Eq::eq"(&other.buf));
 }
 
 pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
@@ -23840,7 +23840,7 @@ pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
     if (c != Ordering::Equal) {
         return c;
     }
-    let c: Ordering = self.buf."&mut<String>^Ord::cmp"(&other.buf);
+    let c: Ordering = self.buf."&mutString^Ord::cmp"(&other.buf);
     if (c != Ordering::Equal) {
         return c;
     }
@@ -24383,7 +24383,7 @@ pub fn "Array<u64>::with_capacity"(capacity: i32) -> Array<u64> {
     return Array<u64> { repr: core::builtin::array_new::<u64>(capacity), used: 0 };
 }
 
-pub fn "&mut<String>^Eq::eq"(self: &&mut String, other: &&mut String) -> bool {
+pub fn "&mutString^Eq::eq"(self: &&mut String, other: &&mut String) -> bool {
     return (*self ref.eq *other);
 }
 
@@ -24475,7 +24475,7 @@ fn "Tuple<f64,f64>^InspectAlt::inspect_alt"(self: &[f64, f64], f: &mut Formatter
     f.Formatter::close_brace("]");
 }
 
-pub fn "&<Point>^InspectAlt::inspect_alt"(self: &&Point, f: &mut Formatter) {
+pub fn "&Point^InspectAlt::inspect_alt"(self: &&Point, f: &mut Formatter) {
     f.Formatter::write_str("&");
     let inner: &Point = *self;
     *inner."Point^InspectAlt::inspect_alt"(f);
@@ -24506,7 +24506,7 @@ fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
     f.Formatter::write_str("]");
 }
 
-pub fn "&<Point>^Inspect::inspect"(self: &&Point, f: &mut Formatter) {
+pub fn "&Point^Inspect::inspect"(self: &&Point, f: &mut Formatter) {
     f.Formatter::write_str("&");
     let inner: &Point = *self;
     *inner."Point^Inspect::inspect"(f);
@@ -24535,7 +24535,7 @@ fn "Tuple<f64,f64>^Eq::eq"(self: &[f64, f64], other: &[f64, f64]) -> bool {
     return true;
 }
 
-pub fn "&<Point>^Eq::eq"(self: &&Point, other: &&Point) -> bool {
+pub fn "&Point^Eq::eq"(self: &&Point, other: &&Point) -> bool {
     return (*self ref.eq *other);
 }
 

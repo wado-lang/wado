@@ -1,13 +1,13 @@
 use sexpression from "./golden/sexpression.wado";
 use {
-    Span, Token, SexprNode, ItemNode, ItemAlt0, ItemAlt1, ItemAlt2,
+    LexerSlice, Span, Token, SexprNode, ItemNode, ItemAlt0, ItemAlt1, ItemAlt2,
     ListNode, AtomNode, AtomAlt0, AtomAlt1, AtomAlt2, AtomAlt3,
     TK_STRING, TK_WHITESPACE, TK_NUMBER, TK_SYMBOL,
     TK_LPAREN, TK_RPAREN, TK_DOT, TK_EOF,
 } from "./golden/sexpression.wado";
 
 fn tok(kind: i32, text: String, start: i32, end: i32) -> Token {
-    return Token { kind, text, span: Span { start, end }, leading_trivia: [] };
+    return Token { kind, text: LexerSlice::from_string(text), span: Span { start, end }, leading_trivia: [] };
 }
 
 fn s(start: i32, end: i32) -> Span {
@@ -56,85 +56,11 @@ test "parse number atom" {
 
 test "parse nested list" {
     // "(define (square x) (* x x))"
-    let result = sexpression::parse(&"(define (square x) (* x x))");
+    let input = "(define (square x) (* x x))";
+    let result = sexpression::parse(&input);
     let tree = result.unwrap();
-    let expected = SexprNode {
-        span: s(0, 27),
-        item_list: [
-            ItemNode::Alt1(ItemAlt1 {
-                span: s(0, 27),
-                list_: ListNode {
-                    span: s(0, 27),
-                    lparen: tok(TK_LPAREN, "(", 0, 1),
-                    item_list: [
-                        ItemNode::Alt0(ItemAlt0 {
-                            span: s(1, 7),
-                            atom: AtomNode::Alt1(AtomAlt1 {
-                                span: s(1, 7),
-                                symbol: tok(TK_SYMBOL, "define", 1, 7),
-                            }),
-                        }),
-                        ItemNode::Alt1(ItemAlt1 {
-                            span: s(8, 18),
-                            list_: ListNode {
-                                span: s(8, 18),
-                                lparen: tok(TK_LPAREN, "(", 8, 9),
-                                item_list: [
-                                    ItemNode::Alt0(ItemAlt0 {
-                                        span: s(9, 15),
-                                        atom: AtomNode::Alt1(AtomAlt1 {
-                                            span: s(9, 15),
-                                            symbol: tok(TK_SYMBOL, "square", 9, 15),
-                                        }),
-                                    }),
-                                    ItemNode::Alt0(ItemAlt0 {
-                                        span: s(16, 17),
-                                        atom: AtomNode::Alt1(AtomAlt1 {
-                                            span: s(16, 17),
-                                            symbol: tok(TK_SYMBOL, "x", 16, 17),
-                                        }),
-                                    }),
-                                ] as Array<ItemNode>,
-                                rparen: tok(TK_RPAREN, ")", 17, 18),
-                            },
-                        }),
-                        ItemNode::Alt1(ItemAlt1 {
-                            span: s(19, 26),
-                            list_: ListNode {
-                                span: s(19, 26),
-                                lparen: tok(TK_LPAREN, "(", 19, 20),
-                                item_list: [
-                                    ItemNode::Alt0(ItemAlt0 {
-                                        span: s(20, 21),
-                                        atom: AtomNode::Alt1(AtomAlt1 {
-                                            span: s(20, 21),
-                                            symbol: tok(TK_SYMBOL, "*", 20, 21),
-                                        }),
-                                    }),
-                                    ItemNode::Alt0(ItemAlt0 {
-                                        span: s(22, 23),
-                                        atom: AtomNode::Alt1(AtomAlt1 {
-                                            span: s(22, 23),
-                                            symbol: tok(TK_SYMBOL, "x", 22, 23),
-                                        }),
-                                    }),
-                                    ItemNode::Alt0(ItemAlt0 {
-                                        span: s(24, 25),
-                                        atom: AtomNode::Alt1(AtomAlt1 {
-                                            span: s(24, 25),
-                                            symbol: tok(TK_SYMBOL, "x", 24, 25),
-                                        }),
-                                    }),
-                                ] as Array<ItemNode>,
-                                rparen: tok(TK_RPAREN, ")", 25, 26),
-                            },
-                        }),
-                    ] as Array<ItemNode>,
-                    rparen: tok(TK_RPAREN, ")", 26, 27),
-                },
-            }),
-        ] as Array<ItemNode>,
-        eof: tok(TK_EOF, "", 27, 27),
-    };
-    assert tree == expected, `AST mismatch for nested define`;
+    let cst = sexpression::to_tree(&tree);
+    let actual = cst.to_string_tree();
+    let expected = "(sexpr (item (list_ ( (item (atom define)) (item (list_ ( (item (atom square)) (item (atom x)) ))) (item (list_ ( (item (atom *)) (item (atom x)) (item (atom x)) ))) ))))";
+    assert actual == expected, `AST mismatch for nested define\nactual:   {actual}\nexpected: {expected}`;
 }

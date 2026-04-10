@@ -18,15 +18,15 @@ Profiling the SQLite parser benchmark (13 KB SQL, 100 iterations, ~26 ms/iter) w
 
 The SLL prediction engine falls back to backtracking when it cannot disambiguate alternatives within depth-5 lookahead. The top backtracking functions by inclusive time:
 
-| Function | Inclusive | Grammar alternatives |
-|----------|-----------|---------------------|
-| `parse_result_column_bt_2` | 12.2% | `expr (K_AS? column_alias)?` |
-| `parse_expr_bt_13` | 10.2% | `function_name '(' ... ')'` |
-| `parse_expr_bt_2` | 5.7% | `((database_name '.')? table_name '.')? column_name` |
-| `parse_table_or_subquery_bt_1` | 4.2% | table reference with alias |
-| `parse_result_column_bt_1` | 4.1% | `table_name '.' '*'` |
-| `parse_expr_bt_21` | 4.0% | `(NOT? EXISTS)? '(' select_stmt ')'` |
-| `parse_table_or_subquery_bt_0` | 3.1% | table reference |
+| Function                       | Inclusive | Grammar alternatives                                 |
+| ------------------------------ | --------- | ---------------------------------------------------- |
+| `parse_result_column_bt_2`     | 12.2%     | `expr (K_AS? column_alias)?`                         |
+| `parse_expr_bt_13`             | 10.2%     | `function_name '(' ... ')'`                          |
+| `parse_expr_bt_2`              | 5.7%      | `((database_name '.')? table_name '.')? column_name` |
+| `parse_table_or_subquery_bt_1` | 4.2%      | table reference with alias                           |
+| `parse_result_column_bt_1`     | 4.1%      | `table_name '.' '*'`                                 |
+| `parse_expr_bt_21`             | 4.0%      | `(NOT? EXISTS)? '(' select_stmt ')'`                 |
+| `parse_table_or_subquery_bt_0` | 3.1%      | table reference                                      |
 
 #### `result_column` — worst case
 
@@ -56,12 +56,12 @@ Most expressions in SQL are column references (bare IDENTIFIERs). The generated 
 
 ### Bottleneck 2: `Parser::expect` error path (22% combined)
 
-| Function | Self-time |
-|----------|-----------|
-| `Parser::expect` | 12.0% |
-| `String::push_str` | 4.7% |
-| `LexerSlice^Display::fmt` | 3.4% |
-| `String::push` (from expect) | ~2% |
+| Function                     | Self-time |
+| ---------------------------- | --------- |
+| `Parser::expect`             | 12.0%     |
+| `String::push_str`           | 4.7%      |
+| `LexerSlice^Display::fmt`    | 3.4%      |
+| `String::push` (from expect) | ~2%       |
 
 `expect` constructs a `ParseError` with template string and array literal on every failure. During backtracking, most `expect` calls are speculative — the error is immediately discarded when the caller backtracks. Constructing the error message (`ParseError::new(...)` with string interpolation and `Array<String>` allocation) is pure waste on the failure path.
 
@@ -69,9 +69,9 @@ Reducing backtracking (Bottleneck 1) would eliminate most of this cost.
 
 ### Bottleneck 3: `Parser::last_end` (11.7%)
 
-| Function | Self-time |
-|----------|-----------|
-| `Parser::last_end` | 11.7% |
+| Function           | Self-time |
+| ------------------ | --------- |
+| `Parser::last_end` | 11.7%     |
 
 Called after every token consumption to compute node spans via `Span::new(start, p.last_end())`. The function itself is trivial (array index), but at millions of calls the overhead accumulates.
 
@@ -79,11 +79,11 @@ Possible improvement: cache `last_end` in a field on `Parser` updated by `advanc
 
 ### Summary
 
-| Category | Estimated share | Priority |
-|----------|----------------|----------|
-| Backtracking | ~44% inclusive | High |
-| expect error path (driven by backtracking) | ~22% | High (addressed by reducing backtracking) |
-| last_end overhead | ~12% | Medium |
+| Category                                   | Estimated share | Priority                                  |
+| ------------------------------------------ | --------------- | ----------------------------------------- |
+| Backtracking                               | ~44% inclusive  | High                                      |
+| expect error path (driven by backtracking) | ~22%            | High (addressed by reducing backtracking) |
+| last_end overhead                          | ~12%            | Medium                                    |
 
 ## Generated Parser Bugs
 
