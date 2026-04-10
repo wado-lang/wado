@@ -277,7 +277,7 @@ pub fn format_query(pairs: &Array<[String, String]>) -> String
 | `.to_string()`             | `&self -> String`                                   | Serialize to string       |
 | `.authority()`             | `&self -> String`                                   | `[user:pass@]host[:port]` |
 | `.origin()`                | `&self -> String`                                   | `scheme://host[:port]`    |
-| `.path_with_query()`      | `&self -> String`                                   | `/path[?query]`           |
+| `.path_with_query()`       | `&self -> String`                                   | `/path[?query]`           |
 | `.effective_port()`        | `&self -> u16`                                      | Port or scheme default    |
 | `.resolve(ref)`            | `&self, String -> Result<Url, ParseError>`          | Relative resolution       |
 | `.normalize()`             | `&self -> Url`                                      | Normalize URL             |

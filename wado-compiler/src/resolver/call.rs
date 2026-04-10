@@ -274,8 +274,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                                 &bound.name.clone(),
                                             );
                                         } else {
-                                            let type_name =
-                                                self.type_id_to_string(type_arg);
+                                            let type_name = self.type_id_to_string(type_arg);
                                             let _ = self.logger.error(
                                                 TypeError::TraitBoundNotSatisfied {
                                                     type_name,
