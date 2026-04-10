@@ -2150,6 +2150,10 @@ _Fields are private._
 
 ###### `fn next(&mut self) -> Option<Self::Item>`
 
+##### `impl IntoIterator for ArrayIter<T>`
+
+###### `fn into_iter(&self) -> ArrayIter<T>`
+
 #### `pub struct RangeExclusive<T: Ord>`
 
 Half-open range [start, end).
@@ -2317,6 +2321,14 @@ Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
 
 Returns the numeric value of an ASCII hexadecimal digit (0–15).
 Panics if the character is not a valid hex digit.
+
+##### `pub fn len_utf8(&self) -> i32`
+
+Returns the number of bytes this character needs in UTF-8 encoding.
+
+##### `pub fn encode_utf8(&self) -> Array<u8>`
+
+Encodes this character as UTF-8, returning the bytes.
 
 ##### `impl Display for char`
 
