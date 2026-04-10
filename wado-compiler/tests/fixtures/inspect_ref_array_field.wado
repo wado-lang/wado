@@ -1,0 +1,20 @@
+/// Auto-derived Inspect for struct with &Array<T> field generates invalid Wasm.
+/// The compiler emits a type mismatch: expected (ref null $type), found (ref $type).
+///
+/// The bug is in the auto-derived Inspect implementation — when a struct field
+/// is a reference to a generic type like &Array<T>, the generated Wasm code
+/// misassigns the dereferenced value to a local of incompatible type.
+use { println, Stdout } from "core:cli";
+
+struct Wrapper {
+    data: &Array<i32>,
+}
+
+export fn run() with Stdout {
+    let arr: Array<i32> = [1, 2, 3];
+    let w = Wrapper { data: &arr };
+    println(`{w:?}`);
+}
+
+__DATA__
+{"stdout": "Wrapper { data: &[1, 2, 3] }\n"}
