@@ -23,7 +23,7 @@ Prerequisites: `cc`, `rustc`, `zig`, `node` (managed by `mise install`).
 
 ## Results
 
-Environment: Wado 2026-04-09, wasmtime 42.0.1, gcc 13.3.0, rustc 1.94.1, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
+Environment: Wado 2026-04-10, wasmtime 42.0.1, gcc 13.3.0, rustc 1.94.1, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
 
 ### Compute
 
@@ -53,15 +53,15 @@ Environment: Wado 2026-04-09, wasmtime 42.0.1, gcc 13.3.0, rustc 1.94.1, Zig 0.1
 
 | Benchmark        | Baseline (native)   | Baseline (ms) | Wado (ms) | Relative |
 | ---------------- | ------------------- | ------------- | --------- | -------- |
-| SQLite parse     | sqlparser-rs (Rust) | 187           | 3,001     | 16.05x   |
-| Syntax highlight | tree-sitter (Rust)  | 451           | 9,058     | 20.08x   |
+| SQLite parse     | sqlparser-rs (Rust) | 178           | 2,952     | 16.58x   |
+| Syntax highlight | tree-sitter (Rust)  | 519           | 10,158    | 19.57x   |
 
 Syntax highlight Wasm-to-Wasm comparison (both on wasmtime):
 
 | Runtime                        | Time (ms) | Relative |
 | ------------------------------ | --------- | -------- |
-| tree-sitter (Wasm/wasmtime)    | 587       | 1.00x    |
-| **Wado** (Gale, Wasm/wasmtime) | 9,058     | 15.43x   |
+| tree-sitter (Wasm/wasmtime)    | 650       | 1.00x    |
+| **Wado** (Gale, Wasm/wasmtime) | 10,158    | 15.63x   |
 
 ## Profiling
 
