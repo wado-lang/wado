@@ -343,29 +343,159 @@ fn test_with_logging() with Stderr {
 }
 ```
 
-#### Handlers for Testing
+#### Handling Granularity and Wildcard
 
-Effect handlers enable testing code that uses WASI effects without a real WASI runtime. Test functions implicitly have all effects, so handlers can be used to mock any effect:
+By default, a handler must implement all operations of the handled effect. Use `..` (rest pattern) to opt in to trapping on unimplemented operations:
 
 ```wado
-test "http client mock" {
+// All operations required — compile error if any is missing
+with TcpSocket as {
+    fn create(family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> { ... }
+    fn bind(self: &TcpSocket, addr: IpSocketAddress) -> Result<(), ErrorCode> { ... }
+    fn connect(self: &TcpSocket, addr: IpSocketAddress) -> Result<(), ErrorCode> { ... }
+    // ... all 20+ methods
+} do { ... }
+
+// With wildcard — only implement what you need, rest traps at runtime
+with TcpSocket as {
+    fn create(family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> {
+        resume Result::Ok(mock_socket())
+    }
+    fn connect(self: &TcpSocket, addr: IpSocketAddress) -> Result<(), ErrorCode> {
+        resume Result::Ok(())
+    }
+    ..  // unimplemented operations trap if called
+} do { ... }
+```
+
+`..` is consistent with struct rest patterns (`let { name, .. } = person`).
+
+#### Mutable State in Handlers
+
+Inline handlers capture outer variables with the same semantics as closures:
+
+```wado
+test "capture output" {
+    let mut captured: Array<String> = [];
+    with Stdout as {
+        fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+            let bytes = data.read(65536);
+            captured.push(String::from_utf8(bytes));  // captures &mut captured
+            let [f, tx] = Future::<Result<(), ErrorCode>>::new();
+            tx.write(Result::<(), ErrorCode>::Ok(()));
+            resume f
+        }
+        ..
+    } do {
+        println("hello");
+    }
+    assert captured[0] == "hello\n";
+}
+```
+
+Named handler mutable state semantics are deferred to a future revision.
+
+### Effect Forwarding
+
+Handlers only handle the effects they declare. All other effects forward to the outer scope. This follows the universal pattern in algebraic effect systems (Koka, Eff, OCaml 5, Effekt).
+
+```wado
+with Client as {
+    fn send(request: Request) -> Result<Response, ErrorCode> {
+        resume Result::Ok(mock_response())
+    }
+    ..
+} do {
+    let headers = Fields::new();    // Fields is not handled → forwards to outer scope
+    let req = Request::new(...);    // Request is not handled → forwards to outer scope
+    let resp = Client::send(req);   // Client IS handled → goes to inline handler
+}
+```
+
+Handler bodies execute in the outer effect scope. This means:
+
+- A handler for effect E can call E's operations in its body to delegate to the outer implementation (no infinite recursion).
+- A handler for effect E can use other effects that are available in the outer scope.
+
+```wado
+export fn run() with Stdout, Client {
     with Client as {
         fn send(request: Request) -> Result<Response, ErrorCode> {
-            // Client propagates Request, Response, Fields, Stream, Future, etc.
-            let headers = Fields::new();
-            headers.append("content-type", "application/json");
-            let [tf, tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-            let [resp, _] = Response::new(headers, null, tf);
-            tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
-            resume Result::Ok(resp)
+            println("intercepted!");         // Stdout — outer scope
+            let resp = Client::send(request); // Client — outer scope (real impl)
+            resume resp
         }
+        ..
     } do {
-        let request = make_request("/api/data");
-        let response = Client::send(request);
-        assert response matches { Ok(_) };
+        app();  // Client::send() here goes to the handler above
     }
 }
 ```
+
+### Handler Nesting
+
+Handlers nest naturally. Inner handlers override specific effects; unhandled effects forward through the chain to the outermost scope:
+
+```wado
+with Stdout = MockStdout do {
+    with Client as {
+        fn send(request: Request) -> Result<Response, ErrorCode> {
+            println("sending...");  // Stdout → MockStdout (outer handler)
+            resume mock_response()
+        }
+        ..
+    } do {
+        println("before");      // Stdout → MockStdout
+        Client::send(req);      // Client → inline handler
+    }
+}
+```
+
+### World Imports as the Outermost Handler
+
+A world's imports define the outermost handler scope. The runtime (wasmtime) provides the real implementations for all imported effects. A `with ... do` block creates a nested handler that overrides specific effects within its scope.
+
+Conceptually, compiling for `wasi:cli/command`:
+
+```
+wasmtime (outermost handler)
+  ├─ Stdout     = WASI stdout implementation
+  ├─ Stderr     = WASI stderr implementation
+  ├─ TcpSocket  = WASI socket implementation
+  ├─ Stream     = CM canonical runtime
+  ├─ Future     = CM canonical runtime
+  └─ ...all world imports...
+
+  do {
+      run()   ← user's export fn
+  }
+```
+
+For the test world, the runtime provides a minimal set (Stdout, Stderr, CM builtins). Effects not imported by the test world (e.g., Client, Fields, Request from `wasi:http`) must be provided by user handlers:
+
+```wado
+test "http handler" {
+    // Client, Fields, Request, Response are not in test world imports
+    // → handlers required for each
+    with Client as {
+        fn send(request: Request) -> Result<Response, ErrorCode> {
+            resume Result::Ok(mock_response())
+        }
+        ..
+    },
+    Fields as { fn new() { resume mock_fields() }; .. },
+    Request as { fn new(...) { resume mock_request() }; .. },
+    Response as { fn new(...) { resume mock_response() }; .. }
+    do {
+        // Stream, Future → forward to test world runtime (CM builtins)
+        // Client → handled by inline handler
+        // Fields, Request, Response → handled by inline handlers
+        let resp = Client::send(make_request());
+    }
+}
+```
+
+Standard library test handlers (e.g., `core:test`) will be provided to reduce this boilerplate.
 
 ### Resume Keyword
 
@@ -391,9 +521,18 @@ with FileSystem as {
 } do { ... }
 ```
 
-### Continuation Semantics
+### Continuation Semantics and Execution Model
 
 One-shot only. Each `resume` executes at most once. Multi-shot continuations are a future consideration pending Wasm Stack Switching support.
+
+Execution model depends on whether post-resume code exists:
+
+| Pattern        | Example                                | Implementation                |
+| -------------- | -------------------------------------- | ----------------------------- |
+| No post-resume | `fn op() { resume value }`             | `resume` compiles to `return` |
+| Post-resume    | `fn op() { resume value; cleanup(); }` | Wasm Stack Switching          |
+
+Most handlers (test mocks, DI) have no post-resume code and use the `return` optimization. Post-resume handlers (resource cleanup, generators) require Wasm Stack Switching, which is available on amd64 in wasmtime.
 
 ### Relation to `stores`
 
@@ -411,7 +550,12 @@ fn register(data: &Data) -> Handle with Stdout, stores[data] {
 - Effect violations produce clear compile errors
 - Resource types are effects: every resource operation requires the resource to be in scope
 - Effect propagation eliminates verbosity: `with Stdout` automatically grants `Stream`, `Future`, etc.
-- Handlers enable testing and dependency injection without a real WASI runtime
+- Handlers satisfy effects locally; unhandled effects forward to the outer scope
+- Handler bodies execute in the outer effect scope, enabling delegation to real implementations
+- World imports are the outermost handler scope; user handlers nest inside
+- `..` wildcard enables partial handling with runtime trap for unimplemented operations
+- Inline handlers capture mutable state with closure semantics
+- `resume` without post-processing compiles to `return`; post-processing requires Stack Switching
 - One-shot semantics ensure resource safety
 - Generic effects (`<effect E>`) support higher-order functions without effect polymorphism complexity
 - No existing language has signature-based effect propagation; this is a novel design
