@@ -97,4 +97,9 @@ It may include TODOs on WIP.
 - [WebIDL Binding Generator (`wado-from-idl`)](./wep-2026-04-01-tide.md)
 - [Reactive Signals](./wep-2026-04-04-reactive-signals.md)
 - [URL Standard Library (`core:url`)](./wep-2026-04-10-url-stdlib.md)
+<<<<<<< HEAD
 - [Effect Handler](./wep-2026-04-11-effect-handler.md)
+||||||| c2edbd1
+=======
+- [Default Arguments](./wep-2026-04-11-default-arguments.md)
+>>>>>>> origin/main

@@ -342,9 +342,9 @@ type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(80)
 
-type "functype//core:prelude/array.wado/Array<Tuple<String,Array<u8>>>::push" = fn(ref "core:prelude//Array<Tuple<String,Array<u8>>>", ref "tuple//[String, Array<u8>]");  // TypeId(81)
+type "functype//core:prelude/array.wado/Array<Tuple<FieldName,FieldValue>>::push" = fn(ref "core:prelude//Array<Tuple<String,Array<u8>>>", ref "tuple//[String, Array<u8>]");  // TypeId(81)
 
-type "functype//core:prelude/array.wado/Array<Tuple<String,Array<u8>>>::grow" = fn(ref "core:prelude//Array<Tuple<String,Array<u8>>>");  // TypeId(82)
+type "functype//core:prelude/array.wado/Array<Tuple<FieldName,FieldValue>>::grow" = fn(ref "core:prelude//Array<Tuple<String,Array<u8>>>");  // TypeId(82)
 
 type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(83)
 
@@ -1444,17 +1444,17 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<Tuple<String,Array<u8>>>::push"(self, value) {
+fn "core:prelude/array.wado/Array<Tuple<FieldName,FieldValue>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Tuple<String,Array<u8>>>::grow"(self);
+        "core:prelude/array.wado/Array<Tuple<FieldName,FieldValue>>::grow"(self);
     }
     builtin::array_set<ref "tuple//[String, Array<u8>]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<Tuple<String,Array<u8>>>::grow"(self) {
+fn "core:prelude/array.wado/Array<Tuple<FieldName,FieldValue>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<Tuple<String,Array<u8>>>;

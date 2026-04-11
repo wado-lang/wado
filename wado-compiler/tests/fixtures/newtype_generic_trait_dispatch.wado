@@ -1,0 +1,53 @@
+// Newtype with its own trait impl through generic dispatch.
+// When a newtype overrides a base type's trait impl, the newtype's impl
+// must be used even when called through a generic function.
+
+use { println, Stdout } from "core:cli";
+
+type Meters = f64;
+type Seconds = f64;
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl Describe for f64 {
+    fn describe(&self) -> String {
+        return "f64";
+    }
+}
+
+impl Describe for Meters {
+    fn describe(&self) -> String {
+        return "meters";
+    }
+}
+
+impl Describe for Seconds {
+    fn describe(&self) -> String {
+        return "seconds";
+    }
+}
+
+fn show<T: Describe>(value: &T) -> String {
+    return value.describe();
+}
+
+export fn run() with Stdout {
+    let m: Meters = 42.0 as Meters;
+    let s: Seconds = 10.0 as Seconds;
+    let f: f64 = 3.14;
+
+    // Direct calls work correctly
+    println(m.describe());
+    println(s.describe());
+    println(f.describe());
+
+    // Generic dispatch must also use the newtype's own impl
+    println(show::<Meters>(&m));
+    println(show::<Seconds>(&s));
+    println(show::<f64>(&f));
+}
+
+__DATA__
+{"stdout": "meters\nseconds\nf64\nmeters\nseconds\nf64\n"}
