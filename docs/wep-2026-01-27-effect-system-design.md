@@ -4,7 +4,7 @@ Status: Draft
 
 ## Context
 
-Wado tracks side effects through an effect system. This WEP defines the syntax and semantics for effect declarations, effect checking, and effect handlers.
+Wado tracks side effects through an effect system. This WEP defines the syntax and semantics for effect declarations, effect checking, effect handlers, and the relationship between resource types and effects.
 
 ## Decision
 
@@ -135,16 +135,112 @@ This design follows Koka's approach where state effects are tracked, but uses si
 
 See also: [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md) for how effects relate to WIT interfaces.
 
+### Resource Types as Effects
+
+- [ ] Not yet implemented.
+
+Resource types (`resource`) are capabilities. Every operation on a resource (constructors, methods, statics) is a host call that requires the host to provide the implementation. Therefore, resource types are effects: using any operation on a resource type requires that the resource is available in the current effect scope.
+
+```wado
+// TcpSocket is a resource — using it requires the TcpSocket effect
+fn connect(addr: IpSocketAddress) with TcpSocket {
+    let socket = TcpSocket::create(IpAddressFamily::Ipv4);  // TcpSocket effect
+    socket.bind(addr);    // TcpSocket effect
+    socket.connect(addr); // TcpSocket effect
+}
+```
+
+This applies uniformly to all resource types:
+
+| Resource     | Origin            | Example operation                    |
+| ------------ | ----------------- | ------------------------------------ |
+| `TcpSocket`  | `wasi:sockets`    | `TcpSocket::create(family)`          |
+| `UdpSocket`  | `wasi:sockets`    | `UdpSocket::create(family)`          |
+| `Descriptor` | `wasi:filesystem` | `descriptor.read_via_stream(offset)` |
+| `Fields`     | `wasi:http`       | `Fields::new()`                      |
+| `Request`    | `wasi:http`       | `Request::new(headers, ...)`         |
+| `Response`   | `wasi:http`       | `Response::new(headers, ...)`        |
+| `Stream<T>`  | `core:prelude`    | `Stream::<u8>::new()`                |
+| `Future<T>`  | `core:prelude`    | `Future::<T>::new()`                 |
+
+Note: `Stream` and `Future` are CM canonical builtins, but their operations (`stream.new`, `stream.read`, etc.) are still host syscalls. There is no special-casing — all resources follow the same rule.
+
+### Effect Propagation
+
+- [ ] Not yet implemented. Depends on resource-as-effect.
+
+When an effect operation's signature contains resource types, those resource effects are automatically available to the caller. This propagation is transitive.
+
+The rule: if a resource type `R` appears in any parameter type or return type of an effect's operations, then `with Effect` implicitly grants `with R`. Recursively, if `R`'s operations mention another resource type `S`, then `S` is also granted.
+
+No existing language has this mechanism. The closest precedents are Koka's effect aliases (manual grouping) and Rust's supertraits (`trait Ord: Eq`). Effect propagation is an automatic, signature-derived form of supertrait.
+
+Example: `Stdout` has a single operation:
+
+```wado
+pub effect Stdout {
+    fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
+}
+```
+
+`Stream` and `Future` appear in the signature. Their operations mention `StreamWritable` and `FutureWritable` respectively. So:
+
+```
+with Stdout
+  → Stream, Future           (direct: appear in write_via_stream signature)
+    → StreamWritable          (transitive: Stream::new() returns StreamWritable)
+    → FutureWritable          (transitive: Future::new() returns FutureWritable)
+```
+
+This means `println` only needs `with Stdout`:
+
+```wado
+pub fn println(message: String) with Stdout {
+    let [rx, tx] = Stream::<u8>::new();      // Stream, StreamWritable — propagated
+    let handle = Stdout::write_via_stream(rx); // Stdout operation, returns Future — propagated
+    write_to_stream(tx, message, true);
+    drop_cli_write_future(handle);             // FutureWritable — propagated
+}
+```
+
+More propagation chains:
+
+```
+with Client                    (wasi:http)
+  → Request, Response          (direct: send(Request) -> Result<Response, ...>)
+    → Fields, RequestOptions   (transitive: Request::new(Headers, ..., RequestOptions))
+    → Stream, Future           (transitive: Request::new(..., Stream<u8>, Future<...>))
+      → StreamWritable         (transitive²)
+      → FutureWritable         (transitive²)
+
+with TcpSocket                 (wasi:sockets)
+  → Stream, Future             (direct: send(Stream<u8>) -> Future<...>)
+    → StreamWritable           (transitive)
+    → FutureWritable           (transitive)
+```
+
+Effects without resource types in their signatures propagate nothing:
+
+```
+with Environment  → (nothing)   // get_environment() -> Array<[String, String]>
+with Random       → (nothing)   // get_random_bytes(u64) -> Array<u8>
+with Exit         → (nothing)   // exit(Result<(), ()>)
+```
+
+Only resource types (`resource` keyword) trigger propagation. Structs, enums, variants, and primitives do not.
+
 ### Handlers
+
+- [ ] Not yet implemented.
 
 Handlers satisfy effects. Inside a `with ... do` block, the handled effect is provided by the handler, not required from the caller.
 
 Only the effects actually needed are required on the calling function:
 
-- The handled effect itself: **not required** (handler satisfies it)
-- Effects used by handler methods: **required** on the caller
+- The handled effect itself: not required (handler satisfies it)
+- Effects used by handler methods: required on the caller
 
-#### DI-Style (Named Handler)
+#### Named Handler
 
 ```wado
 handler MockStdin for Stdin {
@@ -179,7 +275,7 @@ handler LoggingStdin for Stdin {
     }
 }
 
-// Caller must have Stdout
+// Caller must have Stdout (handler method's effect), but not Stdin (handled)
 fn test_logging() with Stdout {
     with Stdin = LoggingStdin do {
         let line = Stdin::read_line();
@@ -219,6 +315,8 @@ with FileSystem as {
 
 #### Mixed
 
+Named and inline handlers can be combined:
+
 ```wado
 with Stdin = MockStdin, Stdout as {
     fn write(s: String) {
@@ -241,6 +339,30 @@ fn test_with_logging() with Stderr {
         }
     } do {
         let line = Stdin::read_line();
+    }
+}
+```
+
+#### Handlers for Testing
+
+Effect handlers enable testing code that uses WASI effects without a real WASI runtime. Test functions implicitly have all effects, so handlers can be used to mock any effect:
+
+```wado
+test "http client mock" {
+    with Client as {
+        fn send(request: Request) -> Result<Response, ErrorCode> {
+            // Client propagates Request, Response, Fields, Stream, Future, etc.
+            let headers = Fields::new();
+            headers.append("content-type", "application/json");
+            let [tf, tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+            let [resp, _] = Response::new(headers, null, tf);
+            tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+            resume Result::Ok(resp)
+        }
+    } do {
+        let request = make_request("/api/data");
+        let response = Client::send(request);
+        assert response matches { Ok(_) };
     }
 }
 ```
@@ -287,6 +409,9 @@ fn register(data: &Data) -> Handle with Stdout, stores[data] {
 
 - All function effects are explicit and checked at compile time
 - Effect violations produce clear compile errors
-- Handlers enable testing and dependency injection
+- Resource types are effects: every resource operation requires the resource to be in scope
+- Effect propagation eliminates verbosity: `with Stdout` automatically grants `Stream`, `Future`, etc.
+- Handlers enable testing and dependency injection without a real WASI runtime
 - One-shot semantics ensure resource safety
 - Generic effects (`<effect E>`) support higher-order functions without effect polymorphism complexity
+- No existing language has signature-based effect propagation; this is a novel design
