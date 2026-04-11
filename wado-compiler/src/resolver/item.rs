@@ -449,6 +449,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             stores_aliased_locals: IndexSet::default(),
             // Scratch local fields - computed by lower phase
             is_cm_binding: false,
+            is_cm_export: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
             comp_features: extract_comp_features(&func.attrs),
             export_name: Self::extract_export_name(&func.attrs),
@@ -528,6 +529,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             address_taken_locals: ctx.address_taken_locals,
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
+            is_cm_export: false,
             inline_hint: crate::tir::InlineHint::Auto,
             comp_features: 0,
             export_name: None,
@@ -860,6 +862,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             address_taken_locals: ctx.address_taken_locals,
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
+            is_cm_export: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
             comp_features: extract_comp_features(&func.attrs),
             export_name: None,

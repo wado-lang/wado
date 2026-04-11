@@ -2493,6 +2493,11 @@ pub struct TirFunction {
     /// Used by DCE to avoid module remapping for adapter functions.
     pub is_cm_binding: bool,
 
+    /// Whether this function is a synthesized CM *export* binding (world export wrapper).
+    /// When true, the global initializer (`__initialize_modules`) is injected at the start
+    /// of this function's body during lowering.
+    pub is_cm_export: bool,
+
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.
     pub inline_hint: InlineHint,
 
