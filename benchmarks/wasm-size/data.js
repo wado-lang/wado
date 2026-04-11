@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775896306745,
+  "lastUpdate": 1775896437725,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11582,6 +11582,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19360,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c2edbd1a88aa7a13aaea739ff7be3454846f2cc5",
+          "message": "Merge pull request #806 from wado-lang/claude/optimize-sieve-benchmark-U7Hj1\n\nOptimize sieve benchmark with three peephole passes",
+          "timestamp": "2026-04-11T17:30:42+09:00",
+          "tree_id": "e2e422f1d651338b04088a627c76edc9ac358264",
+          "url": "https://github.com/wado-lang/wado/commit/c2edbd1a88aa7a13aaea739ff7be3454846f2cc5"
+        },
+        "date": 1775896437462,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1795,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8927,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18708,
             "unit": "bytes"
           }
         ]
