@@ -1,31 +1,49 @@
-// WASI P3 CLI shim for jco transpilation
-// Provides wasi:cli/stdout and wasi:cli/stderr for Node.js
+// Minimal WASI P3 CLI shim for jco-transpiled Wado programs
+//
+// Uses a global stream write hook to intercept bulk data from stream.write,
+// bypassing the jco byte-at-a-time rendezvous mechanism.
 
-const encoder = new TextEncoder();
+// Map: writable end waitable index -> output target
+const _streamTargets = new Map();
 
-// Stream write hook: jco calls this to write bytes to a stream
-globalThis._jcoStreamWriteHook = (streamId, bytes) => {
-  // streamId 0 = stdout, streamId 1 = stderr
-  if (streamId === 0) {
-    process.stdout.write(bytes);
-  } else {
-    process.stderr.write(bytes);
+// Global hook: called by patched jco's streamWrite when data is written
+globalThis._jcoStreamWriteHook = (writableEndIdx, data) => {
+  const target = _streamTargets.get(writableEndIdx);
+  if (target) {
+    target.write(data);
+    return true;
   }
-  return bytes.length;
+  return false;
 };
 
-export function writeViaStream() {
-  return 0; // stdout stream id
-}
+export const types = {
+  OutputStream: class OutputStream {},
+};
 
 export const stdout = {
-  writeViaStream() {
-    return 0; // stdout stream id
-  }
+  writeViaStream(_stream) {
+    _defaultTarget = process.stdout;
+    return { tag: "ok" };
+  },
 };
+stdout.writeViaStream._isHostProvided = true;
 
 export const stderr = {
-  writeViaStream() {
-    return 1; // stderr stream id
+  writeViaStream(_stream) {
+    _defaultTarget = process.stderr;
+    return { tag: "ok" };
+  },
+};
+stderr.writeViaStream._isHostProvided = true;
+
+// Default target for unregistered writable ends
+let _defaultTarget = process.stdout;
+
+// Override the hook to auto-register unknown writable ends
+const _origHook = globalThis._jcoStreamWriteHook;
+globalThis._jcoStreamWriteHook = (writableEndIdx, data) => {
+  if (!_streamTargets.has(writableEndIdx) && _defaultTarget) {
+    _streamTargets.set(writableEndIdx, _defaultTarget);
   }
+  return _origHook(writableEndIdx, data);
 };
