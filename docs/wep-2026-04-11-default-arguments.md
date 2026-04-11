@@ -326,16 +326,16 @@ struct Config {
 
 ### WebIDL Mapping Improvement
 
-With default arguments, WebIDL optional parameters map to their actual types instead of `Option<T>`:
+With default arguments, WebIDL optional parameters with explicit defaults map to their actual types instead of `Option<T>`:
 
 ```wado
+// WebIDL: optional boolean subtree = false
 // Before (Option wrapping):
 fn clone_node(&self, deep: Option<bool>) -> Node;
-fn arc(&self, x: f64, y: f64, radius: f64,
-       start_angle: f64, end_angle: f64, anticlockwise: Option<bool>);
-
-// After (defaults):
+// After (default value from IDL):
 fn clone_node(&self, deep: bool = false) -> Node;
+
+// WebIDL: optional boolean counterclockwise = false
 fn arc(&self, x: f64, y: f64, radius: f64,
        start_angle: f64, end_angle: f64, anticlockwise: bool = false);
 ```
@@ -343,13 +343,31 @@ fn arc(&self, x: f64, y: f64, radius: f64,
 WebIDL optional parameters without explicit defaults map to `Option<T>` with `= null`:
 
 ```wado
-// WebIDL: undefined fillText(DOMString text, double x, double y, optional double maxWidth);
+// WebIDL: optional double maxWidth (no default in IDL)
 fn fill_text(&self, text: String, x: f64, y: f64, max_width: Option<f64> = null);
 ```
 
-WebIDL dictionaries map to structs with field defaults:
+WebIDL optional parameters with `= {}` (empty dictionary default) map to struct type with struct default:
 
 ```wado
+// WebIDL: optional RequestInit init = {}
+fn fetch(input: String, init: RequestInit = RequestInit {}) -> Future<Response>;
+
+// WebIDL: optional AddEventListenerOptions options = {}
+fn add_event_listener(&self, type: String, callback: Option<fn(Event)>,
+                      options: AddEventListenerOptions = AddEventListenerOptions {});
+```
+
+WebIDL dictionaries map to structs with field defaults. Members with explicit defaults use the declared default; members without defaults use `Option<T> = null`:
+
+```wado
+// WebIDL:
+// dictionary RequestInit {
+//   ByteString method;          ← no default in IDL
+//   BodyInit? body;             ← no default in IDL
+//   RequestMode mode;           ← no default in IDL
+// };
+
 // Before:
 pub struct RequestInit {
     pub method: Option<String>,
@@ -357,11 +375,23 @@ pub struct RequestInit {
     pub mode: Option<RequestMode>,
 }
 
-// After:
+// After: all fields Option<T> = null (no IDL defaults to use)
 pub struct RequestInit {
-    pub method: String = "GET",
+    pub method: Option<String> = null,
     pub body: Option<String> = null,
     pub mode: Option<RequestMode> = null,
+}
+
+// Dictionary WITH explicit defaults:
+// dictionary ResponseInit {
+//   unsigned short status = 200;    ← default in IDL
+//   ByteString statusText = "";     ← default in IDL
+//   HeadersInit headers;            ← no default
+// };
+pub struct ResponseInit {
+    pub status: u16 = 200,
+    pub status_text: String = "",
+    pub headers: Option<Headers> = null,
 }
 ```
 
@@ -376,8 +406,8 @@ let init = RequestInit {
 };
 let resp = Fetch::fetch(url, Option::Some(init)).read();
 
-// After:
-let init: RequestInit = { method: "POST", body: Option::Some(data) };
+// After: struct field defaults eliminate boilerplate, fetch default is {}
+let init: RequestInit = { method: Option::Some("POST"), body: Option::Some(data) };
 let resp = Fetch::fetch(url, init).read();
 ```
 
