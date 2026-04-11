@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775907239720,
+  "lastUpdate": 1775924532643,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11645,6 +11645,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4fed3c1b6ab62ef71ada5262bc19318d75a13dab"
         },
         "date": 1775907239442,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1795,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8927,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18708,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c77803baf3532241515f4dbfbe107ec37bb4ade5",
+          "message": "Merge pull request #809 from wado-lang/claude/default-arguments-research-BY3Ys\n\nWEP: Default Arguments for functions and struct fields",
+          "timestamp": "2026-04-12T01:19:01+09:00",
+          "tree_id": "1b5cc0ef690b3b6355e6f4af4edd51fa8eb8e09d",
+          "url": "https://github.com/wado-lang/wado/commit/c77803baf3532241515f4dbfbe107ec37bb4ade5"
+        },
+        "date": 1775924532367,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
