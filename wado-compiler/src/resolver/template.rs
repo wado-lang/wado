@@ -31,7 +31,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let mut combined = String::new();
             for part in &template.parts {
                 if let ast::TemplatePart::String(s) = part {
-                    combined.push_str(s);
+                    let unescaped = super::util::unescape_template_string(s).unwrap_or_default();
+                    combined.push_str(&unescaped);
                 }
             }
             return TirExpr::new(TirExprKind::StringLiteral(combined), string_type, span);
@@ -53,7 +54,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             match part {
                 ast::TemplatePart::String(s) => {
                     if !s.is_empty() {
-                        parts.push(TirTemplatePart::Literal(s.clone()));
+                        let unescaped =
+                            super::util::unescape_template_string(s).unwrap_or_default();
+                        if !unescaped.is_empty() {
+                            parts.push(TirTemplatePart::Literal(unescaped));
+                        }
                     }
                 }
                 ast::TemplatePart::Interpolation { expr, format } => {

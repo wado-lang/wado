@@ -192,6 +192,74 @@ pub(super) fn unescape_char(raw: &str) -> Result<char, String> {
     Ok(result)
 }
 
+/// Unescape a template string literal part (raw text between backticks).
+///
+/// Like `unescape_string` but also handles template-specific escapes: `\{` and `\}`.
+pub(super) fn unescape_template_string(raw: &str) -> Result<String, String> {
+    let mut result = String::new();
+    let mut chars = raw.chars().peekable();
+    let mut pending_high: Option<u16> = None;
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            // Handle template-specific escapes first
+            if let Some(&next) = chars.peek() {
+                if next == '{' || next == '}' {
+                    if pending_high.is_some() {
+                        return Err(
+                            "invalid surrogate pair: high surrogate not followed by low surrogate"
+                                .to_string(),
+                        );
+                    }
+                    chars.next();
+                    result.push(next);
+                    continue;
+                }
+            }
+            let escaped = unescape_one(&mut chars)?;
+            if let Some(code_unit) = as_surrogate_code_unit(escaped) {
+                if is_high_surrogate(code_unit) {
+                    if pending_high.is_some() {
+                        return Err(
+                            "invalid surrogate pair: high surrogate not followed by low surrogate"
+                                .to_string(),
+                        );
+                    }
+                    pending_high = Some(code_unit);
+                    continue;
+                } else if is_low_surrogate(code_unit)
+                    && let Some(high) = pending_high.take()
+                {
+                    let combined = decode_surrogate_pair(high, code_unit);
+                    let c = char::from_u32(combined)
+                        .ok_or_else(|| "invalid surrogate pair".to_string())?;
+                    result.push(c);
+                    continue;
+                }
+            }
+            if pending_high.is_some() {
+                return Err(
+                    "invalid surrogate pair: high surrogate not followed by low surrogate"
+                        .to_string(),
+                );
+            }
+            result.push(escaped);
+        } else {
+            if pending_high.is_some() {
+                return Err(
+                    "invalid surrogate pair: high surrogate not followed by low surrogate"
+                        .to_string(),
+                );
+            }
+            result.push(ch);
+        }
+    }
+    if pending_high.is_some() {
+        return Err("invalid surrogate pair: high surrogate at end of string".to_string());
+    }
+    Ok(result)
+}
+
 /// Parse one escape sequence (after the leading `\` has been consumed).
 fn unescape_one<I: Iterator<Item = char>>(
     chars: &mut std::iter::Peekable<I>,

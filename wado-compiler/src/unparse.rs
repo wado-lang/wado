@@ -3155,15 +3155,9 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
 }
 
 fn escape_template_literal_into(s: &str, output: &mut String) {
-    for c in s.chars() {
-        match c {
-            '\\' => output.push_str("\\\\"),
-            '`' => output.push_str("\\`"),
-            '{' => output.push_str("\\{"),
-            '}' => output.push_str("\\}"),
-            _ => output.push(c),
-        }
-    }
+    // Template literal parts are stored as raw text (escape sequences preserved).
+    // Just output as-is — escapes like \n, \{, \} are already in raw form.
+    output.push_str(s);
 }
 
 fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {

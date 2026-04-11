@@ -1881,3 +1881,29 @@ fn test_format_attribute_numeric_arg_preserved() {
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
+
+#[test]
+fn test_format_template_string_escape_sequences_preserved() {
+    // Escape sequences in template strings must be preserved, not decoded
+    let source = "fn foo() {\n    let s = `hello\\nworld`;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("`hello\\nworld`"),
+        "\\n escape in template string must be preserved: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_template_string_escape_sequences_all() {
+    // All escape sequences: \n, \r, \t, \0, \\, \{, \}
+    let source = "fn foo() {\n    let s = `a\\nb\\rc\\td\\0e\\\\f\\{g\\}`;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("`a\\nb\\rc\\td\\0e\\\\f\\{g\\}`"),
+        "all escape sequences in template string must be preserved: {}",
+        formatted
+    );
+}
