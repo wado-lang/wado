@@ -2104,8 +2104,13 @@ impl Monomorphizer {
             {
                 base = inner;
             }
+            // Unwrap Newtype to check if the underlying base type is generic
+            let effective = match type_table.get(base) {
+                ResolvedType::Newtype { base_type, .. } => *base_type,
+                _ => base,
+            };
             matches!(
-                type_table.get(base),
+                type_table.get(effective),
                 ResolvedType::GenericInstance { .. }
                     | ResolvedType::GenericResource { .. }
                     | ResolvedType::BuiltinArray(_)
@@ -2140,18 +2145,33 @@ impl Monomorphizer {
             {
                 inner = t;
             }
-            let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
-            let base = type_table.base_type_name(inner);
-            info.with_substituted_struct_name(&mangled, &base)
+            // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
+            // then fall back to the base type name (e.g., "f64") if no direct impl exists.
+            let own_mangled = type_table.mangle_type_name(inner);
+            let own_base = type_table.base_type_name(inner);
+            let candidate = info.with_substituted_struct_name(&own_mangled, &own_base);
+            let candidate_name = candidate.to_mangled_name();
+            if self
+                .functions
+                .trait_method_locations
+                .contains_key(&candidate_name)
+            {
+                candidate
+            } else {
+                let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
+                let base = type_table.base_type_name(inner);
+                info.with_substituted_struct_name(&mangled, &base)
+            }
         } else if needs_struct_type_args {
             // Derive the struct name from the already-substituted receiver type.
+            // Resolve through newtypes so that e.g. MyArray<i32>::len → Array<i32>::len.
             let mut recv_inner = receiver_type_id;
             while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
                 type_table.get(recv_inner).clone()
             {
                 recv_inner = t;
             }
-            let recv_mangled = type_table.mangle_type_name(recv_inner);
+            let recv_mangled = type_table.mangle_type_name_resolving_newtypes(recv_inner);
             let recv_base = type_table.base_type_name(recv_inner);
             let mut new_info = info.with_substituted_struct_name(&recv_mangled, &recv_base);
             // For ref-type impls (e.g., impl IntoIterator for &Array<T>), preserve

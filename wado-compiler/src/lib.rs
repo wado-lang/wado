@@ -365,17 +365,7 @@ fn compile_after_load<H: CompilerHost>(
         check_stores(&package.tir_modules, logger)?;
     }
 
-    // === Phase 8b: Erase Newtypes and Flags (Package -> Package) ===
-    // After synthesis (which needs full type info) and before monomorphize
-    // (which must not see Newtype/Flags). Newtypes → ultimate base; Flags → u32.
-    let package = {
-        for module in package.tir_modules.values() {
-            module.type_table.borrow_mut().erase_newtypes_and_flags();
-        }
-        package
-    };
-
-    // === Phase 8c: Link (Package → FlatPackage) ===
+    // === Phase 8b: Link (Package → FlatPackage) ===
     let mut flat = {
         let _span = logger.span("link");
         link::link(package)
@@ -385,6 +375,13 @@ fn compile_after_load<H: CompilerHost>(
     {
         let _span = logger.span("monomorphize");
         monomorphize(&mut flat);
+    }
+
+    // === Phase 9b: Erase Newtypes and Flags ===
+    // After monomorphize (which needs distinct Newtype/Flags types for trait dispatch)
+    // and before lower/optimize/codegen (which expect Newtypes → base type; Flags → u32).
+    {
+        flat.type_table.borrow_mut().erase_newtypes_and_flags();
     }
 
     // === Phase 10: Lower (FlatPackage → FlatPackage) ===
@@ -635,11 +632,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 })?
             };
 
-            // Erase Newtypes and Flags (after synthesis, before link)
-            for module in package.tir_modules.values() {
-                module.type_table.borrow_mut().erase_newtypes_and_flags();
-            }
-
             // Link
             let mut flat = link::link(package);
 
@@ -648,6 +640,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 let _span = logger.span("monomorphize");
                 monomorphize(&mut flat);
             }
+
+            // Erase Newtypes and Flags (after monomorphize, before lower)
+            flat.type_table.borrow_mut().erase_newtypes_and_flags();
 
             // Snapshot monomorphized state (only unparse; Debug format is deferred)
             let mono_text = Some(unparse::unparse_flat_package(&flat));
