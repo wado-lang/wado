@@ -153,6 +153,7 @@ pub struct GlobalDecl {
 /// - `#[inline(always)]`                   → `[Ident("always")]`
 /// - `#[serde(rename = "type")]`           → `[KeyValue("rename", "type")]`
 /// - `#[canonical("wasi", "stream-new")]`  → `[Str("wasi"), Str("stream-new")]`
+/// - `#[timeout_ms(120000)]`               → `[Number("120000")]`
 #[derive(Debug, Clone)]
 pub enum AttrArg {
     /// A quoted string literal, e.g. `"value"`.
@@ -161,13 +162,15 @@ pub enum AttrArg {
     Ident(String),
     /// A key = "value" pair, e.g. `rename = "type"`.
     KeyValue(String, String),
+    /// A numeric literal, e.g. `120000`.
+    Number(String),
 }
 
 impl AttrArg {
     /// Returns the string value: for `Str`/`Ident` the contained string; for `KeyValue` the value side.
     pub fn as_str(&self) -> &str {
         match self {
-            Self::Str(s) | Self::Ident(s) => s,
+            Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
             Self::KeyValue(_, v) => v,
         }
     }
@@ -206,7 +209,7 @@ impl Attribute {
     /// For `#[serde(default)]`, `attr.has_arg("default")` returns `true`.
     pub fn has_arg(&self, name: &str) -> bool {
         self.args.iter().any(|arg| match arg {
-            AttrArg::Str(s) | AttrArg::Ident(s) => s == name,
+            AttrArg::Str(s) | AttrArg::Ident(s) | AttrArg::Number(s) => s == name,
             AttrArg::KeyValue(k, _) => k == name,
         })
     }

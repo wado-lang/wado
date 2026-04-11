@@ -406,7 +406,7 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(s);
                 self.output.push('"');
             }
-            AttrArg::Ident(s) => {
+            AttrArg::Ident(s) | AttrArg::Number(s) => {
                 self.output.push_str(s);
             }
             AttrArg::KeyValue(k, v) => {

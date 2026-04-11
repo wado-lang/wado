@@ -1867,3 +1867,17 @@ fn test_roundtrip_ast_all_stdlib() {
         );
     }
 }
+
+#[test]
+fn test_format_attribute_numeric_arg_preserved() {
+    // Numeric attribute arguments must not be quoted: #[timeout_ms(120000)] stays as-is
+    let source = "#[timeout_ms(120000)]\ntest \"bench\" {\n    assert 1 == 1;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("#[timeout_ms(120000)]"),
+        "numeric attribute argument must not be quoted: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}

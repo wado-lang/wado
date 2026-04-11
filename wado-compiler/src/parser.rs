@@ -603,7 +603,7 @@ impl Parser {
                     }
                     TokenKind::NumberLit(value) => {
                         self.advance();
-                        AttrArg::Str(value)
+                        AttrArg::Number(value)
                     }
                     _ => break,
                 };
