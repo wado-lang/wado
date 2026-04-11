@@ -260,19 +260,6 @@ struct Box<T> {
     value: T,
 }
 
-// Field defaults
-struct Config {
-    host: String,              // required (no default)
-    port: i32 = 8080,          // optional (has default)
-    debug: bool = false,
-}
-
-let c = Config { host: "localhost" };
-// → Config { host: "localhost", port: 8080, debug: false }
-
-let c = Config { host: "localhost", port: 3000 };
-// → Config { host: "localhost", port: 3000, debug: false }
-
 // Field visibility
 pub struct Config {
     pub name: String,   // accessible from other modules
@@ -621,16 +608,6 @@ fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
 
-// Default arguments (trailing parameters only)
-fn connect(host: String, port: i32 = 8080, timeout: i32 = 30) { ... }
-connect("localhost");              // → connect("localhost", 8080, 30)
-connect("localhost", 3000);        // → connect("localhost", 3000, 30)
-connect("localhost", 3000, 60);
-
-// Default expressions: any pure expression (no effects)
-fn make_rect(width: f64, height: f64 = width) -> Rect { ... }
-make_rect(10.0);                   // → make_rect(10.0, 10.0)
-
 // With effects
 fn greet(name: String) with Stdout {
     println(`Hello, {name}!`);
@@ -646,8 +623,6 @@ export fn run() { ... }
 ```
 
 A function must have `return` if it returns a value. See Visibility for `pub` and `export` details.
-
-Default arguments are desugared at the call site (zero overhead). Default expressions must be pure (no effects). Defaults are not part of function types — assigning to `fn(A, B) -> C` erases defaults.
 
 ### Methods
 
@@ -692,10 +667,6 @@ let compute = |x: i32| {
 
 // Struct literal return
 let make_point = |x: i32, y: i32| Point { x, y };
-
-// Default parameters in closures
-let greet = |name: String, greeting: String = "Hello"| `{greeting}, {name}!`;
-greet("Alice");        // → greet("Alice", "Hello")
 
 // Capturing outer variables (value semantics - copy)
 let multiplier = 10;
@@ -846,18 +817,6 @@ trait Summary {
         return `Title: {self.title()}`;
     }
 }
-
-// Default arguments in trait methods (only trait defines defaults, not impl)
-trait Drawable {
-    fn draw(&self, opacity: f64 = 1.0);
-}
-
-impl Drawable for Circle {
-    fn draw(&self, opacity: f64) { ... }  // impl receives all params
-}
-
-circle.draw();      // → circle.draw(1.0)
-circle.draw(0.5);
 
 // Associated type
 trait Container {
