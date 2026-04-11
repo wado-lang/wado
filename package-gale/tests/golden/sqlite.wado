@@ -4800,6 +4800,1856 @@ impl Parser {
     }
 }
 
+fn scan_error(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_UNEXPECTED_CHAR { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_analyze_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_ANALYZE { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        let gp_0 = pos;
+        sg_0: {
+            pos = gp_0;
+            sg_0_0: {
+                pos = scan_database_name(tokens, pos);
+                if pos < 0 { break sg_0_0; }
+                break sg_0;
+            }
+            pos = gp_0;
+            sg_0_1: {
+                pos = scan_table_or_index_name(tokens, pos);
+                if pos < 0 { break sg_0_1; }
+                break sg_0;
+            }
+            pos = gp_0;
+            pos = scan_database_name(tokens, pos);
+            if pos < 0 { return -1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+            pos += 1;
+            pos = scan_table_or_index_name(tokens, pos);
+            if pos < 0 { return -1; }
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_begin_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_BEGIN { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_K_DEFERRED | TK_K_IMMEDIATE | TK_K_EXCLUSIVE } {
+        let sp = pos;
+        let gp_1 = pos;
+        sg_1: {
+            pos = gp_1;
+            sg_1_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRED { break sg_1_0; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_IMMEDIATE { break sg_1_1; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_EXCLUSIVE { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_K_TRANSACTION {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_TRANSACTION { return -1; }
+        pos += 1;
+        if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+            let sp = pos;
+            pos = scan_transaction_name(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_commit_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let gp_2 = pos;
+    sg_2: {
+        pos = gp_2;
+        sg_2_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_COMMIT { break sg_2_0; }
+            pos += 1;
+            break sg_2;
+        }
+        pos = gp_2;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_END { return -1; }
+        pos += 1;
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_K_TRANSACTION {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_TRANSACTION { return -1; }
+        pos += 1;
+        if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+            let sp = pos;
+            pos = scan_transaction_name(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_detach_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_DETACH { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_K_DATABASE {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_DATABASE { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_database_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_drop_index_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_DROP { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEX { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_K_IF {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_IF { return -1; }
+        pos += 1;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_EXISTS { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        pos = scan_database_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_index_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_drop_table_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_DROP { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_TABLE { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_K_IF {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_IF { return -1; }
+        pos += 1;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_EXISTS { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        pos = scan_database_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_table_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_drop_trigger_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_DROP { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_TRIGGER { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_K_IF {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_IF { return -1; }
+        pos += 1;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_EXISTS { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        pos = scan_database_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_trigger_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_drop_view_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_DROP { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_VIEW { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_K_IF {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_IF { return -1; }
+        pos += 1;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_EXISTS { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        pos = scan_database_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_view_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_pragma_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_PRAGMA { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        pos = scan_database_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_pragma_name(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_EQ | TK_LIT_LPAREN } {
+        let sp = pos;
+        let gp_3 = pos;
+        sg_3: {
+            pos = gp_3;
+            sg_3_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { break sg_3_0; }
+                pos += 1;
+                pos = scan_pragma_value(tokens, pos);
+                if pos < 0 { break sg_3_0; }
+                break sg_3;
+            }
+            pos = gp_3;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+            pos += 1;
+            pos = scan_pragma_value(tokens, pos);
+            if pos < 0 { return -1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_reindex_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_REINDEX { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        let gp_4 = pos;
+        sg_4: {
+            pos = gp_4;
+            sg_4_0: {
+                pos = scan_collation_name(tokens, pos);
+                if pos < 0 { break sg_4_0; }
+                break sg_4;
+            }
+            pos = gp_4;
+            if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+                let sp = pos;
+                pos = scan_database_name(tokens, pos);
+                if pos < 0 { return -1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+                pos += 1;
+                if pos < 0 { pos = sp; }
+            }
+            let gp_5 = pos;
+            sg_5: {
+                pos = gp_5;
+                sg_5_0: {
+                    pos = scan_table_name(tokens, pos);
+                    if pos < 0 { break sg_5_0; }
+                    break sg_5;
+                }
+                pos = gp_5;
+                pos = scan_index_name(tokens, pos);
+                if pos < 0 { return -1; }
+            }
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_release_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_RELEASE { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_K_SAVEPOINT {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_SAVEPOINT { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_savepoint_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_rollback_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_K_TRANSACTION {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_TRANSACTION { return -1; }
+        pos += 1;
+        if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+            let sp = pos;
+            pos = scan_transaction_name(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_K_TO {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_TO { return -1; }
+        pos += 1;
+        if pos < tokens.len() && tokens[pos].kind == TK_K_SAVEPOINT {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_SAVEPOINT { pos = -1; } else { pos += 1; }
+            if pos < 0 { pos = sp; }
+        }
+        pos = scan_savepoint_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_savepoint_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_SAVEPOINT { return -1; }
+    pos += 1;
+    pos = scan_savepoint_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_vacuum_stmt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_VACUUM { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_type_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_name(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        pos = scan_name(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_LIT_LPAREN {
+        let sp = pos;
+        let gp_6 = pos;
+        sg_6: {
+            pos = gp_6;
+            sg_6_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break sg_6_0; }
+                pos += 1;
+                pos = scan_signed_number(tokens, pos);
+                if pos < 0 { break sg_6_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break sg_6_0; }
+                pos += 1;
+                break sg_6;
+            }
+            pos = gp_6;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+            pos += 1;
+            pos = scan_signed_number(tokens, pos);
+            if pos < 0 { return -1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
+            pos += 1;
+            pos = scan_signed_number(tokens, pos);
+            if pos < 0 { return -1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_conflict_clause(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind == TK_K_ON {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_ON { return -1; }
+        pos += 1;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_CONFLICT { return -1; }
+        pos += 1;
+        let gp_7 = pos;
+        sg_7: {
+            pos = gp_7;
+            sg_7_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { break sg_7_0; }
+                pos += 1;
+                break sg_7;
+            }
+            pos = gp_7;
+            sg_7_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ABORT { break sg_7_1; }
+                pos += 1;
+                break sg_7;
+            }
+            pos = gp_7;
+            sg_7_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_FAIL { break sg_7_2; }
+                pos += 1;
+                break sg_7;
+            }
+            pos = gp_7;
+            sg_7_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_IGNORE { break sg_7_3; }
+                pos += 1;
+                break sg_7;
+            }
+            pos = gp_7;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_REPLACE { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_foreign_key_clause(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_REFERENCES { return -1; }
+    pos += 1;
+    pos = scan_foreign_table(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind == TK_LIT_LPAREN {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+        pos += 1;
+        pos = scan_column_name(tokens, pos);
+        if pos < 0 { return -1; }
+        while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
+            pos += 1;
+            pos = scan_column_name(tokens, pos);
+            if pos < 0 { return -1; }
+            if pos < 0 { pos = sp; break; }
+        }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_K_ON | TK_K_MATCH } {
+        let sp = pos;
+        let gp_8 = pos;
+        sg_8: {
+            pos = gp_8;
+            sg_8_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ON { break sg_8_0; }
+                pos += 1;
+                let gp_9 = pos;
+                sg_9: {
+                    pos = gp_9;
+                    sg_9_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_K_DELETE { break sg_9_0; }
+                        pos += 1;
+                        break sg_9;
+                    }
+                    pos = gp_9;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_UPDATE { return -1; }
+                    pos += 1;
+                }
+                let gp_10 = pos;
+                sg_10: {
+                    pos = gp_10;
+                    sg_10_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_K_SET { break sg_10_0; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos].kind != TK_K_NULL { break sg_10_0; }
+                        pos += 1;
+                        break sg_10;
+                    }
+                    pos = gp_10;
+                    sg_10_1: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_K_SET { break sg_10_1; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFAULT { break sg_10_1; }
+                        pos += 1;
+                        break sg_10;
+                    }
+                    pos = gp_10;
+                    sg_10_2: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_K_CASCADE { break sg_10_2; }
+                        pos += 1;
+                        break sg_10;
+                    }
+                    pos = gp_10;
+                    sg_10_3: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_K_RESTRICT { break sg_10_3; }
+                        pos += 1;
+                        break sg_10;
+                    }
+                    pos = gp_10;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_NO { return -1; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_ACTION { return -1; }
+                    pos += 1;
+                }
+                break sg_8;
+            }
+            pos = gp_8;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_MATCH { return -1; }
+            pos += 1;
+            pos = scan_name(tokens, pos);
+            if pos < 0 { return -1; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_K_NOT | TK_K_DEFERRABLE } {
+        let sp = pos;
+        if pos < tokens.len() && tokens[pos].kind == TK_K_NOT {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { pos = -1; } else { pos += 1; }
+            if pos < 0 { pos = sp; }
+        }
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRABLE { return -1; }
+        pos += 1;
+        if pos < tokens.len() && tokens[pos].kind == TK_K_INITIALLY {
+            let sp = pos;
+            let gp_11 = pos;
+            sg_11: {
+                pos = gp_11;
+                sg_11_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break sg_11_0; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRED { break sg_11_0; }
+                    pos += 1;
+                    break sg_11;
+                }
+                pos = gp_11;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { return -1; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_IMMEDIATE { return -1; }
+                pos += 1;
+            }
+            if pos < 0 { pos = sp; }
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_raise_function(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_RAISE { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    let gp_12 = pos;
+    sg_12: {
+        pos = gp_12;
+        sg_12_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_IGNORE { break sg_12_0; }
+            pos += 1;
+            break sg_12;
+        }
+        pos = gp_12;
+        let gp_13 = pos;
+        sg_13: {
+            pos = gp_13;
+            sg_13_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { break sg_13_0; }
+                pos += 1;
+                break sg_13;
+            }
+            pos = gp_13;
+            sg_13_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ABORT { break sg_13_1; }
+                pos += 1;
+                break sg_13;
+            }
+            pos = gp_13;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_FAIL { return -1; }
+            pos += 1;
+        }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
+        pos += 1;
+        pos = scan_error_message(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_indexed_column(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_column_name(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind == TK_K_COLLATE {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_COLLATE { return -1; }
+        pos += 1;
+        pos = scan_collation_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_K_ASC | TK_K_DESC } {
+        let sp = pos;
+        let gp_14 = pos;
+        sg_14: {
+            pos = gp_14;
+            sg_14_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ASC { break sg_14_0; }
+                pos += 1;
+                break sg_14;
+            }
+            pos = gp_14;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_DESC { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_qualified_table_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        pos = scan_database_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_table_name(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_K_INDEXED | TK_K_NOT } {
+        let sp = pos;
+        let gp_15 = pos;
+        sg_15: {
+            pos = gp_15;
+            sg_15_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_15_0; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_BY { break sg_15_0; }
+                pos += 1;
+                pos = scan_index_name(tokens, pos);
+                if pos < 0 { break sg_15_0; }
+                break sg_15;
+            }
+            pos = gp_15;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { return -1; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_pragma_value(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_signed_number(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_name(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_join_operator(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos < tokens.len() && tokens[pos].kind == TK_K_NATURAL {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NATURAL { pos = -1; } else { pos += 1; }
+            if pos < 0 { pos = sp; }
+        }
+        if pos < tokens.len() && tokens[pos].kind matches { TK_K_LEFT | TK_K_INNER | TK_K_CROSS } {
+            let sp = pos;
+            let gp_16 = pos;
+            sg_16: {
+                pos = gp_16;
+                sg_16_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_LEFT { break sg_16_0; }
+                    pos += 1;
+                    if pos < tokens.len() && tokens[pos].kind == TK_K_OUTER {
+                        let sp = pos;
+                        if pos >= tokens.len() || tokens[pos].kind != TK_K_OUTER { pos = -1; } else { pos += 1; }
+                        if pos < 0 { pos = sp; }
+                    }
+                    break sg_16;
+                }
+                pos = gp_16;
+                sg_16_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INNER { break sg_16_1; }
+                    pos += 1;
+                    break sg_16;
+                }
+                pos = gp_16;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_CROSS { return -1; }
+                pos += 1;
+            }
+            if pos < 0 { pos = sp; }
+        }
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_JOIN { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_compound_operator(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_UNION { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_UNION { break try_1; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ALL { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INTERSECT { break try_2; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_EXCEPT { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_signed_number(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_PLUS | TK_LIT_MINUS } {
+        let sp = pos;
+        let gp_17 = pos;
+        sg_17: {
+            pos = gp_17;
+            sg_17_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break sg_17_0; }
+                pos += 1;
+                break sg_17;
+            }
+            pos = gp_17;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_NUMERIC_LITERAL { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_literal_value(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_NUMERIC_LITERAL { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_BLOB_LITERAL { break try_2; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NULL { break try_3; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_4: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CURRENT_TIME { break try_4; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_5: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CURRENT_DATE { break try_5; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_CURRENT_TIMESTAMP { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_unary_operator(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_TILDE { break try_2; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_error_message(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_column_alias(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_IDENTIFIER { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_keyword(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ABORT { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ACTION { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ADD { break try_2; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_AFTER { break try_3; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_4: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ALL { break try_4; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_5: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ALTER { break try_5; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_6: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ANALYZE { break try_6; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_7: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_AND { break try_7; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_8: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { break try_8; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_9: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ASC { break try_9; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_10: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ATTACH { break try_10; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_11: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_AUTOINCREMENT { break try_11; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_12: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_BEFORE { break try_12; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_13: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_BEGIN { break try_13; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_14: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_BETWEEN { break try_14; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_15: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_BY { break try_15; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_16: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CASCADE { break try_16; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_17: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CASE { break try_17; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_18: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CAST { break try_18; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_19: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CHECK { break try_19; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_20: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_COLLATE { break try_20; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_21: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_COLUMN { break try_21; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_22: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_COMMIT { break try_22; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_23: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CONFLICT { break try_23; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_24: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CONSTRAINT { break try_24; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_25: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CREATE { break try_25; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_26: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CROSS { break try_26; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_27: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CURRENT_DATE { break try_27; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_28: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CURRENT_TIME { break try_28; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_29: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_CURRENT_TIMESTAMP { break try_29; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_30: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_DATABASE { break try_30; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_31: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFAULT { break try_31; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_32: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRABLE { break try_32; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_33: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRED { break try_33; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_34: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_DELETE { break try_34; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_35: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_DESC { break try_35; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_36: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_DETACH { break try_36; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_37: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_DISTINCT { break try_37; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_38: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_DROP { break try_38; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_39: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_EACH { break try_39; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_40: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ELSE { break try_40; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_41: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_END { break try_41; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_42: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ESCAPE { break try_42; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_43: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_EXCEPT { break try_43; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_44: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_EXCLUSIVE { break try_44; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_45: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_EXISTS { break try_45; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_46: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_EXPLAIN { break try_46; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_47: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_FAIL { break try_47; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_48: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_FOR { break try_48; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_49: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_FOREIGN { break try_49; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_50: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_FROM { break try_50; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_51: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_FULL { break try_51; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_52: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_GLOB { break try_52; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_53: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_GROUP { break try_53; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_54: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_HAVING { break try_54; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_55: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_IF { break try_55; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_56: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_IGNORE { break try_56; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_57: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_IMMEDIATE { break try_57; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_58: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_IN { break try_58; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_59: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEX { break try_59; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_60: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break try_60; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_61: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break try_61; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_62: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INNER { break try_62; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_63: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INSERT { break try_63; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_64: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INSTEAD { break try_64; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_65: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INTERSECT { break try_65; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_66: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INTO { break try_66; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_67: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_IS { break try_67; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_68: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ISNULL { break try_68; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_69: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_JOIN { break try_69; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_70: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_KEY { break try_70; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_71: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_LEFT { break try_71; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_72: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_LIKE { break try_72; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_73: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_LIMIT { break try_73; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_74: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_MATCH { break try_74; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_75: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NATURAL { break try_75; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_76: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NO { break try_76; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_77: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { break try_77; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_78: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NOTNULL { break try_78; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_79: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NULL { break try_79; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_80: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_OF { break try_80; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_81: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_OFFSET { break try_81; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_82: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ON { break try_82; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_83: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break try_83; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_84: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ORDER { break try_84; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_85: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_OUTER { break try_85; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_86: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_PLAN { break try_86; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_87: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_PRAGMA { break try_87; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_88: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_PRIMARY { break try_88; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_89: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_QUERY { break try_89; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_90: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_RAISE { break try_90; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_91: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_RECURSIVE { break try_91; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_92: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_REFERENCES { break try_92; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_93: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_REGEXP { break try_93; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_94: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_REINDEX { break try_94; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_95: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_RELEASE { break try_95; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_96: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_RENAME { break try_96; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_97: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_REPLACE { break try_97; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_98: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_RESTRICT { break try_98; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_99: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_RIGHT { break try_99; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_100: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { break try_100; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_101: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ROW { break try_101; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_102: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_SAVEPOINT { break try_102; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_103: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_SELECT { break try_103; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_104: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_SET { break try_104; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_105: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_TABLE { break try_105; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_106: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_TEMP { break try_106; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_107: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_TEMPORARY { break try_107; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_108: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_THEN { break try_108; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_109: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_TO { break try_109; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_110: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_TRANSACTION { break try_110; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_111: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_TRIGGER { break try_111; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_112: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_UNION { break try_112; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_113: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_UNIQUE { break try_113; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_114: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_UPDATE { break try_114; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_115: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_USING { break try_115; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_116: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_VACUUM { break try_116; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_117: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_VALUES { break try_117; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_118: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_VIEW { break try_118; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_119: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_VIRTUAL { break try_119; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_120: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_WHEN { break try_120; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_121: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_WHERE { break try_121; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_122: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_WITH { break try_122; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_WITHOUT { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_function_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_database_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_schema_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_table_function_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_table_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_table_or_index_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_new_table_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_column_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_collation_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_foreign_table(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_index_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_trigger_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_view_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_module_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_pragma_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_savepoint_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_table_alias(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_IDENTIFIER { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+        pos += 1;
+        pos = scan_table_alias(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_transaction_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_any_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_any_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_IDENTIFIER { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_keyword(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { break try_2; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+        pos += 1;
+        pos = scan_any_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
 fn parse_parse(p: &mut Parser) -> Result<ParseNode, ParseError> {
     let start = p.peek().span.start;
     let mut sql_stmt_list_or_error_list: Array<SqlStmtListOrErrorGroup> = [];
@@ -7971,6 +9821,15 @@ fn parse_expr_bt_15(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
+fn parse_expr_scan_15(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_CAST { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let k_case = p.expect(TK_K_CASE)?;
@@ -8018,6 +9877,13 @@ fn parse_expr_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
+fn parse_expr_scan_22(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_CASE { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_expr_bt_21(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let item_k_exists: Option<ItemOptKExistsItem> = if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_EXISTS {
@@ -8050,6 +9916,25 @@ fn parse_expr_bt_21(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
+fn parse_expr_scan_21(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_K_NOT | TK_K_EXISTS } {
+        let sp = pos;
+        if pos < tokens.len() && tokens[pos].kind == TK_K_NOT {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { return -1; }
+            pos += 1;
+            if pos < 0 { pos = sp; }
+        }
+        if pos >= tokens.len() || tokens[pos].kind != TK_K_EXISTS { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_expr_bt_14(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
@@ -8063,6 +9948,13 @@ fn parse_expr_bt_14(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
+fn parse_expr_scan_14(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_expr_bt_23(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let raise_function = parse_raise_function(p)?;
@@ -8072,6 +9964,13 @@ fn parse_expr_bt_23(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
+fn parse_expr_scan_23(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_raise_function(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_expr_bt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let literal_value = parse_literal_value(p)?;
@@ -8079,6 +9978,13 @@ fn parse_expr_bt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
         span: Span::new(start, p.last_end()),
         literal_value,
     }));
+}
+
+fn parse_expr_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_literal_value(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_expr_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
@@ -8134,6 +10040,15 @@ fn parse_expr_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
+fn parse_expr_scan_13(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_function_name(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_expr_bt_3(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let unary_operator = parse_unary_operator(p)?;
@@ -8143,6 +10058,13 @@ fn parse_expr_bt_3(p: &mut Parser) -> Result<ExprNode, ParseError> {
         unary_operator,
         expr,
     }));
+}
+
+fn parse_expr_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_unary_operator(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_expr_bt_2(p: &mut Parser) -> Result<ExprNode, ParseError> {
@@ -8197,110 +10119,151 @@ fn parse_expr_bt_2(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
+fn parse_expr_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+            let sp = pos;
+            pos = scan_database_name(tokens, pos);
+            if pos < 0 { return -1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+            pos += 1;
+            if pos < 0 { pos = sp; }
+        }
+        pos = scan_table_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_column_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_K_CAST | TK_K_CASE | TK_K_NOT | TK_K_EXISTS | TK_LIT_LPAREN | TK_K_RAISE | TK_NUMERIC_LITERAL | TK_STRING_LITERAL | TK_BLOB_LITERAL | TK_K_NULL | TK_K_CURRENT_TIME | TK_K_CURRENT_DATE | TK_K_CURRENT_TIMESTAMP | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOTNULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE } {
         if p.peek_kind() == TK_LIT_LPAREN {
             let saved = p.pos;
-            let r_21 = parse_expr_bt_21(p);
-            if let Err(_) = r_21 {
-                p.pos = saved;
-            } else {
-                return r_21;
+            if parse_expr_scan_21(&p.tokens, p.pos) >= 0 {
+                let r_21 = parse_expr_bt_21(p);
+                if let Err(_) = r_21 {
+                    p.pos = saved;
+                } else {
+                    return r_21;
+                }
             }
-            let r_14 = parse_expr_bt_14(p);
-            if let Err(_) = r_14 {
-                p.pos = saved;
-            } else {
-                return r_14;
+            if parse_expr_scan_14(&p.tokens, p.pos) >= 0 {
+                let r_14 = parse_expr_bt_14(p);
+                if let Err(_) = r_14 {
+                    p.pos = saved;
+                } else {
+                    return r_14;
+                }
             }
-            let r_13 = parse_expr_bt_13(p);
-            if let Err(_) = r_13 {
-                p.pos = saved;
-            } else {
-                return r_13;
+            if parse_expr_scan_13(&p.tokens, p.pos) >= 0 {
+                let r_13 = parse_expr_bt_13(p);
+                if let Err(_) = r_13 {
+                    p.pos = saved;
+                } else {
+                    return r_13;
+                }
             }
             return parse_expr_bt_2(p);
         } else if p.peek_kind() == TK_K_CAST {
             let saved = p.pos;
-            let r_15 = parse_expr_bt_15(p);
-            if let Err(_) = r_15 {
-                p.pos = saved;
-            } else {
-                return r_15;
+            if parse_expr_scan_15(&p.tokens, p.pos) >= 0 {
+                let r_15 = parse_expr_bt_15(p);
+                if let Err(_) = r_15 {
+                    p.pos = saved;
+                } else {
+                    return r_15;
+                }
             }
-            let r_13 = parse_expr_bt_13(p);
-            if let Err(_) = r_13 {
-                p.pos = saved;
-            } else {
-                return r_13;
+            if parse_expr_scan_13(&p.tokens, p.pos) >= 0 {
+                let r_13 = parse_expr_bt_13(p);
+                if let Err(_) = r_13 {
+                    p.pos = saved;
+                } else {
+                    return r_13;
+                }
             }
             return parse_expr_bt_2(p);
         } else if p.peek_kind() == TK_K_CASE {
             let saved = p.pos;
-            let r_22 = parse_expr_bt_22(p);
-            if let Err(_) = r_22 {
-                p.pos = saved;
-            } else {
-                return r_22;
+            if parse_expr_scan_22(&p.tokens, p.pos) >= 0 {
+                let r_22 = parse_expr_bt_22(p);
+                if let Err(_) = r_22 {
+                    p.pos = saved;
+                } else {
+                    return r_22;
+                }
             }
-            let r_13 = parse_expr_bt_13(p);
-            if let Err(_) = r_13 {
-                p.pos = saved;
-            } else {
-                return r_13;
+            if parse_expr_scan_13(&p.tokens, p.pos) >= 0 {
+                let r_13 = parse_expr_bt_13(p);
+                if let Err(_) = r_13 {
+                    p.pos = saved;
+                } else {
+                    return r_13;
+                }
             }
             return parse_expr_bt_2(p);
         } else if p.peek_kind() == TK_K_RAISE {
             let saved = p.pos;
-            let r_23 = parse_expr_bt_23(p);
-            if let Err(_) = r_23 {
-                p.pos = saved;
-            } else {
-                return r_23;
+            if parse_expr_scan_23(&p.tokens, p.pos) >= 0 {
+                return parse_expr_bt_23(p);
             }
-            let r_13 = parse_expr_bt_13(p);
-            if let Err(_) = r_13 {
-                p.pos = saved;
-            } else {
-                return r_13;
+            if parse_expr_scan_13(&p.tokens, p.pos) >= 0 {
+                let r_13 = parse_expr_bt_13(p);
+                if let Err(_) = r_13 {
+                    p.pos = saved;
+                } else {
+                    return r_13;
+                }
             }
             return parse_expr_bt_2(p);
         } else if p.peek_kind() == TK_K_NOT {
             let saved = p.pos;
-            let r_21 = parse_expr_bt_21(p);
-            if let Err(_) = r_21 {
-                p.pos = saved;
-            } else {
-                return r_21;
+            if parse_expr_scan_21(&p.tokens, p.pos) >= 0 {
+                let r_21 = parse_expr_bt_21(p);
+                if let Err(_) = r_21 {
+                    p.pos = saved;
+                } else {
+                    return r_21;
+                }
             }
-            let r_13 = parse_expr_bt_13(p);
-            if let Err(_) = r_13 {
-                p.pos = saved;
-            } else {
-                return r_13;
+            if parse_expr_scan_13(&p.tokens, p.pos) >= 0 {
+                let r_13 = parse_expr_bt_13(p);
+                if let Err(_) = r_13 {
+                    p.pos = saved;
+                } else {
+                    return r_13;
+                }
             }
-            let r_2 = parse_expr_bt_2(p);
-            if let Err(_) = r_2 {
-                p.pos = saved;
-            } else {
-                return r_2;
+            if parse_expr_scan_2(&p.tokens, p.pos) >= 0 {
+                return parse_expr_bt_2(p);
             }
             return parse_expr_bt_3(p);
         } else if p.peek_kind() == TK_K_EXISTS {
             let saved = p.pos;
-            let r_21 = parse_expr_bt_21(p);
-            if let Err(_) = r_21 {
-                p.pos = saved;
-            } else {
-                return r_21;
+            if parse_expr_scan_21(&p.tokens, p.pos) >= 0 {
+                let r_21 = parse_expr_bt_21(p);
+                if let Err(_) = r_21 {
+                    p.pos = saved;
+                } else {
+                    return r_21;
+                }
             }
-            let r_13 = parse_expr_bt_13(p);
-            if let Err(_) = r_13 {
-                p.pos = saved;
-            } else {
-                return r_13;
+            if parse_expr_scan_13(&p.tokens, p.pos) >= 0 {
+                let r_13 = parse_expr_bt_13(p);
+                if let Err(_) = r_13 {
+                    p.pos = saved;
+                } else {
+                    return r_13;
+                }
             }
             return parse_expr_bt_2(p);
         } else if p.peek_kind() matches { TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE } {
@@ -8309,26 +10272,27 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
             return parse_expr_bt_0(p);
         } else if p.peek_kind() matches { TK_STRING_LITERAL | TK_K_NULL | TK_K_CURRENT_TIME | TK_K_CURRENT_DATE | TK_K_CURRENT_TIMESTAMP } {
             let saved = p.pos;
-            let r_0 = parse_expr_bt_0(p);
-            if let Err(_) = r_0 {
-                p.pos = saved;
-            } else {
-                return r_0;
+            if parse_expr_scan_0(&p.tokens, p.pos) >= 0 {
+                return parse_expr_bt_0(p);
             }
-            let r_13 = parse_expr_bt_13(p);
-            if let Err(_) = r_13 {
-                p.pos = saved;
-            } else {
-                return r_13;
+            if parse_expr_scan_13(&p.tokens, p.pos) >= 0 {
+                let r_13 = parse_expr_bt_13(p);
+                if let Err(_) = r_13 {
+                    p.pos = saved;
+                } else {
+                    return r_13;
+                }
             }
             return parse_expr_bt_2(p);
         } else if p.peek_kind() matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOTNULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT } {
             let saved = p.pos;
-            let r_13 = parse_expr_bt_13(p);
-            if let Err(_) = r_13 {
-                p.pos = saved;
-            } else {
-                return r_13;
+            if parse_expr_scan_13(&p.tokens, p.pos) >= 0 {
+                let r_13 = parse_expr_bt_13(p);
+                if let Err(_) = r_13 {
+                    p.pos = saved;
+                } else {
+                    return r_13;
+                }
             }
             return parse_expr_bt_2(p);
         }
@@ -9348,6 +11312,13 @@ fn parse_pragma_value_bt_1(p: &mut Parser) -> Result<PragmaValueNode, ParseError
     }));
 }
 
+fn parse_pragma_value_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_pragma_value_bt_2(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
     let start = p.peek().span.start;
     let string_literal = p.expect(TK_STRING_LITERAL)?;
@@ -9355,6 +11326,13 @@ fn parse_pragma_value_bt_2(p: &mut Parser) -> Result<PragmaValueNode, ParseError
         span: Span::new(start, p.last_end()),
         string_literal,
     }));
+}
+
+fn parse_pragma_value_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn parse_pragma_value(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
@@ -9369,12 +11347,8 @@ fn parse_pragma_value(p: &mut Parser) -> Result<PragmaValueNode, ParseError> {
     }
     if kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
         if p.peek_kind() == TK_STRING_LITERAL {
-            let saved = p.pos;
-            let r_1 = parse_pragma_value_bt_1(p);
-            if let Err(_) = r_1 {
-                p.pos = saved;
-            } else {
-                return r_1;
+            if parse_pragma_value_scan_1(&p.tokens, p.pos) >= 0 {
+                return parse_pragma_value_bt_1(p);
             }
             return parse_pragma_value_bt_2(p);
         } else if p.peek_kind() matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_LIT_LPAREN } {
@@ -9443,6 +11417,17 @@ fn parse_result_column_bt_1(p: &mut Parser) -> Result<ResultColumnNode, ParseErr
     }));
 }
 
+fn parse_result_column_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_table_name(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_result_column_bt_2(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
     let start = p.peek().span.start;
     let expr = parse_expr(p)?;
@@ -9489,12 +11474,8 @@ fn parse_result_column(p: &mut Parser) -> Result<ResultColumnNode, ParseError> {
     }
     if kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN | TK_NUMERIC_LITERAL | TK_BLOB_LITERAL | TK_BIND_PARAMETER | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE } {
         if p.peek_kind() matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
-            let saved = p.pos;
-            let r_1 = parse_result_column_bt_1(p);
-            if let Err(_) = r_1 {
-                p.pos = saved;
-            } else {
-                return r_1;
+            if parse_result_column_scan_1(&p.tokens, p.pos) >= 0 {
+                return parse_result_column_bt_1(p);
             }
             return parse_result_column_bt_2(p);
         } else if p.peek_kind() matches { TK_NUMERIC_LITERAL | TK_BLOB_LITERAL | TK_BIND_PARAMETER | TK_LIT_MINUS | TK_LIT_PLUS | TK_LIT_TILDE } {
@@ -9546,6 +11527,13 @@ fn parse_table_or_subquery_bt_3(p: &mut Parser) -> Result<TableOrSubqueryNode, P
     }));
 }
 
+fn parse_table_or_subquery_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_table_or_subquery_bt_2(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LIT_LPAREN)?;
@@ -9591,6 +11579,13 @@ fn parse_table_or_subquery_bt_2(p: &mut Parser) -> Result<TableOrSubqueryNode, P
         group_1,
         rparen,
     }));
+}
+
+fn parse_table_or_subquery_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
@@ -9680,6 +11675,23 @@ fn parse_table_or_subquery_bt_1(p: &mut Parser) -> Result<TableOrSubqueryNode, P
     }));
 }
 
+fn parse_table_or_subquery_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        pos = scan_schema_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_table_function_name(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_table_or_subquery_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let schema_name_dot: Option<SchemaNameDotItem> = if p.peek_kind() matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
@@ -9763,38 +11775,94 @@ fn parse_table_or_subquery_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, P
     }));
 }
 
+fn parse_table_or_subquery_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        pos = scan_schema_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_table_name(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_K_AS | TK_IDENTIFIER | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+        let sp = pos;
+        if pos < tokens.len() && tokens[pos].kind == TK_K_AS {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { pos = -1; } else { pos += 1; }
+            if pos < 0 { pos = sp; }
+        }
+        pos = scan_table_alias(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_K_INDEXED | TK_K_NOT } {
+        let sp = pos;
+        let gp_18 = pos;
+        sg_18: {
+            pos = gp_18;
+            sg_18_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_18_0; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_BY { break sg_18_0; }
+                pos += 1;
+                pos = scan_index_name(tokens, pos);
+                if pos < 0 { break sg_18_0; }
+                break sg_18;
+            }
+            pos = gp_18;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { return -1; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
 fn parse_table_or_subquery(p: &mut Parser) -> Result<TableOrSubqueryNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_LIT_LPAREN | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL } {
         if p.peek_kind() == TK_LIT_LPAREN {
             let saved = p.pos;
-            let r_3 = parse_table_or_subquery_bt_3(p);
-            if let Err(_) = r_3 {
-                p.pos = saved;
-            } else {
-                return r_3;
+            if parse_table_or_subquery_scan_3(&p.tokens, p.pos) >= 0 {
+                let r_3 = parse_table_or_subquery_bt_3(p);
+                if let Err(_) = r_3 {
+                    p.pos = saved;
+                } else {
+                    return r_3;
+                }
             }
-            let r_2 = parse_table_or_subquery_bt_2(p);
-            if let Err(_) = r_2 {
-                p.pos = saved;
-            } else {
-                return r_2;
+            if parse_table_or_subquery_scan_2(&p.tokens, p.pos) >= 0 {
+                let r_2 = parse_table_or_subquery_bt_2(p);
+                if let Err(_) = r_2 {
+                    p.pos = saved;
+                } else {
+                    return r_2;
+                }
             }
-            let r_1 = parse_table_or_subquery_bt_1(p);
-            if let Err(_) = r_1 {
-                p.pos = saved;
-            } else {
-                return r_1;
+            if parse_table_or_subquery_scan_1(&p.tokens, p.pos) >= 0 {
+                let r_1 = parse_table_or_subquery_bt_1(p);
+                if let Err(_) = r_1 {
+                    p.pos = saved;
+                } else {
+                    return r_1;
+                }
             }
             return parse_table_or_subquery_bt_0(p);
         } else if p.peek_kind() matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL } {
             let saved = p.pos;
-            let r_1 = parse_table_or_subquery_bt_1(p);
-            if let Err(_) = r_1 {
-                p.pos = saved;
-            } else {
-                return r_1;
+            if parse_table_or_subquery_scan_1(&p.tokens, p.pos) >= 0 {
+                let r_1 = parse_table_or_subquery_bt_1(p);
+                if let Err(_) = r_1 {
+                    p.pos = saved;
+                } else {
+                    return r_1;
+                }
             }
             return parse_table_or_subquery_bt_0(p);
         }
@@ -10139,6 +12207,15 @@ fn parse_compound_operator_bt_1(p: &mut Parser) -> Result<CompoundOperatorNode, 
     }));
 }
 
+fn parse_compound_operator_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_UNION { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_ALL { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_compound_operator_bt_0(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {
     let start = p.peek().span.start;
     let k_union = p.expect(TK_K_UNION)?;
@@ -10146,6 +12223,13 @@ fn parse_compound_operator_bt_0(p: &mut Parser) -> Result<CompoundOperatorNode, 
         span: Span::new(start, p.last_end()),
         k_union,
     }));
+}
+
+fn parse_compound_operator_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_K_UNION { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn parse_compound_operator(p: &mut Parser) -> Result<CompoundOperatorNode, ParseError> {

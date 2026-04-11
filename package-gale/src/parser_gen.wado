@@ -1,4 +1,4 @@
-use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement } from "./ir.wado";
+use { Grammar, ParserRule, Alternative, Element, RepeatElement, RepeatKind, LabelElement } from "./ir.wado";
 use {
     to_lower,
     to_snake_case,
@@ -1019,6 +1019,7 @@ fn count_leaf_nodes(node: &PredictionNode) -> i32 {
 
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
     gen_parser_struct(w);
+    gen_scan_functions(w, grammar, ctx);
     for let rule of grammar.parser_rules {
         gen_parse_fn(w, &rule, ctx);
     }
@@ -1127,6 +1128,303 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.blank();
 }
 
+// --- Alternative Scan Helpers ---
+// For each alternative in a Backtrack group that has a scannable prefix,
+// generate a scan_<rule>_bt_<N> function. This function scans only the
+// scannable prefix of the alternative, which is enough to distinguish it
+// from other alternatives without full speculative parsing.
+
+/// Returns the number of leading elements in the alternative that are scannable.
+/// Stops at the first unscannable element (e.g., a RuleRef to `expr`).
+fn scannable_prefix_len(elements: &Array<Element>, ctx: &mut GenContext) -> i32 {
+    let mut count: i32 = 0;
+    for let elem of elements {
+        let mut visiting: Array<String> = [];
+        if !ctx.is_element_scannable(elem, &mut visiting) {
+            break;
+        }
+        count += 1;
+    }
+    return count;
+}
+
+/// Generate a scan function for a backtracking alternative if it has at least
+/// one scannable leading element. The scan covers the scannable prefix only.
+fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, fn_name: &String, alt_idx: i32, ctx: &mut GenContext) {
+    let prefix_len = scannable_prefix_len(&alt.elements, ctx);
+    if prefix_len == 0 {
+        return;
+    }
+
+    let scan_name = `{*fn_name}_scan_{alt_idx}`;
+
+    let mut f = FnSpec::new(&scan_name);
+    f.add_param("tokens", "&Array<Token>");
+    f.add_param("pos", "i32");
+    f.set_return_type("i32");
+    f.emit_begin(w);
+    w.line("let mut pos = pos;");
+
+    for let mut i = 0; i < prefix_len; i += 1 {
+        gen_scan_element(w, &alt.elements[i], ctx);
+    }
+
+    w.line("return pos;");
+    w.end();
+    w.blank();
+}
+
+/// Returns true if the alternative has a generated scan function (has scannable prefix).
+fn alt_has_scan(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
+    return scannable_prefix_len(elements, ctx) > 0;
+}
+
+/// Returns true if the scan function covers the entire alternative (all elements are scannable).
+/// When true, a scan success guarantees parse success so no fallthrough is needed.
+fn alt_scan_is_full(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
+    return scannable_prefix_len(elements, ctx) == elements.len();
+}
+
+// --- Scan Function Generation ---
+// Scan functions recognize parser rules by walking token kinds without building
+// CST nodes or constructing error messages. They return the token position after
+// successful recognition, or -1 on failure. Used to disambiguate Backtrack
+// alternatives without expensive speculative parsing.
+
+fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
+    for let rule of grammar.parser_rules {
+        let mut visiting: Array<String> = [];
+        if ctx.is_rule_scannable(&rule.name, &mut visiting) {
+            gen_scan_function(w, &rule, ctx);
+        }
+    }
+}
+
+fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
+    let fn_name = `scan_{to_snake_case(&rule.name)}`;
+
+    let mut f = FnSpec::new(&fn_name);
+    f.add_param("tokens", "&Array<Token>");
+    f.add_param("pos", "i32");
+    f.set_return_type("i32");
+    f.emit_begin(w);
+
+    if rule.alternatives.len() == 1 {
+        w.line("let mut pos = pos;");
+        for let elem of &rule.alternatives[0].elements {
+            gen_scan_element(w, elem, ctx);
+        }
+        w.line("return pos;");
+    } else {
+        gen_scan_multi_alt(w, &rule.alternatives, ctx);
+    }
+
+    w.end();
+    w.blank();
+}
+
+/// Generate scan code that tries multiple alternatives in order.
+/// Uses an outer labeled block: on success, `break` skips remaining alts.
+/// The last alternative uses `return -1` on failure.
+fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext) {
+    w.line("let mut pos = pos;");
+    w.line("let start = pos;");
+    w.begin("scan_alts:");
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let alt = &alts[i];
+        let is_last = i == alts.len() - 1;
+        if is_last {
+            w.line("pos = start;");
+            for let elem of &alt.elements {
+                gen_scan_element(w, elem, ctx);
+            }
+        } else {
+            let label = `try_{i}`;
+            w.line("pos = start;");
+            w.begin(`{label}:`);
+            for let elem of &alt.elements {
+                gen_scan_element_in_block(w, elem, ctx, &label);
+            }
+            w.line("break scan_alts;");
+            w.end();
+        }
+    }
+    w.end();
+    w.line("return pos;");
+}
+
+/// Generate scan code for a single element. On failure, emits `return -1;`.
+fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext) {
+    if let Label(lab) = elem {
+        gen_scan_element(w, &lab.element, ctx);
+        return;
+    }
+    if let TokenRef(name) = elem {
+        let const_name = `TK_{name}`;
+        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ return -1; \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let Literal(text) = elem {
+        let const_name = literal_const_name(text);
+        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ return -1; \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let RuleRef(name) = elem {
+        let fn_name = `scan_{to_snake_case(name)}`;
+        w.line(`pos = {fn_name}(tokens, pos);`);
+        w.line("if pos < 0 { return -1; }");
+        return;
+    }
+    if let Repeat(rep) = elem {
+        gen_scan_repeat(w, rep, ctx);
+        return;
+    }
+    if let Group(alts) = elem {
+        gen_scan_group(w, alts, ctx);
+        return;
+    }
+}
+
+/// Generate scan code for a single element inside a labeled block.
+/// On failure, emits `break <label>;` instead of `return -1;`.
+fn gen_scan_element_in_block(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, label: &String) {
+    if let Label(lab) = elem {
+        gen_scan_element_in_block(w, &lab.element, ctx, label);
+        return;
+    }
+    if let TokenRef(name) = elem {
+        let const_name = `TK_{name}`;
+        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ break {*label}; \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let Literal(text) = elem {
+        let const_name = literal_const_name(text);
+        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ break {*label}; \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let RuleRef(name) = elem {
+        let fn_name = `scan_{to_snake_case(name)}`;
+        w.line(`pos = {fn_name}(tokens, pos);`);
+        w.line(`if pos < 0 \{ break {*label}; \}`);
+        return;
+    }
+    if let Repeat(rep) = elem {
+        gen_scan_repeat(w, rep, ctx);
+        return;
+    }
+    if let Group(alts) = elem {
+        gen_scan_group(w, alts, ctx);
+        return;
+    }
+}
+
+fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext) {
+    let mut visiting: Array<String> = [];
+    let inner_first = ctx.first_of_element(&rep.element, &mut visiting);
+    let check = kind_check_str(&inner_first, "tokens[pos].kind");
+
+    if let Optional = rep.kind {
+        w.begin(`if pos < tokens.len() && {check}`);
+        w.line("let sp = pos;");
+        gen_scan_element_assign(w, &rep.element, ctx);
+        w.line("if pos < 0 { pos = sp; }");
+        w.end();
+        return;
+    }
+    if let Star = rep.kind {
+        w.begin(`while pos < tokens.len() && {check}`);
+        w.line("let sp = pos;");
+        gen_scan_element_assign(w, &rep.element, ctx);
+        w.line("if pos < 0 { pos = sp; break; }");
+        w.end();
+        return;
+    }
+    if let Plus = rep.kind {
+        // First iteration is mandatory.
+        gen_scan_element(w, &rep.element, ctx);
+        w.begin(`while pos < tokens.len() && {check}`);
+        w.line("let sp = pos;");
+        gen_scan_element_assign(w, &rep.element, ctx);
+        w.line("if pos < 0 { pos = sp; break; }");
+        w.end();
+        return;
+    }
+}
+
+/// Emit scan code for an element that assigns to `pos` (may set -1 on failure).
+/// Used inside optional/repetition blocks where failure means backtrack, not abort.
+fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext) {
+    if let Label(lab) = elem {
+        gen_scan_element_assign(w, &lab.element, ctx);
+        return;
+    }
+    if let TokenRef(name) = elem {
+        let const_name = `TK_{name}`;
+        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ pos = -1; \} else \{ pos += 1; \}`);
+        return;
+    }
+    if let Literal(text) = elem {
+        let const_name = literal_const_name(text);
+        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ pos = -1; \} else \{ pos += 1; \}`);
+        return;
+    }
+    if let RuleRef(name) = elem {
+        let fn_name = `scan_{to_snake_case(name)}`;
+        w.line(`pos = {fn_name}(tokens, pos);`);
+        return;
+    }
+    if let Group(alts) = elem {
+        gen_scan_group(w, alts, ctx);
+        return;
+    }
+    if let Repeat(rep) = elem {
+        gen_scan_repeat(w, rep, ctx);
+        return;
+    }
+}
+
+global mut SCAN_GROUP_COUNTER: i32 = 0;
+
+fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext) {
+    if alts.len() == 1 {
+        for let elem of &alts[0].elements {
+            gen_scan_element(w, elem, ctx);
+        }
+        return;
+    }
+    // Multi-alternative group: try each alternative.
+    let gc = SCAN_GROUP_COUNTER;
+    SCAN_GROUP_COUNTER += 1;
+    let outer = `sg_{gc}`;
+    let gp_var = `gp_{gc}`;
+    w.line(`let {gp_var} = pos;`);
+    w.begin(`{outer}:`);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let alt = &alts[i];
+        let is_last = i == alts.len() - 1;
+        if is_last {
+            w.line(`pos = {gp_var};`);
+            for let elem of &alt.elements {
+                gen_scan_element(w, elem, ctx);
+            }
+        } else {
+            let inner = `sg_{gc}_{i}`;
+            w.line(`pos = {gp_var};`);
+            w.begin(`{inner}:`);
+            for let elem of &alt.elements {
+                gen_scan_element_in_block(w, elem, ctx, &inner);
+            }
+            w.line(`break {outer};`);
+            w.end();
+        }
+    }
+    w.end();
+}
+
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     ctx.current_rule_name = rule.name;
     ctx.group_counter = 0;
@@ -1219,6 +1517,11 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
                     );
                     w.end();
                     w.blank();
+
+                    // Generate scan helper for this alternative if it has a
+                    // scannable prefix (at least one scannable element before
+                    // the first unscannable one).
+                    gen_bt_scan_if_possible(w, alt, &fn_name, alt_idx, ctx);
                 }
             }
         }
@@ -3606,19 +3909,100 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         let mut sorted_indices = indices.sorted();
         sort_group_by_element_count(&mut sorted_indices, alts);
         if skip == 0 {
-            w.line("let saved = p.pos;");
-            for let mut i = 0; i < sorted_indices.len(); i += 1 {
+            // Check if any alternatives have scan functions available.
+            // If ALL non-last alternatives have scans, we can eliminate
+            // backtracking entirely: scan each, parse the winner.
+            // If some have scans and some don't, use a hybrid approach.
+            let mut all_have_scans = true;
+            for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
                 let idx = sorted_indices[i];
-                let is_last = i == sorted_indices.len() - 1;
-                if is_last {
-                    w.line(`return {*fn_name}_bt_{idx}(p);`);
+                if !alt_has_scan(&alts[idx].elements, ctx) {
+                    all_have_scans = false;
+                    break;
+                }
+            }
+
+            if all_have_scans && sorted_indices.len() >= 2 {
+                // All non-last alternatives have scan functions.
+                // Check if ALL scans are full (cover entire alternative).
+                let mut all_full = true;
+                for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
+                    let idx = sorted_indices[i];
+                    if !alt_scan_is_full(&alts[idx].elements, ctx) {
+                        all_full = false;
+                        break;
+                    }
+                }
+
+                if all_full {
+                    // All scans cover entire alternatives — scan success
+                    // guarantees parse success, no save/restore needed.
+                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                        let idx = sorted_indices[i];
+                        let is_last = i == sorted_indices.len() - 1;
+                        if is_last {
+                            w.line(`return {*fn_name}_bt_{idx}(p);`);
+                        } else {
+                            w.begin(`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                            w.line(`return {*fn_name}_bt_{idx}(p);`);
+                            w.end();
+                        }
+                    }
                 } else {
-                    w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
-                    w.begin(`if let Err(_) = r_{idx}`);
-                    w.line("p.pos = saved;");
-                    w.else_begin("else");
-                    w.line(`return r_{idx};`);
-                    w.end();
+                    // Some scans are partial — scan success is a hint,
+                    // not a guarantee. Use save/restore with scan guards.
+                    w.line("let saved = p.pos;");
+                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                        let idx = sorted_indices[i];
+                        let is_last = i == sorted_indices.len() - 1;
+                        if is_last {
+                            w.line(`return {*fn_name}_bt_{idx}(p);`);
+                        } else {
+                            let has_scan = alt_has_scan(&alts[idx].elements, ctx);
+                            let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
+                            if is_full {
+                                // Full scan: success guarantees parse success.
+                                w.begin(`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                w.line(`return {*fn_name}_bt_{idx}(p);`);
+                                w.end();
+                            } else if has_scan {
+                                // Partial scan: try parse, fall through on failure.
+                                w.begin(`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                                w.begin(`if let Err(_) = r_{idx}`);
+                                w.line("p.pos = saved;");
+                                w.else_begin("else");
+                                w.line(`return r_{idx};`);
+                                w.end();
+                                w.end();
+                            } else {
+                                // No scan: full backtracking.
+                                w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                                w.begin(`if let Err(_) = r_{idx}`);
+                                w.line("p.pos = saved;");
+                                w.else_begin("else");
+                                w.line(`return r_{idx};`);
+                                w.end();
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Fallback: original backtracking pattern.
+                w.line("let saved = p.pos;");
+                for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                    let idx = sorted_indices[i];
+                    let is_last = i == sorted_indices.len() - 1;
+                    if is_last {
+                        w.line(`return {*fn_name}_bt_{idx}(p);`);
+                    } else {
+                        w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                        w.begin(`if let Err(_) = r_{idx}`);
+                        w.line("p.pos = saved;");
+                        w.else_begin("else");
+                        w.line(`return r_{idx};`);
+                        w.end();
+                    }
                 }
             }
         } else {

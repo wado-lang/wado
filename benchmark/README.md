@@ -91,8 +91,8 @@ Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlpa
 
 | Implementation             |     Time | vs best |
 | -------------------------- | -------: | ------: |
-| sqlparser-rs (Rust native) |   173 ms |   1.00x |
-| **Wado** (Gale)            | 2,137 ms |  12.35x |
+| sqlparser-rs (Rust native) |   189 ms |   1.00x |
+| **Wado** (Gale)            | 1,305 ms |   6.91x |
 
 ## Syntax Highlight
 

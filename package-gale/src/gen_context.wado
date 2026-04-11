@@ -9,6 +9,7 @@ pub struct GenContext {
     rule_index: TreeMap<String, i32>,
     first_cache: TreeMap<String, Array<String>>,
     single_token_cache: TreeMap<String, bool>,
+    scannable_cache: TreeMap<String, bool>,
     pub current_rule_name: String,
     pub group_counter: i32,
     pub alt_gc_starts: Array<i32>,
@@ -30,6 +31,7 @@ impl GenContext {
             rule_index,
             first_cache: TreeMap::<String, Array<String>>::new(),
             single_token_cache: TreeMap::<String, bool>::new(),
+            scannable_cache: TreeMap::<String, bool>::new(),
             current_rule_name: "",
             group_counter: 0,
             alt_gc_starts: [],
@@ -207,6 +209,85 @@ impl GenContext {
         return result;
     }
 
+    /// Returns true if the rule can be recognized by a bounded token scan.
+    /// A rule is scannable if it does not transitively reference any rule that
+    /// has left-recursive alternatives. Left-recursive rules (like `expr`) can
+    /// span arbitrarily large input, making scanning as expensive as parsing.
+    /// Self-recursive but non-left-recursive rules (like `any_name`) are
+    /// scannable because their recursion is bounded by delimiters.
+    pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
+        let cached = self.scannable_cache.get(*name);
+        if let Some(val) = cached {
+            return val;
+        }
+
+        let visiting_set = str_set_from(visiting);
+        if visiting_set.contains(*name) {
+            // Cycle back to a rule we're already checking — this is fine for
+            // non-left-recursive rules (bounded recursion). Return true here;
+            // if the rule is left-recursive, it will be caught by the
+            // has_left_recursive_alt check on the initial call.
+            return true;
+        }
+
+        let is_top_level = visiting.is_empty();
+        visiting.push(*name);
+
+        let mut result = false;
+        let rule = self.find_rule(name);
+        if let Some(rule) = rule {
+            if has_left_recursive_alt(&rule.alternatives, name) {
+                // Left-recursive rules are not scannable.
+                result = false;
+            } else {
+                let mut all_ok = true;
+                for let alt of &rule.alternatives {
+                    if !self.is_alt_scannable(&alt.elements, visiting) {
+                        all_ok = false;
+                        break;
+                    }
+                }
+                result = all_ok;
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if is_top_level {
+            self.scannable_cache[*name] = result;
+        }
+
+        return result;
+    }
+
+    /// Returns true if every element in the sequence is scannable.
+    fn is_alt_scannable(&mut self, elements: &Array<Element>, visiting: &mut Array<String>) -> bool {
+        for let elem of elements {
+            if !self.is_element_scannable(elem, visiting) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Returns true if a single element is scannable.
+    fn is_element_scannable(&mut self, elem: &Element, visiting: &mut Array<String>) -> bool {
+        return match elem {
+            TokenRef(_) | Literal(_) => true,
+            RuleRef(name) => self.is_rule_scannable(name, visiting),
+            Label(lab) => self.is_element_scannable(&lab.element, visiting),
+            Repeat(rep) => self.is_element_scannable(&rep.element, visiting),
+            Group(alts) => {
+                for let alt of alts {
+                    if !self.is_alt_scannable(&alt.elements, visiting) {
+                        return false;
+                    }
+                }
+                return true;
+            },
+        };
+    }
+
     /// Get the rule name that owns the general group types inside a given
     /// single-alt group. Returns the current_rule_name if no shared group found.
     pub fn general_group_rule_name(&self, single_alt_type_name: &String) -> String {
@@ -272,6 +353,33 @@ fn extract_group_alts_for_scan(elem: &Element) -> Option<&Array<Alternative>> {
         }
     }
     return null;
+}
+
+/// Returns true if any alternative starts with a direct reference to the
+/// given rule name (left-recursive). Unwraps labels and skips nullable
+/// elements to find the first non-nullable element.
+fn has_left_recursive_alt(alternatives: &Array<Alternative>, rule_name: &String) -> bool {
+    for let alt of alternatives {
+        for let elem of &alt.elements {
+            let inner = unwrap_labels(elem);
+            if let RuleRef(name) = inner {
+                if *name == *rule_name {
+                    return true;
+                }
+            }
+            if !is_nullable(elem) {
+                break;
+            }
+        }
+    }
+    return false;
+}
+
+fn unwrap_labels(elem: &Element) -> &Element with stores[elem] {
+    if let Label(lab) = elem {
+        return unwrap_labels(&lab.element);
+    }
+    return elem;
 }
 
 pub fn is_nullable(elem: &Element) -> bool {
