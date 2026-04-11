@@ -419,19 +419,30 @@ impl StreamWritable<u8> for MockCM {
 }
 ```
 
-Future and FutureWritable use type-erased storage to handle generic `Future<T>`:
+Future and FutureWritable use `&T` references for type-erased storage (GC keeps values alive):
 
 ```wado
+struct MockCMFutureSlot {
+    mut value: Option<&()>,  // type-erased: &T cast to &()
+}
+
+// MockCM also has:
+//   mut future_slots: Array<MockCMFutureSlot>,
+
 impl<T> Future<T> for MockCM {
     fn new(&mut self) -> [Future<T>, FutureWritable<T>] {
-        let id = self.future_count;
-        self.future_count += 1;
+        let id = self.future_slots.len();
+        self.future_slots.push(MockCMFutureSlot { value: null });
         resume [id as Future<T>, id as FutureWritable<T>]
     }
 
     fn read(&self, f: &Future<T>) -> Option<T> {
-        // type-erased lookup; returns stored value if written
-        ..
+        let id = *f as i32;
+        if let Some(erased) = self.future_slots[id].value {
+            let ref = erased as &T;  // cast back to original type
+            resume Option::Some(*ref)
+        }
+        resume null
     }
 
     fn drop(&self, f: &Future<T>) { resume () }
@@ -440,7 +451,8 @@ impl<T> Future<T> for MockCM {
 
 impl<T> FutureWritable<T> for MockCM {
     fn write(&mut self, fw: &FutureWritable<T>, value: T) {
-        // store value (type-erased) for later read
+        let id = *fw as i32;
+        self.future_slots[id].value = Option::Some(&value as &());  // type-erase via &()
         resume ()
     }
 
