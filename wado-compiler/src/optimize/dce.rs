@@ -58,82 +58,23 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
 
 /// Compute reachable functions from all entry points via call graph traversal.
 ///
-/// Entry points include: world exports, test functions, `wasm_module` exports,
-/// and HTTP handler helpers.
+/// Entry points are functions marked `is_export` (user-declared `export fn`) or
+/// `is_cm_export` (synthesized CM export wrappers).
 fn compute_reachable_from_entries(
     project: &FlatPackage,
     call_graph: &CallGraph,
 ) -> IndexSet<FunctionId> {
-    // Determine entry functions from world exports.
-    // For the test world, test functions are the sole entry points; world exports
-    // (like `run`) are only reachable if tests transitively call them.
-    let mut entry_func_names: Vec<String> = if project.is_test_world() {
-        vec![]
-    } else {
-        project
-            .world_registry
-            .get(&project.target_world)
-            .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
-            .unwrap_or_else(|| vec!["run".to_string()])
-    };
-
-    // Include export adapter functions as additional entry points
-    // (they wrap the user's export functions with CM boundary logic)
-    for binding_name in project.export_binding_names.values() {
-        entry_func_names.push(binding_name.clone());
-    }
-
-    // Compute reachable functions from all entry points
     let mut reachable = IndexSet::default();
-    for entry_name in &entry_func_names {
-        let entry_func = FunctionId::Free(FreeFunctionName::from_module_source(
-            &project.entry_module_source,
-            entry_name,
-        ));
-        let entry_reachable = compute_reachable(call_graph, &entry_func);
-        reachable.extend(entry_reachable);
-    }
 
-    // Add test functions as entry points only when targeting the test world.
-    // For non-test worlds (command, service, …), tests are dead code.
-    if project.is_test_world() {
-        for test in &project.tests {
-            let test_func = FunctionId::Free(FreeFunctionName::from_module_source(
-                &project.entry_module_source,
-                &test.function_name,
-            ));
-            let test_reachable = compute_reachable(call_graph, &test_func);
-            reachable.extend(test_reachable);
-        }
-    }
-
-    // Mark exported functions from #![wasm_module] sources as reachable.
-    // These are compiled into separate wasm modules and must not be eliminated.
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if project
-            .wasm_module_sources
-            .contains_key(&func.module_source)
-            && func.is_export
-        {
+        if func.is_cm_export || func.is_export {
             let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
                 &func.module_source,
                 &func.name,
             ));
-            let wasm_mod_reachable = compute_reachable(call_graph, &func_id);
-            reachable.extend(wasm_mod_reachable);
+            reachable.extend(compute_reachable(call_graph, &func_id));
         }
-    }
-
-    // HTTP handler exports need cm_lower_string for ErrorCode payload lowering
-    // (ErrorCode variant cases can contain Option<String> payloads).
-    // This is used in the component export path, not via TIR call graph.
-    if project.has_http_handler_export {
-        let func = FunctionId::Free(FreeFunctionName::from_strs(
-            &["core", "internal"],
-            "cm_lower_string",
-        ));
-        reachable.extend(compute_reachable(call_graph, &func));
     }
 
     reachable
