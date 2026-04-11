@@ -362,6 +362,117 @@ test "http client mock" {
 
 Standard library test handlers (e.g., `core:test`) will be provided to reduce boilerplate for common WASI effects.
 
+#### Stdout Handler: Stream Timing and Two Patterns
+
+Stdout has a single operation: `fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>`. Handling it requires understanding the timing of stream data. Consider `println`:
+
+```wado
+pub fn println(message: String) with Stdout {
+    let [rx, tx] = Stream::<u8>::new();           // 1. stream pair (CM runtime, forwarded)
+    let handle = Stdout::write_via_stream(rx);    // 2. handler intercepts here
+    write_to_stream(tx, message, true);           // 3. data written to tx AFTER handler returns
+    drop_cli_write_future(handle);                // 4. drop the Future
+}
+```
+
+When the handler is called at step 2, the stream `data` (rx) is empty — the caller writes to tx at step 3, after `resume`. Stream and Future operations are resource effects that forward to the outer scope (CM runtime), so the handler only intercepts `write_via_stream` itself.
+
+##### No Post-Resume Pattern
+
+Store the stream's readable end and read after the `do` block. No Stack Switching required — `resume` compiles to `return`.
+
+```wado
+struct MockStdout {
+    mut streams: Array<Stream<u8>>,
+}
+
+impl Stdout for MockStdout {
+    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+        self.streams.push(data);
+        let [f, ftx] = Future::<Result<(), ErrorCode>>::new();
+        ftx.write(Result::<(), ErrorCode>::Ok(()));
+        ftx.drop();
+        resume f  // no post-resume → compiles to return
+    }
+}
+
+impl MockStdout {
+    fn drain(&mut self) -> String {
+        let mut result = String::with_capacity(256);
+        for let stream of self.streams {
+            loop {
+                let chunk = stream.read(4096);
+                if chunk.is_empty() { break; }
+                result.push_str(String::from_utf8(chunk));
+            }
+            stream.drop();
+        }
+        self.streams = [];
+        return result;
+    }
+}
+
+test "println captures output" {
+    let mut mock = MockStdout { streams: [] };
+    with Stdout = &mut mock do {
+        println("hello");
+        println("world");
+    }
+    // After do block: writable ends are closed, readable ends have data
+    let output = mock.drain();
+    assert output == "hello\nworld\n";
+}
+```
+
+##### Post-Resume Pattern
+
+Read stream data automatically after each `resume`. Requires Wasm Stack Switching.
+
+```wado
+struct BufferingStdout {
+    mut chunks: Array<String>,
+}
+
+impl Stdout for BufferingStdout {
+    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+        let pos = self.chunks.len();
+        self.chunks.push("");  // placeholder
+        let [f, ftx] = Future::<Result<(), ErrorCode>>::new();
+        resume f;
+        // Post-resume: caller has written to tx and dropped it
+        let mut bytes: Array<u8> = [];
+        loop {
+            let chunk = data.read(4096);
+            if chunk.is_empty() { break; }
+            for let b of chunk { bytes.push(b); }
+        }
+        data.drop();
+        self.chunks[pos] = String::from_utf8(bytes);
+        ftx.write(Result::<(), ErrorCode>::Ok(()));
+        ftx.drop();
+    }
+}
+
+test "println captures output" {
+    let mut mock = BufferingStdout { chunks: [] };
+    with Stdout = &mut mock do {
+        println("hello");
+        println("world");
+    }
+    assert mock.chunks[0] == "hello\n";
+    assert mock.chunks[1] == "world\n";
+}
+```
+
+`pos` preserves insertion order: with deep handlers, post-resume code executes in LIFO order (the last `resume`'s post-resume runs first). Recording `pos` before `resume` ensures each invocation writes to the correct index regardless of execution order.
+
+|                 | No post-resume                | Post-resume                    |
+| --------------- | ----------------------------- | ------------------------------ |
+| Stack Switching | Not required                  | Required                       |
+| Data access     | Manual (`drain()` after `do`) | Automatic (each `resume`)      |
+| Ordering        | Natural (forward read)        | Requires `pos` trick (LIFO)    |
+| MVP suitability | Yes                           | Deferred until Stack Switching |
+
 ### Effect Forwarding
 
 Handlers only handle the effects they declare. All other effects forward to the outer scope. This follows the universal pattern in algebraic effect systems (Koka, Eff, OCaml 5, Effekt).
