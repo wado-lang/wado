@@ -1907,3 +1907,20 @@ fn test_format_template_string_escape_sequences_all() {
         formatted
     );
 }
+
+#[test]
+fn test_format_match_two_arms_always_multiline() {
+    // Match with 2+ arms must always be formatted multiline, never collapsed to one line
+    let source = r#"
+fn foo(x: Option<i32>) -> i32 {
+    return match x { Some(v) => v, None => 0 };
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    // The match should be expanded to multiple lines
+    assert!(
+        formatted.contains("Some(v) => v,\n"),
+        "match with 2 arms must be multiline:\n{}",
+        formatted
+    );
+}

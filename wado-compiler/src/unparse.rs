@@ -2178,8 +2178,8 @@ impl<'a> Unparser<'a> {
 
     /// Try to format a match expression on a single line.
     fn try_inline_match(&mut self, m: &MatchExpr) -> bool {
-        // Match expressions with 3 or more arms are always formatted multiline
-        if m.arms.len() >= 3 {
+        // Match expressions with 2 or more arms are always formatted multiline
+        if m.arms.len() >= 2 {
             return false;
         }
         // All arms must have inline-safe bodies, and no comments inside the match body
