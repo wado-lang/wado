@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775896437725,
+  "lastUpdate": 1775907239720,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11606,6 +11606,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c2edbd1a88aa7a13aaea739ff7be3454846f2cc5"
         },
         "date": 1775896437462,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1795,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8927,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18708,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4fed3c1b6ab62ef71ada5262bc19318d75a13dab",
+          "message": "Merge pull request #808 from wado-lang/claude/check-serde-status-n1dmE\n\nImplement flags serde and fix newtype/flags type erasure ordering",
+          "timestamp": "2026-04-11T20:30:37+09:00",
+          "tree_id": "528b0e95be47424587c13b7842cc1afb73c8ab08",
+          "url": "https://github.com/wado-lang/wado/commit/4fed3c1b6ab62ef71ada5262bc19318d75a13dab"
+        },
+        "date": 1775907239442,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
