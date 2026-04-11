@@ -365,3 +365,40 @@ run = "mise run -C benchmark syntax-highlight"
 [tasks.report-wasm-size]
 description = "Build all languages and report Wasm sizes"
 run = "mise run -C wasm-size report-wasm-size"
+
+[tasks.build-jco]
+description = "Build patched jco from vendor/jco"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cd vendor/jco
+PUPPETEER_SKIP_DOWNLOAD=1 npm install --ignore-scripts 2>&1 | tail -3
+cargo build -p xtask --target x86_64-unknown-linux-gnu
+./target/x86_64-unknown-linux-gnu/debug/xtask build debug
+echo "jco built successfully at vendor/jco"
+"""
+
+[tasks.jco-transpile]
+description = "Transpile a Wado .wasm component to JS via patched jco"
+usage = "jco-transpile <wasm-file> [output-dir]"
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+WASM_FILE="${1:?Usage: mise run jco-transpile <wasm-file> [output-dir]}"
+OUTPUT_DIR="${2:-${WASM_FILE%.wasm}-jco}"
+JCO="vendor/jco/packages/jco/src/jco.js"
+SHIM_DIR="$(pwd)/example/jco-shim"
+
+if [ ! -f "vendor/jco/packages/jco/obj/js-component-bindgen-component.js" ]; then
+  echo "jco not built yet. Run: mise run build-jco"
+  exit 1
+fi
+
+rm -rf "$OUTPUT_DIR"
+node "$JCO" transpile "$WASM_FILE" -o "$OUTPUT_DIR" \
+  --map "wasi:cli/*=${SHIM_DIR}/cli.js#*" \
+  --map "wasi:random/*=${SHIM_DIR}/random.js#*" \
+  --map "wasi:clocks/*=${SHIM_DIR}/clocks.js#*"
+echo '{"type": "module"}' > "$OUTPUT_DIR/package.json"
+echo "Transpiled to: $OUTPUT_DIR"
+"""

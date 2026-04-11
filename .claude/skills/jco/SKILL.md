@@ -5,7 +5,7 @@ description: Debug and patch jco (JS Component Tooling) for Wado wasm transpilat
 
 # jco Patching Workflow
 
-jco (`vendor/jco`) is bytecodealliance's tool for transpiling Wasm Components to JavaScript. Wado uses a patched fork because upstream jco has incomplete support for WASM3 (GC), CM async (P3 streams/futures), and JSPI integration.
+jco (`vendor/jco`) is bytecodealliance's tool for transpiling Wasm Components to JavaScript. Wado uses a patched fork because upstream jco has incomplete support for P3 async stream delivery and JSPI integration.
 
 ## Setup
 
@@ -22,13 +22,11 @@ After editing jco Rust source:
 ```sh
 cd vendor/jco
 
-# 1. Rebuild wasm component (the transpiler itself runs as wasm)
-cargo clean -p js-component-bindgen --target wasm32-wasip1
-cargo build --workspace --target wasm32-wasip1
+# 1. Build xtask (host target)
+cargo build -p xtask --target x86_64-unknown-linux-gnu
 
 # 2. Re-transpile the jco component to JS (bootstrap: uses existing jco to transpile itself)
 rm -f packages/jco/obj/js-component-bindgen-component.*
-cargo build -p xtask --target x86_64-unknown-linux-gnu
 ./target/x86_64-unknown-linux-gnu/debug/xtask build debug
 
 # 3. Test with a Wado program
@@ -46,11 +44,17 @@ node --experimental-wasm-jspi -e "
 "
 ```
 
-**IMPORTANT**: `cargo clean -p js-component-bindgen --target wasm32-wasip1` is required. Without it, cargo may not detect changes in `lib.rs` because the `WasmFeatures` bitflag values are const-evaluated and produce identical binaries. Always clean before rebuild.
+Or use mise tasks:
+
+```sh
+mise run build-jco
+mise run hello
+mise run jco-transpile example/hello.wasm
+```
 
 ## Debugging Runtime Errors
 
-jco-transpiled code is a single large JS file (~165KB for hello). Key functions to know:
+jco-transpiled code is a single large JS file (~185KB for hello). Key functions to know:
 
 | Wasm canonical built-in | jco JS function        | Trampoline                      |
 | ----------------------- | ---------------------- | ------------------------------- |
@@ -88,17 +92,26 @@ jco's async machinery swallows errors via unhandled Promise rejections. Always a
 process.on('unhandledRejection', e => { console.error('UNHANDLED:', e); process.exit(1); });
 ```
 
+### Debug technique: enable JCO_DEBUG
+
+```sh
+JCO_DEBUG=1 node --experimental-wasm-jspi run.mjs
+```
+
 ### Common error patterns
 
-| Error                                             | Likely cause                                                     |
-| ------------------------------------------------- | ---------------------------------------------------------------- |
-| `rec group usage requires 'gc' proposal`          | `WasmFeatures` in `lib.rs` or `core.rs` missing `GC` / `WASM3`   |
-| `wide arithmetic support is not enabled`          | Missing `WasmFeatures::WIDE_ARITHMETIC`                          |
-| `X is not defined` (runtime)                      | Missing intrinsic dependency in `intrinsics/mod.rs`              |
-| `cannot drop subtask before resolve is delivered` | Subtask lifecycle issue — `deliverResolve()` not called          |
-| `task.X is not a function`                        | Method not defined on `AsyncTask` class (jco implementation gap) |
-| `invalid variant discriminant for expected`       | Async export returns `undefined` instead of result discriminant  |
-| Hang / timeout                                    | JSPI Suspending missing on a trampoline, or rendezvous deadlock  |
+| Error                                               | Likely cause                                                     |
+| --------------------------------------------------- | ---------------------------------------------------------------- |
+| `rec group usage requires 'gc' proposal`            | `WasmFeatures` in `lib.rs` or `core.rs` missing `GC` / `WASM3`   |
+| `wide arithmetic support is not enabled`            | Missing `WasmFeatures::WIDE_ARITHMETIC`                          |
+| `X is not defined` (runtime)                        | Missing intrinsic dependency in `intrinsics/mod.rs`              |
+| `cannot drop subtask before resolve is delivered`   | Subtask lifecycle issue — `deliverResolve()` not called          |
+| `task.X is not a function`                          | Method not defined on `AsyncTask` class (jco implementation gap) |
+| `invalid variant discriminant for expected`         | Async export returns `undefined` instead of result discriminant  |
+| Hang / timeout                                      | JSPI Suspending missing on a trampoline, or rendezvous deadlock  |
+| `symbolRscRep is not defined`                       | Missing `SymbolResourceRep` intrinsic dependency                 |
+| `FUTURES is not defined`                            | Missing `GlobalFutureMap` intrinsic dependency for FutureDrop    |
+| `invalid resource rep during remove, (cannot be 0)` | futureDropReadable called with handle 0 (stream hook bypass)     |
 
 ## Saving Patches
 
@@ -131,6 +144,7 @@ git commit -m "Update jco patches: <description>"
 | `crates/js-component-bindgen/src/intrinsics/mod.rs`             | Intrinsic dependency resolution           |
 | `crates/js-component-bindgen/src/intrinsics/lower.rs`           | Value lowering (Result, Variant, etc.)    |
 | `crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs` | Stream classes and operations             |
+| `crates/js-component-bindgen/src/intrinsics/p3/async_future.rs` | Future classes and drop operations        |
 | `crates/js-component-bindgen/src/intrinsics/p3/waitable.rs`     | WaitableSet wait/poll                     |
 | `crates/js-component-bindgen/src/intrinsics/p3/async_task.rs`   | AsyncTask class                           |
 
@@ -143,3 +157,10 @@ git commit -m "Update jco patches: <description>"
 - `clocks.js` — `wasi:clocks` via `process.hrtime` / `Date.now`
 
 The `--map` flag maps WASI interfaces to shim files during transpilation.
+
+## Current Patches (on top of upstream main)
+
+1. **Stream write hook** (`async_stream.rs`): `globalThis._jcoStreamWriteHook` delivers stream data directly from linear memory, bypassing the rendezvous mechanism.
+2. **Missing intrinsic dependencies** (`mod.rs`): `StreamNewFromLift` → `SymbolResourceRep`; `FutureDropReadable/Writable` → `GlobalFutureMap`, `FutureEndClass`, etc.
+3. **futureDropReadable/Writable** (`async_future.rs`, `transpile_bindgen.rs`): Pass `componentIdx` as bound parameter; accept single `futureEndIdx` from wasm; tolerate handle 0 (stream hook bypass).
+4. **Async export void return** (`function_bindgen.rs`): Fall back to `task.completionPromise()` when JSPI returns `undefined`.
