@@ -3162,7 +3162,15 @@ fn generate_flags_deserialize(
             TypeTable::UNIT,
             span,
         );
-        name_match_stmts.push(if_stmt(condition, block(vec![expr_stmt(assign)]), None));
+        let continue_stmt = TirStmt {
+            kind: TirStmtKind::Continue,
+            span,
+        };
+        name_match_stmts.push(if_stmt(
+            condition,
+            block(vec![expr_stmt(assign), continue_stmt]),
+            None,
+        ));
     }
 
     // else: unknown flag error
