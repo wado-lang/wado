@@ -14540,8 +14540,14 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
         }));
     }
     if kind == TK_LPAREN {
+        let saved = p.pos;
         if parse_expression_scan_32(&p.tokens, p.pos) >= 0 {
-            return parse_expression_bt_32(p);
+            let r_32 = parse_expression_bt_32(p);
+            if let Err(_) = r_32 {
+                p.pos = saved;
+            } else {
+                return r_32;
+            }
         }
         return parse_expression_bt_34(p);
     }
@@ -18966,14 +18972,30 @@ fn parse_generic_args(p: &mut Parser) -> Result<GenericArgsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LT {
+        let saved = p.pos;
         if parse_generic_args_scan_1(&p.tokens, p.pos) >= 0 {
-            return parse_generic_args_bt_1(p);
+            let r_1 = parse_generic_args_bt_1(p);
+            if let Err(_) = r_1 {
+                p.pos = saved;
+            } else {
+                return r_1;
+            }
         }
         if parse_generic_args_scan_2(&p.tokens, p.pos) >= 0 {
-            return parse_generic_args_bt_2(p);
+            let r_2 = parse_generic_args_bt_2(p);
+            if let Err(_) = r_2 {
+                p.pos = saved;
+            } else {
+                return r_2;
+            }
         }
         if parse_generic_args_scan_3(&p.tokens, p.pos) >= 0 {
-            return parse_generic_args_bt_3(p);
+            let r_3 = parse_generic_args_bt_3(p);
+            if let Err(_) = r_3 {
+                p.pos = saved;
+            } else {
+                return r_3;
+            }
         }
         return parse_generic_args_bt_0(p);
     }

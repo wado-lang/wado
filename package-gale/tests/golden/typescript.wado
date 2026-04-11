@@ -12608,8 +12608,14 @@ fn parse_export_statement(p: &mut Parser) -> Result<ExportStatementNode, ParseEr
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Export {
+        let saved = p.pos;
         if parse_export_statement_scan_0(&p.tokens, p.pos) >= 0 {
-            return parse_export_statement_bt_0(p);
+            let r_0 = parse_export_statement_bt_0(p);
+            if let Err(_) = r_0 {
+                p.pos = saved;
+            } else {
+                return r_0;
+            }
         }
         return parse_export_statement_bt_1(p);
     }
@@ -12876,8 +12882,14 @@ fn parse_variable_statement(p: &mut Parser) -> Result<VariableStatementNode, Par
     let kind = p.peek_kind();
     if kind matches { TK_Public | TK_Private | TK_Protected | TK_Var | TK_Let | TK_Const | TK_ReadOnly | TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Require | TK_LIT_LBRACKET | TK_LIT_LBRACE } {
         if p.peek_kind() matches { TK_LIT_LBRACKET | TK_LIT_LBRACE } {
+            let saved = p.pos;
             if parse_variable_statement_scan_1(&p.tokens, p.pos) >= 0 {
-                return parse_variable_statement_bt_1(p);
+                let r_1 = parse_variable_statement_bt_1(p);
+                if let Err(_) = r_1 {
+                    p.pos = saved;
+                } else {
+                    return r_1;
+                }
             }
             return parse_variable_statement_bt_0(p);
         } else if p.peek_kind() matches { TK_Public | TK_Private | TK_Protected | TK_Var | TK_Let | TK_Const | TK_ReadOnly | TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Require } {
@@ -13353,20 +13365,46 @@ fn parse_iteration_statement(p: &mut Parser) -> Result<IterationStatementNode, P
         }));
     }
     if kind == TK_For {
+        let saved = p.pos;
         if parse_iteration_statement_scan_3(&p.tokens, p.pos) >= 0 {
-            return parse_iteration_statement_bt_3(p);
+            let r_3 = parse_iteration_statement_bt_3(p);
+            if let Err(_) = r_3 {
+                p.pos = saved;
+            } else {
+                return r_3;
+            }
         }
         if parse_iteration_statement_scan_7(&p.tokens, p.pos) >= 0 {
-            return parse_iteration_statement_bt_7(p);
+            let r_7 = parse_iteration_statement_bt_7(p);
+            if let Err(_) = r_7 {
+                p.pos = saved;
+            } else {
+                return r_7;
+            }
         }
         if parse_iteration_statement_scan_6(&p.tokens, p.pos) >= 0 {
-            return parse_iteration_statement_bt_6(p);
+            let r_6 = parse_iteration_statement_bt_6(p);
+            if let Err(_) = r_6 {
+                p.pos = saved;
+            } else {
+                return r_6;
+            }
         }
         if parse_iteration_statement_scan_2(&p.tokens, p.pos) >= 0 {
-            return parse_iteration_statement_bt_2(p);
+            let r_2 = parse_iteration_statement_bt_2(p);
+            if let Err(_) = r_2 {
+                p.pos = saved;
+            } else {
+                return r_2;
+            }
         }
         if parse_iteration_statement_scan_5(&p.tokens, p.pos) >= 0 {
-            return parse_iteration_statement_bt_5(p);
+            let r_5 = parse_iteration_statement_bt_5(p);
+            if let Err(_) = r_5 {
+                p.pos = saved;
+            } else {
+                return r_5;
+            }
         }
         return parse_iteration_statement_bt_4(p);
     }
@@ -14109,11 +14147,22 @@ fn parse_property_member_declaration(p: &mut Parser) -> Result<PropertyMemberDec
     let kind = p.peek_kind();
     if kind matches { TK_Public | TK_Private | TK_Protected | TK_Async | TK_Static | TK_ReadOnly } {
         if p.peek_kind() matches { TK_Public | TK_Private | TK_Protected | TK_Async | TK_Static | TK_ReadOnly } {
+            let saved = p.pos;
             if parse_property_member_declaration_scan_0(&p.tokens, p.pos) >= 0 {
-                return parse_property_member_declaration_bt_0(p);
+                let r_0 = parse_property_member_declaration_bt_0(p);
+                if let Err(_) = r_0 {
+                    p.pos = saved;
+                } else {
+                    return r_0;
+                }
             }
             if parse_property_member_declaration_scan_1(&p.tokens, p.pos) >= 0 {
-                return parse_property_member_declaration_bt_1(p);
+                let r_1 = parse_property_member_declaration_bt_1(p);
+                if let Err(_) = r_1 {
+                    p.pos = saved;
+                } else {
+                    return r_1;
+                }
             }
             return parse_property_member_declaration_bt_2(p);
         }
@@ -15651,8 +15700,14 @@ fn parse_single_expression_atom(p: &mut Parser) -> Result<SingleExpressionNode, 
             }
             return parse_single_expression_bt_47(p);
         } else if p.peek_kind() == TK_LIT_LPAREN {
+            let saved = p.pos;
             if parse_single_expression_scan_49(&p.tokens, p.pos) >= 0 {
-                return parse_single_expression_bt_49(p);
+                let r_49 = parse_single_expression_bt_49(p);
+                if let Err(_) = r_49 {
+                    p.pos = saved;
+                } else {
+                    return r_49;
+                }
             }
             return parse_single_expression_bt_0(p);
         } else if p.peek_kind() matches { TK_Async | TK_Function_ } {
@@ -16778,8 +16833,14 @@ fn parse_arrow_function_body(p: &mut Parser) -> Result<ArrowFunctionBodyNode, Pa
     let kind = p.peek_kind();
     if kind matches { TK_LIT_LBRACE | TK_Async | TK_Function_ | TK_Identifier | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_BinaryIntegerLiteral | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PLUSPLUS | TK_LIT_MINUSMINUS | TK_LIT_PLUS | TK_LIT_MINUS | TK_LIT_TILDE | TK_LIT_BANG | TK_YieldStar | TK_BackTick | TK_RegularExpressionLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BigBinaryIntegerLiteral | TK_LIT_LT } {
         if p.peek_kind() == TK_LIT_LBRACE {
+            let saved = p.pos;
             if parse_arrow_function_body_scan_1(&p.tokens, p.pos) >= 0 {
-                return parse_arrow_function_body_bt_1(p);
+                let r_1 = parse_arrow_function_body_bt_1(p);
+                if let Err(_) = r_1 {
+                    p.pos = saved;
+                } else {
+                    return r_1;
+                }
             }
             return parse_arrow_function_body_bt_0(p);
         } else if p.peek_kind() matches { TK_Async | TK_Function_ | TK_Identifier | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_BinaryIntegerLiteral | TK_LIT_LBRACKET | TK_LIT_LPAREN | TK_LIT_PLUSPLUS | TK_LIT_MINUSMINUS | TK_LIT_PLUS | TK_LIT_MINUS | TK_LIT_TILDE | TK_LIT_BANG | TK_YieldStar | TK_BackTick | TK_RegularExpressionLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BigBinaryIntegerLiteral | TK_LIT_LT } {

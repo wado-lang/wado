@@ -1179,6 +1179,12 @@ fn alt_has_scan(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
     return scannable_prefix_len(elements, ctx) > 0;
 }
 
+/// Returns true if the scan function covers the entire alternative (all elements are scannable).
+/// When true, a scan success guarantees parse success so no fallthrough is needed.
+fn alt_scan_is_full(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
+    return scannable_prefix_len(elements, ctx) == elements.len();
+}
+
 // --- Scan Function Generation ---
 // Scan functions recognize parser rules by walking token kinds without building
 // CST nodes or constructing error messages. They return the token position after
@@ -3918,16 +3924,67 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
 
             if all_have_scans && sorted_indices.len() >= 2 {
                 // All non-last alternatives have scan functions.
-                // Use scan-then-parse: no backtracking needed.
-                for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                // Check if ALL scans are full (cover entire alternative).
+                let mut all_full = true;
+                for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
                     let idx = sorted_indices[i];
-                    let is_last = i == sorted_indices.len() - 1;
-                    if is_last {
-                        w.line(`return {*fn_name}_bt_{idx}(p);`);
-                    } else {
-                        w.begin(`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
-                        w.line(`return {*fn_name}_bt_{idx}(p);`);
-                        w.end();
+                    if !alt_scan_is_full(&alts[idx].elements, ctx) {
+                        all_full = false;
+                        break;
+                    }
+                }
+
+                if all_full {
+                    // All scans cover entire alternatives — scan success
+                    // guarantees parse success, no save/restore needed.
+                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                        let idx = sorted_indices[i];
+                        let is_last = i == sorted_indices.len() - 1;
+                        if is_last {
+                            w.line(`return {*fn_name}_bt_{idx}(p);`);
+                        } else {
+                            w.begin(`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                            w.line(`return {*fn_name}_bt_{idx}(p);`);
+                            w.end();
+                        }
+                    }
+                } else {
+                    // Some scans are partial — scan success is a hint,
+                    // not a guarantee. Use save/restore with scan guards.
+                    w.line("let saved = p.pos;");
+                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                        let idx = sorted_indices[i];
+                        let is_last = i == sorted_indices.len() - 1;
+                        if is_last {
+                            w.line(`return {*fn_name}_bt_{idx}(p);`);
+                        } else {
+                            let has_scan = alt_has_scan(&alts[idx].elements, ctx);
+                            let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
+                            if is_full {
+                                // Full scan: success guarantees parse success.
+                                w.begin(`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                w.line(`return {*fn_name}_bt_{idx}(p);`);
+                                w.end();
+                            } else if has_scan {
+                                // Partial scan: try parse, fall through on failure.
+                                w.begin(`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                                w.begin(`if let Err(_) = r_{idx}`);
+                                w.line("p.pos = saved;");
+                                w.else_begin("else");
+                                w.line(`return r_{idx};`);
+                                w.end();
+                                w.end();
+                            } else {
+                                // No scan: full backtracking.
+                                w.line(`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                                w.begin(`if let Err(_) = r_{idx}`);
+                                w.line("p.pos = saved;");
+                                w.else_begin("else");
+                                w.line(`return r_{idx};`);
+                                w.end();
+                            }
+                        }
                     }
                 }
             } else {
