@@ -704,7 +704,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l20: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -803,7 +803,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         t = val;
         block {
             l26: loop {
-                if (t > 0_i64) == 0 {
+                if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
@@ -826,7 +826,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             temp = abs_val;
             block {
                 l30: loop {
-                    if (temp > 0_i64) == 0 {
+                    if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
@@ -1068,7 +1068,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
         i = 0;
         block {
             l60: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
@@ -1166,7 +1166,7 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {
     _hfs_pos_8 = self.pos;
     b71: block {
         l72: loop {
-            if (_hfs_pos_8 < _licm_used_6) == 0 {
+            if _hfs_pos_8 >= _licm_used_6 {
                 break b71;
             }
             b = __inline_String__get_byte_1: block -> u8 {
@@ -1355,7 +1355,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     _licm_repr_91 = _licm_input_89.repr;
     b82: block {
         l83: loop {
-            if (scan_pos < _licm_used_90) == 0 {
+            if scan_pos >= _licm_used_90 {
                 break b82;
             }
             sb = builtin::array_get_u8(_licm_repr_91, scan_pos);
@@ -1392,7 +1392,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             _licm_repr_94 = _licm_input_92.repr;
             block {
                 l90: loop {
-                    if (i_7 < prefix_len) == 0 {
+                    if i_7 >= prefix_len {
                         break __for_0;
                     }
                     index_53 = start_6 + i_7;
@@ -1421,7 +1421,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
         _licm_repr_97 = _licm_input_95.repr;
         block {
             l93: loop {
-                if (i_10 < prefix_len) == 0 {
+                if i_10 >= prefix_len {
                     break __for_1;
                 }
                 index_59 = start_9 + i_10;
@@ -1439,11 +1439,11 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     _hfs_pos_98 = self.pos;
     b95: block {
         l96: loop {
-            if (_hfs_pos_98 < __inline_String__len_14: block -> i32 {
+            if _hfs_pos_98 >= __inline_String__len_14: block -> i32 {
                 __local_63 = self.input;
                 self.pos = _hfs_pos_98;
                 break __inline_String__len_14: __local_63.used;
-            }) == 0 {
+            } {
                 break b95;
             }
             b = __inline_String__get_byte_15: block -> u8 {
@@ -1649,7 +1649,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
         _licm_repr_17 = _licm_input_15.repr;
         block {
             l121: loop {
-                if (i < 4) == 0 {
+                if i >= 4 {
                     break __for_2;
                 }
                 b = __inline_String__get_byte_2: block -> u8 {
@@ -1721,7 +1721,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l132: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
@@ -2013,12 +2013,8 @@ fn "core:json/Perms^Serialize::serialize<JsonSerializer>"(self, s) {
     if (self & 1) != 0 {
         count = 1;
     }
-    if (self & 2) != 0 {
-        count = count + 1;
-    }
-    if (self & 4) != 0 {
-        count = count + 1;
-    }
+    count = count + ((self & 2) != 0);
+    count = count + ((self & 4) != 0);
     "core:prelude/string.wado/String::push"(s, 91);
     __fused_payload_9 = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
     if (self & 1) != 0 {
