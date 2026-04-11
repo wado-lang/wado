@@ -2737,12 +2737,7 @@ fn find_flags<'a>(module: &'a TirModule, name: &str) -> Option<&'a crate::tir::T
 }
 
 /// Build `(*self as u32) & bitmask != 0` condition.
-fn flags_bit_check(
-    ref_self_type: TypeId,
-    flags_type: TypeId,
-    bitmask: u32,
-    span: Span,
-) -> TirExpr {
+fn flags_bit_check(ref_self_type: TypeId, flags_type: TypeId, bitmask: u32, span: Span) -> TirExpr {
     let self_deref = deref_expr(local_ref(0, "self", ref_self_type), flags_type, span);
     let self_as_u32 = cast(self_deref, TypeTable::U32);
     let and_expr = TirExpr::new(
@@ -2827,7 +2822,12 @@ fn generate_flags_serialize(
     let mut stmts = Vec::new();
 
     // let mut count: i32 = 0;
-    stmts.push(let_mut_stmt("count", count_local, TypeTable::I32, i32_const(0)));
+    stmts.push(let_mut_stmt(
+        "count",
+        count_local,
+        TypeTable::I32,
+        i32_const(0),
+    ));
 
     // For each member: if bit set, count += 1
     for (_member_name, bitmask) in &members {
@@ -2865,7 +2865,12 @@ fn generate_flags_serialize(
         result_seq_err,
         span,
     );
-    stmts.push(let_mut_stmt("__result", result_tmp, result_seq_err, begin_call));
+    stmts.push(let_mut_stmt(
+        "__result",
+        result_tmp,
+        result_seq_err,
+        begin_call,
+    ));
 
     // Build the then-block: for each member, if bit set, seq.element::<String>(&"Name")
     let mut then_stmts = Vec::new();
@@ -2917,7 +2922,11 @@ fn generate_flags_serialize(
         string_type,
         span,
     );
-    let else_stmts = vec![return_stmt(Some(variant_err(err_val, result_unit_err, span)))];
+    let else_stmts = vec![return_stmt(Some(variant_err(
+        err_val,
+        result_unit_err,
+        span,
+    )))];
 
     stmts.push(if_let_ok(
         local_ref(result_tmp, "__result", result_seq_err),
@@ -3330,7 +3339,7 @@ fn generate_flags_deserialize(
     })
 }
 
-/// Create a DeserializeError literal with a dynamic message expression.
+/// Create a `DeserializeError` literal with a dynamic message expression.
 fn deserialize_error_literal_with_expr(
     deser_error_type: TypeId,
     deser_error_kind_type: TypeId,

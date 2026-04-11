@@ -338,25 +338,27 @@ type "functype//core:prelude/Array<u8>::push" = fn(ref "core:prelude//Array<u8>"
 
 type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(84)
 
-type "functype//core:prelude/array.wado/Array<Array<u8>>::push" = fn(ref "core:prelude//Array<Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(85)
+type "functype//core:prelude/array.wado/Array<FieldValue>::push" = fn(ref "core:prelude//Array<Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(85)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(86)
+type "functype//core:prelude/array.wado/Array<FieldValue>::grow" = fn(ref "core:prelude//Array<Array<u8>>");  // TypeId(86)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(87)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(87)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(88)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(88)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(89)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(89)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(90)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(90)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(91)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(91)
 
-type "functype//wado-compiler/tests/fixtures/http-fields-set.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(92)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(92)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(93)
+type "functype//wado-compiler/tests/fixtures/http-fields-set.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(93)
 
-type "functype//wado-compiler/tests/fixtures/http-fields-set.wado/handle" = fn();  // TypeId(94)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(94)
+
+type "functype//wado-compiler/tests/fixtures/http-fields-set.wado/handle" = fn();  // TypeId(95)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1677,14 +1679,46 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/array.wado/Array<Array<u8>>::push"(self, value) {
+fn "core:prelude/array.wado/Array<FieldValue>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Array<u8>>::grow"(self);
+        "core:prelude/array.wado/Array<FieldValue>::grow"(self);
     }
     builtin::array_set<ref "core:prelude//Array<u8>">(self.repr, used, value);
     self.used = used + 1;
+}
+
+fn "core:prelude/array.wado/Array<FieldValue>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref builtin::array<Array<u8>>;
+    let old_repr: ref builtin::array<Array<u8>>;
+    let used: i32;
+    let i: i32;
+    let __local_7: i32;
+    capacity = builtin::array_len(self.repr);
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = capacity * 2;
+        break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+    };
+    new_repr = builtin::array_new<ref "core:prelude//Array<u8>">(new_capacity);
+    old_repr = self.repr;
+    used = self.used;
+    __for_0: block {
+        i = 0;
+        block {
+            l127: loop {
+                if (i < used) == 0 {
+                    break __for_0;
+                }
+                builtin::array_set<ref "core:prelude//Array<u8>">(new_repr, i, builtin::array_get<ref "core:prelude//Array<u8>">(old_repr, i));
+                i = i + 1;
+                continue l127;
+            };
+        };
+    };
+    self.repr = new_repr;
 }
 
 fn "core:prelude/array.wado/Array<u8>::push"(self, value) {

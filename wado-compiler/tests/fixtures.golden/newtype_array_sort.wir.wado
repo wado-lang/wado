@@ -93,11 +93,11 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/array.wado/Array<i32>::sorted" = fn(ref "core:prelude//Array<i32>") -> ref "core:prelude//Array<i32>";  // TypeId(37)
+type "functype//core:prelude/array.wado/Array<Score>::sorted" = fn(ref "core:prelude//Array<i32>") -> ref "core:prelude//Array<i32>";  // TypeId(37)
 
-type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(38)
+type "functype//core:prelude/array.wado/Array<Score>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(38)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(39)
+type "functype//core:prelude/array.wado/Array<Score>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(39)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
 
@@ -109,7 +109,7 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "cor
 
 type "functype//core:prelude/primitive.wado/i32^Ord::cmp" = fn(i32, i32) -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(44)
 
-type "functype//wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<i32>::sort_by$__Closure_2" = fn(ref "core:prelude//Array<i32>");  // TypeId(45)
+type "functype//wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2" = fn(ref "core:prelude//Array<i32>");  // TypeId(45)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -146,50 +146,50 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/run"() with Stdout {
         __local_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(50, 10, 90, 30), used: 4 };
         break __seq_lit: __local_0;
     };
-    "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<i32>::sort_by$__Closure_2"(scores);
+    "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2"(scores);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(70), used: 0 };
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         __local_25 = __local_6;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_i32__IndexValue_i32___index_value_13: block -> i32 {
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_Score__IndexValue_i32___index_value_13: block -> i32 {
             if 0 >= scores.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_i32__IndexValue_i32___index_value_13: builtin::array_get<i32>(scores.repr, 0);
+            break __inline_Array_Score__IndexValue_i32___index_value_13: builtin::array_get<i32>(scores.repr, 0);
         }, __local_25);
         "core:prelude/string.wado/String::push"(__local_5, 44);
         "core:prelude/string.wado/String::push"(__local_5, 32);
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         __local_32 = __local_6;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_i32__IndexValue_i32___index_value_17: block -> i32 {
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_Score__IndexValue_i32___index_value_17: block -> i32 {
             if 1 >= scores.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_i32__IndexValue_i32___index_value_17: builtin::array_get<i32>(scores.repr, 1);
+            break __inline_Array_Score__IndexValue_i32___index_value_17: builtin::array_get<i32>(scores.repr, 1);
         }, __local_32);
         "core:prelude/string.wado/String::push"(__local_5, 44);
         "core:prelude/string.wado/String::push"(__local_5, 32);
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         __local_39 = __local_6;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_i32__IndexValue_i32___index_value_21: block -> i32 {
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_Score__IndexValue_i32___index_value_21: block -> i32 {
             if 2 >= scores.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_i32__IndexValue_i32___index_value_21: builtin::array_get<i32>(scores.repr, 2);
+            break __inline_Array_Score__IndexValue_i32___index_value_21: builtin::array_get<i32>(scores.repr, 2);
         }, __local_39);
         "core:prelude/string.wado/String::push"(__local_5, 44);
         "core:prelude/string.wado/String::push"(__local_5, 32);
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         __local_46 = __local_6;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_i32__IndexValue_i32___index_value_25: block -> i32 {
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_Score__IndexValue_i32___index_value_25: block -> i32 {
             if 3 >= scores.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_i32__IndexValue_i32___index_value_25: builtin::array_get<i32>(scores.repr, 3);
+            break __inline_Array_Score__IndexValue_i32___index_value_25: builtin::array_get<i32>(scores.repr, 3);
         }, __local_46);
         break __tmpl: __local_5;
     });
@@ -197,7 +197,7 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/run"() with Stdout {
         __local_2 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(3, 1, 2), used: 3 };
         break __seq_lit: __local_2;
     };
-    sorted = "core:prelude/array.wado/Array<i32>::sorted"(orig);
+    sorted = "core:prelude/array.wado/Array<Score>::sorted"(orig);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(60), used: 0 };
         "core:prelude/string.wado/String::push"(__local_7, 115);
@@ -210,34 +210,34 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push"(__local_7, 32);
         __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         __local_63 = __local_8;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_i32__IndexValue_i32___index_value_36: block -> i32 {
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_Score__IndexValue_i32___index_value_36: block -> i32 {
             if 0 >= sorted.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_i32__IndexValue_i32___index_value_36: builtin::array_get<i32>(sorted.repr, 0);
+            break __inline_Array_Score__IndexValue_i32___index_value_36: builtin::array_get<i32>(sorted.repr, 0);
         }, __local_63);
         "core:prelude/string.wado/String::push"(__local_7, 44);
         "core:prelude/string.wado/String::push"(__local_7, 32);
         __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         __local_70 = __local_8;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_i32__IndexValue_i32___index_value_40: block -> i32 {
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_Score__IndexValue_i32___index_value_40: block -> i32 {
             if 1 >= sorted.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_i32__IndexValue_i32___index_value_40: builtin::array_get<i32>(sorted.repr, 1);
+            break __inline_Array_Score__IndexValue_i32___index_value_40: builtin::array_get<i32>(sorted.repr, 1);
         }, __local_70);
         "core:prelude/string.wado/String::push"(__local_7, 44);
         "core:prelude/string.wado/String::push"(__local_7, 32);
         __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_7 };
         __local_77 = __local_8;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_i32__IndexValue_i32___index_value_44: block -> i32 {
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_Score__IndexValue_i32___index_value_44: block -> i32 {
             if 2 >= sorted.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            break __inline_Array_i32__IndexValue_i32___index_value_44: builtin::array_get<i32>(sorted.repr, 2);
+            break __inline_Array_Score__IndexValue_i32___index_value_44: builtin::array_get<i32>(sorted.repr, 2);
         }, __local_77);
         break __tmpl: __local_7;
     });
@@ -626,7 +626,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<i32>::sorted"(self) {
+fn "core:prelude/array.wado/Array<Score>::sorted"(self) {
     let n: i32;
     let new_repr: ref builtin::array<i32>;
     let copy: ref "core:prelude//Array<i32>";
@@ -634,21 +634,21 @@ fn "core:prelude/array.wado/Array<i32>::sorted"(self) {
     new_repr = builtin::array_new<i32>(n);
     builtin::array_copy<i32>(new_repr, 0, self.repr, 0, n);
     copy = struct.new "core:prelude//Array<i32>" { repr: new_repr, used: n };
-    "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<i32>::sort_by$__Closure_2"(copy);
+    "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2"(copy);
     return copy;
 }
 
-fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
+fn "core:prelude/array.wado/Array<Score>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<i32>::grow"(self);
+        "core:prelude/array.wado/Array<Score>::grow"(self);
     }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<i32>::grow"(self) {
+fn "core:prelude/array.wado/Array<Score>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<i32>;
@@ -680,7 +680,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<i32>::sort_by$__Closure_2"(self) {
+fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2"(self) {
     let n: i32;
     let src: ref builtin::array<i32>;
     let buf: ref builtin::array<i32>;
