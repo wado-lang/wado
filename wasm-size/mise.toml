@@ -12,11 +12,7 @@
 lockfile = true
 
 [tools]
-node = "latest"
 zig = "latest"
-go = "1.25"                              # TinyGo 0.40.x requires go <= 1.25
-wasmtime = "41"                        # matches project's Cargo.toml
-"github:tinygo-org/tinygo" = "latest"  # TinyGo (needs go)
 "github:WebAssembly/wasi-sdk" = "latest" # clang + wasm-ld + wasi-sysroot
 
 [env]
@@ -101,35 +97,6 @@ zig build-exe -O ReleaseSmall -target wasm32-wasi pi_approx/pi_approx.zig -femit
 zig build-exe -O ReleaseSmall -target wasm32-wasi zlib/zlib.zig -femit-bin="$OUT_DIR/zlib_zig.wasm"
 """
 
-[tasks.build-tinygo]
-description = "Build TinyGo programs to Wasm"
-run = """
-#!/usr/bin/env bash
-set -e
-mkdir -p "$OUT_DIR"
-
-if command -v tinygo >/dev/null 2>&1; then
-    echo "Building TinyGo..."
-    tinygo build -o "$OUT_DIR/hello_world_tinygo.wasm" -target=wasip1 -opt=z -no-debug hello_world/hello_world.go
-    tinygo build -o "$OUT_DIR/pi_approx_tinygo.wasm" -target=wasip1 -opt=z -no-debug pi_approx/pi_approx.go
-else
-    echo "SKIP: TinyGo (run 'mise install' to install)"
-fi
-"""
-
-[tasks.build-assemblyscript]
-description = "Build AssemblyScript programs to Wasm"
-run = """
-#!/usr/bin/env bash
-set -e
-mkdir -p "$OUT_DIR"
-
-echo "Building AssemblyScript..."
-(cd assemblyscript && npm install)
-(cd assemblyscript && npx asc ../hello_world/hello_world.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/hello_world_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2)
-(cd assemblyscript && npx asc ../pi_approx/pi_approx.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/pi_approx_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2)
-"""
-
 [tasks.build-moonbit]
 description = "Build Moonbit programs to Wasm"
 run = """
@@ -179,7 +146,7 @@ echo "Generated $OUT_DIR/test.gz from README.md ($(wc -c < README.md | tr -d ' '
 
 [tasks.build-all]
 description = "Build all language targets"
-depends = ["gen-test-data", "build-rust", "build-zig", "build-tinygo", "build-assemblyscript", "build-moonbit", "build-c", "build-wado"]
+depends = ["gen-test-data", "build-rust", "build-zig", "build-moonbit", "build-c", "build-wado"]
 
 [tasks.validate]
 description = "Validate built Wasm files with wasmtime"
@@ -270,7 +237,6 @@ run = """
 rm -rf "$OUT_DIR"
 rm -rf hello_world/target pi_approx/target zlib/target
 rm -rf hello_world/_build pi_approx/_build
-rm -rf assemblyscript/node_modules
 """
 
 [tasks.install-deps]
@@ -278,7 +244,7 @@ description = "Show dependency installation instructions"
 run = """
 #!/usr/bin/env bash
 echo "Managed by mise (run 'mise install'):"
-echo "  node, zig, go, wasmtime, tinygo, wasi-sdk"
+echo "  zig, wasi-sdk (wasmtime is inherited from root mise.toml)"
 echo ""
 echo "Manual installation required:"
 echo "  rustup target add wasm32-wasip1                                # Rust wasm target"

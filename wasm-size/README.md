@@ -7,8 +7,6 @@ Compares WebAssembly binary sizes across different languages.
 - **C** - via LLVM + wasi-libc
 - **Rust** - wasm32-wasip1 target
 - **Zig** - wasm32-wasi target
-- **TinyGo** - wasip1 target
-- **AssemblyScript** - 0.28.x with @assemblyscript/wasi-shim
 - **Moonbit** - wasm target with peter-jerry-ye/wasi
 - **Wado** - WASI P3 component model (under development)
 
@@ -22,25 +20,23 @@ Compares WebAssembly binary sizes across different languages.
 
 ### hello_world
 
-| Language       | Size (bytes) |
-| -------------- | -----------: |
-| wado           |        1,794 |
-| c              |        2,353 |
-| zig            |        4,449 |
-| assemblyscript |        6,913 |
-| rust           |       40,754 |
-| tinygo         |      162,341 |
+| Language | Size (bytes) |
+| -------- | -----------: |
+| wado     |        1,799 |
+| c        |        3,076 |
+| zig      |        4,449 |
+| moonbit  |       15,319 |
+| rust     |       40,754 |
 
 ### pi_approx
 
-| Language       | Size (bytes) |
-| -------------- | -----------: |
-| wado           |        8,969 |
-| zig            |       10,608 |
-| assemblyscript |       11,372 |
-| c              |       14,429 |
-| rust           |       60,683 |
-| tinygo         |      187,167 |
+| Language | Size (bytes) |
+| -------- | -----------: |
+| wado     |        8,974 |
+| zig      |       10,608 |
+| c        |       16,786 |
+| moonbit  |       25,006 |
+| rust     |       60,683 |
 
 ### zlib
 
@@ -48,9 +44,9 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       19,355 | stdin + gzip decompress (core:zlib)    |
+| wado     |       19,360 | stdin + gzip decompress (core:zlib)    |
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
-| c        |       30,270 | stdin + gzip decompress (zlib 1.3.1)   |
+| c        |       33,439 | stdin + gzip decompress (zlib 1.3.1)   |
 | rust     |       88,014 | stdin + gzip decompress (zlib-rs)      |
 
 ## Usage
@@ -73,15 +69,13 @@ mise run clean
 
 All languages are compiled with size optimization and symbol stripping enabled:
 
-| Language       | WASI Version | Optimization Flags                                                            | Notes                                        |
-| -------------- | ------------ | ----------------------------------------------------------------------------- | -------------------------------------------- |
-| C              | Preview 1    | `-Oz -Wl,--strip-all`                                                         | Aggressive size opt + strip all symbols      |
-| Rust           | Preview 1    | `opt-level="z"`, `lto=true`, `codegen-units=1`, `strip=true`, `panic="abort"` | Configured in Cargo.toml `[profile.release]` |
-| Zig            | Preview 1    | `-O ReleaseSmall`                                                             | Built-in size optimization mode              |
-| TinyGo         | Preview 1    | `-opt=z -no-debug`                                                            | Size opt + strip debug info                  |
-| AssemblyScript | Preview 1    | `--optimizeLevel 3 --shrinkLevel 2`                                           | Via @assemblyscript/wasi-shim                |
-| Moonbit        | Preview 1    | `--release --strip`                                                           | Release mode + strip symbols                 |
-| Wado           | Preview 3    | `-Os`                                                                         | Component model                              |
+| Language | WASI Version | Optimization Flags                                                            | Notes                                        |
+| -------- | ------------ | ----------------------------------------------------------------------------- | -------------------------------------------- |
+| C        | Preview 1    | `-Oz -Wl,--strip-all`                                                         | Aggressive size opt + strip all symbols      |
+| Rust     | Preview 1    | `opt-level="z"`, `lto=true`, `codegen-units=1`, `strip=true`, `panic="abort"` | Configured in Cargo.toml `[profile.release]` |
+| Zig      | Preview 1    | `-O ReleaseSmall`                                                             | Built-in size optimization mode              |
+| Moonbit  | Preview 1    | `--release --strip`                                                           | Release mode + strip symbols                 |
+| Wado     | Preview 3    | `-Os`                                                                         | Component model                              |
 
 ## Requirements
 
@@ -89,12 +83,10 @@ All languages are compiled with size optimization and symbol stripping enabled:
 
 Run `mise install` to install:
 
-- **Node.js** - for AssemblyScript
 - **Zig** - wasm32-wasi target
-- **Go** - needed by TinyGo
-- **wasmtime** - for validation (v41+ required for Wado's WASI P3)
-- **TinyGo** - wasip1 target (`github:tinygo-org/tinygo`)
 - **wasi-sdk** - clang + wasm-ld + wasi-sysroot for C (`github:WebAssembly/wasi-sdk`)
+
+wasmtime is inherited from the root `mise.toml`.
 
 ### Manual installation
 
