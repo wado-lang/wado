@@ -100,18 +100,18 @@ JCO_DEBUG=1 node --experimental-wasm-jspi run.mjs
 
 ### Common error patterns
 
-| Error                                             | Likely cause                                                     |
-| ------------------------------------------------- | ---------------------------------------------------------------- |
-| `rec group usage requires 'gc' proposal`          | `WasmFeatures` in `lib.rs` or `core.rs` missing `GC` / `WASM3`  |
-| `wide arithmetic support is not enabled`          | Missing `WasmFeatures::WIDE_ARITHMETIC`                          |
-| `X is not defined` (runtime)                      | Missing intrinsic dependency in `intrinsics/mod.rs`              |
-| `cannot drop subtask before resolve is delivered`  | Subtask lifecycle issue — `deliverResolve()` not called          |
-| `task.X is not a function`                        | Method not defined on `AsyncTask` class (jco implementation gap) |
-| `invalid variant discriminant for expected`       | Async export returns `undefined` instead of result discriminant  |
-| Hang / timeout                                    | JSPI Suspending missing on a trampoline, or rendezvous deadlock  |
-| `symbolRscRep is not defined`                     | Missing `SymbolResourceRep` intrinsic dependency                 |
-| `FUTURES is not defined`                          | Missing `GlobalFutureMap` intrinsic dependency for FutureDrop    |
-| `invalid resource rep during remove, (cannot be 0)` | futureDropReadable called with handle 0 (stream hook bypass)   |
+| Error                                               | Likely cause                                                     |
+| --------------------------------------------------- | ---------------------------------------------------------------- |
+| `rec group usage requires 'gc' proposal`            | `WasmFeatures` in `lib.rs` or `core.rs` missing `GC` / `WASM3`   |
+| `wide arithmetic support is not enabled`            | Missing `WasmFeatures::WIDE_ARITHMETIC`                          |
+| `X is not defined` (runtime)                        | Missing intrinsic dependency in `intrinsics/mod.rs`              |
+| `cannot drop subtask before resolve is delivered`   | Subtask lifecycle issue — `deliverResolve()` not called          |
+| `task.X is not a function`                          | Method not defined on `AsyncTask` class (jco implementation gap) |
+| `invalid variant discriminant for expected`         | Async export returns `undefined` instead of result discriminant  |
+| Hang / timeout                                      | JSPI Suspending missing on a trampoline, or rendezvous deadlock  |
+| `symbolRscRep is not defined`                       | Missing `SymbolResourceRep` intrinsic dependency                 |
+| `FUTURES is not defined`                            | Missing `GlobalFutureMap` intrinsic dependency for FutureDrop    |
+| `invalid resource rep during remove, (cannot be 0)` | futureDropReadable called with handle 0 (stream hook bypass)     |
 
 ## Saving Patches
 
