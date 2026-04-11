@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775887886658,
+  "lastUpdate": 1775896306745,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11528,6 +11528,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/152db71548148f829cf04b564edadcd2f4e6f64f"
         },
         "date": 1775887886372,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1799,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8974,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19360,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "518c5cc179db356aeba76822450a5a4a7acf4e58",
+          "message": "Merge pull request #807 from wado-lang/claude/run-format-wado-mfaBI\n\nFix formatter: numeric attrs, template escapes, match expansion",
+          "timestamp": "2026-04-11T17:28:29+09:00",
+          "tree_id": "84b97f56f3fe06730458d7970913962a6633feab",
+          "url": "https://github.com/wado-lang/wado/commit/518c5cc179db356aeba76822450a5a4a7acf4e58"
+        },
+        "date": 1775896306464,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
