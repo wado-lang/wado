@@ -11,7 +11,15 @@
 //!   }
 
 use { TreeMap } from "core:collections";
-use { Serialize, Serializer, SerializeError, Deserialize, Deserializer, DeserializeError, DeserializeErrorKind } from "core:serde";
+use {
+    Serialize,
+    Serializer,
+    SerializeError,
+    Deserialize,
+    Deserializer,
+    DeserializeError,
+    DeserializeErrorKind,
+} from "core:serde";
 
 /// Error type for URL parsing failures.
 pub variant ParseError {
@@ -75,9 +83,15 @@ fn is_special_scheme(s: &String) -> bool {
 }
 
 fn is_unreserved_char(c: char) -> bool {
-    if 'A' <= c <= 'Z' { return true; }
-    if 'a' <= c <= 'z' { return true; }
-    if '0' <= c <= '9' { return true; }
+    if 'A' <= c <= 'Z' {
+        return true;
+    }
+    if 'a' <= c <= 'z' {
+        return true;
+    }
+    if '0' <= c <= '9' {
+        return true;
+    }
     return c == '-' || c == '.' || c == '_' || c == '~';
 }
 
@@ -301,8 +315,12 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
                 if after.starts_with(":") {
                     let port_str = after.substr_bytes(1, after.len());
                     match parse_port_str(&port_str) {
-                        Err(e) => { return Result::Err(e); },
-                        Ok(port_val) => { apply_port(url, port_val); },
+                        Err(e) => {
+                            return Result::Err(e);
+                        },
+                        Ok(port_val) => {
+                            apply_port(url, port_val);
+                        },
                     }
                 } else {
                     return Result::Err(ParseError::InvalidHost);
@@ -328,7 +346,9 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
             return Result::Err(ParseError::MissingHost);
         }
         match parse_port_str(&port_str) {
-            Err(e) => { return Result::Err(e); },
+            Err(e) => {
+                return Result::Err(e);
+            },
             Ok(port_val) => {
                 url.host = host_part.to_ascii_lowercase();
                 apply_port(url, port_val);
@@ -351,7 +371,9 @@ impl Url {
 
         let colon = match input.find(":") {
             Some(pos) => pos,
-            None => { return Result::Err(ParseError::InvalidScheme); },
+            None => {
+                return Result::Err(ParseError::InvalidScheme);
+            },
         };
         if colon == 0 {
             return Result::Err(ParseError::InvalidScheme);
@@ -413,11 +435,7 @@ impl Url {
     }
 
     /// Constructs a Url from the three parts used by wasi:http Request.
-    pub fn from_http_parts(
-        scheme: String,
-        authority: String,
-        path_with_query: String,
-    ) -> Result<Url, ParseError> {
+    pub fn from_http_parts(scheme: String, authority: String, path_with_query: String) -> Result<Url, ParseError> {
         let mut buf = String::with_capacity(scheme.len() + 3 + authority.len() + path_with_query.len());
         buf.push_str(scheme);
         buf.push_str("://");
@@ -598,18 +616,18 @@ impl Url {
         }
 
         let resolved_path = if r_path.starts_with("/") {
-            normalize_percent_encoding(&remove_dot_segments(r_path))
+            normalize_percent_encoding(&remove_dot_segments(r_path));
         } else {
             let base = self.path;
             let merged = if let Some(last_slash) = base.rfind("/") {
                 let mut m = String::with_capacity(last_slash + 1 + r_path.len());
                 m.push_str(base.substr_bytes(0, last_slash + 1));
                 m.push_str(r_path);
-                m
+                m;
             } else {
-                r_path
+                r_path;
             };
-            normalize_percent_encoding(&remove_dot_segments(merged))
+            normalize_percent_encoding(&remove_dot_segments(merged));
         };
 
         return Result::Ok(Url {
@@ -652,10 +670,8 @@ impl Url {
                         let v = part.substr_bytes(eq_pos + 1, part.len());
                         result.push(percent_decode_query_component(&v));
                     }
-                } else {
-                    if percent_decode_query_component(&part) == key {
-                        result.push("");
-                    }
+                } else if percent_decode_query_component(&part) == key {
+                    result.push("");
                 }
             }
         }
@@ -737,7 +753,9 @@ impl Deserialize for Url {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Url, DeserializeError> {
         let str = match d.deserialize_string() {
             Ok(s) => s,
-            Err(e) => { return Result::Err(e); },
+            Err(e) => {
+                return Result::Err(e);
+            },
         };
         return match Url::parse(str) {
             Ok(url) => Result::Ok(url),

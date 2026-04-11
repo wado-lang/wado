@@ -168,7 +168,9 @@ fn fragment_is_recursive(rule: &LexerRule, all_rules: &Array<LexerRule>) -> bool
 fn fragment_refs_self(target: &String, alts: &Array<LexerAlt>, all_rules: &Array<LexerRule>, visited: &mut Array<String>) -> bool {
     for let alt of alts {
         for let elem of &alt.elements {
-            if fragment_elem_refs_self(target, elem, all_rules, visited) { return true; }
+            if fragment_elem_refs_self(target, elem, all_rules, visited) {
+                return true;
+            }
         }
     }
     return false;
@@ -177,8 +179,12 @@ fn fragment_refs_self(target: &String, alts: &Array<LexerAlt>, all_rules: &Array
 fn fragment_elem_refs_self(target: &String, elem: &LexerElement, all_rules: &Array<LexerRule>, visited: &mut Array<String>) -> bool {
     match *elem {
         RuleRef(name) => {
-            if name == *target { return true; }
-            if visited.iter().any(|v: String| v == name) { return false; }
+            if name == *target {
+                return true;
+            }
+            if visited.iter().any(|v: String| v == name) {
+                return false;
+            }
             visited.push(name);
             let frag = find_fragment(all_rules, &name);
             if let Some(f) = frag {
@@ -195,7 +201,9 @@ fn fragment_elem_refs_self(target: &String, elem: &LexerElement, all_rules: &Arr
         Not(not_elem) => {
             return fragment_elem_refs_self(target, &not_elem.element, all_rules, visited);
         },
-        _ => { return false; },
+        _ => {
+            return false;
+        },
     }
 }
 
@@ -438,7 +446,9 @@ fn find_fragment(all_rules: &Array<LexerRule>, name: &String) -> Option<&LexerRu
 
 /// Tries to extract a single lowercase char from a case-insensitive CharClass (e.g., [aA]).
 fn try_extract_ci_char(cc: &CharClass) -> Option<char> {
-    if cc.negated { return null; }
+    if cc.negated {
+        return null;
+    }
     if cc.ranges.len() == 1 {
         let r = &cc.ranges[0];
         if r.start == r.end {
@@ -449,9 +459,10 @@ fn try_extract_ci_char(cc: &CharClass) -> Option<char> {
     if cc.ranges.len() == 2 {
         let r0 = &cc.ranges[0];
         let r1 = &cc.ranges[1];
-        if r0.start == r0.end && r1.start == r1.end && r0.start != r1.start
-            && r0.start.to_ascii_lowercase() == r1.start.to_ascii_lowercase()
-        {
+        if r0.start == r0.end
+            && r1.start == r1.end
+            && r0.start != r1.start
+            && r0.start.to_ascii_lowercase() == r1.start.to_ascii_lowercase() {
             return Option::<char>::Some(r0.start.to_ascii_lowercase());
         }
     }
@@ -494,9 +505,13 @@ fn try_extract_keyword_char(elem: &LexerElement, all_rules: &Array<LexerRule>) -
 /// Analyzes a lexer rule to determine if it's a fixed keyword pattern.
 /// Returns KeywordInfo if it matches a sequence of case-insensitive (or literal) chars.
 fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>) -> Option<KeywordInfo> {
-    if rule.is_fragment || rule.body.len() != 1 { return null; }
+    if rule.is_fragment || rule.body.len() != 1 {
+        return null;
+    }
     let alt = &rule.body[0];
-    if alt.elements.is_empty() { return null; }
+    if alt.elements.is_empty() {
+        return null;
+    }
     let mut text = String::with_capacity(alt.elements.len());
     let mut char_ci: Array<bool> = [];
     for let elem of &alt.elements {
@@ -525,7 +540,9 @@ fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>) -> O
 pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>) -> Array<KeywordInfo> {
     let mut result: Array<KeywordInfo> = [];
     for let rule of lexer_rules {
-        if rule.is_fragment || rule.body.is_empty() { continue; }
+        if rule.is_fragment || rule.body.is_empty() {
+            continue;
+        }
         let info = try_extract_keyword_info(rule, lexer_rules);
         if let Some(kw) = info {
             result.push(kw);
@@ -536,14 +553,18 @@ pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>) -> Array<KeywordInf
 
 fn is_keyword_rule_name(name: &String, keywords: &Array<KeywordInfo>) -> bool {
     for let kw of keywords {
-        if kw.rule_name == *name { return true; }
+        if kw.rule_name == *name {
+            return true;
+        }
     }
     return false;
 }
 
 /// Extracts the fixed literal text from a lexer rule, if it's a pure literal sequence.
 fn try_extract_fixed_text(rule: &LexerRule) -> Option<String> {
-    if rule.is_fragment || rule.body.len() != 1 { return null; }
+    if rule.is_fragment || rule.body.len() != 1 {
+        return null;
+    }
     let alt = &rule.body[0];
     let mut text = String::with_capacity(alt.elements.len());
     for let elem of &alt.elements {
@@ -561,14 +582,18 @@ fn is_literal_duplicate(rule: &LexerRule, lit_tokens: &Array<LitToken>) -> bool 
     let text = try_extract_fixed_text(rule);
     if let Some(t) = &text {
         for let lit of lit_tokens {
-            if lit.text == *t { return true; }
+            if lit.text == *t {
+                return true;
+            }
         }
     }
     return false;
 }
 
 fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &Array<KeywordInfo>) {
-    if keywords.is_empty() { return; }
+    if keywords.is_empty() {
+        return;
+    }
 
     let mut f = FnSpec::new("classify_keyword");
     f.add_param("chars", "&Array<char>");
@@ -584,8 +609,12 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &Array<KeywordInfo>) 
     let mut max_len = 0;
     for let kw of keywords {
         let l = kw.lowercase_text.len();
-        if l < min_len { min_len = l; }
-        if l > max_len { max_len = l; }
+        if l < min_len {
+            min_len = l;
+        }
+        if l > max_len {
+            max_len = l;
+        }
     }
 
     let mut first_len = true;
@@ -593,9 +622,13 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &Array<KeywordInfo>) 
         // Check if any keywords have this length
         let mut has_any = false;
         for let kw of keywords {
-            if kw.lowercase_text.len() == target_len { has_any = true; }
+            if kw.lowercase_text.len() == target_len {
+                has_any = true;
+            }
         }
-        if !has_any { continue; }
+        if !has_any {
+            continue;
+        }
 
         if first_len {
             w.begin(`if len == {target_len}`);
@@ -617,9 +650,13 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &Array<KeywordInfo>) 
             let fc = kw.lowercase_text.chars().next().unwrap();
             let mut found = false;
             for let existing of &first_chars {
-                if *existing == fc { found = true; }
+                if *existing == fc {
+                    found = true;
+                }
             }
-            if !found { first_chars.push(fc); }
+            if !found {
+                first_chars.push(fc);
+            }
         }
         first_chars.sort();
         // Emit first-char dispatch within this length group if >1 first char
@@ -634,7 +671,9 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &Array<KeywordInfo>) 
                     w.else_begin(`else if {guard}`);
                 }
                 for let kw of &len_keywords {
-                    if kw.lowercase_text.chars().next().unwrap() != *fc { continue; }
+                    if kw.lowercase_text.chars().next().unwrap() != *fc {
+                        continue;
+                    }
                     emit_keyword_check(w, *kw);
                 }
             }
@@ -666,7 +705,9 @@ fn emit_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
     let kw_chars: Array<char> = kw.lowercase_text.chars().collect();
     w.write("if ");
     for let mut ci = 0; ci < kw_chars.len(); ci += 1 {
-        if ci > 0 { w.write(" && "); }
+        if ci > 0 {
+            w.write(" && ");
+        }
         let lower = kw_chars[ci];
         let upper = kw_chars[ci].to_ascii_uppercase();
         if kw.char_ci[ci] {
@@ -742,15 +783,28 @@ fn compute_first_chars(rule: &LexerRule, all_rules: &Array<LexerRule>) -> TryCal
     // A catch-all rule (e.g., UNEXPECTED_CHAR: .) matches any single character.
     // It's only useful in the wildcard fallback, never in specific dispatch branches
     // where another rule already matches at least 1 character.
-    let catch_all = is_wc && rule.body.len() == 1 && rule.body[0].elements.len() == 1 && rule.body[0].elements[0] matches { AnyChar };
-    return TryCall { fn_name, token_kind, extra, first_chars: chars, is_wildcard: is_wc, is_catch_all: catch_all, match_length: -1 };
+    let catch_all = is_wc
+        && rule.body.len() == 1
+        && rule.body[0].elements.len() == 1
+        && rule.body[0].elements[0] matches { AnyChar };
+    return TryCall {
+        fn_name,
+        token_kind,
+        extra,
+        first_chars: chars,
+        is_wildcard: is_wc,
+        is_catch_all: catch_all,
+        match_length: -1,
+    };
 }
 
 /// Analyze first elements of rule body alternatives to find first-char set.
 /// Returns true if it's a wildcard (any char could match).
 fn compute_elem_first_chars(body: &Array<LexerAlt>, all_rules: &Array<LexerRule>, out: &mut Array<[char, char]>) -> bool {
     for let alt of body {
-        if alt.elements.is_empty() { return true; }
+        if alt.elements.is_empty() {
+            return true;
+        }
         let elem = &alt.elements[0];
         if compute_single_elem_first(elem, all_rules, out) {
             return true;
@@ -771,7 +825,9 @@ fn compute_single_elem_first(elem: &LexerElement, all_rules: &Array<LexerRule>, 
             return false;
         },
         CharClass(cc) => {
-            if cc.negated { return true; }
+            if cc.negated {
+                return true;
+            }
             for let r of &cc.ranges {
                 add_range(out, r.start, r.end);
             }
@@ -787,7 +843,9 @@ fn compute_single_elem_first(elem: &LexerElement, all_rules: &Array<LexerRule>, 
         },
         Repeat(rep) => {
             let is_wc = compute_single_elem_first(&rep.element, all_rules, out);
-            if is_wc { return true; }
+            if is_wc {
+                return true;
+            }
             if rep.kind matches { Star } || rep.kind matches { Optional } {
                 return true;
             }
@@ -796,13 +854,17 @@ fn compute_single_elem_first(elem: &LexerElement, all_rules: &Array<LexerRule>, 
         Group(alts) => {
             return compute_elem_first_chars(&alts, all_rules, out);
         },
-        _ => { return true; },
+        _ => {
+            return true;
+        },
     }
 }
 
 fn add_range(out: &mut Array<[char, char]>, start: char, end: char) {
     for let r of out {
-        if r[0] == start && r[1] == end { return; }
+        if r[0] == start && r[1] == end {
+            return;
+        }
     }
     out.push([start, end]);
 }
@@ -810,7 +872,9 @@ fn add_range(out: &mut Array<[char, char]>, start: char, end: char) {
 /// Check if a char matches any of the ranges in first_chars.
 fn char_matches_ranges(c: char, ranges: &Array<[char, char]>) -> bool {
     for let r of ranges {
-        if c >= r[0] && c <= r[1] { return true; }
+        if c >= r[0] && c <= r[1] {
+            return true;
+        }
     }
     return false;
 }
@@ -825,14 +889,20 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
     // Collect all unique single chars from first_chars
     let mut all_chars: Array<char> = [];
     for let call of calls {
-        if call.is_wildcard { continue; }
+        if call.is_wildcard {
+            continue;
+        }
         for let r of &call.first_chars {
             if r[0] == r[1] {
                 let mut found = false;
                 for let existing of &all_chars {
-                    if *existing == r[0] { found = true; }
+                    if *existing == r[0] {
+                        found = true;
+                    }
                 }
-                if !found { all_chars.push(r[0]); }
+                if !found {
+                    all_chars.push(r[0]);
+                }
             }
         }
     }
@@ -844,7 +914,9 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
     for let c of &all_chars {
         let mut matching: Array<i32> = [];
         for let mut i = 0; i < calls.len(); i += 1 {
-            if calls[i].is_catch_all { continue; }
+            if calls[i].is_catch_all {
+                continue;
+            }
             if calls[i].is_wildcard || char_matches_ranges(*c, &calls[i].first_chars) {
                 matching.push(i);
             }
@@ -869,14 +941,20 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
     // Collect all ranged entries (ranges where start != end)
     let mut range_calls: Array<i32> = [];
     for let mut i = 0; i < calls.len(); i += 1 {
-        if calls[i].is_wildcard { continue; }
+        if calls[i].is_wildcard {
+            continue;
+        }
         for let r of &calls[i].first_chars {
             if r[0] != r[1] {
                 let mut found = false;
                 for let existing of &range_calls {
-                    if *existing == i { found = true; }
+                    if *existing == i {
+                        found = true;
+                    }
                 }
-                if !found { range_calls.push(i); }
+                if !found {
+                    range_calls.push(i);
+                }
             }
         }
     }
@@ -884,7 +962,9 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
     // Merge range-based calls into groups or add them to wildcard fallback
     // For simplicity, add range-based calls to a "range group" with their guard
     for let mut i = 0; i < calls.len(); i += 1 {
-        if calls[i].is_wildcard { continue; }
+        if calls[i].is_wildcard {
+            continue;
+        }
         for let r of &calls[i].first_chars {
             if r[0] != r[1] {
                 // Build range guard
@@ -895,9 +975,13 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
                     if g.guard == guard {
                         let mut already = false;
                         for let ci of &g.calls {
-                            if *ci == i { already = true; }
+                            if *ci == i {
+                                already = true;
+                            }
                         }
-                        if !already { g.calls.push(i); }
+                        if !already {
+                            g.calls.push(i);
+                        }
                         found_group = true;
                     }
                 }
@@ -906,7 +990,9 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
                     cs.push(i);
                     // Also add non-catch-all wildcards
                     for let mut j = 0; j < calls.len(); j += 1 {
-                        if calls[j].is_wildcard && !calls[j].is_catch_all { cs.push(j); }
+                        if calls[j].is_wildcard && !calls[j].is_catch_all {
+                            cs.push(j);
+                        }
                     }
                     groups.push(DispatchGroup { guard, calls: cs });
                 }
@@ -925,9 +1011,13 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
         }
         let mut has_range = false;
         for let r of &calls[i].first_chars {
-            if r[0] != r[1] { has_range = true; }
+            if r[0] != r[1] {
+                has_range = true;
+            }
         }
-        if has_range { wildcard_calls.push(i); }
+        if has_range {
+            wildcard_calls.push(i);
+        }
     }
     if !wildcard_calls.is_empty() {
         groups.push(DispatchGroup { guard: String::from("true"), calls: wildcard_calls });
@@ -1004,9 +1094,13 @@ fn emit_group_calls(w: &mut CodeWriter, calls: &Array<TryCall>, indices: &Array<
 }
 
 fn arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
-    if a.len() != b.len() { return false; }
+    if a.len() != b.len() {
+        return false;
+    }
     for let mut i = 0; i < a.len(); i += 1 {
-        if a[i] != b[i] { return false; }
+        if a[i] != b[i] {
+            return false;
+        }
     }
     return true;
 }
@@ -1059,7 +1153,11 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                 }
             }
             for let rule of lexer_rules {
-                if !rule.is_fragment && !rule.body.is_empty() && rule.mode == mi && !is_keyword_rule_name(&rule.name, keywords) && !is_literal_duplicate(rule, lit_tokens) {
+                if !rule.is_fragment
+                    && !rule.body.is_empty()
+                    && rule.mode == mi
+                    && !is_keyword_rule_name(&rule.name, keywords)
+                    && !is_literal_duplicate(rule, lit_tokens) {
                     let fn_name = `try_{to_lower(&rule.name)}`;
                     w.line(`end = {fn_name}(&lexer.chars, start);`);
                     let mut extra = String::with_capacity(64);
@@ -1099,7 +1197,10 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
             });
         }
         for let rule of lexer_rules {
-            if !rule.is_fragment && !rule.body.is_empty() && !is_keyword_rule_name(&rule.name, keywords) && !is_literal_duplicate(rule, lit_tokens) {
+            if !rule.is_fragment
+                && !rule.body.is_empty()
+                && !is_keyword_rule_name(&rule.name, keywords)
+                && !is_literal_duplicate(rule, lit_tokens) {
                 all_calls.push(compute_first_chars(rule, lexer_rules));
             }
         }
@@ -1172,7 +1273,9 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.line("lexer.pos = best_end;");
     w.end();  // else
     w.end();  // while
-    w.line("tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));");
+    w.line(
+        "tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));",
+    );
     w.line("return tokens;");
     w.end();  // fn
     w.blank();

@@ -126,7 +126,9 @@ fn prediction_contains_backtrack(node: &PredictionNode) -> bool {
         Consume(c) => prediction_contains_backtrack(&c.child),
         Dispatch(d) => {
             for let b of &d.branches {
-                if prediction_contains_backtrack(&b.child) { return true; }
+                if prediction_contains_backtrack(&b.child) {
+                    return true;
+                }
             }
             return false;
         },
@@ -138,11 +140,15 @@ fn prediction_collect_all_indices(node: &PredictionNode, out: &mut Array<i32>) {
     match *node {
         Backtrack(indices) => {
             for let i of &indices {
-                if !out.iter().any(|x: i32| x == *i) { out.push(*i); }
+                if !out.iter().any(|x: i32| x == *i) {
+                    out.push(*i);
+                }
             }
         },
         Leaf(idx) => {
-            if !out.iter().any(|x: i32| x == idx) { out.push(idx); }
+            if !out.iter().any(|x: i32| x == idx) {
+                out.push(idx);
+            }
         },
         Consume(c) => prediction_collect_all_indices(&c.child, out),
         Dispatch(d) => {
