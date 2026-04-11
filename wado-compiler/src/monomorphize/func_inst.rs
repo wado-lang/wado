@@ -1104,15 +1104,11 @@ impl Monomorphizer {
                             (
                                 mi.impl_type_args
                                     .iter()
-                                    .map(|&tid| {
-                                        self.substitute_type(tid, substitution, type_table)
-                                    })
+                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
                                     .collect::<Vec<_>>(),
                                 mi.method_type_args
                                     .iter()
-                                    .map(|&tid| {
-                                        self.substitute_type(tid, substitution, type_table)
-                                    })
+                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
                                     .collect::<Vec<_>>(),
                             )
                         } else if self.current_impl_type_param_count > 0
@@ -1182,9 +1178,7 @@ impl Monomorphizer {
                             let substituted_method_args: Vec<TypeId> = mi
                                 .method_type_args
                                 .iter()
-                                .map(|&tid| {
-                                    self.substitute_type(tid, substitution, type_table)
-                                })
+                                .map(|&tid| self.substitute_type(tid, substitution, type_table))
                                 .collect();
                             let any_changed = substituted_method_args
                                 .iter()
@@ -1201,8 +1195,7 @@ impl Monomorphizer {
 
                         if new_func_name != old_func_name {
                             if info.is_type_param_receiver {
-                                let mut sorted_entries: Vec<_> =
-                                    substitution.iter().collect();
+                                let mut sorted_entries: Vec<_> = substitution.iter().collect();
                                 sorted_entries.sort_by_key(|(idx, _)| **idx);
                                 let concrete_module = self
                                     .functions

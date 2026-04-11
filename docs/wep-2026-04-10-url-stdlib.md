@@ -141,13 +141,6 @@ impl Url {
     /// Follows RFC 3986 §5 resolution algorithm.
     pub fn resolve(&self, reference: String) -> Result<Url, ParseError>
 
-    /// Returns a normalized form of this URL:
-    /// - Scheme and host lowercased
-    /// - Dot-segments (. and ..) removed from path
-    /// - Default port removed
-    /// - Unnecessary percent-encoding decoded (unreserved characters)
-    pub fn normalize(&self) -> Url
-
     /// Parses the query string into a TreeMap (insertion-order preserved).
     /// Decodes percent-encoding and treats "+" as space.
     /// Duplicate keys use last-value-wins semantics.
@@ -218,20 +211,19 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 ### Trait Implementations
 
+URLs are normalized at parse time (scheme/host lowercased, dot-segments resolved, default ports removed, unnecessary percent-encoding decoded). This means `Eq` can use direct field comparison without allocating:
+
 ```wado
-/// Two URLs are equal when their normalized forms are identical.
 impl Eq for Url {
     fn eq(&self, other: &Self) -> bool {
-        let a = self.normalize();
-        let b = other.normalize();
-        return a.scheme == b.scheme
-            && a.username == b.username
-            && a.password == b.password
-            && a.host == b.host
-            && a.port == b.port
-            && a.path == b.path
-            && a.query == b.query
-            && a.fragment == b.fragment;
+        return self.scheme == other.scheme
+            && self.username == other.username
+            && self.password == other.password
+            && self.host == other.host
+            && self.port == other.port
+            && self.path == other.path
+            && self.query == other.query
+            && self.fragment == other.fragment;
     }
 }
 
@@ -241,6 +233,12 @@ impl Display for Url {
         f.write_str(&self.to_string());
     }
 }
+
+/// Serializes as a JSON string.
+impl Serialize for Url { ... }
+
+/// Deserializes from a JSON string via Url::parse.
+impl Deserialize for Url { ... }
 ```
 
 ### Module-Level Utility Functions
@@ -281,7 +279,6 @@ pub fn format_query(params: TreeMap<String, String>) -> String
 | `.path_with_query()`        | `&self -> String`                                   | `/path[?query]`           |
 | `.effective_port()`         | `&self -> u16`                                      | Port or scheme default    |
 | `.resolve(ref)`             | `&self, String -> Result<Url, ParseError>`          | Relative resolution       |
-| `.normalize()`              | `&self -> Url`                                      | Normalize URL             |
 | `.query_pairs()`            | `&self -> TreeMap<String, String>`                  | Parse query params        |
 | `.query_get(key)`           | `&self, String -> Option<String>`                   | Get param value           |
 | `.query_get_all(key)`       | `&self, String -> Array<String>`                    | Get all values for key    |
@@ -291,7 +288,7 @@ pub fn format_query(params: TreeMap<String, String>) -> String
 | `parse_query`               | `String -> TreeMap<String, String>`                 | Parse query string        |
 | `format_query`              | `TreeMap<String, String> -> String`                 | Format query string       |
 
-8 pub fields. 14 methods. 4 module functions. 1 error variant.
+8 pub fields. 13 methods. 4 module functions. 1 error variant. Serde: `Serialize` + `Deserialize` via JSON string.
 
 ### Usage Examples
 
@@ -398,13 +395,13 @@ Key implementation details:
 
 - **No opaque URIs**: `mailto:`, `urn:`, `data:` URLs cannot be represented. A separate `core:uri` module could be added later for RFC 3986 URI-references
 - **No IDNA**: Internationalized domain names are not normalized to Punycode. The host is stored as-is. This could be added as a separate utility without changing the `Url` type
-- **Eq via normalization**: Comparing two URLs normalizes both, which allocates. For hot-path comparisons, users should cache normalized forms
+- **Eq field comparison**: Comparing two URLs compares all fields individually, which is slightly more expensive than a single string comparison. For hot-path comparisons, users can compare `to_string()` results
 
 ### Future Extensions
 
 - `core:uri` — RFC 3986 URI-reference type for non-special schemes
 - IDNA / Punycode support as a separate utility module
-- `impl Serialize for Url` / `impl Deserialize for Url` for JSON serialization
+- `impl Hash for Url` for use in hash-based collections
 
 ## Related WEPs
 
