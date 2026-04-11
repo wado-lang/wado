@@ -1,0 +1,29 @@
+// Test: Negate eqz(comparison) → negated comparison
+//
+// `while x <= limit` lowers to `if (x <= limit) == 0 { break }`.
+// The peephole pass folds `eqz(le_s)` → `gt_s`, saving one instruction.
+//
+// At O0: `(x <= limit) == 0` (eqz wrapping comparison)
+// At O1: `x > limit` (negated comparison, no eqz)
+
+fn count_up_to(limit: i32) -> i32 {
+    let mut x = 0;
+    while x <= limit {
+        x += 1;
+    }
+    return x;
+}
+
+test {
+    assert count_up_to(5) == 6;
+    assert count_up_to(0) == 1;
+    assert count_up_to(-1) == 0;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": ["<= limit) == 0"],
+    "wir_not_expect:O1": ["== 0"],
+    "wir_expect:O1": ["x > limit"]
+}
