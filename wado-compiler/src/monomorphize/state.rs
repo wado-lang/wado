@@ -37,6 +37,16 @@ pub(super) struct Monomorphizer {
     pub current_module_source: ModuleSource,
     pub structs: StructInstState,
     pub functions: FuncInstState,
+    /// Number of impl-level type params in the function currently being instantiated.
+    /// Set by `instantiate_function` before calling `substitute_types_in_block`.
+    /// Used to distinguish impl-level (struct) type params from method-level type params
+    /// in the substitution map when rewriting static method calls.
+    pub current_impl_type_param_count: usize,
+    /// Base struct name of the impl block being instantiated (e.g., `TreeMap` for
+    /// `impl<K,V> TreeMap<K,V>`). Used to restrict impl type arg propagation to
+    /// calls on the same struct — calls to other structs within the same impl block
+    /// must not receive these type args.
+    pub current_impl_struct_name: String,
 }
 
 impl Monomorphizer {
@@ -56,6 +66,8 @@ impl Monomorphizer {
                 mangled_to_key: IndexMap::default(),
                 trait_method_locations: IndexMap::default(),
             },
+            current_impl_type_param_count: 0,
+            current_impl_struct_name: String::new(),
         }
     }
 
