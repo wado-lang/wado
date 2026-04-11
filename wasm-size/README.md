@@ -20,21 +20,23 @@ Compares WebAssembly binary sizes across different languages.
 
 ### hello_world
 
-| Language       | Size (bytes) |
-| -------------- | -----------: |
-| wado           |        1,794 |
-| c              |        2,353 |
-| zig            |        4,449 |
-| rust           |       40,754 |
+| Language | Size (bytes) |
+| -------- | -----------: |
+| wado     |        1,799 |
+| c        |        3,076 |
+| zig      |        4,449 |
+| moonbit  |       15,319 |
+| rust     |       40,754 |
 
 ### pi_approx
 
-| Language       | Size (bytes) |
-| -------------- | -----------: |
-| wado           |        8,969 |
-| zig            |       10,608 |
-| c              |       14,429 |
-| rust           |       60,683 |
+| Language | Size (bytes) |
+| -------- | -----------: |
+| wado     |        8,974 |
+| zig      |       10,608 |
+| c        |       16,786 |
+| moonbit  |       25,006 |
+| rust     |       60,683 |
 
 ### zlib
 
@@ -42,9 +44,9 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       19,355 | stdin + gzip decompress (core:zlib)    |
+| wado     |       19,360 | stdin + gzip decompress (core:zlib)    |
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
-| c        |       30,270 | stdin + gzip decompress (zlib 1.3.1)   |
+| c        |       33,439 | stdin + gzip decompress (zlib 1.3.1)   |
 | rust     |       88,014 | stdin + gzip decompress (zlib-rs)      |
 
 ## Usage
@@ -82,8 +84,9 @@ All languages are compiled with size optimization and symbol stripping enabled:
 Run `mise install` to install:
 
 - **Zig** - wasm32-wasi target
-- **wasmtime** - for validation (v41+ required for Wado's WASI P3)
 - **wasi-sdk** - clang + wasm-ld + wasi-sysroot for C (`github:WebAssembly/wasi-sdk`)
+
+wasmtime is inherited from the root `mise.toml`.
 
 ### Manual installation
 

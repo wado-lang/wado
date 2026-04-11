@@ -5,9 +5,9 @@ Wasm binary size comparison across languages.
 ## Setup
 
 ```sh
-mise install                                                   # zig, wasmtime, wasi-sdk
+mise install                                                   # zig, wasi-sdk (wasmtime from root)
 rustup target add wasm32-wasip1                                # Rust wasm target
-curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash  # Moonbit (optional)
+curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash  # Moonbit
 ```
 
 ## Tasks
