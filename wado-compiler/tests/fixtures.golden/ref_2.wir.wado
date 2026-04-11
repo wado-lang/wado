@@ -159,7 +159,7 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/double_all"(arr) {
         _licm_repr_9 = arr.repr;
         block {
             l1: loop {
-                if (i < _licm_used_8) == 0 {
+                if i >= _licm_used_8 {
                     break __for_0;
                 }
                 value = builtin::array_get<i32>(_licm_repr_9, i) * 2;
@@ -177,7 +177,7 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/accumulate"(target, n) {
         i = 0;
         block {
             l4: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_1;
                 }
                 target.value = target.value + i;
@@ -209,7 +209,7 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/process"(arr, input, count) {
     _licm_repr_15 = input.repr;
     b8: block {
         l9: loop {
-            if (i < count) == 0 {
+            if i >= count {
                 break b8;
             }
             val = __inline_Array_u8__IndexValue_i32___index_value_0: block -> u8 {
@@ -295,7 +295,7 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/ref_mut_array_ops"() with Stdout {
         _licm_repr_43 = nums.repr;
         block {
             l16: loop {
-                if (i < _licm_used_42) == 0 {
+                if i >= _licm_used_42 {
                     break __for_2;
                 }
                 "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -355,7 +355,7 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/ref_loop_mut_test"() with Stdout {
     r = count;
     b18: block {
         l19: loop {
-            if (r.value < 5) == 0 {
+            if r.value >= 5 {
                 break b18;
             }
             r.value = r.value + 1;
@@ -424,7 +424,7 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/ref_mut_while_condition_test"() with
     pos_0 = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
     b21: block {
         l22: loop {
-            if (pos_0.value < 3) == 0 {
+            if pos_0.value >= 3 {
                 break b21;
             }
             pos_3 = pos_0;
@@ -528,7 +528,7 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/ref_mut_array_append_complex_test"()
         _licm_repr_40 = out.repr;
         block {
             l25: loop {
-                if (i < _licm_used_39) == 0 {
+                if i >= _licm_used_39 {
                     break __for_3;
                 }
                 "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -605,7 +605,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l29: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -700,7 +700,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         t = val;
         block {
             l35: loop {
-                if (t > 0_i64) == 0 {
+                if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
@@ -723,7 +723,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             temp = abs_val;
             block {
                 l39: loop {
-                    if (temp > 0_i64) == 0 {
+                    if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
@@ -840,7 +840,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l51: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
@@ -963,7 +963,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
         i = 0;
         block {
             l72: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
@@ -1005,7 +1005,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
         i = 0;
         block {
             l76: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));

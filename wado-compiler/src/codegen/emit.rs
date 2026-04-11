@@ -984,12 +984,14 @@ impl<'a> WirEmitter<'a> {
             WirInstr::DeclareLocal { .. } => {
                 // Already handled in pre-allocation
             }
-            WirInstr::LocalGet { name, .. } => {
+            WirInstr::LocalGet { name, result_ty } => {
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalGet(idx));
                 // Ref-type locals are nullable in Wasm (for defaultability).
-                // Narrow to non-null since Wado values are always non-null.
-                if self.ref_locals.contains(name.as_str()) {
+                // Narrow to non-null when the WIR result type says non-null.
+                // The WIR optimizer relaxes result_ty to nullable for GC access
+                // operands (array.get, struct.get, etc.) where nullable is accepted.
+                if self.ref_locals.contains(name.as_str()) && result_ty.is_nonnull_ref() {
                     f.instruction(&Instruction::RefAsNonNull);
                 }
             }

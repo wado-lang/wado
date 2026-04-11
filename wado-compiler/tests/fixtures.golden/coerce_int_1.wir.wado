@@ -529,7 +529,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l26: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -624,7 +624,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         t = val;
         block {
             l32: loop {
-                if (t > 0_i64) == 0 {
+                if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
@@ -647,7 +647,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             temp = abs_val;
             block {
                 l36: loop {
-                    if (temp > 0_i64) == 0 {
+                    if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
@@ -809,7 +809,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     temp = val_i64;
     b42: block {
         l43: loop {
-            if (temp != 0_i64) == 0 {
+            if temp == 0_i64 {
                 break b42;
             }
             digit_count = digit_count + 1;
@@ -837,7 +837,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     temp = val_i64;
     b47: block {
         l48: loop {
-            if (temp != 0_i64) == 0 {
+            if temp == 0_i64 {
                 break b47;
             }
             pos = pos - 1;
@@ -950,7 +950,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l62: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);

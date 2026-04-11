@@ -274,7 +274,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l2: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -393,7 +393,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     i = 127;
     b11: block {
         l12: loop {
-            if (i >= 0) == 0 {
+            if i < 0 {
                 break b11;
             }
             remainder = "core:prelude/int128.wado/u128^Shl::shl"(remainder, 1);
@@ -482,7 +482,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal"(self, f) {
         temp_7 = value_copy "core:prelude/int128.wado//u128"(self);
         block {
             l21: loop {
-                if ("core:prelude/int128.wado/u128^Ord::cmp"(temp_7, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) == 2) == 0 {
+                if "core:prelude/int128.wado/u128^Ord::cmp"(temp_7, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) != 2 {
                     break __for_0;
                 }
                 digit_count = digit_count + 1;
@@ -505,7 +505,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal"(self, f) {
         temp_11 = value_copy "core:prelude/int128.wado//u128"(self);
         block {
             l24: loop {
-                if ("core:prelude/int128.wado/u128^Ord::cmp"(temp_11, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) == 2) == 0 {
+                if "core:prelude/int128.wado/u128^Ord::cmp"(temp_11, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) != 2 {
                     break __for_1;
                 }
                 pos = pos - 1;
@@ -640,7 +640,7 @@ fn "core:prelude/int128.wado/i128::fmt_decimal"(self, f) {
         temp_9 = value_copy "core:prelude/int128.wado//u128"(abs_val);
         block {
             l37: loop {
-                if ("core:prelude/int128.wado/u128^Ord::cmp"(temp_9, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) == 2) == 0 {
+                if "core:prelude/int128.wado/u128^Ord::cmp"(temp_9, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) != 2 {
                     break __for_2;
                 }
                 digit_count = digit_count + 1;
@@ -663,7 +663,7 @@ fn "core:prelude/int128.wado/i128::fmt_decimal"(self, f) {
         temp_13 = value_copy "core:prelude/int128.wado//u128"(abs_val);
         block {
             l40: loop {
-                if ("core:prelude/int128.wado/u128^Ord::cmp"(temp_13, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) == 2) == 0 {
+                if "core:prelude/int128.wado/u128^Ord::cmp"(temp_13, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) != 2 {
                     break __for_3;
                 }
                 pos = pos - 1;
@@ -771,7 +771,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l51: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);

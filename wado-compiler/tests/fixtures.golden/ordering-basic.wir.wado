@@ -203,7 +203,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l14: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -275,7 +275,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
         i = 0;
         block {
             l21: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
@@ -307,7 +307,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
         i = 0;
         block {
             l25: loop {
-                if (i < min_len) == 0 {
+                if i >= min_len {
                     break __for_2;
                 }
                 a_byte = builtin::array_get_u8(a_repr, i);
@@ -347,10 +347,10 @@ fn "core:prelude/array.wado/Array<i32>^Eq::eq"(self, other) {
         _licm_repr_5 = other.repr;
         block {
             l33: loop {
-                if (i < _licm_used_3) == 0 {
+                if i >= _licm_used_3 {
                     break __for_9;
                 }
-                if (builtin::array_get<i32>(_licm_repr_4, i) == builtin::array_get<i32>(_licm_repr_5, i)) == 0 {
+                if builtin::array_get<i32>(_licm_repr_4, i) != builtin::array_get<i32>(_licm_repr_5, i) {
                     return 0;
                 }
                 i = i + 1;
@@ -381,7 +381,7 @@ fn "core:prelude/array.wado/Array<i32>^Ord::cmp"(self, other) {
         _licm_repr_9 = other.repr;
         block {
             l37: loop {
-                if (i < min_len) == 0 {
+                if i >= min_len {
                     break __for_10;
                 }
                 a = builtin::array_get<i32>(_licm_repr_8, i);
@@ -436,7 +436,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
         i = 0;
         block {
             l45: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));

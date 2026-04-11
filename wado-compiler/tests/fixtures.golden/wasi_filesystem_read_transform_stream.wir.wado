@@ -210,7 +210,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_transform_stream.wado/to_u
         _licm_repr_12 = data.repr;
         block {
             l1: loop {
-                if (i < _licm_used_11) == 0 {
+                if i >= _licm_used_11 {
                     break __for_0;
                 }
                 b = builtin::array_get<u8>(_licm_repr_12, i);
@@ -480,7 +480,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
         i = 0;
         block {
             l54: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
@@ -498,7 +498,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l57: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -704,7 +704,7 @@ fn "core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow"(self) {
         i = 0;
         block {
             l69: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "tuple//[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple//[Descriptor, String]">(old_repr, i));
@@ -746,7 +746,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
         i = 0;
         block {
             l73: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));

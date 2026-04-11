@@ -588,7 +588,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l19: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -683,7 +683,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         t = val;
         block {
             l25: loop {
-                if (t > 0_i64) == 0 {
+                if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
@@ -706,7 +706,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             temp = abs_val;
             block {
                 l29: loop {
-                    if (temp > 0_i64) == 0 {
+                    if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
@@ -803,7 +803,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
         i = 0;
         block {
             l38: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
@@ -835,7 +835,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
         i = 0;
         block {
             l42: loop {
-                if (i < min_len) == 0 {
+                if i >= min_len {
                     break __for_2;
                 }
                 a_byte = builtin::array_get_u8(a_repr, i);
@@ -939,7 +939,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l57: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
@@ -1111,7 +1111,7 @@ fn "core:prelude/array.wado/Array<Array<Elem>>::grow"(self) {
         i = 0;
         block {
             l86: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude//Array<Elem>">(new_repr, i, builtin::array_get<ref "core:prelude//Array<Elem>">(old_repr, i));
@@ -1153,7 +1153,7 @@ fn "core:prelude/array.wado/Array<Elem>::grow"(self) {
         i = 0;
         block {
             l90: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//Elem">(old_repr, i));
@@ -1215,7 +1215,7 @@ fn "core:prelude/array.wado/Array<LitToken>::grow"(self) {
         i = 0;
         block {
             l96: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//LitToken">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/treeset_mut_ref_deep.wado//LitToken">(old_repr, i));
@@ -1369,7 +1369,7 @@ fn "core:prelude/array.wado/Array<TreeMapEntry<String,unit>>::grow"(self) {
         i = 0;
         block {
             l112: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:collections//TreeMapEntry<String,unit>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapEntry<String,unit>">(old_repr, i));

@@ -2100,7 +2100,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l72: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -2195,7 +2195,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         t = val;
         block {
             l78: loop {
-                if (t > 0_i64) == 0 {
+                if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
@@ -2218,7 +2218,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             temp = abs_val;
             block {
                 l82: loop {
-                    if (temp > 0_i64) == 0 {
+                    if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
@@ -2335,7 +2335,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l94: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
@@ -2453,14 +2453,14 @@ fn "core:prelude/array.wado/Array<i32>::sort_by"(self, cmp) {
     __for_11: block {
         block {
             l115: loop {
-                if (width < n) == 0 {
+                if width >= n {
                     break __for_11;
                 }
                 __for_12: block {
                     start = 0;
                     block {
                         l118: loop {
-                            if (start < n) == 0 {
+                            if start >= n {
                                 break __for_12;
                             }
                             mid = start + width;
@@ -2475,7 +2475,7 @@ fn "core:prelude/array.wado/Array<i32>::sort_by"(self, cmp) {
                                     k = start;
                                     block {
                                         l122: loop {
-                                            if (k < end) == 0 {
+                                            if k >= end {
                                                 break __for_13;
                                             }
                                             if i < mid {
@@ -2576,7 +2576,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
         i = 0;
         block {
             l133: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
@@ -2927,14 +2927,14 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_18
     __for_11: block {
         block {
             l177: loop {
-                if (width < n) == 0 {
+                if width >= n {
                     break __for_11;
                 }
                 __for_12: block {
                     start = 0;
                     block {
                         l180: loop {
-                            if (start < n) == 0 {
+                            if start >= n {
                                 break __for_12;
                             }
                             mid = start + width;
@@ -2949,7 +2949,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_18
                                     k = start;
                                     block {
                                         l184: loop {
-                                            if (k < end) == 0 {
+                                            if k >= end {
                                                 break __for_13;
                                             }
                                             if i < mid {
@@ -3016,14 +3016,14 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_19
     __for_11: block {
         block {
             l191: loop {
-                if (width < n) == 0 {
+                if width >= n {
                     break __for_11;
                 }
                 __for_12: block {
                     start = 0;
                     block {
                         l194: loop {
-                            if (start < n) == 0 {
+                            if start >= n {
                                 break __for_12;
                             }
                             mid = start + width;
@@ -3038,7 +3038,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/Array<i32>::sort_by$__Closure_19
                                     k = start;
                                     block {
                                         l198: loop {
-                                            if (k < end) == 0 {
+                                            if k >= end {
                                                 break __for_13;
                                             }
                                             if i < mid {

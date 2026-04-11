@@ -7,7 +7,7 @@
 //! - Copy-used-only-for-field-reads elision
 //! - Multi-value struct elision (`MultiValueStructNew` + `StructGet` → `MultiValueLocalBind`)
 
-use crate::wir::{WirInstr, WirPackage, WirTypeDef};
+use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
 use indexmap::IndexMap;
 
@@ -117,12 +117,14 @@ pub(super) fn run_peephole(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
         eliminate_const_if(instr);
     }
     fold_eqz_patterns(instrs);
+    fold_branchless_increment(instrs);
     elide_redundant_value_copies(instrs);
     elide_copy_used_only_for_field_reads(instrs);
     // Cross-scope copy elision: traces LocalGet through parent scope definitions.
     // Runs after the recursive peephole so nested blocks are already optimized.
     elide_value_copies_cross_scope(instrs, &IndexMap::default());
     elide_multi_value_structs(instrs, types);
+    relax_gc_operand_nullability(instrs);
 }
 
 /// Recurse into nested instruction bodies and eliminate dead branches.
@@ -326,6 +328,7 @@ fn fold_eqz_in_instr(instr: &mut WirInstr) {
         fn visit_instr(&mut self, instr: &mut WirInstr) {
             self.walk_instr(instr);
             try_fold_eqz(instr);
+            try_negate_eqz_comparison(instr);
         }
     }
     FoldEqz.visit_instr(instr);
@@ -355,6 +358,205 @@ fn try_fold_eqz(instr: &mut WirInstr) {
         }
         _ => {}
     }
+}
+
+/// Fold `I32Eqz(comparison)` into the negated comparison instruction.
+///
+/// e.g., `i32.eqz(i32.le_s(a, b))` → `i32.gt_s(a, b)`
+///
+/// This saves one Wasm instruction per negated comparison, which is significant
+/// in tight loops (e.g., `while x <= limit` lowers to `if !(x <= limit) break`).
+/// Only applies to integer comparisons — float comparisons are excluded due to NaN.
+fn try_negate_eqz_comparison(instr: &mut WirInstr) {
+    let WirInstr::I32Eqz(inner) = instr else {
+        return;
+    };
+    // Determine which negated constructor to use based on the inner comparison.
+    // Take a reference first to decide, then destructure to move operands.
+    let ctor: fn(Box<WirInstr>, Box<WirInstr>) -> WirInstr = match inner.as_ref() {
+        // i32 signed
+        WirInstr::I32LeS(..) => WirInstr::I32GtS,
+        WirInstr::I32LtS(..) => WirInstr::I32GeS,
+        WirInstr::I32GeS(..) => WirInstr::I32LtS,
+        WirInstr::I32GtS(..) => WirInstr::I32LeS,
+        // i32 unsigned
+        WirInstr::I32LeU(..) => WirInstr::I32GtU,
+        WirInstr::I32LtU(..) => WirInstr::I32GeU,
+        WirInstr::I32GeU(..) => WirInstr::I32LtU,
+        WirInstr::I32GtU(..) => WirInstr::I32LeU,
+        // i32 eq/ne
+        WirInstr::I32Eq(..) => WirInstr::I32Ne,
+        WirInstr::I32Ne(..) => WirInstr::I32Eq,
+        // i64 signed
+        WirInstr::I64LeS(..) => WirInstr::I64GtS,
+        WirInstr::I64LtS(..) => WirInstr::I64GeS,
+        WirInstr::I64GeS(..) => WirInstr::I64LtS,
+        WirInstr::I64GtS(..) => WirInstr::I64LeS,
+        // i64 unsigned
+        WirInstr::I64LeU(..) => WirInstr::I64GtU,
+        WirInstr::I64LtU(..) => WirInstr::I64GeU,
+        WirInstr::I64GeU(..) => WirInstr::I64LtU,
+        WirInstr::I64GtU(..) => WirInstr::I64LeU,
+        // i64 eq/ne
+        WirInstr::I64Eq(..) => WirInstr::I64Ne,
+        WirInstr::I64Ne(..) => WirInstr::I64Eq,
+        _ => return,
+    };
+    // Extract the two operands from the inner comparison.
+    let (l, r) = match inner.as_mut() {
+        WirInstr::I32LeS(l, r)
+        | WirInstr::I32LtS(l, r)
+        | WirInstr::I32GeS(l, r)
+        | WirInstr::I32GtS(l, r)
+        | WirInstr::I32LeU(l, r)
+        | WirInstr::I32LtU(l, r)
+        | WirInstr::I32GeU(l, r)
+        | WirInstr::I32GtU(l, r)
+        | WirInstr::I32Eq(l, r)
+        | WirInstr::I32Ne(l, r)
+        | WirInstr::I64LeS(l, r)
+        | WirInstr::I64LtS(l, r)
+        | WirInstr::I64GeS(l, r)
+        | WirInstr::I64GtS(l, r)
+        | WirInstr::I64LeU(l, r)
+        | WirInstr::I64LtU(l, r)
+        | WirInstr::I64GeU(l, r)
+        | WirInstr::I64GtU(l, r)
+        | WirInstr::I64Eq(l, r)
+        | WirInstr::I64Ne(l, r) => (
+            std::mem::replace(l, Box::new(WirInstr::Nop)),
+            std::mem::replace(r, Box::new(WirInstr::Nop)),
+        ),
+        _ => return,
+    };
+    *instr = ctor(l, r);
+}
+
+/// Fold `if bool { x += 1 }` → `x += bool` (branchless increment).
+///
+/// Eliminates a conditional branch in the common counting-loop pattern where a
+/// boolean value gates an increment-by-one. Since the condition is guaranteed to
+/// be 0 or 1, it can be added directly.
+fn fold_branchless_increment(instrs: &mut [WirInstr]) {
+    for instr in instrs.iter_mut() {
+        fold_branchless_increment_in(instr);
+    }
+}
+
+fn fold_branchless_increment_in(instr: &mut WirInstr) {
+    // Recurse into nested blocks first.
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            fold_branchless_increment(body);
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            ..
+        } => {
+            fold_branchless_increment(then_body);
+            if let Some(eb) = else_body {
+                fold_branchless_increment(eb);
+            }
+        }
+        _ => {}
+    }
+    // Match: If { cond, then: [LocalSet(x, I32Add(LocalGet(x), I32Const(1)))], else: None }
+    let WirInstr::If {
+        condition,
+        then_body,
+        else_body: None,
+        result: None,
+    } = instr
+    else {
+        return;
+    };
+    if then_body.len() != 1 {
+        return;
+    }
+    let WirInstr::LocalSet { name, value } = &then_body[0] else {
+        return;
+    };
+    let WirInstr::I32Add(lhs, rhs) = value.as_ref() else {
+        return;
+    };
+    let WirInstr::LocalGet { name: get_name, .. } = lhs.as_ref() else {
+        return;
+    };
+    if get_name != name {
+        return;
+    }
+    let WirInstr::I32Const(1) = rhs.as_ref() else {
+        return;
+    };
+    if !is_boolean_valued(condition.as_ref()) {
+        return;
+    }
+    // Transform: x = x + condition
+    let cond = std::mem::replace(condition, Box::new(WirInstr::Nop));
+    let get = Box::new(WirInstr::LocalGet {
+        name: name.clone(),
+        result_ty: WirType::I32,
+    });
+    *instr = WirInstr::LocalSet {
+        name: name.clone(),
+        value: Box::new(WirInstr::I32Add(get, cond)),
+    };
+}
+
+/// Returns true if the instruction is guaranteed to produce 0 or 1.
+fn is_boolean_valued(instr: &WirInstr) -> bool {
+    matches!(
+        instr,
+        // Integer comparisons
+        WirInstr::I32Eq(..)
+            | WirInstr::I32Ne(..)
+            | WirInstr::I32LtS(..)
+            | WirInstr::I32LtU(..)
+            | WirInstr::I32GtS(..)
+            | WirInstr::I32GtU(..)
+            | WirInstr::I32LeS(..)
+            | WirInstr::I32LeU(..)
+            | WirInstr::I32GeS(..)
+            | WirInstr::I32GeU(..)
+            | WirInstr::I64Eq(..)
+            | WirInstr::I64Ne(..)
+            | WirInstr::I64LtS(..)
+            | WirInstr::I64LtU(..)
+            | WirInstr::I64GtS(..)
+            | WirInstr::I64GtU(..)
+            | WirInstr::I64LeS(..)
+            | WirInstr::I64LeU(..)
+            | WirInstr::I64GeS(..)
+            | WirInstr::I64GeU(..)
+            // Float comparisons
+            | WirInstr::F32Eq(..)
+            | WirInstr::F32Ne(..)
+            | WirInstr::F32Lt(..)
+            | WirInstr::F32Gt(..)
+            | WirInstr::F32Le(..)
+            | WirInstr::F32Ge(..)
+            | WirInstr::F64Eq(..)
+            | WirInstr::F64Ne(..)
+            | WirInstr::F64Lt(..)
+            | WirInstr::F64Gt(..)
+            | WirInstr::F64Le(..)
+            | WirInstr::F64Ge(..)
+            // Eqz / null checks
+            | WirInstr::I32Eqz(..)
+            | WirInstr::I64Eqz(..)
+            | WirInstr::RefIsNull(..)
+            | WirInstr::RefTest { .. }
+            // Bool array element (packed i8 with values 0 or 1)
+            | WirInstr::ArrayGet {
+                result_ty: WirType::Bool,
+                ..
+            }
+            | WirInstr::ArrayGetU {
+                result_ty: WirType::Bool,
+                ..
+            }
+    )
 }
 
 /// Remove unnecessary `ValueCopy` wrappers from `LocalSet` instructions.
@@ -1167,4 +1369,50 @@ fn match_field_get(
         return None;
     }
     Some((idx, target.clone()))
+}
+
+/// Relax `LocalGet.result_ty` from non-null to nullable for GC access operands.
+///
+/// GC access instructions (`array.get`, `array.set`, `struct.get`, `struct.set`,
+/// `array.len`, `array.fill`, `array.copy`, `ref.cast`, `ref.test`) accept
+/// `(ref null $type)`, so `ref.as_non_null` is unnecessary for their object operand.
+/// Codegen emits `ref.as_non_null` only when `result_ty` is non-null, so relaxing
+/// it here suppresses the redundant instruction.
+fn relax_gc_operand_nullability(instrs: &mut [WirInstr]) {
+    struct Relaxer;
+    impl WirMutVisitor for Relaxer {
+        fn visit_instr(&mut self, instr: &mut WirInstr) {
+            self.walk_instr(instr);
+            match instr {
+                WirInstr::ArrayGet { array, .. }
+                | WirInstr::ArrayGetS { array, .. }
+                | WirInstr::ArrayGetU { array, .. }
+                | WirInstr::ArraySet { array, .. } => relax_ref_local_get(array),
+                WirInstr::ArrayLen(a) => relax_ref_local_get(a),
+                WirInstr::ArrayFill { array, .. } => relax_ref_local_get(array),
+                WirInstr::ArrayCopy { dest, src, .. } => {
+                    relax_ref_local_get(dest);
+                    relax_ref_local_get(src);
+                }
+                WirInstr::StructGet { expr, .. } | WirInstr::StructSet { expr, .. } => {
+                    relax_ref_local_get(expr);
+                }
+                WirInstr::RefCast { expr, .. } | WirInstr::RefTest { expr, .. } => {
+                    relax_ref_local_get(expr);
+                }
+                _ => {}
+            }
+        }
+    }
+    for instr in instrs.iter_mut() {
+        Relaxer.visit_instr(instr);
+    }
+}
+
+fn relax_ref_local_get(instr: &mut WirInstr) {
+    if let WirInstr::LocalGet { result_ty, .. } = instr
+        && result_ty.is_nonnull_ref()
+    {
+        *result_ty = result_ty.clone().as_nullable();
+    }
 }

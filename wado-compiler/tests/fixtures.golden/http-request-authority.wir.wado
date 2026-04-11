@@ -796,7 +796,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
         i = 0;
         block {
             l42: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
@@ -814,7 +814,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l45: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
