@@ -59,28 +59,31 @@ zlib compress/decompress of twitter.json (631 KB) x 10 iterations.
 
 Deserialize twitter.json (631 KB).
 
-| Implementation         |   Time | vs best |
-| ---------------------- | -----: | ------: |
-| serde_json (Rust native) | 0.63 ms |  1.00x |
-| **Wado** core:json     | 16.3 ms | 25.87x |
+| Implementation           |    Time | vs best |
+| ------------------------ | ------: | ------: |
+| serde_json (Rust native) | 0.81 ms |  1.00x  |
+| JSON.parse (Node)        | 1.65 ms |  2.04x  |
+| **Wado** core:json       | 17.3 ms | 21.36x  |
 
 ## JSON: canada
 
 Deserialize canada.json (2.3 MB, geographic coordinates).
 
-| Implementation         |   Time | vs best |
-| ---------------------- | -----: | ------: |
-| serde_json (Rust native) | 7.51 ms |  1.00x |
-| **Wado** core:json     | 82.5 ms | 10.99x |
+| Implementation           |    Time | vs best |
+| ------------------------ | ------: | ------: |
+| serde_json (Rust native) | 8.18 ms |  1.00x  |
+| JSON.parse (Node)        | 11.3 ms |  1.38x  |
+| **Wado** core:json       | 79.2 ms |  9.68x  |
 
 ## JSON: catalog
 
 Deserialize citm_catalog.json (1.7 MB, event catalog).
 
-| Implementation         |   Time | vs best |
-| ---------------------- | -----: | ------: |
-| serde_json (Rust native) | 2.24 ms |  1.00x |
-| **Wado** core:json     | 38.5 ms | 17.19x |
+| Implementation           |    Time | vs best |
+| ------------------------ | ------: | ------: |
+| serde_json (Rust native) | 2.34 ms |  1.00x  |
+| JSON.parse (Node)        | 4.61 ms |  1.97x  |
+| **Wado** core:json       | 38.6 ms | 16.50x  |
 
 ## SQL Parse
 
