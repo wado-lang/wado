@@ -331,55 +331,156 @@ impl TcpSocket for MinimalTcp {
 
 `..` is consistent with struct rest patterns (`let { name, .. } = person`).
 
-#### Handlers for Testing
+#### CM Streams and Futures Are Unbuffered
 
-Effect handlers enable testing code that uses WASI effects without a real WASI runtime. Test functions implicitly have all effects, so handlers can provide any effect:
+CM streams and futures are semantically unidirectional **unbuffered** channels (see [CM Concurrency spec](../vendor/component-model/design/mvp/Concurrency.md)). `stream.write` blocks until a concurrent reader consumes the data; `future.write` blocks until a concurrent reader reads the value. The CM runtime does not buffer data between the readable and writable ends.
 
-```wado
-struct MockClient;
-
-impl Client for MockClient {
-    fn send(&self, request: Request) -> Result<Response, ErrorCode> {
-        let headers = Fields::new();
-        headers.append("content-type", "application/json");
-        let [tf, tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-        let [resp, _] = Response::new(headers, null, tf);
-        tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
-        resume Result::Ok(resp)
-    }
-    ..
-}
-
-test "http client mock" {
-    let mock = MockClient;
-    with Client = &mock do {
-        let request = make_request("/api/data");
-        let response = Client::send(request);
-        assert response matches { Ok(_) };
-    }
-}
-```
-
-Standard library test handlers (e.g., `core:test`) will be provided to reduce boilerplate for common WASI effects.
-
-#### Stdout Handler: Stream Timing and Two Patterns
-
-Stdout has a single operation: `fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>`. Handling it requires understanding the timing of stream data. Consider `println`:
+This means synchronous effect handlers cannot directly use CM streams for data transfer. Consider `println`:
 
 ```wado
 pub fn println(message: String) with Stdout {
-    let [rx, tx] = Stream::<u8>::new();           // 1. stream pair (CM runtime, forwarded)
+    let [rx, tx] = Stream::<u8>::new();           // 1. stream pair
     let handle = Stdout::write_via_stream(rx);    // 2. handler intercepts here
-    write_to_stream(tx, message, true);           // 3. data written to tx AFTER handler returns
-    drop_cli_write_future(handle);                // 4. drop the Future
+    write_to_stream(tx, message, true);           // 3. tx.write() — blocks if no reader on rx
+    drop_cli_write_future(handle);                // 4. future.drop() — blocks if no writer
 }
 ```
 
-When the handler is called at step 2, the stream `data` (rx) is empty — the caller writes to tx at step 3, after `resume`. Stream and Future operations are resource effects that forward to the outer scope (CM runtime), so the handler only intercepts `write_via_stream` itself.
+If the handler at step 2 simply stores `rx` and resumes, the caller's `tx.write()` at step 3 blocks waiting for a reader on `rx`. In a synchronous handler, there is no concurrent reader — deadlock.
 
-##### No Post-Resume Pattern
+The real WASI runtime avoids this because `write_via_stream` starts an async task that reads `rx` concurrently. Synchronous mock handlers need a different approach: replace CM's unbuffered streams and futures with buffered in-memory implementations.
 
-Store the stream's readable end and read after the `do` block. No Stack Switching required — `resume` compiles to `return`.
+#### Buffered CM Handlers
+
+- [ ] Not yet implemented.
+
+`core:test` will provide `MockCM` — a handler that implements `Stream<u8>`, `StreamWritable<u8>`, `Future<T>`, and `FutureWritable<T>` with buffered in-memory semantics. Writes append to a buffer without blocking; reads return buffered data immediately.
+
+```wado
+struct StreamBuffer {
+    mut data: Array<u8>,
+    mut read_pos: i32,
+    mut write_closed: bool,
+}
+
+struct MockCM {
+    mut stream_buffers: Array<StreamBuffer>,
+    mut future_count: i32,
+}
+
+impl Stream<u8> for MockCM {
+    fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
+        let id = self.stream_buffers.len();
+        self.stream_buffers.push(StreamBuffer { data: [], read_pos: 0, write_closed: false });
+        resume [id as Stream<u8>, id as StreamWritable<u8>]
+    }
+
+    fn read(&mut self, stream: &Stream<u8>, max: i32) -> Array<u8> {
+        let id = *stream as i32;
+        let buf = &mut self.stream_buffers[id];
+        let available = buf.data.len() - buf.read_pos;
+        if available == 0 { resume [] }
+        let count = i32::min(max, available);
+        let mut result: Array<u8> = [];
+        for let mut i = 0; i < count; i += 1 {
+            result.push(buf.data[buf.read_pos + i]);
+        }
+        buf.read_pos += count;
+        resume result
+    }
+
+    fn drop(&self, stream: &Stream<u8>) { resume () }
+    fn cancel_read(&self, stream: &Stream<u8>) { resume () }
+}
+
+impl StreamWritable<u8> for MockCM {
+    fn write(&mut self, writable: &StreamWritable<u8>, data: Array<u8>) {
+        let id = *writable as i32;
+        self.stream_buffers[id].data.extend(data);
+        resume ()  // buffered — never blocks
+    }
+
+    fn write_raw(&mut self, writable: &StreamWritable<u8>, data: builtin::array<u8>, len: i32) {
+        let id = *writable as i32;
+        let buf = &mut self.stream_buffers[id];
+        for let mut i = 0; i < len; i += 1 {
+            buf.data.push(builtin::array_get_u8(data, i));
+        }
+        resume ()
+    }
+
+    fn drop(&mut self, writable: &StreamWritable<u8>) {
+        let id = *writable as i32;
+        self.stream_buffers[id].write_closed = true;
+        resume ()
+    }
+
+    fn cancel_write(&self, writable: &StreamWritable<u8>) { resume () }
+}
+```
+
+Future and FutureWritable use type-erased storage to handle generic `Future<T>`:
+
+```wado
+impl<T> Future<T> for MockCM {
+    fn new(&mut self) -> [Future<T>, FutureWritable<T>] {
+        let id = self.future_count;
+        self.future_count += 1;
+        resume [id as Future<T>, id as FutureWritable<T>]
+    }
+
+    fn read(&self, f: &Future<T>) -> Option<T> {
+        // type-erased lookup; returns stored value if written
+        ..
+    }
+
+    fn drop(&self, f: &Future<T>) { resume () }
+    fn cancel_read(&self, f: &Future<T>) { resume () }
+}
+
+impl<T> FutureWritable<T> for MockCM {
+    fn write(&mut self, fw: &FutureWritable<T>, value: T) {
+        // store value (type-erased) for later read
+        resume ()
+    }
+
+    fn drop(&self, fw: &FutureWritable<T>) { resume () }
+    fn cancel_write(&self, fw: &FutureWritable<T>) { resume () }
+}
+```
+
+#### Handler Bundling
+
+- [ ] Not yet implemented.
+
+When a type implements multiple effects, listing each one in `with` is verbose. If the effect name is omitted, the `with` block handles all effects the type implements:
+
+```wado
+// Explicit: list each effect separately
+with Stream<u8> = &mut cm, StreamWritable<u8> = &mut cm,
+     Future<T> = &mut cm, FutureWritable<T> = &mut cm do { ... }
+
+// Bundled: handle all effects MockCM implements
+with &mut cm do { ... }
+```
+
+Multiple handlers compose naturally:
+
+```wado
+with &mut cm, Stdout = &mut stdout, Client = &mut client do {
+    run();
+}
+```
+
+This follows wasmtime's pattern where a single `WasiState` struct implements multiple `*View` traits and is registered with one `add_to_linker` call.
+
+#### Handlers for Testing
+
+Effect handlers enable testing code that uses WASI effects without a real WASI runtime. Test functions implicitly have all effects, so handlers can provide any effect. `core:test::MockCM` provides buffered CM canonical handlers as a foundation.
+
+##### Stdout Handler Example
+
+MockStdout stores stream handles from each `write_via_stream` call. Because streams go through `MockCM` (buffered), the caller's `tx.write()` succeeds without blocking. After the `do` block, `drain()` reads buffered data from the stored stream handles:
 
 ```wado
 struct MockStdout {
@@ -413,65 +514,152 @@ impl MockStdout {
 }
 
 test "println captures output" {
-    let mut mock = MockStdout { streams: [] };
-    with Stdout = &mut mock do {
+    let mut cm = MockCM::new();
+    let mut stdout = MockStdout { streams: [] };
+    with &mut cm, Stdout = &mut stdout do {
         println("hello");
         println("world");
+        // drain() must be called inside MockCM scope (fake handles are only valid here)
+        let output = stdout.drain();
+        assert output == "hello\nworld\n";
     }
-    // After do block: writable ends are closed, readable ends have data
-    let output = mock.drain();
-    assert output == "hello\nworld\n";
 }
 ```
 
-##### Post-Resume Pattern
+Execution flow:
 
-Read stream data automatically after each `resume`. Requires Wasm Stack Switching.
+```
+println("hello"):
+  Stream::<u8>::new()            → MockCM: creates buffer #0, returns fake handles
+  Stdout::write_via_stream(rx)  → MockStdout: stores rx, creates fake Future, resumes
+  tx.write_raw(bytes, len)      → MockCM: appends to buffer #0 (no block)
+  tx.drop()                     → MockCM: marks buffer #0 as write-closed
+  future.drop()                 → MockCM: no-op
+
+stdout.drain():
+  stream.read(4096)             → MockCM: reads from buffer #0 (immediate)
+  stream.drop()                 → MockCM: no-op
+```
+
+##### HTTP Client Handler Example
+
+Testing code that calls `Client::send` (e.g., `example/http-get.wado`). The mock constructs a Response with body data pre-written to a buffered stream — this is safe because `MockCM` streams are buffered, so `body_tx.write()` succeeds immediately without a concurrent reader:
 
 ```wado
-struct BufferingStdout {
-    mut chunks: Array<String>,
+struct MockClient {
+    mut requests: Array<String>,
+    response_body: String,
+    status: StatusCode,
 }
 
-impl Stdout for BufferingStdout {
-    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
-        let pos = self.chunks.len();
-        self.chunks.push("");  // placeholder
-        let [f, ftx] = Future::<Result<(), ErrorCode>>::new();
-        resume f;
-        // Post-resume: caller has written to tx and dropped it
-        let mut bytes: Array<u8> = [];
-        loop {
-            let chunk = data.read(4096);
-            if chunk.is_empty() { break; }
-            for let b of chunk { bytes.push(b); }
+impl Client for MockClient {
+    fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
+        if let Some(path) = request.get_path_with_query() {
+            self.requests.push(path);
         }
-        data.drop();
-        self.chunks[pos] = String::from_utf8(bytes);
-        ftx.write(Result::<(), ErrorCode>::Ok(()));
-        ftx.drop();
+
+        let headers = Fields::new();  // forwards to outer scope
+        let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        let [body_rx, body_tx] = Stream::<u8>::new();  // → MockCM (buffered)
+
+        body_tx.write(self.response_body.bytes().collect());  // buffered — no block
+        body_tx.drop();
+        trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+        trailers_tx.drop();
+
+        let [resp, _] = Response::new(headers, Option::Some(body_rx), trailers_rx);
+        resp.set_status_code(self.status);
+
+        resume Result::<Response, ErrorCode>::Ok(resp)  // no post-resume
     }
+    ..
 }
 
-test "println captures output" {
-    let mut mock = BufferingStdout { chunks: [] };
-    with Stdout = &mut mock do {
-        println("hello");
-        println("world");
+test "http-get fetches and prints" {
+    let mut cm = MockCM::new();
+    let mut stdout = MockStdout { streams: [] };
+    let mut client = MockClient {
+        requests: [],
+        response_body: `{"origin": "127.0.0.1"}`,
+        status: 200,
+    };
+    with &mut cm, Stdout = &mut stdout, Client = &mut client do {
+        run();  // example/http-get.wado's export fn run()
+        assert client.requests[0] == "/get";
+        let output = stdout.drain();
+        assert output contains "Status: 200";
     }
-    assert mock.chunks[0] == "hello\n";
-    assert mock.chunks[1] == "world\n";
 }
 ```
 
-`pos` preserves insertion order: with deep handlers, post-resume code executes in LIFO order (the last `resume`'s post-resume runs first). Recording `pos` before `resume` ensures each invocation writes to the correct index regardless of execution order.
+Note: `Fields::new()`, `Response::new()` etc. are HTTP resource operations that forward to the outer scope. This test requires a world that imports `wasi:http` types (e.g., `wasi:http/service`), or additional handlers for those resources.
 
-|                 | No post-resume                | Post-resume                    |
-| --------------- | ----------------------------- | ------------------------------ |
-| Stack Switching | Not required                  | Required                       |
-| Data access     | Manual (`drain()` after `do`) | Automatic (each `resume`)      |
-| Ordering        | Natural (forward read)        | Requires `pos` trick (LIFO)    |
-| MVP suitability | Yes                           | Deferred until Stack Switching |
+##### HTTP Server Middleware Example (Post-Resume)
+
+A timing middleware uses post-resume to measure request processing time. The handler delegates to the outer `Handler` implementation via effect forwarding, resumes the response to the caller, then records metrics:
+
+```wado
+struct TimingMiddleware {
+    mut log: Array<[String, u64]>,
+}
+
+impl Handler for TimingMiddleware {
+    fn handle(&mut self, request: Request) -> Result<Response, ErrorCode> {
+        let path = request.get_path_with_query().unwrap_or("?");
+        let start = MonotonicClock::now();
+        let resp = Handler::handle(request);  // delegates to outer scope
+        resume resp;
+        // Post-resume (Stack Switching): runs after do block completes
+        let elapsed = MonotonicClock::now() - start;
+        self.log.push([path, elapsed]);
+    }
+    ..
+}
+```
+
+Testing with MockHandler as the downstream:
+
+```wado
+struct MockHandler {
+    status: StatusCode,
+    body: String,
+}
+
+impl Handler for MockHandler {
+    fn handle(&self, request: Request) -> Result<Response, ErrorCode> {
+        let headers = Fields::new();
+        let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        let [body_rx, body_tx] = Stream::<u8>::new();
+        body_tx.write(self.body.bytes().collect());
+        body_tx.drop();
+        trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+        trailers_tx.drop();
+        let [resp, _] = Response::new(headers, Option::Some(body_rx), trailers_rx);
+        resp.set_status_code(self.status);
+        resume Result::<Response, ErrorCode>::Ok(resp)
+    }
+    ..
+}
+
+test "timing middleware records elapsed time" {
+    let mut cm = MockCM::new();
+    let downstream = MockHandler { status: 200, body: "ok" };
+    let mut timing = TimingMiddleware { log: [] };
+    with &mut cm do {
+        with Handler = &downstream do {
+            with Handler = &mut timing do {
+                let req = create_test_request("/api");
+                let resp = Handler::handle(req);
+                assert resp matches { Ok(_) };
+            }
+        }
+    }
+    assert timing.log.len() == 1;
+    assert timing.log[0].0 == "/api";
+}
+```
+
+Handler nesting: inner `TimingMiddleware` intercepts `Handler::handle`, delegates to the outer `MockHandler` via effect forwarding, and records timing in post-resume.
 
 ### Effect Forwarding
 
@@ -618,3 +806,6 @@ fn register(data: &Data) -> Handle with Stdout, stores[data] {
 - One-shot semantics ensure resource safety
 - Generic effects (`<effect E>`) support higher-order functions without effect polymorphism complexity
 - No existing language has signature-based effect propagation; this is a novel design
+- CM streams and futures are unbuffered — synchronous handlers need `MockCM` (buffered CM handlers) for data transfer
+- Handler bundling (`with &mut value do`) reduces boilerplate when a type implements multiple effects
+- `core:test::MockCM` provides standard buffered Stream/Future handlers as a foundation for all test mocks
