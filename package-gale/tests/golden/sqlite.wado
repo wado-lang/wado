@@ -315,23 +315,17 @@ fn escape_html(out: &mut String, text: &String) {
     }
 }
 
-fn escape_html_range(out: &mut String, chars: &Array<char>, start: i32, end: i32) {
-    let mut i = start;
-    let len = chars.len();
-    while i < end && i < len {
-        let c = chars[i];
-        if c == '&' {
-            out.push_str("&amp;");
-        } else if c == '<' {
-            out.push_str("&lt;");
-        } else if c == '>' {
-            out.push_str("&gt;");
-        } else if c == '"' {
-            out.push_str("&quot;");
-        } else {
-            out.push(c);
-        }
-        i += 1;
+fn escape_html_char(out: &mut String, c: char) {
+    if c == '&' {
+        out.push_str("&amp;");
+    } else if c == '<' {
+        out.push_str("&lt;");
+    } else if c == '>' {
+        out.push_str("&gt;");
+    } else if c == '"' {
+        out.push_str("&quot;");
+    } else {
+        out.push(c);
     }
 }
 
@@ -352,21 +346,27 @@ fn capture_to_class(capture: &String) -> String {
 pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> String {
     let mut out = String::with_capacity(source.len() * 5);
     let mut pos = 0;
-    let chars = source.chars().collect();
+    let mut iter = source.chars();
     for let cap of captures {
-        if cap.start > pos {
-            escape_html_range(&mut out, &chars, pos, cap.start);
+        while pos < cap.start {
+            if let Some(c) = iter.next() {
+                escape_html_char(&mut out, c);
+            }
+            pos += 1;
         }
         let cls = capture_to_class(&cap.capture);
         out.push_str(`<span class="{cls}">`);
-        escape_html_range(&mut out, &chars, cap.start, cap.end);
-        out.push_str("</span>");
-        if cap.end > pos {
-            pos = cap.end;
+        let end = cap.end;
+        while pos < end {
+            if let Some(c) = iter.next() {
+                escape_html_char(&mut out, c);
+            }
+            pos += 1;
         }
+        out.push_str("</span>");
     }
-    if pos < chars.len() {
-        escape_html_range(&mut out, &chars, pos, chars.len());
+    while let Some(c) = iter.next() {
+        escape_html_char(&mut out, c);
     }
     return out;
 }
