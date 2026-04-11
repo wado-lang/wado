@@ -824,6 +824,12 @@ impl Monomorphizer {
 
         // Clone and substitute types in body
         let mut local_count = generic.local_count;
+        self.current_impl_type_param_count = generic.impl_type_params.len();
+        self.current_impl_struct_name = generic
+            .method_info
+            .as_ref()
+            .map(|info| info.base_struct_name.clone())
+            .unwrap_or_default();
         let body = generic.body.as_ref().map(|b| {
             let mut new_body = b.clone();
             self.substitute_types_in_block(
@@ -1124,103 +1130,96 @@ impl Monomorphizer {
                     if !substitution.is_empty()
                         && let Some(info) = call_func.method_info.clone()
                     {
-                        let has_explicit_type_params = info.struct_name != info.base_struct_name;
-                        let return_type_is_generic = matches!(
-                            type_table.get(expr.type_id),
-                            ResolvedType::Struct {
-                                is_monomorphized: true,
-                                ..
-                            } | ResolvedType::GenericInstance { .. }
-                                | ResolvedType::BuiltinArray(_)
-                        );
-                        let needs_struct_type_args = has_explicit_type_params
-                            || info.is_type_param_receiver
-                            || return_type_is_generic;
-
                         let old_func_name = call_func.name.clone();
                         let module_source = call_func.module_source.clone();
 
-                        let existing_monomorph_type_args: Option<(Vec<TypeId>, Vec<TypeId>)> =
-                            if has_explicit_type_params {
-                                if let FunctionRef {
-                                    monomorph_info: Some(mi),
-                                    ..
-                                } = &*call_func
-                                {
-                                    Some((mi.impl_type_args.clone(), mi.method_type_args.clone()))
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            };
-
-                        let mut sorted_entries: Vec<_> = substitution.iter().collect();
-                        sorted_entries.sort_by_key(|(idx, _)| **idx);
-                        let (type_names, sub_impl_type_args, sub_method_type_args) = if let Some(
-                            (ref impl_ta, ref method_ta),
-                        ) =
-                            existing_monomorph_type_args
-                        {
-                            let sub_impl: Vec<TypeId> = impl_ta
-                                .iter()
-                                .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                                .collect();
-                            let sub_method: Vec<TypeId> = method_ta
-                                .iter()
-                                .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                                .collect();
-                            let sub_names: Vec<String> = sub_impl
-                                .iter()
-                                .chain(sub_method.iter())
-                                .map(|&tid| type_table.mangle_type_name(tid))
-                                .collect();
-                            (sub_names, sub_impl, sub_method)
-                        } else {
-                            // No existing monomorph_info — determine split from callee's info.
-                            // Use the callee's monomorph_info to understand the split.
-                            let (callee_impl_count, callee_method_count) = if let FunctionRef {
-                                monomorph_info: Some(mi),
-                                ..
-                            } = &*call_func
-                            {
-                                (mi.impl_type_args.len(), mi.method_type_args.len())
-                            } else {
-                                (0, 0)
-                            };
-                            let names: Vec<String> = sorted_entries
-                                .iter()
-                                .map(|(_, tid)| type_table.mangle_type_name(**tid))
-                                .collect();
-                            let tids: Vec<TypeId> =
-                                sorted_entries.iter().map(|(_, tid)| **tid).collect();
-                            if callee_impl_count + callee_method_count > 0
-                                && tids.len() >= callee_impl_count
-                            {
-                                let impl_ta = tids[..callee_impl_count].to_vec();
-                                let method_ta = tids[callee_impl_count..].to_vec();
-                                (names, impl_ta, method_ta)
-                            } else {
-                                (names, tids, vec![])
-                            }
-                        };
-
-                        let mut new_info = if info.is_type_param_receiver && !type_names.is_empty()
-                        {
-                            let base = type_table.base_type_name(*sorted_entries[0].1);
-                            info.with_substituted_struct_name(&type_names[0], &base)
-                        } else if needs_struct_type_args {
-                            info.with_struct_type_args(&type_names)
-                        } else {
-                            info.clone()
-                        };
-                        // Substitute type params in monomorph_info method_type_args and update
-                        // accordingly (e.g., R → FixedReader in a default
-                        // trait method body calling Self::read::<R>(r)).
-                        if let FunctionRef {
+                        // Derive substituted type args from the callee's own monomorph_info.
+                        // The callee's monomorph_info records which type params the callee
+                        // uses (impl-level and method-level). We substitute through the
+                        // outer function's substitution map to resolve any type params.
+                        //
+                        // This is the single source of truth for the callee's type args.
+                        // We must NOT use the outer substitution map's entries directly
+                        // as type args — those are the outer function's type params, not
+                        // the callee's.
+                        let (sub_impl_type_args, sub_method_type_args) = if let FunctionRef {
                             monomorph_info: Some(mi),
                             ..
                         } = &*call_func
+                        {
+                            (
+                                mi.impl_type_args
+                                    .iter()
+                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                                    .collect::<Vec<_>>(),
+                                mi.method_type_args
+                                    .iter()
+                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                                    .collect::<Vec<_>>(),
+                            )
+                        } else if self.current_impl_type_param_count > 0
+                            && info.struct_name == info.base_struct_name
+                            && info.base_struct_name == self.current_impl_struct_name
+                        {
+                            // The callee has no monomorph_info, but the outer function
+                            // has impl-level type params AND the callee's struct matches
+                            // the outer impl's struct (e.g., we're inside
+                            // `impl<K,V> TreeMap<K,V>` and calling `TreeMap::new()`).
+                            // The resolver didn't annotate the bare struct reference with
+                            // type args, so we derive them from the outer substitution's
+                            // impl-level entries.
+                            let mut sorted_entries: Vec<_> = substitution.iter().collect();
+                            sorted_entries.sort_by_key(|(idx, _)| **idx);
+                            let impl_args: Vec<TypeId> = sorted_entries
+                                .iter()
+                                .take(self.current_impl_type_param_count)
+                                .map(|(_, tid)| **tid)
+                                .collect();
+                            (impl_args, vec![])
+                        } else {
+                            (vec![], vec![])
+                        };
+
+                        // Build the new method info with substituted type names.
+                        let mut new_info = if info.is_type_param_receiver {
+                            // The struct name is a type parameter (e.g., T^Ord::cmp).
+                            // Look up the concrete type from the outer substitution.
+                            let mut sorted_entries: Vec<_> = substitution.iter().collect();
+                            sorted_entries.sort_by_key(|(idx, _)| **idx);
+                            if sorted_entries.is_empty() {
+                                info.clone()
+                            } else {
+                                let concrete_tid = *sorted_entries[0].1;
+                                let type_name = type_table.mangle_type_name(concrete_tid);
+                                let base = type_table.base_type_name(concrete_tid);
+                                info.with_substituted_struct_name(&type_name, &base)
+                            }
+                        } else {
+                            // Apply the callee's own substituted type args.
+                            let impl_names: Vec<String> = sub_impl_type_args
+                                .iter()
+                                .map(|&tid| type_table.mangle_type_name(tid))
+                                .collect();
+                            let method_names: Vec<String> = sub_method_type_args
+                                .iter()
+                                .map(|&tid| type_table.mangle_type_name(tid))
+                                .collect();
+                            if impl_names.is_empty() && method_names.is_empty() {
+                                info.clone()
+                            } else {
+                                info.with_type_args(&impl_names, &method_names)
+                            }
+                        };
+                        // For type param receivers, also update method type args if they
+                        // contain type params that need substitution (e.g., R → FixedReader
+                        // in a default trait method body calling Self::read::<R>(r)).
+                        // The with_substituted_struct_name above only replaces the struct
+                        // name, not the method type args.
+                        if info.is_type_param_receiver
+                            && let FunctionRef {
+                                monomorph_info: Some(mi),
+                                ..
+                            } = &*call_func
                         {
                             let substituted_method_args: Vec<TypeId> = mi
                                 .method_type_args
@@ -1242,6 +1241,8 @@ impl Monomorphizer {
 
                         if new_func_name != old_func_name {
                             if info.is_type_param_receiver {
+                                let mut sorted_entries: Vec<_> = substitution.iter().collect();
+                                sorted_entries.sort_by_key(|(idx, _)| **idx);
                                 let concrete_module = self
                                     .functions
                                     .trait_method_locations

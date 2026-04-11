@@ -1,0 +1,751 @@
+//! URL parsing and construction for special schemes (WHATWG URL Standard).
+//!
+//! Supports `http`, `https`, `ws`, and `wss` schemes.
+//!
+//! Usage:
+//!   use { Url, ParseError, percent_encode, percent_decode, parse_query, format_query } from "core:url";
+//!
+//!   let url = Url::parse("https://example.com/path?key=val");
+//!   if let Ok(url) = url {
+//!       let pq = url.path_with_query();  // "/path?key=val"
+//!   }
+
+use { TreeMap } from "core:collections";
+use { Serialize, Serializer, SerializeError, Deserialize, Deserializer, DeserializeError, DeserializeErrorKind } from "core:serde";
+
+/// Error type for URL parsing failures.
+pub variant ParseError {
+    EmptyInput,
+    InvalidScheme,
+    MissingHost,
+    InvalidHost,
+    InvalidPort,
+    InvalidPath,
+    InvalidPercentEncoding,
+}
+
+impl Eq for ParseError {
+    fn eq(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [EmptyInput, EmptyInput] => true,
+            [InvalidScheme, InvalidScheme] => true,
+            [MissingHost, MissingHost] => true,
+            [InvalidHost, InvalidHost] => true,
+            [InvalidPort, InvalidPort] => true,
+            [InvalidPath, InvalidPath] => true,
+            [InvalidPercentEncoding, InvalidPercentEncoding] => true,
+            _ => false,
+        };
+    }
+}
+
+/// A parsed URL with a special scheme (http, https, ws, wss).
+///
+/// Fields store raw (percent-encoded) values. Use `percent_decode` to get
+/// decoded forms where needed.
+pub struct Url {
+    /// The scheme, lowercase. One of: "http", "https", "ws", "wss".
+    pub scheme: String,
+    /// The username component. Empty string if absent.
+    pub username: String,
+    /// The password component. Empty string if absent.
+    pub password: String,
+    /// The host. Always present for special schemes.
+    /// IPv6 addresses are stored without brackets (e.g., "::1" not "[::1]").
+    pub host: String,
+    /// The port number. None means the default port for the scheme.
+    pub port: Option<u16>,
+    /// The path component. Always starts with "/". At minimum "/".
+    pub path: String,
+    /// The query string without the leading "?". None if absent.
+    pub query: Option<String>,
+    /// The fragment without the leading "#". None if absent.
+    pub fragment: Option<String>,
+}
+
+fn default_port_for_scheme(scheme: &String) -> u16 {
+    if *scheme == "http" || *scheme == "ws" {
+        return 80;
+    }
+    return 443;
+}
+
+fn is_special_scheme(s: &String) -> bool {
+    return *s == "http" || *s == "https" || *s == "ws" || *s == "wss";
+}
+
+fn is_unreserved_char(c: char) -> bool {
+    if 'A' <= c <= 'Z' { return true; }
+    if 'a' <= c <= 'z' { return true; }
+    if '0' <= c <= '9' { return true; }
+    return c == '-' || c == '.' || c == '_' || c == '~';
+}
+
+fn percent_encode_char(c: char, out: &mut String) {
+    if is_unreserved_char(c) {
+        out.push(c);
+    } else {
+        for let b of c.encode_utf8() {
+            let n = b as i32;
+            out.push_str(`%{n:02X}`);
+        }
+    }
+}
+
+/// Percent-encodes a string. Encodes all characters except unreserved
+/// characters (A-Z, a-z, 0-9, '-', '.', '_', '~') per RFC 3986 §2.3.
+pub fn percent_encode(input: String) -> String {
+    let mut out = String::with_capacity(input.len());
+    for let c of input.chars() {
+        percent_encode_char(c, &mut out);
+    }
+    return out;
+}
+
+/// Decodes percent-encoded sequences (%XX).
+/// Returns Err if the input contains invalid percent-encoding or invalid UTF-8.
+pub fn percent_decode(input: String) -> Result<String, ParseError> {
+    let len = input.len();
+    let mut bytes: Array<u8> = Array::<u8>::with_capacity(len);
+    let mut i = 0;
+    while i < len {
+        let c = input.get_byte(i) as char;
+        if c == '%' {
+            if i + 2 >= len {
+                return Result::Err(ParseError::InvalidPercentEncoding);
+            }
+            let hi = input.get_byte(i + 1) as char;
+            let lo = input.get_byte(i + 2) as char;
+            if !hi.is_hexdigit() || !lo.is_hexdigit() {
+                return Result::Err(ParseError::InvalidPercentEncoding);
+            }
+            bytes.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
+            i += 3;
+        } else {
+            bytes.push(input.get_byte(i));
+            i += 1;
+        }
+    }
+    return match String::from_utf8(bytes) {
+        Ok(s) => Result::Ok(s),
+        Err(_) => Result::Err(ParseError::InvalidPercentEncoding),
+    };
+}
+
+fn percent_encode_query_component(input: &String) -> String {
+    let mut out = String::with_capacity(input.len());
+    for let c of input.chars() {
+        if c == ' ' {
+            out.push('+');
+        } else if is_unreserved_char(c) {
+            out.push(c);
+        } else {
+            for let b of c.encode_utf8() {
+                let n = b as i32;
+                out.push_str(`%{n:02X}`);
+            }
+        }
+    }
+    return out;
+}
+
+fn percent_decode_query_component(input: &String) -> String {
+    let len = input.len();
+    let mut bytes: Array<u8> = Array::<u8>::with_capacity(len);
+    let mut i = 0;
+    while i < len {
+        let c = input.get_byte(i) as char;
+        if c == '+' {
+            bytes.push(' ' as u8);
+            i += 1;
+        } else if c == '%' && i + 2 < len {
+            let hi = input.get_byte(i + 1) as char;
+            let lo = input.get_byte(i + 2) as char;
+            if hi.is_hexdigit() && lo.is_hexdigit() {
+                bytes.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
+                i += 3;
+            } else {
+                bytes.push('%' as u8);
+                i += 1;
+            }
+        } else {
+            bytes.push(input.get_byte(i));
+            i += 1;
+        }
+    }
+    if let Ok(s) = String::from_utf8(bytes) {
+        return s;
+    }
+    return *input;
+}
+
+/// Parses a query string into key-value pairs (insertion-order preserved).
+/// Input should not include the leading "?".
+/// Handles "+" as space and decodes percent-encoding.
+/// Duplicate keys use last-value-wins semantics.
+pub fn parse_query(query: String) -> TreeMap<String, String> {
+    let mut result = TreeMap::<String, String>::new();
+    if query.is_empty() {
+        return result;
+    }
+    for let part of query.split("&") {
+        if part.is_empty() {
+            continue;
+        }
+        if let Some(eq_pos) = part.find("=") {
+            let key = part.substr_bytes(0, eq_pos);
+            let val = part.substr_bytes(eq_pos + 1, part.len());
+            result[percent_decode_query_component(&key)] = percent_decode_query_component(&val);
+        } else {
+            result[percent_decode_query_component(&part)] = "";
+        }
+    }
+    return result;
+}
+
+/// Formats key-value pairs into a query string (insertion-order preserved).
+/// Output does not include the leading "?".
+/// Keys and values are percent-encoded; spaces become "+".
+pub fn format_query(params: TreeMap<String, String>) -> String {
+    let mut out = String::with_capacity(64);
+    let entries = params.entries();
+    for let mut i = 0; i < entries.len(); i += 1 {
+        if i > 0 {
+            out.push('&');
+        }
+        let entry = entries[i];
+        out.push_str(percent_encode_query_component(&entry.0));
+        out.push('=');
+        out.push_str(percent_encode_query_component(&entry.1));
+    }
+    return out;
+}
+
+fn remove_dot_segments(path: String) -> String {
+    let segments = path.split("/");
+    let mut stack: Array<String> = [];
+    for let seg of segments {
+        if seg == ".." {
+            if stack.len() > 1 {
+                stack.pop();
+            }
+        } else if seg != "." {
+            stack.push(seg);
+        }
+    }
+    if stack.is_empty() {
+        return "";
+    }
+    if stack.len() == 1 && stack[0] == "" {
+        return "/";
+    }
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < stack.len(); i += 1 {
+        if i > 0 {
+            result.push('/');
+        }
+        result.push_str(stack[i]);
+    }
+    return result;
+}
+
+fn parse_port_str(s: &String) -> Result<u16, ParseError> {
+    if s.is_empty() {
+        return Result::Err(ParseError::InvalidPort);
+    }
+    let mut val: i32 = 0;
+    for let c of s.chars() {
+        if !('0' <= c <= '9') {
+            return Result::Err(ParseError::InvalidPort);
+        }
+        val = val * 10 + (c as i32 - '0' as i32);
+        if val > 65535 {
+            return Result::Err(ParseError::InvalidPort);
+        }
+    }
+    return Result::Ok(val as u16);
+}
+
+fn apply_port(url: &mut Url, port_val: u16) {
+    if port_val == default_port_for_scheme(&url.scheme) {
+        url.port = null;
+    } else {
+        url.port = Option::Some(port_val);
+    }
+}
+
+fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> {
+    let input = *authority;
+    let mut rest = input;
+
+    if let Some(at_pos) = input.find("@") {
+        let userinfo = input.substr_bytes(0, at_pos);
+        rest = input.substr_bytes(at_pos + 1, input.len());
+        if let Some(colon_pos) = userinfo.find(":") {
+            url.username = userinfo.substr_bytes(0, colon_pos);
+            url.password = userinfo.substr_bytes(colon_pos + 1, userinfo.len());
+        } else {
+            url.username = userinfo;
+        }
+    }
+
+    if rest.is_empty() {
+        return Result::Err(ParseError::MissingHost);
+    }
+
+    if rest.starts_with("[") {
+        if let Some(bracket_end) = rest.find("]") {
+            url.host = rest.substr_bytes(1, bracket_end);
+            let after = rest.substr_bytes(bracket_end + 1, rest.len());
+            if !after.is_empty() {
+                if after.starts_with(":") {
+                    let port_str = after.substr_bytes(1, after.len());
+                    match parse_port_str(&port_str) {
+                        Err(e) => { return Result::Err(e); },
+                        Ok(port_val) => { apply_port(url, port_val); },
+                    }
+                } else {
+                    return Result::Err(ParseError::InvalidHost);
+                }
+            }
+        } else {
+            return Result::Err(ParseError::InvalidHost);
+        }
+        return Result::Ok(());
+    }
+
+    if let Some(colon_pos) = rest.rfind(":") {
+        let host_part = rest.substr_bytes(0, colon_pos);
+        let port_str = rest.substr_bytes(colon_pos + 1, rest.len());
+        if port_str.is_empty() {
+            if host_part.is_empty() {
+                return Result::Err(ParseError::MissingHost);
+            }
+            url.host = host_part.to_ascii_lowercase();
+            return Result::Ok(());
+        }
+        if host_part.is_empty() {
+            return Result::Err(ParseError::MissingHost);
+        }
+        match parse_port_str(&port_str) {
+            Err(e) => { return Result::Err(e); },
+            Ok(port_val) => {
+                url.host = host_part.to_ascii_lowercase();
+                apply_port(url, port_val);
+            },
+        }
+        return Result::Ok(());
+    }
+
+    url.host = rest.to_ascii_lowercase();
+    return Result::Ok(());
+}
+
+impl Url {
+    /// Parses a URL string. Only special schemes (http, https, ws, wss)
+    /// are accepted.
+    pub fn parse(input: String) -> Result<Url, ParseError> {
+        if input.is_empty() {
+            return Result::Err(ParseError::EmptyInput);
+        }
+
+        let colon = match input.find(":") {
+            Some(pos) => pos,
+            None => { return Result::Err(ParseError::InvalidScheme); },
+        };
+        if colon == 0 {
+            return Result::Err(ParseError::InvalidScheme);
+        }
+
+        let scheme = input.substr_bytes(0, colon).to_ascii_lowercase();
+        if !is_special_scheme(&scheme) {
+            return Result::Err(ParseError::InvalidScheme);
+        }
+
+        let mut rest = input.substr_bytes(colon + 1, input.len());
+
+        if !rest.starts_with("//") {
+            return Result::Err(ParseError::MissingHost);
+        }
+        rest = rest.substr_bytes(2, rest.len());
+
+        let mut fragment: Option<String> = null;
+        if let Some(hash_pos) = rest.find("#") {
+            fragment = Option::Some(rest.substr_bytes(hash_pos + 1, rest.len()));
+            rest = rest.substr_bytes(0, hash_pos);
+        }
+
+        let mut query: Option<String> = null;
+        if let Some(q_pos) = rest.find("?") {
+            query = Option::Some(rest.substr_bytes(q_pos + 1, rest.len()));
+            rest = rest.substr_bytes(0, q_pos);
+        }
+
+        let mut authority_str = rest;
+        let mut path = "/";
+        if let Some(slash_pos) = rest.find("/") {
+            authority_str = rest.substr_bytes(0, slash_pos);
+            path = rest.substr_bytes(slash_pos, rest.len());
+        }
+
+        let normalized_path = normalize_percent_encoding(&remove_dot_segments(path));
+
+        let mut url = Url {
+            scheme: scheme,
+            username: "",
+            password: "",
+            host: "",
+            port: null,
+            path: normalized_path,
+            query: query,
+            fragment: fragment,
+        };
+
+        if let Err(e) = parse_authority(&authority_str, &mut url) {
+            return Result::Err(e);
+        }
+
+        if url.host.is_empty() {
+            return Result::Err(ParseError::MissingHost);
+        }
+
+        return Result::Ok(url);
+    }
+
+    /// Constructs a Url from the three parts used by wasi:http Request.
+    pub fn from_http_parts(
+        scheme: String,
+        authority: String,
+        path_with_query: String,
+    ) -> Result<Url, ParseError> {
+        let mut buf = String::with_capacity(scheme.len() + 3 + authority.len() + path_with_query.len());
+        buf.push_str(scheme);
+        buf.push_str("://");
+        buf.push_str(authority);
+        if !path_with_query.is_empty() && !path_with_query.starts_with("/") {
+            buf.push('/');
+        }
+        buf.push_str(path_with_query);
+        return Url::parse(buf);
+    }
+
+    /// Serializes the URL back to a string.
+    pub fn to_string(&self) -> String {
+        let mut out = String::with_capacity(64);
+        out.push_str(self.scheme);
+        out.push_str("://");
+        if !self.username.is_empty() {
+            out.push_str(self.username);
+            if !self.password.is_empty() {
+                out.push(':');
+                out.push_str(self.password);
+            }
+            out.push('@');
+        }
+        if self.host.contains(":") {
+            out.push('[');
+            out.push_str(self.host);
+            out.push(']');
+        } else {
+            out.push_str(self.host);
+        }
+        if let Some(p) = self.port {
+            out.push_str(`:{p}`);
+        }
+        out.push_str(self.path);
+        if let Some(q) = self.query {
+            out.push('?');
+            out.push_str(q);
+        }
+        if let Some(f) = self.fragment {
+            out.push('#');
+            out.push_str(f);
+        }
+        return out;
+    }
+
+    /// Returns the authority: [userinfo@]host[:port].
+    pub fn authority(&self) -> String {
+        let mut out = String::with_capacity(32);
+        if !self.username.is_empty() {
+            out.push_str(self.username);
+            if !self.password.is_empty() {
+                out.push(':');
+                out.push_str(self.password);
+            }
+            out.push('@');
+        }
+        if self.host.contains(":") {
+            out.push('[');
+            out.push_str(self.host);
+            out.push(']');
+        } else {
+            out.push_str(self.host);
+        }
+        if let Some(p) = self.port {
+            out.push_str(`:{p}`);
+        }
+        return out;
+    }
+
+    /// Returns the origin: scheme://host[:port] (excludes credentials).
+    pub fn origin(&self) -> String {
+        let mut out = String::with_capacity(32);
+        out.push_str(self.scheme);
+        out.push_str("://");
+        if self.host.contains(":") {
+            out.push('[');
+            out.push_str(self.host);
+            out.push(']');
+        } else {
+            out.push_str(self.host);
+        }
+        if let Some(p) = self.port {
+            out.push_str(`:{p}`);
+        }
+        return out;
+    }
+
+    /// Returns path with query: /path[?query]. Matches wasi:http path_with_query.
+    pub fn path_with_query(&self) -> String {
+        if let Some(q) = self.query {
+            let mut out = String::with_capacity(self.path.len() + 1 + q.len());
+            out.push_str(self.path);
+            out.push('?');
+            out.push_str(q);
+            return out;
+        }
+        return self.path;
+    }
+
+    /// Returns the effective port (explicit port or default for the scheme).
+    pub fn effective_port(&self) -> u16 {
+        return match self.port {
+            Some(p) => p,
+            None => default_port_for_scheme(&self.scheme),
+        };
+    }
+
+    /// Resolves a relative URL reference against this URL as the base.
+    /// Follows RFC 3986 §5.
+    pub fn resolve(&self, reference: String) -> Result<Url, ParseError> {
+        if let Some(colon) = reference.find(":") {
+            if colon > 0 {
+                let ref_scheme = reference.substr_bytes(0, colon).to_ascii_lowercase();
+                if is_special_scheme(&ref_scheme) {
+                    return Url::parse(reference);
+                }
+            }
+        }
+
+        let mut r_authority = "";
+        let mut r_path = "";
+        let mut r_query: Option<String> = null;
+        let mut r_fragment: Option<String> = null;
+
+        let mut rest = reference;
+
+        if let Some(hash_pos) = rest.find("#") {
+            r_fragment = Option::Some(rest.substr_bytes(hash_pos + 1, rest.len()));
+            rest = rest.substr_bytes(0, hash_pos);
+        }
+
+        if let Some(q_pos) = rest.find("?") {
+            r_query = Option::Some(rest.substr_bytes(q_pos + 1, rest.len()));
+            rest = rest.substr_bytes(0, q_pos);
+        }
+
+        if rest.starts_with("//") {
+            rest = rest.substr_bytes(2, rest.len());
+            if let Some(slash_pos) = rest.find("/") {
+                r_authority = rest.substr_bytes(0, slash_pos);
+                r_path = rest.substr_bytes(slash_pos, rest.len());
+            } else {
+                r_authority = rest;
+                r_path = "/";
+            }
+
+            let mut result = Url {
+                scheme: self.scheme,
+                username: "",
+                password: "",
+                host: "",
+                port: null,
+                path: normalize_percent_encoding(&remove_dot_segments(r_path)),
+                query: r_query,
+                fragment: r_fragment,
+            };
+            if let Err(e) = parse_authority(&r_authority, &mut result) {
+                return Result::Err(e);
+            }
+            return Result::Ok(result);
+        }
+
+        r_path = rest;
+
+        if r_path.is_empty() {
+            let resolved_query = if r_query matches { Some(_) } { r_query } else { self.query };
+            return Result::Ok(Url {
+                scheme: self.scheme,
+                username: self.username,
+                password: self.password,
+                host: self.host,
+                port: self.port,
+                path: self.path,
+                query: resolved_query,
+                fragment: r_fragment,
+            });
+        }
+
+        let resolved_path = if r_path.starts_with("/") {
+            normalize_percent_encoding(&remove_dot_segments(r_path))
+        } else {
+            let base = self.path;
+            let merged = if let Some(last_slash) = base.rfind("/") {
+                let mut m = String::with_capacity(last_slash + 1 + r_path.len());
+                m.push_str(base.substr_bytes(0, last_slash + 1));
+                m.push_str(r_path);
+                m
+            } else {
+                r_path
+            };
+            normalize_percent_encoding(&remove_dot_segments(merged))
+        };
+
+        return Result::Ok(Url {
+            scheme: self.scheme,
+            username: self.username,
+            password: self.password,
+            host: self.host,
+            port: self.port,
+            path: resolved_path,
+            query: r_query,
+            fragment: r_fragment,
+        });
+    }
+
+    /// Parses the query string into a TreeMap (insertion-order preserved).
+    pub fn query_pairs(&self) -> TreeMap<String, String> {
+        return match self.query {
+            Some(q) => parse_query(q),
+            None => TreeMap::<String, String>::new(),
+        };
+    }
+
+    /// Returns the value for the given query parameter key.
+    pub fn query_get(&self, key: String) -> Option<String> {
+        return self.query_pairs().get(key);
+    }
+
+    /// Returns all values for the given query parameter key.
+    /// Computed from the raw query string to preserve duplicate keys.
+    pub fn query_get_all(&self, key: String) -> Array<String> {
+        let mut result: Array<String> = [];
+        if let Some(q) = self.query {
+            for let part of q.split("&") {
+                if part.is_empty() {
+                    continue;
+                }
+                if let Some(eq_pos) = part.find("=") {
+                    let k = part.substr_bytes(0, eq_pos);
+                    if percent_decode_query_component(&k) == key {
+                        let v = part.substr_bytes(eq_pos + 1, part.len());
+                        result.push(percent_decode_query_component(&v));
+                    }
+                } else {
+                    if percent_decode_query_component(&part) == key {
+                        result.push("");
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    /// Returns a new Url with the query string replaced by the given params.
+    pub fn with_query_pairs(&self, params: TreeMap<String, String>) -> Url {
+        let mut q: Option<String> = null;
+        if !params.is_empty() {
+            q = Option::Some(format_query(params));
+        }
+        return Url {
+            scheme: self.scheme,
+            username: self.username,
+            password: self.password,
+            host: self.host,
+            port: self.port,
+            path: self.path,
+            query: q,
+            fragment: self.fragment,
+        };
+    }
+}
+
+fn normalize_percent_encoding(input: &String) -> String {
+    let len = input.len();
+    let mut out = String::with_capacity(len);
+    let mut i = 0;
+    while i < len {
+        let c = input.get_byte(i) as char;
+        if c == '%' && i + 2 < len {
+            let hi = input.get_byte(i + 1) as char;
+            let lo = input.get_byte(i + 2) as char;
+            if hi.is_hexdigit() && lo.is_hexdigit() {
+                let decoded = hi.hex_digit_value() << 4 | lo.hex_digit_value();
+                if is_unreserved_char(decoded as u8 as char) {
+                    out.push(decoded as u8 as char);
+                } else {
+                    out.push_str(`%{decoded:02X}`);
+                }
+                i += 3;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    return out;
+}
+
+impl Eq for Url {
+    fn eq(&self, other: &Self) -> bool {
+        return self.scheme == other.scheme
+            && self.username == other.username
+            && self.password == other.password
+            && self.host == other.host
+            && self.port == other.port
+            && self.path == other.path
+            && self.query == other.query
+            && self.fragment == other.fragment;
+    }
+}
+
+impl Display for Url {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(self.to_string());
+    }
+}
+
+impl Serialize for Url {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let str = self.to_string();
+        return s.serialize_string(&str);
+    }
+}
+
+impl Deserialize for Url {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Url, DeserializeError> {
+        let str = match d.deserialize_string() {
+            Ok(s) => s,
+            Err(e) => { return Result::Err(e); },
+        };
+        return match Url::parse(str) {
+            Ok(url) => Result::Ok(url),
+            Err(_) => Result::Err(DeserializeError {
+                kind: DeserializeErrorKind::InvalidValue,
+                message: "invalid URL",
+                offset: 0,
+            }),
+        };
+    }
+}

@@ -261,7 +261,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             method_type_args =
                                 self.infer_type_args_from_method(prefix, suffix, &args);
                         }
-                        // Register assoc type resolutions for inferred type args
+                        // Check trait bounds and register assoc type resolutions for inferred type args
                         if !method_type_args.is_empty() {
                             let mtype_params =
                                 self.lookup_static_method_type_params(prefix, suffix);
@@ -272,6 +272,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                             self.register_assoc_types_for_concrete_type_and_trait(
                                                 type_arg,
                                                 &bound.name.clone(),
+                                            );
+                                        } else {
+                                            let type_name = self.type_id_to_string(type_arg);
+                                            let _ = self.logger.error(
+                                                TypeError::TraitBoundNotSatisfied {
+                                                    type_name,
+                                                    trait_name: bound.name.clone(),
+                                                    param_name: param.name.clone(),
+                                                    span: call.span,
+                                                },
                                             );
                                         }
                                     }

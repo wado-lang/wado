@@ -1161,6 +1161,10 @@ impl ArrayIter {
 impl Iterator for ArrayIter<T> {
     fn next(&mut self) -> Option<Self::Item>;
 }
+
+impl IntoIterator for ArrayIter<T> {
+    fn into_iter(&self) -> ArrayIter<T>;
+}
 ```
 
 ```wado
@@ -1271,6 +1275,8 @@ impl char {
     pub fn eq_ignore_ascii_case(&self, other: &char) -> bool;
     pub fn is_hexdigit(&self) -> bool;
     pub fn hex_digit_value(&self) -> i32;
+    pub fn len_utf8(&self) -> i32;
+    pub fn encode_utf8(&self) -> Array<u8>;
 }
 
 impl Display for char {

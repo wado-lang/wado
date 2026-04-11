@@ -96,3 +96,4 @@ It may include TODOs on WIP.
 - [Redesign String and Array APIs](./wep-2026-03-29-redesign-string-array-api.md)
 - [WebIDL Binding Generator (`wado-from-idl`)](./wep-2026-04-01-tide.md)
 - [Reactive Signals](./wep-2026-04-04-reactive-signals.md)
+- [URL Standard Library (`core:url`)](./wep-2026-04-10-url-stdlib.md)

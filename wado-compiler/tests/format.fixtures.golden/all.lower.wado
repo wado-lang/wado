@@ -7756,6 +7756,50 @@ pub fn char::hex_digit_value(self: Box<char>) -> i32 {
     core::internal::panic("char::hex_digit_value: not a hex digit");
 }
 
+pub fn char::len_utf8(self: Box<char>) -> i32 {
+    let cp: i32 = self.value as i32;
+    if (cp < 0x80) {
+        return 1;
+    }
+    if (cp < 0x800) {
+        return 2;
+    }
+    if (cp < 0x10000) {
+        return 3;
+    }
+    return 4;
+}
+
+pub fn char::encode_utf8(self: Box<char>) -> Array<u8> {
+    let cp: i32 = self.value as i32;
+    if (cp < 0x80) {
+        return __seq_lit: {
+            let mut __b: Array<u8> = "core::prelude/array.wado::Array<u8>^SequenceLiteralBuilder::new_literal"(1);
+            __b."Array<u8>^SequenceLiteralBuilder::push_literal"(cp as u8);
+            break __seq_lit: __b."Array<u8>^SequenceLiteralBuilder::build"();
+        };
+    }
+    if (cp < 0x800) {
+        let mut buf: Array<u8> = "core::prelude/array.wado::Array<u8>::with_capacity"(2);
+        buf."Array<u8>::push"((0xC0 | (cp >> 6)) as u8);
+        buf."Array<u8>::push"((0x80 | (cp & 0x3F)) as u8);
+        return buf;
+    }
+    if (cp < 0x10000) {
+        let mut buf: Array<u8> = "core::prelude/array.wado::Array<u8>::with_capacity"(3);
+        buf."Array<u8>::push"((0xE0 | (cp >> 12)) as u8);
+        buf."Array<u8>::push"((0x80 | ((cp >> 6) & 0x3F)) as u8);
+        buf."Array<u8>::push"((0x80 | (cp & 0x3F)) as u8);
+        return buf;
+    }
+    let mut buf: Array<u8> = "core::prelude/array.wado::Array<u8>::with_capacity"(4);
+    buf."Array<u8>::push"((0xF0 | (cp >> 18)) as u8);
+    buf."Array<u8>::push"((0x80 | ((cp >> 12) & 0x3F)) as u8);
+    buf."Array<u8>::push"((0x80 | ((cp >> 6) & 0x3F)) as u8);
+    buf."Array<u8>::push"((0x80 | (cp & 0x3F)) as u8);
+    return buf;
+}
+
 pub fn i8::max(a: i8, b: i8) -> i8 {
     return "core::builtin::core/builtin/select<i8>"((a > b), a, b);
 }
@@ -24802,6 +24846,22 @@ pub fn "Array<char>::with_capacity"(capacity: i32) -> Array<char> {
     return Array<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
 }
 
+fn "core/builtin/array_fill<u8>"(arr: builtin::array<u8>, offset: i32, value: u8, len: i32);
+
+fn "core/builtin/select<u64>"(cond: bool, if_true: u64, if_false: u64) -> u64;
+
+fn "core/builtin/select<i64>"(cond: bool, if_true: i64, if_false: i64) -> i64;
+
+fn "core/builtin/select<u32>"(cond: bool, if_true: u32, if_false: u32) -> u32;
+
+fn "core/builtin/select<u16>"(cond: bool, if_true: u16, if_false: u16) -> u16;
+
+fn "core/builtin/select<i16>"(cond: bool, if_true: i16, if_false: i16) -> i16;
+
+fn "core/builtin/select<u8>"(cond: bool, if_true: u8, if_false: u8) -> u8;
+
+fn "core/builtin/select<i8>"(cond: bool, if_true: i8, if_false: i8) -> i8;
+
 pub fn "Array<u8>::push"(self: &mut Array<u8>, value: u8) with stores[value] {
     let used: i32 = self.used;
     if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
@@ -24836,25 +24896,13 @@ fn "Array<u8>^SequenceLiteralBuilder::build"(self: &Array<u8>) -> Array<u8> {
     return *self;
 }
 
+fn "Array<u8>^SequenceLiteralBuilder::push_literal"(self: &mut Array<u8>, value: u8) with stores[value] {
+    self."Array<u8>::push"(value);
+}
+
 fn "Array<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<u8> {
     return "core::prelude/array.wado::Array<u8>::with_capacity"(capacity);
 }
-
-fn "core/builtin/array_fill<u8>"(arr: builtin::array<u8>, offset: i32, value: u8, len: i32);
-
-fn "core/builtin/select<u64>"(cond: bool, if_true: u64, if_false: u64) -> u64;
-
-fn "core/builtin/select<i64>"(cond: bool, if_true: i64, if_false: i64) -> i64;
-
-fn "core/builtin/select<u32>"(cond: bool, if_true: u32, if_false: u32) -> u32;
-
-fn "core/builtin/select<u16>"(cond: bool, if_true: u16, if_false: u16) -> u16;
-
-fn "core/builtin/select<i16>"(cond: bool, if_true: i16, if_false: i16) -> i16;
-
-fn "core/builtin/select<u8>"(cond: bool, if_true: u8, if_false: u8) -> u8;
-
-fn "core/builtin/select<i8>"(cond: bool, if_true: i8, if_false: i8) -> i8;
 
 fn "Array<u64>^IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
     if (index >= self.used) {

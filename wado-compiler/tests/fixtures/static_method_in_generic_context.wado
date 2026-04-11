@@ -1,0 +1,63 @@
+// Calling a non-generic static method from within a generic function
+// should not propagate the outer generic type parameters to the callee.
+//
+// Bug: Foo::parse(s) inside deserialize<D: Deserializer> was monomorphized
+// as Foo<JsonDeserializer>::parse, causing an unresolved call.
+
+use { Serialize, Serializer, SerializeError, Deserialize, Deserializer, DeserializeError, DeserializeErrorKind } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct Foo {
+    value: i32,
+}
+
+impl Foo {
+    fn parse(input: String) -> Option<Foo> {
+        if input == "42" {
+            return Option::Some(Foo { value: 42 });
+        }
+        return null;
+    }
+}
+
+impl Serialize for Foo {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_string(&`{self.value}`);
+    }
+}
+
+impl Deserialize for Foo {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Foo, DeserializeError> {
+        let str = match d.deserialize_string() {
+            Ok(s) => s,
+            Err(e) => { return Result::Err(e); },
+        };
+        return match Foo::parse(str) {
+            Some(foo) => Result::Ok(foo),
+            None => Result::Err(DeserializeError {
+                kind: DeserializeErrorKind::InvalidValue,
+                message: "invalid Foo",
+                offset: 0,
+            }),
+        };
+    }
+}
+
+test "roundtrip" {
+    let foo = Foo { value: 42 };
+    let json = to_string::<Foo>(&foo);
+    if let Ok(j) = json {
+        assert j == `"42"`;
+        let restored = from_string::<Foo>(j);
+        if let Ok(f) = restored {
+            assert f.value == 42;
+        } else {
+            panic("deserialize failed");
+        }
+    } else {
+        panic("serialize failed");
+    }
+}
+
+__DATA__
+{"test": {}}
