@@ -233,111 +233,79 @@ Only resource types (`resource` keyword) trigger propagation. Structs, enums, va
 
 - [ ] Not yet implemented.
 
-Handlers satisfy effects. Inside a `with ... do` block, the handled effect is provided by the handler, not required from the caller.
+Handlers satisfy effects by providing implementations for effect operations. An effect handler is any value whose type implements the effect via `impl Effect for Type`, analogous to trait implementations. The `with Effect = value do { ... }` block installs a handler for the scope of the `do` block.
 
 Only the effects actually needed are required on the calling function:
 
 - The handled effect itself: not required (handler satisfies it)
 - Effects used by handler methods: required on the caller
 
-#### Named Handler
+#### Effect as Trait
+
+An effect declaration defines an interface (like a trait). Any struct that implements the effect's operations can serve as a handler:
 
 ```wado
-handler MockStdin for Stdin {
-    fn read_line() -> String {
-        resume "mocked input"
-    }
+effect Stdin {
+    fn read_line() -> String;
 }
 
-fn test_input() {
-    with Stdin = MockStdin do {
-        let line = Stdin::read_line();
-        assert line == "mocked input";
+struct MockStdin {
+    responses: Array<String>,
+    mut index: i32,
+}
+
+impl Stdin for MockStdin {
+    fn read_line(&mut self) -> String {
+        let result = self.responses[self.index];
+        self.index += 1;
+        resume result
     }
+}
+```
+
+Handler implementations add `&self` or `&mut self` to access the handler's state. The effect declaration itself has no `self` parameter (effect operations are free functions from the caller's perspective).
+
+#### Using Handlers
+
+```wado
+fn test_input() {
+    let mut mock = MockStdin { responses: ["hello", "world"], index: 0 };
+    with Stdin = &mut mock do {
+        let a = Stdin::read_line();  // "hello"
+        let b = Stdin::read_line();  // "world"
+    }
+    assert mock.index == 2;
 }
 ```
 
 Multiple handlers:
 
 ```wado
-with Stdin = MockStdin, Stdout = MockStdout do {
+with Stdin = &mut mock_stdin, Stdout = &mut mock_stdout do {
     // ...
 }
 ```
 
+#### Handler Methods with Effects
+
 Handler methods can have their own effect requirements:
 
 ```wado
-handler LoggingStdin for Stdin {
-    fn read_line() -> String with Stdout {
+struct LoggingStdin {
+    response: String,
+}
+
+impl Stdin for LoggingStdin {
+    fn read_line(&self) -> String with Stdout {
         println("reading...");
-        resume "mocked"
+        resume self.response
     }
 }
 
 // Caller must have Stdout (handler method's effect), but not Stdin (handled)
 fn test_logging() with Stdout {
-    with Stdin = LoggingStdin do {
-        let line = Stdin::read_line();
-    }
-}
-```
-
-#### Inline Handler
-
-Uses the same method definition style as named handlers:
-
-```wado
-with Stdin as {
-    fn read_line() -> String {
-        resume "simple mock"
-    }
-} do {
-    let line = Stdin::read_line();
-}
-```
-
-With arguments and complex logic:
-
-```wado
-with FileSystem as {
-    fn read_file(path: String) -> String {
-        resume `contents of {path}`
-    }
-    fn write_file(path: String, data: String) {
-        log.push([path, data]);
-        resume;
-    }
-} do {
-    let content = FileSystem::read_file("test.txt");
-}
-```
-
-#### Mixed
-
-Named and inline handlers can be combined:
-
-```wado
-with Stdin = MockStdin, Stdout as {
-    fn write(s: String) {
-        captured.push(s);
-        resume;
-    }
-} do {
-    // ...
-}
-```
-
-Inline handler methods can also have effect requirements:
-
-```wado
-fn test_with_logging() with Stderr {
-    with Stdin as {
-        fn read_line() -> String with Stderr {
-            eprintln("debug: reading");
-            resume "mocked"
-        }
-    } do {
+    let mock = LoggingStdin { response: "mocked" };
+    with Stdin = &mock do {
         let line = Stdin::read_line();
     }
 }
@@ -345,89 +313,95 @@ fn test_with_logging() with Stderr {
 
 #### Handling Granularity and Wildcard
 
-By default, a handler must implement all operations of the handled effect. Use `..` (rest pattern) to opt in to trapping on unimplemented operations:
+By default, `impl Effect for Type` must implement all operations of the effect (like a complete trait impl). Use `..` (rest pattern) to opt in to trapping on unimplemented operations:
 
 ```wado
-// All operations required — compile error if any is missing
-with TcpSocket as {
-    fn create(family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> { ... }
-    fn bind(self: &TcpSocket, addr: IpSocketAddress) -> Result<(), ErrorCode> { ... }
-    fn connect(self: &TcpSocket, addr: IpSocketAddress) -> Result<(), ErrorCode> { ... }
-    // ... all 20+ methods
-} do { ... }
+struct MinimalTcp;
 
-// With wildcard — only implement what you need, rest traps at runtime
-with TcpSocket as {
-    fn create(family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> {
+impl TcpSocket for MinimalTcp {
+    fn create(&self, family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> {
         resume Result::Ok(mock_socket())
     }
-    fn connect(self: &TcpSocket, addr: IpSocketAddress) -> Result<(), ErrorCode> {
+    fn connect(&self, self_: &TcpSocket, addr: IpSocketAddress) -> Result<(), ErrorCode> {
         resume Result::Ok(())
     }
-    ..  // unimplemented operations trap if called
-} do { ... }
+    ..  // bind, listen, send, receive, etc. — trap if called
+}
 ```
 
 `..` is consistent with struct rest patterns (`let { name, .. } = person`).
 
-#### Mutable State in Handlers
+#### Handlers for Testing
 
-Inline handlers capture outer variables with the same semantics as closures:
+Effect handlers enable testing code that uses WASI effects without a real WASI runtime. Test functions implicitly have all effects, so handlers can provide any effect:
 
 ```wado
-test "capture output" {
-    let mut captured: Array<String> = [];
-    with Stdout as {
-        fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
-            let bytes = data.read(65536);
-            captured.push(String::from_utf8(bytes));  // captures &mut captured
-            let [f, tx] = Future::<Result<(), ErrorCode>>::new();
-            tx.write(Result::<(), ErrorCode>::Ok(()));
-            resume f
-        }
-        ..
-    } do {
-        println("hello");
+struct MockClient;
+
+impl Client for MockClient {
+    fn send(&self, request: Request) -> Result<Response, ErrorCode> {
+        let headers = Fields::new();
+        headers.append("content-type", "application/json");
+        let [tf, tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        let [resp, _] = Response::new(headers, null, tf);
+        tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+        resume Result::Ok(resp)
     }
-    assert captured[0] == "hello\n";
+    ..
+}
+
+test "http client mock" {
+    let mock = MockClient;
+    with Client = &mock do {
+        let request = make_request("/api/data");
+        let response = Client::send(request);
+        assert response matches { Ok(_) };
+    }
 }
 ```
 
-Named handler mutable state semantics are deferred to a future revision.
+Standard library test handlers (e.g., `core:test`) will be provided to reduce boilerplate for common WASI effects.
 
 ### Effect Forwarding
 
 Handlers only handle the effects they declare. All other effects forward to the outer scope. This follows the universal pattern in algebraic effect systems (Koka, Eff, OCaml 5, Effekt).
 
 ```wado
-with Client as {
-    fn send(request: Request) -> Result<Response, ErrorCode> {
-        resume Result::Ok(mock_response())
-    }
-    ..
-} do {
+let mock = MockClient;
+with Client = &mock do {
     let headers = Fields::new();    // Fields is not handled → forwards to outer scope
     let req = Request::new(...);    // Request is not handled → forwards to outer scope
-    let resp = Client::send(req);   // Client IS handled → goes to inline handler
+    let resp = Client::send(req);   // Client IS handled → goes to MockClient
 }
 ```
 
-Handler bodies execute in the outer effect scope. This means:
+Handler method bodies execute in the outer effect scope. This means:
 
 - A handler for effect E can call E's operations in its body to delegate to the outer implementation (no infinite recursion).
 - A handler for effect E can use other effects that are available in the outer scope.
 
 ```wado
-export fn run() with Stdout, Client {
-    with Client as {
-        fn send(request: Request) -> Result<Response, ErrorCode> {
-            println("intercepted!");         // Stdout — outer scope
-            let resp = Client::send(request); // Client — outer scope (real impl)
-            resume resp
+struct CachingClient {
+    cache: &mut TreeMap<String, Response>,
+}
+
+impl Client for CachingClient {
+    fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
+        let key = request.get_path_with_query();
+        if let Some(cached) = self.cache.get(key) {
+            resume Result::Ok(cached)
         }
-        ..
-    } do {
-        app();  // Client::send() here goes to the handler above
+        let resp = Client::send(request);  // Client — outer scope (real impl)
+        self.cache[key] = resp;
+        resume resp
+    }
+    ..
+}
+
+export fn run() with Stdout, Client {
+    let mut cache = TreeMap::<String, Response>::new();
+    with Client = &mut CachingClient { cache: &mut cache } do {
+        app();
     }
 }
 ```
@@ -437,16 +411,12 @@ export fn run() with Stdout, Client {
 Handlers nest naturally. Inner handlers override specific effects; unhandled effects forward through the chain to the outermost scope:
 
 ```wado
-with Stdout = MockStdout do {
-    with Client as {
-        fn send(request: Request) -> Result<Response, ErrorCode> {
-            println("sending...");  // Stdout → MockStdout (outer handler)
-            resume mock_response()
-        }
-        ..
-    } do {
-        println("before");      // Stdout → MockStdout
-        Client::send(req);      // Client → inline handler
+let mut mock_stdout = MockStdout { captured: [] };
+let mock_client = MockClient;
+with Stdout = &mut mock_stdout do {
+    with Client = &mock_client do {
+        println("sending...");   // Stdout → MockStdout (outer handler)
+        Client::send(req);       // Client → MockClient (inner handler)
     }
 }
 ```
@@ -471,54 +441,30 @@ wasmtime (outermost handler)
   }
 ```
 
-For the test world, the runtime provides a minimal set (Stdout, Stderr, CM builtins). Effects not imported by the test world (e.g., Client, Fields, Request from `wasi:http`) must be provided by user handlers:
-
-```wado
-test "http handler" {
-    // Client, Fields, Request, Response are not in test world imports
-    // → handlers required for each
-    with Client as {
-        fn send(request: Request) -> Result<Response, ErrorCode> {
-            resume Result::Ok(mock_response())
-        }
-        ..
-    },
-    Fields as { fn new() { resume mock_fields() }; .. },
-    Request as { fn new(...) { resume mock_request() }; .. },
-    Response as { fn new(...) { resume mock_response() }; .. }
-    do {
-        // Stream, Future → forward to test world runtime (CM builtins)
-        // Client → handled by inline handler
-        // Fields, Request, Response → handled by inline handlers
-        let resp = Client::send(make_request());
-    }
-}
-```
-
-Standard library test handlers (e.g., `core:test`) will be provided to reduce this boilerplate.
+For the test world, the runtime provides a minimal set (Stdout, Stderr, CM builtins). Effects not imported by the test world (e.g., Client, Fields, Request from `wasi:http`) must be provided by user handlers.
 
 ### Resume Keyword
 
 `resume` is a control flow expression similar to `return`. It passes a value to the computation and transfers control. The expression `resume` itself evaluates to `()`.
 
 ```wado
-with Stdin as {
-    fn read_line() -> String {
+impl Stdin for MockStdin {
+    fn read_line(&self) -> String {
         resume "value"
     }
-} do { ... }
+}
 ```
 
 For post-processing (one-shot continuations):
 
 ```wado
-with FileSystem as {
-    fn open_file(path: String) -> Handle {
+impl FileSystem for ManagedFs {
+    fn open_file(&self, path: String) -> Handle {
         let handle = real_open(path);
         resume handle;
         real_close(handle);  // runs after do block completes
     }
-} do { ... }
+}
 ```
 
 ### Continuation Semantics and Execution Model
@@ -550,11 +496,13 @@ fn register(data: &Data) -> Handle with Stdout, stores[data] {
 - Effect violations produce clear compile errors
 - Resource types are effects: every resource operation requires the resource to be in scope
 - Effect propagation eliminates verbosity: `with Stdout` automatically grants `Stream`, `Future`, etc.
+- Effects are traits: any type implementing `impl Effect for Type` can serve as a handler
+- No `handler` keyword needed; handlers are ordinary values with effect implementations
+- Mutable state in handlers is natural: struct fields accessed via `&self` / `&mut self`
 - Handlers satisfy effects locally; unhandled effects forward to the outer scope
 - Handler bodies execute in the outer effect scope, enabling delegation to real implementations
 - World imports are the outermost handler scope; user handlers nest inside
 - `..` wildcard enables partial handling with runtime trap for unimplemented operations
-- Inline handlers capture mutable state with closure semantics
 - `resume` without post-processing compiles to `return`; post-processing requires Stack Switching
 - One-shot semantics ensure resource safety
 - Generic effects (`<effect E>`) support higher-order functions without effect polymorphism complexity
