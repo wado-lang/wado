@@ -11,6 +11,7 @@
 //!   }
 
 use { TreeMap } from "core:collections";
+use { Serialize, Serializer, SerializeError, Deserialize, Deserializer, DeserializeError, DeserializeErrorKind } from "core:serde";
 
 /// Error type for URL parsing failures.
 pub variant ParseError {
@@ -111,12 +112,12 @@ pub fn percent_decode(input: String) -> Result<String, ParseError> {
         let c = input.get_byte(i) as char;
         if c == '%' {
             if i + 2 >= len {
-                return Result::<String, ParseError>::Err(ParseError::InvalidPercentEncoding);
+                return Result::Err(ParseError::InvalidPercentEncoding);
             }
             let hi = input.get_byte(i + 1) as char;
             let lo = input.get_byte(i + 2) as char;
             if !hi.is_hexdigit() || !lo.is_hexdigit() {
-                return Result::<String, ParseError>::Err(ParseError::InvalidPercentEncoding);
+                return Result::Err(ParseError::InvalidPercentEncoding);
             }
             bytes.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
             i += 3;
@@ -126,8 +127,8 @@ pub fn percent_decode(input: String) -> Result<String, ParseError> {
         }
     }
     return match String::from_utf8(bytes) {
-        Ok(s) => Result::<String, ParseError>::Ok(s),
-        Err(_) => Result::<String, ParseError>::Err(ParseError::InvalidPercentEncoding),
+        Ok(s) => Result::Ok(s),
+        Err(_) => Result::Err(ParseError::InvalidPercentEncoding),
     };
 }
 
@@ -250,19 +251,19 @@ fn remove_dot_segments(path: String) -> String {
 
 fn parse_port_str(s: &String) -> Result<u16, ParseError> {
     if s.is_empty() {
-        return Result::<u16, ParseError>::Err(ParseError::InvalidPort);
+        return Result::Err(ParseError::InvalidPort);
     }
     let mut val: i32 = 0;
     for let c of s.chars() {
         if !('0' <= c <= '9') {
-            return Result::<u16, ParseError>::Err(ParseError::InvalidPort);
+            return Result::Err(ParseError::InvalidPort);
         }
         val = val * 10 + (c as i32 - '0' as i32);
         if val > 65535 {
-            return Result::<u16, ParseError>::Err(ParseError::InvalidPort);
+            return Result::Err(ParseError::InvalidPort);
         }
     }
-    return Result::<u16, ParseError>::Ok(val as u16);
+    return Result::Ok(val as u16);
 }
 
 fn apply_port(url: &mut Url, port_val: u16) {
@@ -289,7 +290,7 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
     }
 
     if rest.is_empty() {
-        return Result::<(), ParseError>::Err(ParseError::MissingHost);
+        return Result::Err(ParseError::MissingHost);
     }
 
     if rest.starts_with("[") {
@@ -300,17 +301,17 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
                 if after.starts_with(":") {
                     let port_str = after.substr_bytes(1, after.len());
                     match parse_port_str(&port_str) {
-                        Err(e) => { return Result::<(), ParseError>::Err(e); },
+                        Err(e) => { return Result::Err(e); },
                         Ok(port_val) => { apply_port(url, port_val); },
                     }
                 } else {
-                    return Result::<(), ParseError>::Err(ParseError::InvalidHost);
+                    return Result::Err(ParseError::InvalidHost);
                 }
             }
         } else {
-            return Result::<(), ParseError>::Err(ParseError::InvalidHost);
+            return Result::Err(ParseError::InvalidHost);
         }
-        return Result::<(), ParseError>::Ok(());
+        return Result::Ok(());
     }
 
     if let Some(colon_pos) = rest.rfind(":") {
@@ -318,26 +319,26 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
         let port_str = rest.substr_bytes(colon_pos + 1, rest.len());
         if port_str.is_empty() {
             if host_part.is_empty() {
-                return Result::<(), ParseError>::Err(ParseError::MissingHost);
+                return Result::Err(ParseError::MissingHost);
             }
             url.host = host_part.to_ascii_lowercase();
-            return Result::<(), ParseError>::Ok(());
+            return Result::Ok(());
         }
         if host_part.is_empty() {
-            return Result::<(), ParseError>::Err(ParseError::MissingHost);
+            return Result::Err(ParseError::MissingHost);
         }
         match parse_port_str(&port_str) {
-            Err(e) => { return Result::<(), ParseError>::Err(e); },
+            Err(e) => { return Result::Err(e); },
             Ok(port_val) => {
                 url.host = host_part.to_ascii_lowercase();
                 apply_port(url, port_val);
             },
         }
-        return Result::<(), ParseError>::Ok(());
+        return Result::Ok(());
     }
 
     url.host = rest.to_ascii_lowercase();
-    return Result::<(), ParseError>::Ok(());
+    return Result::Ok(());
 }
 
 impl Url {
@@ -345,26 +346,26 @@ impl Url {
     /// are accepted.
     pub fn parse(input: String) -> Result<Url, ParseError> {
         if input.is_empty() {
-            return Result::<Url, ParseError>::Err(ParseError::EmptyInput);
+            return Result::Err(ParseError::EmptyInput);
         }
 
         let colon = match input.find(":") {
             Some(pos) => pos,
-            None => { return Result::<Url, ParseError>::Err(ParseError::InvalidScheme); },
+            None => { return Result::Err(ParseError::InvalidScheme); },
         };
         if colon == 0 {
-            return Result::<Url, ParseError>::Err(ParseError::InvalidScheme);
+            return Result::Err(ParseError::InvalidScheme);
         }
 
         let scheme = input.substr_bytes(0, colon).to_ascii_lowercase();
         if !is_special_scheme(&scheme) {
-            return Result::<Url, ParseError>::Err(ParseError::InvalidScheme);
+            return Result::Err(ParseError::InvalidScheme);
         }
 
         let mut rest = input.substr_bytes(colon + 1, input.len());
 
         if !rest.starts_with("//") {
-            return Result::<Url, ParseError>::Err(ParseError::MissingHost);
+            return Result::Err(ParseError::MissingHost);
         }
         rest = rest.substr_bytes(2, rest.len());
 
@@ -387,26 +388,28 @@ impl Url {
             path = rest.substr_bytes(slash_pos, rest.len());
         }
 
+        let normalized_path = normalize_percent_encoding(&remove_dot_segments(path));
+
         let mut url = Url {
             scheme: scheme,
             username: "",
             password: "",
             host: "",
             port: null,
-            path: path,
+            path: normalized_path,
             query: query,
             fragment: fragment,
         };
 
         if let Err(e) = parse_authority(&authority_str, &mut url) {
-            return Result::<Url, ParseError>::Err(e);
+            return Result::Err(e);
         }
 
         if url.host.is_empty() {
-            return Result::<Url, ParseError>::Err(ParseError::MissingHost);
+            return Result::Err(ParseError::MissingHost);
         }
 
-        return Result::<Url, ParseError>::Ok(url);
+        return Result::Ok(url);
     }
 
     /// Constructs a Url from the three parts used by wasi:http Request.
@@ -568,21 +571,21 @@ impl Url {
                 password: "",
                 host: "",
                 port: null,
-                path: remove_dot_segments(r_path),
+                path: normalize_percent_encoding(&remove_dot_segments(r_path)),
                 query: r_query,
                 fragment: r_fragment,
             };
             if let Err(e) = parse_authority(&r_authority, &mut result) {
-                return Result::<Url, ParseError>::Err(e);
+                return Result::Err(e);
             }
-            return Result::<Url, ParseError>::Ok(result);
+            return Result::Ok(result);
         }
 
         r_path = rest;
 
         if r_path.is_empty() {
             let resolved_query = if r_query matches { Some(_) } { r_query } else { self.query };
-            return Result::<Url, ParseError>::Ok(Url {
+            return Result::Ok(Url {
                 scheme: self.scheme,
                 username: self.username,
                 password: self.password,
@@ -595,7 +598,7 @@ impl Url {
         }
 
         let resolved_path = if r_path.starts_with("/") {
-            remove_dot_segments(r_path)
+            normalize_percent_encoding(&remove_dot_segments(r_path))
         } else {
             let base = self.path;
             let merged = if let Some(last_slash) = base.rfind("/") {
@@ -606,10 +609,10 @@ impl Url {
             } else {
                 r_path
             };
-            remove_dot_segments(merged)
+            normalize_percent_encoding(&remove_dot_segments(merged))
         };
 
-        return Result::<Url, ParseError>::Ok(Url {
+        return Result::Ok(Url {
             scheme: self.scheme,
             username: self.username,
             password: self.password,
@@ -619,33 +622,6 @@ impl Url {
             query: r_query,
             fragment: r_fragment,
         });
-    }
-
-    /// Returns a normalized form of this URL.
-    pub fn normalize(&self) -> Url {
-        let norm_scheme = self.scheme.to_ascii_lowercase();
-        let norm_host = self.host.to_ascii_lowercase();
-        let norm_path = remove_dot_segments(self.path);
-
-        let mut norm_port: Option<u16> = null;
-        if let Some(p) = self.port {
-            if p != default_port_for_scheme(&norm_scheme) {
-                norm_port = Option::Some(p);
-            }
-        }
-
-        let norm_path_decoded = normalize_percent_encoding(&norm_path);
-
-        return Url {
-            scheme: norm_scheme,
-            username: self.username,
-            password: self.password,
-            host: norm_host,
-            port: norm_port,
-            path: norm_path_decoded,
-            query: self.query,
-            fragment: self.fragment,
-        };
     }
 
     /// Parses the query string into a TreeMap (insertion-order preserved).
@@ -733,21 +709,43 @@ fn normalize_percent_encoding(input: &String) -> String {
 
 impl Eq for Url {
     fn eq(&self, other: &Self) -> bool {
-        let a = self.normalize();
-        let b = other.normalize();
-        return a.scheme == b.scheme
-            && a.username == b.username
-            && a.password == b.password
-            && a.host == b.host
-            && a.port == b.port
-            && a.path == b.path
-            && a.query == b.query
-            && a.fragment == b.fragment;
+        return self.scheme == other.scheme
+            && self.username == other.username
+            && self.password == other.password
+            && self.host == other.host
+            && self.port == other.port
+            && self.path == other.path
+            && self.query == other.query
+            && self.fragment == other.fragment;
     }
 }
 
 impl Display for Url {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(self.to_string());
+    }
+}
+
+impl Serialize for Url {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let str = self.to_string();
+        return s.serialize_string(&str);
+    }
+}
+
+impl Deserialize for Url {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Url, DeserializeError> {
+        let str = match d.deserialize_string() {
+            Ok(s) => s,
+            Err(e) => { return Result::Err(e); },
+        };
+        return match Url::parse(str) {
+            Ok(url) => Result::Ok(url),
+            Err(_) => Result::Err(DeserializeError {
+                kind: DeserializeErrorKind::InvalidValue,
+                message: "invalid URL",
+                offset: 0,
+            }),
+        };
     }
 }

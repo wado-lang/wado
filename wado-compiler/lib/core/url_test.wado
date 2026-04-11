@@ -1,5 +1,6 @@
 use { Url, ParseError, percent_encode, percent_decode, parse_query, format_query } from "core:url";
 use { TreeMap } from "core:collections";
+use { to_string, from_string } from "core:json";
 
 // --- Url::parse basic ---
 
@@ -487,55 +488,42 @@ test "resolve with new authority" {
     }
 }
 
-// --- Normalize ---
+// --- Parse-time normalization ---
 
-test "normalize scheme and host lowercase" {
-    let url = Url {
-        scheme: "HTTPS",
-        username: "",
-        password: "",
-        host: "EXAMPLE.COM",
-        port: null,
-        path: "/path",
-        query: null,
-        fragment: null,
-    };
-    let norm = url.normalize();
-    assert norm.scheme == "https";
-    assert norm.host == "example.com";
+test "parse normalizes scheme and host to lowercase" {
+    if let Ok(url) = Url::parse("HTTP://EXAMPLE.COM/path") {
+        assert url.scheme == "http";
+        assert url.host == "example.com";
+    } else {
+        panic("parse failed");
+    }
 }
 
-test "normalize removes default port" {
-    let url = Url {
-        scheme: "http",
-        username: "",
-        password: "",
-        host: "example.com",
-        port: Option::Some(80 as u16),
-        path: "/",
-        query: null,
-        fragment: null,
-    };
-    let norm = url.normalize();
-    assert norm.port matches { None };
+test "parse normalizes default port to None" {
+    if let Ok(url) = Url::parse("http://example.com:80/") {
+        assert url.port matches { None };
+    } else {
+        panic("parse failed");
+    }
 }
 
-test "normalize dot segments" {
-    let url = Url {
-        scheme: "http",
-        username: "",
-        password: "",
-        host: "example.com",
-        port: null,
-        path: "/a/b/../c/./d",
-        query: null,
-        fragment: null,
-    };
-    let norm = url.normalize();
-    assert norm.path == "/a/c/d";
+test "parse normalizes dot segments" {
+    if let Ok(url) = Url::parse("http://example.com/a/b/../c/./d") {
+        assert url.path == "/a/c/d";
+    } else {
+        panic("parse failed");
+    }
 }
 
-// --- Eq (via normalization) ---
+test "parse normalizes percent encoding" {
+    if let Ok(url) = Url::parse("http://example.com/%41%42%43") {
+        assert url.path == "/ABC";
+    } else {
+        panic("parse failed");
+    }
+}
+
+// --- Eq ---
 
 test "eq same url" {
     if let Ok(a) = Url::parse("http://example.com/path") {
@@ -811,4 +799,50 @@ test "char encode_utf8" {
     assert bytes[1] == 0x9F;
     assert bytes[2] == 0x8D;
     assert bytes[3] == 0xA3;
+}
+
+// --- Serialize / Deserialize ---
+
+test "serialize Url to JSON" {
+    if let Ok(url) = Url::parse("https://example.com/path?q=1") {
+        let r = to_string::<Url>(&url);
+        assert r matches { Ok(s) && s == `"https://example.com/path?q=1"` };
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "deserialize Url from JSON" {
+    let r = from_string::<Url>(`"https://example.com/path?q=1"`);
+    if let Ok(url) = r {
+        assert url.scheme == "https";
+        assert url.host == "example.com";
+        assert url.path == "/path";
+        assert url.query matches { Some("q=1") };
+    } else {
+        panic("deserialize failed");
+    }
+}
+
+test "serialize deserialize Url roundtrip" {
+    if let Ok(original) = Url::parse("https://user:pass@example.com:8443/api/v1?key=val#frag") {
+        let json = to_string::<Url>(&original);
+        if let Ok(json_str) = json {
+            let restored = from_string::<Url>(json_str);
+            if let Ok(url) = restored {
+                assert url == original;
+            } else {
+                panic("deserialize failed");
+            }
+        } else {
+            panic("serialize failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "deserialize Url invalid string" {
+    let r = from_string::<Url>(`"not-a-url"`);
+    assert r matches { Err(_) };
 }
