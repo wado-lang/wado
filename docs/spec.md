@@ -3834,6 +3834,10 @@ fn take_pure(f: fn(&Data) -> Result) { ... }  // cannot store
 
 See `docs/wep-2026-01-12-value-semantics-and-stores.md` for detailed design rationale.
 
+### Handlers
+
+See `docs/wep-2026-01-27-effect-system-design.md` for handler syntax, resource-as-effect, and effect propagation design.
+
 ## World System
 
 ### What is a World?
