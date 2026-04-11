@@ -69,13 +69,13 @@ mise run clean
 
 All languages are compiled with size optimization and symbol stripping enabled:
 
-| Language       | WASI Version | Optimization Flags                                                            | Notes                                        |
-| -------------- | ------------ | ----------------------------------------------------------------------------- | -------------------------------------------- |
-| C              | Preview 1    | `-Oz -Wl,--strip-all`                                                         | Aggressive size opt + strip all symbols      |
-| Rust           | Preview 1    | `opt-level="z"`, `lto=true`, `codegen-units=1`, `strip=true`, `panic="abort"` | Configured in Cargo.toml `[profile.release]` |
-| Zig            | Preview 1    | `-O ReleaseSmall`                                                             | Built-in size optimization mode              |
-| Moonbit        | Preview 1    | `--release --strip`                                                           | Release mode + strip symbols                 |
-| Wado           | Preview 3    | `-Os`                                                                         | Component model                              |
+| Language | WASI Version | Optimization Flags                                                            | Notes                                        |
+| -------- | ------------ | ----------------------------------------------------------------------------- | -------------------------------------------- |
+| C        | Preview 1    | `-Oz -Wl,--strip-all`                                                         | Aggressive size opt + strip all symbols      |
+| Rust     | Preview 1    | `opt-level="z"`, `lto=true`, `codegen-units=1`, `strip=true`, `panic="abort"` | Configured in Cargo.toml `[profile.release]` |
+| Zig      | Preview 1    | `-O ReleaseSmall`                                                             | Built-in size optimization mode              |
+| Moonbit  | Preview 1    | `--release --strip`                                                           | Release mode + strip symbols                 |
+| Wado     | Preview 3    | `-Os`                                                                         | Component model                              |
 
 ## Requirements
 
