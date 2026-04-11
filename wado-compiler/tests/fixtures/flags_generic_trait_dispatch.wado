@@ -1,0 +1,38 @@
+// Flags type with its own trait impl through generic dispatch.
+// Flags types must satisfy trait bounds and dispatch to their own impl
+// when called through generic functions.
+
+use { println, Stdout } from "core:cli";
+
+flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl Describe for Perms {
+    fn describe(&self) -> String {
+        return "perms";
+    }
+}
+
+fn show<T: Describe>(value: &T) -> String {
+    return value.describe();
+}
+
+export fn run() with Stdout {
+    let p = Perms::Read;
+
+    // Direct call works
+    println(p.describe());
+
+    // Generic dispatch must also work
+    println(show::<Perms>(&p));
+}
+
+__DATA__
+{"stdout": "perms\nperms\n"}
