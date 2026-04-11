@@ -3763,6 +3763,1356 @@ impl Parser {
     }
 }
 
+fn scan_grammar_spec(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_grammar_decl(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_OPTIONS | TK_IMPORT | TK_TOKENS | TK_CHANNELS | TK_AT } {
+        let sp = pos;
+        pos = scan_prequel_construct(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    pos = scan_rules(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_MODE {
+        let sp = pos;
+        pos = scan_mode_spec(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_grammar_decl(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_grammar_type(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_grammar_type(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LEXER { break try_0; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_GRAMMAR { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_PARSER { break try_1; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_GRAMMAR { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_GRAMMAR { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_prequel_construct(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_options_spec(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_delegate_grammars(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_tokens_spec(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            pos = scan_channels_spec(tokens, pos);
+            if pos < 0 { break try_3; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_action_(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_options_spec(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_OPTIONS { return -1; }
+    pos += 1;
+    while pos < tokens.len() && tokens[pos].kind matches { TK_RULE_REF | TK_TOKEN_REF } {
+        let sp = pos;
+        pos = scan_option(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_RBRACE { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_option(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { return -1; }
+    pos += 1;
+    pos = scan_option_value(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_option_value(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break try_0; }
+            while pos < tokens.len() && tokens[pos].kind == TK_DOT {
+                let sp = pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_DOT { return -1; }
+                pos += 1;
+                pos = scan_identifier(tokens, pos);
+                if pos < 0 { return -1; }
+                if pos < 0 { pos = sp; break; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_action_block(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_delegate_grammars(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_IMPORT { return -1; }
+    pos += 1;
+    pos = scan_delegate_grammar(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { return -1; }
+        pos += 1;
+        pos = scan_delegate_grammar(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_delegate_grammar(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { break try_0; }
+            pos += 1;
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_identifier(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_tokens_spec(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_TOKENS { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_RULE_REF | TK_TOKEN_REF } {
+        let sp = pos;
+        pos = scan_id_list(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_RBRACE { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_channels_spec(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_CHANNELS { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_RULE_REF | TK_TOKEN_REF } {
+        let sp = pos;
+        pos = scan_id_list(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_RBRACE { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_id_list(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { return -1; }
+        pos += 1;
+        pos = scan_identifier(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_COMMA {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_action_(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_AT { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_RULE_REF | TK_TOKEN_REF | TK_LEXER | TK_PARSER } {
+        let sp = pos;
+        pos = scan_action_scope_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_COLONCOLON { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_action_block(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_action_scope_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LEXER { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_PARSER { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_action_block(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_ACTION { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_arg_action_block(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_BEGIN_ARGUMENT { return -1; }
+    pos += 1;
+    while pos < tokens.len() && tokens[pos].kind == TK_ARGUMENT_CONTENT {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_ARGUMENT_CONTENT { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_END_ARGUMENT { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_mode_spec(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_MODE { return -1; }
+    pos += 1;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
+    pos += 1;
+    while pos < tokens.len() && tokens[pos].kind matches { TK_FRAGMENT | TK_TOKEN_REF } {
+        let sp = pos;
+        pos = scan_lexer_rule_spec(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_rules(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    while pos < tokens.len() && tokens[pos].kind matches { TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_FRAGMENT | TK_RULE_REF | TK_TOKEN_REF } {
+        let sp = pos;
+        pos = scan_rule_spec(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_rule_spec(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_parser_rule_spec(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_lexer_rule_spec(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_parser_rule_spec(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_FRAGMENT } {
+        let sp = pos;
+        pos = scan_rule_modifiers(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_RULE_REF { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_BEGIN_ARGUMENT {
+        let sp = pos;
+        pos = scan_arg_action_block(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_RETURNS {
+        let sp = pos;
+        pos = scan_rule_returns(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_THROWS {
+        let sp = pos;
+        pos = scan_throws_spec(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_LOCALS {
+        let sp = pos;
+        pos = scan_locals_spec(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_OPTIONS | TK_AT } {
+        let sp = pos;
+        pos = scan_rule_prequel(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
+    pos += 1;
+    pos = scan_rule_block(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
+    pos += 1;
+    pos = scan_exception_group(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_exception_group(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    while pos < tokens.len() && tokens[pos].kind == TK_CATCH {
+        let sp = pos;
+        pos = scan_exception_handler(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_FINALLY {
+        let sp = pos;
+        pos = scan_finally_clause(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_exception_handler(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_CATCH { return -1; }
+    pos += 1;
+    pos = scan_arg_action_block(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_action_block(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_finally_clause(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_FINALLY { return -1; }
+    pos += 1;
+    pos = scan_action_block(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_rule_prequel(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_options_spec(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_rule_action(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_rule_returns(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_RETURNS { return -1; }
+    pos += 1;
+    pos = scan_arg_action_block(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_throws_spec(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_THROWS { return -1; }
+    pos += 1;
+    pos = scan_qualified_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { return -1; }
+        pos += 1;
+        pos = scan_qualified_identifier(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_locals_spec(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LOCALS { return -1; }
+    pos += 1;
+    pos = scan_arg_action_block(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_rule_action(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_AT { return -1; }
+    pos += 1;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_action_block(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_rule_modifiers(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_rule_modifier(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_FRAGMENT } {
+        let sp = pos;
+        pos = scan_rule_modifier(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_rule_modifier(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_PUBLIC { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_PRIVATE { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_PROTECTED { break try_2; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_FRAGMENT { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_rule_block(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_rule_alt_list(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_rule_alt_list(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_labeled_alt(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_OR {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_OR { return -1; }
+        pos += 1;
+        pos = scan_labeled_alt(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_labeled_alt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_alternative(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind == TK_POUND {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_POUND { return -1; }
+        pos += 1;
+        pos = scan_identifier(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_lexer_rule_spec(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind == TK_FRAGMENT {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_FRAGMENT { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_TOKEN_REF { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_OPTIONS {
+        let sp = pos;
+        pos = scan_options_spec(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
+    pos += 1;
+    pos = scan_lexer_rule_block(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_lexer_rule_block(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_lexer_alt_list(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_lexer_alt_list(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_lexer_alt(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_OR {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_OR { return -1; }
+        pos += 1;
+        pos = scan_lexer_alt(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_lexer_alt(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_lexer_elements(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos < tokens.len() && tokens[pos].kind == TK_RARROW {
+                let sp = pos;
+                pos = scan_lexer_commands(tokens, pos);
+                if pos < 0 { pos = sp; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+    }
+    return pos;
+}
+
+fn scan_lexer_elements(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_lexer_element(tokens, pos);
+            if pos < 0 { return -1; }
+            while pos < tokens.len() && tokens[pos].kind matches { TK_STRING_LITERAL | TK_TOKEN_REF | TK_NOT | TK_LEXER_CHAR_SET | TK_DOT | TK_LPAREN | TK_ACTION } {
+                let sp = pos;
+                pos = scan_lexer_element(tokens, pos);
+                if pos < 0 { pos = sp; break; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+    }
+    return pos;
+}
+
+fn scan_lexer_element(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_lexer_atom(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos < tokens.len() && tokens[pos].kind matches { TK_QUESTION | TK_STAR | TK_PLUS } {
+                let sp = pos;
+                pos = scan_ebnf_suffix(tokens, pos);
+                if pos < 0 { pos = sp; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_lexer_block(tokens, pos);
+            if pos < 0 { break try_1; }
+            if pos < tokens.len() && tokens[pos].kind matches { TK_QUESTION | TK_STAR | TK_PLUS } {
+                let sp = pos;
+                pos = scan_ebnf_suffix(tokens, pos);
+                if pos < 0 { pos = sp; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_action_block(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < tokens.len() && tokens[pos].kind == TK_QUESTION {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_QUESTION { pos = -1; } else { pos += 1; }
+            if pos < 0 { pos = sp; }
+        }
+    }
+    return pos;
+}
+
+fn scan_lexer_block(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
+    pos += 1;
+    pos = scan_lexer_alt_list(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_lexer_commands(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_RARROW { return -1; }
+    pos += 1;
+    pos = scan_lexer_command(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { return -1; }
+        pos += 1;
+        pos = scan_lexer_command(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_lexer_command(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_lexer_command_name(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { break try_0; }
+            pos += 1;
+            pos = scan_lexer_command_expr(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_lexer_command_name(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_lexer_command_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_MODE { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_lexer_command_expr(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_alt_list(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_alternative(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_OR {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_OR { return -1; }
+        pos += 1;
+        pos = scan_alternative(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_alternative(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos < tokens.len() && tokens[pos].kind == TK_LT {
+                let sp = pos;
+                pos = scan_element_options(tokens, pos);
+                if pos < 0 { pos = sp; }
+            }
+            pos = scan_element(tokens, pos);
+            if pos < 0 { return -1; }
+            while pos < tokens.len() && tokens[pos].kind matches { TK_RULE_REF | TK_TOKEN_REF | TK_STRING_LITERAL | TK_NOT | TK_DOT | TK_LPAREN | TK_ACTION } {
+                let sp = pos;
+                pos = scan_element(tokens, pos);
+                if pos < 0 { pos = sp; break; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+    }
+    return pos;
+}
+
+fn scan_element(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_labeled_element(tokens, pos);
+            if pos < 0 { break try_0; }
+            let gp_0 = pos;
+            sg_0: {
+                pos = gp_0;
+                sg_0_0: {
+                    pos = scan_ebnf_suffix(tokens, pos);
+                    if pos < 0 { break sg_0_0; }
+                    break sg_0;
+                }
+                pos = gp_0;
+            }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_atom(tokens, pos);
+            if pos < 0 { break try_1; }
+            let gp_1 = pos;
+            sg_1: {
+                pos = gp_1;
+                sg_1_0: {
+                    pos = scan_ebnf_suffix(tokens, pos);
+                    if pos < 0 { break sg_1_0; }
+                    break sg_1;
+                }
+                pos = gp_1;
+            }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_ebnf(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_action_block(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < tokens.len() && tokens[pos].kind == TK_QUESTION {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_QUESTION { pos = -1; } else { pos += 1; }
+            if pos < 0 { pos = sp; }
+        }
+        if pos < tokens.len() && tokens[pos].kind == TK_LT {
+            let sp = pos;
+            pos = scan_predicate_options(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+    }
+    return pos;
+}
+
+fn scan_predicate_options(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LT { return -1; }
+    pos += 1;
+    pos = scan_predicate_option(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { return -1; }
+        pos += 1;
+        pos = scan_predicate_option(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_GT { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_predicate_option(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_element_option(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_identifier(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { return -1; }
+        pos += 1;
+        let gp_2 = pos;
+        sg_2: {
+            pos = gp_2;
+            sg_2_0: {
+                pos = scan_action_block(tokens, pos);
+                if pos < 0 { break sg_2_0; }
+                break sg_2;
+            }
+            pos = gp_2;
+            sg_2_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_INT { break sg_2_1; }
+                pos += 1;
+                break sg_2;
+            }
+            pos = gp_2;
+            if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
+            pos += 1;
+        }
+    }
+    return pos;
+}
+
+fn scan_labeled_element(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    let gp_3 = pos;
+    sg_3: {
+        pos = gp_3;
+        sg_3_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { break sg_3_0; }
+            pos += 1;
+            break sg_3;
+        }
+        pos = gp_3;
+        if pos >= tokens.len() || tokens[pos].kind != TK_PLUS_ASSIGN { return -1; }
+        pos += 1;
+    }
+    let gp_4 = pos;
+    sg_4: {
+        pos = gp_4;
+        sg_4_0: {
+            pos = scan_atom(tokens, pos);
+            if pos < 0 { break sg_4_0; }
+            break sg_4;
+        }
+        pos = gp_4;
+        pos = scan_block(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_ebnf(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_block(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_QUESTION | TK_STAR | TK_PLUS } {
+        let sp = pos;
+        pos = scan_block_suffix(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_block_suffix(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_ebnf_suffix(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_ebnf_suffix(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_QUESTION { break try_0; }
+            pos += 1;
+            if pos < tokens.len() && tokens[pos].kind == TK_QUESTION {
+                let sp = pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_QUESTION { pos = -1; } else { pos += 1; }
+                if pos < 0 { pos = sp; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_STAR { break try_1; }
+            pos += 1;
+            if pos < tokens.len() && tokens[pos].kind == TK_QUESTION {
+                let sp = pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_QUESTION { pos = -1; } else { pos += 1; }
+                if pos < 0 { pos = sp; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_PLUS { return -1; }
+        pos += 1;
+        if pos < tokens.len() && tokens[pos].kind == TK_QUESTION {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_QUESTION { pos = -1; } else { pos += 1; }
+            if pos < 0 { pos = sp; }
+        }
+    }
+    return pos;
+}
+
+fn scan_lexer_atom(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_character_range(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_terminal_def(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_not_set(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LEXER_CHAR_SET { break try_3; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_wildcard(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_terminal_def(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_ruleref(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_not_set(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_wildcard(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_wildcard(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_DOT { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_LT {
+        let sp = pos;
+        pos = scan_element_options(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_not_set(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_NOT { break try_0; }
+            pos += 1;
+            pos = scan_set_element(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_NOT { return -1; }
+        pos += 1;
+        pos = scan_block_set(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_block_set(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
+    pos += 1;
+    pos = scan_set_element(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_OR {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_OR { return -1; }
+        pos += 1;
+        pos = scan_set_element(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_set_element(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_TOKEN_REF { break try_0; }
+            pos += 1;
+            if pos < tokens.len() && tokens[pos].kind == TK_LT {
+                let sp = pos;
+                pos = scan_element_options(tokens, pos);
+                if pos < 0 { pos = sp; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { break try_1; }
+            pos += 1;
+            if pos < tokens.len() && tokens[pos].kind == TK_LT {
+                let sp = pos;
+                pos = scan_element_options(tokens, pos);
+                if pos < 0 { pos = sp; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_character_range(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LEXER_CHAR_SET { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_block(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_OPTIONS | TK_AT | TK_COLON } {
+        let sp = pos;
+        if pos < tokens.len() && tokens[pos].kind == TK_OPTIONS {
+            let sp = pos;
+            pos = scan_options_spec(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+        while pos < tokens.len() && tokens[pos].kind == TK_AT {
+            let sp = pos;
+            pos = scan_rule_action(tokens, pos);
+            if pos < 0 { pos = sp; break; }
+        }
+        if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
+        pos += 1;
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_alt_list(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_ruleref(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_RULE_REF { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_BEGIN_ARGUMENT {
+        let sp = pos;
+        pos = scan_arg_action_block(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos < tokens.len() && tokens[pos].kind == TK_LT {
+        let sp = pos;
+        pos = scan_element_options(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
+fn scan_character_range(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_RANGE { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_terminal_def(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_TOKEN_REF { break try_0; }
+            pos += 1;
+            if pos < tokens.len() && tokens[pos].kind == TK_LT {
+                let sp = pos;
+                pos = scan_element_options(tokens, pos);
+                if pos < 0 { pos = sp; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
+        pos += 1;
+        if pos < tokens.len() && tokens[pos].kind == TK_LT {
+            let sp = pos;
+            pos = scan_element_options(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+    }
+    return pos;
+}
+
+fn scan_element_options(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LT { return -1; }
+    pos += 1;
+    pos = scan_element_option(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { return -1; }
+        pos += 1;
+        pos = scan_element_option(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_GT { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_element_option(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_qualified_identifier(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_identifier(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { return -1; }
+        pos += 1;
+        let gp_5 = pos;
+        sg_5: {
+            pos = gp_5;
+            sg_5_0: {
+                pos = scan_qualified_identifier(tokens, pos);
+                if pos < 0 { break sg_5_0; }
+                break sg_5;
+            }
+            pos = gp_5;
+            sg_5_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { break sg_5_1; }
+                pos += 1;
+                break sg_5;
+            }
+            pos = gp_5;
+            if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
+            pos += 1;
+        }
+    }
+    return pos;
+}
+
+fn scan_identifier(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_RULE_REF { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_TOKEN_REF { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_qualified_identifier(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_DOT {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_DOT { return -1; }
+        pos += 1;
+        pos = scan_identifier(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
 fn parse_grammar_spec(p: &mut Parser) -> Result<GrammarSpecNode, ParseError> {
     let start = p.peek().span.start;
     let grammar_decl = parse_grammar_decl(p)?;
@@ -3998,6 +5348,13 @@ fn parse_delegate_grammar_bt_1(p: &mut Parser) -> Result<DelegateGrammarNode, Pa
     }));
 }
 
+fn parse_delegate_grammar_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_delegate_grammar_bt_0(p: &mut Parser) -> Result<DelegateGrammarNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
@@ -4009,6 +5366,17 @@ fn parse_delegate_grammar_bt_0(p: &mut Parser) -> Result<DelegateGrammarNode, Pa
         assign,
         identifier_2,
     }));
+}
+
+fn parse_delegate_grammar_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { return -1; }
+    pos += 1;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_delegate_grammar(p: &mut Parser) -> Result<DelegateGrammarNode, ParseError> {
@@ -4227,6 +5595,13 @@ fn parse_rule_spec_bt_1(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
     }));
 }
 
+fn parse_rule_spec_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_lexer_rule_spec(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_rule_spec_bt_0(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
     let start = p.peek().span.start;
     let parser_rule_spec = parse_parser_rule_spec(p)?;
@@ -4234,6 +5609,13 @@ fn parse_rule_spec_bt_0(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
         span: Span::new(start, p.last_end()),
         parser_rule_spec,
     }));
+}
+
+fn parse_rule_spec_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_parser_rule_spec(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_rule_spec(p: &mut Parser) -> Result<RuleSpecNode, ParseError> {
@@ -4756,6 +6138,13 @@ fn parse_lexer_command_bt_1(p: &mut Parser) -> Result<LexerCommandNode, ParseErr
     }));
 }
 
+fn parse_lexer_command_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_lexer_command_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_lexer_command_bt_0(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
     let start = p.peek().span.start;
     let lexer_command_name = parse_lexer_command_name(p)?;
@@ -4769,6 +6158,19 @@ fn parse_lexer_command_bt_0(p: &mut Parser) -> Result<LexerCommandNode, ParseErr
         lexer_command_expr,
         rparen,
     }));
+}
+
+fn parse_lexer_command_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_lexer_command_name(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
+    pos += 1;
+    pos = scan_lexer_command_expr(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn parse_lexer_command(p: &mut Parser) -> Result<LexerCommandNode, ParseError> {
@@ -4921,6 +6323,23 @@ fn parse_element_bt_0(p: &mut Parser) -> Result<ElementNode, ParseError> {
     }));
 }
 
+fn parse_element_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_labeled_element(tokens, pos);
+    if pos < 0 { return -1; }
+    let gp_6 = pos;
+    sg_6: {
+        pos = gp_6;
+        sg_6_0: {
+            pos = scan_ebnf_suffix(tokens, pos);
+            if pos < 0 { break sg_6_0; }
+            break sg_6;
+        }
+        pos = gp_6;
+    }
+    return pos;
+}
+
 fn parse_element_bt_1(p: &mut Parser) -> Result<ElementNode, ParseError> {
     let start = p.peek().span.start;
     let atom = parse_atom(p)?;
@@ -4941,6 +6360,23 @@ fn parse_element_bt_1(p: &mut Parser) -> Result<ElementNode, ParseError> {
         atom,
         group_1,
     }));
+}
+
+fn parse_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_atom(tokens, pos);
+    if pos < 0 { return -1; }
+    let gp_7 = pos;
+    sg_7: {
+        pos = gp_7;
+        sg_7_0: {
+            pos = scan_ebnf_suffix(tokens, pos);
+            if pos < 0 { break sg_7_0; }
+            break sg_7;
+        }
+        pos = gp_7;
+    }
+    return pos;
 }
 
 fn parse_element(p: &mut Parser) -> Result<ElementNode, ParseError> {
@@ -5031,6 +6467,13 @@ fn parse_predicate_option_bt_0(p: &mut Parser) -> Result<PredicateOptionNode, Pa
     }));
 }
 
+fn parse_predicate_option_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_element_option(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_predicate_option_bt_1(p: &mut Parser) -> Result<PredicateOptionNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
@@ -5062,17 +6505,40 @@ fn parse_predicate_option_bt_1(p: &mut Parser) -> Result<PredicateOptionNode, Pa
     }));
 }
 
+fn parse_predicate_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { return -1; }
+    pos += 1;
+    let gp_8 = pos;
+    sg_8: {
+        pos = gp_8;
+        sg_8_0: {
+            pos = scan_action_block(tokens, pos);
+            if pos < 0 { break sg_8_0; }
+            break sg_8;
+        }
+        pos = gp_8;
+        sg_8_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_INT { break sg_8_1; }
+            pos += 1;
+            break sg_8;
+        }
+        pos = gp_8;
+        if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
 fn parse_predicate_option(p: &mut Parser) -> Result<PredicateOptionNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_RULE_REF | TK_TOKEN_REF } {
         if p.peek_kind() matches { TK_RULE_REF | TK_TOKEN_REF } {
-            let saved = p.pos;
-            let r_0 = parse_predicate_option_bt_0(p);
-            if let Err(_) = r_0 {
-                p.pos = saved;
-            } else {
-                return r_0;
+            if parse_predicate_option_scan_0(&p.tokens, p.pos) >= 0 {
+                return parse_predicate_option_bt_0(p);
             }
             return parse_predicate_option_bt_1(p);
         }
@@ -5192,6 +6658,13 @@ fn parse_lexer_atom_bt_0(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     }));
 }
 
+fn parse_lexer_atom_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_character_range(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_lexer_atom_bt_1(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     let start = p.peek().span.start;
     let terminal_def = parse_terminal_def(p)?;
@@ -5201,17 +6674,20 @@ fn parse_lexer_atom_bt_1(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     }));
 }
 
+fn parse_lexer_atom_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_terminal_def(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_lexer_atom(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_STRING_LITERAL | TK_TOKEN_REF } {
         if p.peek_kind() == TK_STRING_LITERAL {
-            let saved = p.pos;
-            let r_0 = parse_lexer_atom_bt_0(p);
-            if let Err(_) = r_0 {
-                p.pos = saved;
-            } else {
-                return r_0;
+            if parse_lexer_atom_scan_0(&p.tokens, p.pos) >= 0 {
+                return parse_lexer_atom_bt_0(p);
             }
             return parse_lexer_atom_bt_1(p);
         } else if p.peek_kind() == TK_TOKEN_REF {
@@ -5311,6 +6787,15 @@ fn parse_not_set_bt_0(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     }));
 }
 
+fn parse_not_set_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_NOT { return -1; }
+    pos += 1;
+    pos = scan_set_element(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_not_set_bt_1(p: &mut Parser) -> Result<NotSetNode, ParseError> {
     let start = p.peek().span.start;
     let not = p.expect(TK_NOT)?;
@@ -5320,6 +6805,15 @@ fn parse_not_set_bt_1(p: &mut Parser) -> Result<NotSetNode, ParseError> {
         not,
         block_set,
     }));
+}
+
+fn parse_not_set_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_NOT { return -1; }
+    pos += 1;
+    pos = scan_block_set(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_not_set(p: &mut Parser) -> Result<NotSetNode, ParseError> {
@@ -5390,6 +6884,18 @@ fn parse_set_element_bt_1(p: &mut Parser) -> Result<SetElementNode, ParseError> 
     }));
 }
 
+fn parse_set_element_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_LT {
+        let sp = pos;
+        pos = scan_element_options(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
 fn parse_set_element_bt_2(p: &mut Parser) -> Result<SetElementNode, ParseError> {
     let start = p.peek().span.start;
     let character_range = parse_character_range(p)?;
@@ -5397,6 +6903,13 @@ fn parse_set_element_bt_2(p: &mut Parser) -> Result<SetElementNode, ParseError> 
         span: Span::new(start, p.last_end()),
         character_range,
     }));
+}
+
+fn parse_set_element_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_character_range(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
@@ -5418,12 +6931,8 @@ fn parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
     }
     if kind == TK_STRING_LITERAL {
         if p.peek_kind() == TK_STRING_LITERAL {
-            let saved = p.pos;
-            let r_1 = parse_set_element_bt_1(p);
-            if let Err(_) = r_1 {
-                p.pos = saved;
-            } else {
-                return r_1;
+            if parse_set_element_scan_1(&p.tokens, p.pos) >= 0 {
+                return parse_set_element_bt_1(p);
             }
             return parse_set_element_bt_2(p);
         }
@@ -5624,6 +7133,13 @@ fn parse_element_option_bt_0(p: &mut Parser) -> Result<ElementOptionNode, ParseE
     }));
 }
 
+fn parse_element_option_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_qualified_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_element_option_bt_1(p: &mut Parser) -> Result<ElementOptionNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
@@ -5653,6 +7169,33 @@ fn parse_element_option_bt_1(p: &mut Parser) -> Result<ElementOptionNode, ParseE
         assign,
         group_0,
     }));
+}
+
+fn parse_element_option_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_identifier(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_ASSIGN { return -1; }
+    pos += 1;
+    let gp_9 = pos;
+    sg_9: {
+        pos = gp_9;
+        sg_9_0: {
+            pos = scan_qualified_identifier(tokens, pos);
+            if pos < 0 { break sg_9_0; }
+            break sg_9;
+        }
+        pos = gp_9;
+        sg_9_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { break sg_9_1; }
+            pos += 1;
+            break sg_9;
+        }
+        pos = gp_9;
+        if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
+        pos += 1;
+    }
+    return pos;
 }
 
 fn parse_element_option(p: &mut Parser) -> Result<ElementOptionNode, ParseError> {

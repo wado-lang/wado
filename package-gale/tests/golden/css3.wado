@@ -29295,6 +29295,2783 @@ impl Parser {
     }
 }
 
+fn scan_stylesheet(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_Charset {
+        let sp = pos;
+        pos = scan_charset(tokens, pos);
+        if pos < 0 { return -1; }
+        while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space | TK_Cdo | TK_Cdc } {
+            let sp = pos;
+            let gp_0 = pos;
+            sg_0: {
+                pos = gp_0;
+                sg_0_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Comment { break sg_0_0; }
+                    pos += 1;
+                    break sg_0;
+                }
+                pos = gp_0;
+                sg_0_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_0_1; }
+                    pos += 1;
+                    break sg_0;
+                }
+                pos = gp_0;
+                sg_0_2: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Cdo { break sg_0_2; }
+                    pos += 1;
+                    break sg_0;
+                }
+                pos = gp_0;
+                if pos >= tokens.len() || tokens[pos].kind != TK_Cdc { return -1; }
+                pos += 1;
+            }
+            if pos < 0 { pos = sp; break; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    while pos < tokens.len() && tokens[pos].kind == TK_Import {
+        let sp = pos;
+        pos = scan_imports(tokens, pos);
+        if pos < 0 { return -1; }
+        while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space | TK_Cdo | TK_Cdc } {
+            let sp = pos;
+            let gp_1 = pos;
+            sg_1: {
+                pos = gp_1;
+                sg_1_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Comment { break sg_1_0; }
+                    pos += 1;
+                    break sg_1;
+                }
+                pos = gp_1;
+                sg_1_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_1_1; }
+                    pos += 1;
+                    break sg_1;
+                }
+                pos = gp_1;
+                sg_1_2: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Cdo { break sg_1_2; }
+                    pos += 1;
+                    break sg_1;
+                }
+                pos = gp_1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_Cdc { return -1; }
+                pos += 1;
+            }
+            if pos < 0 { pos = sp; break; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    while pos < tokens.len() && tokens[pos].kind == TK_Namespace {
+        let sp = pos;
+        pos = scan_namespace_(tokens, pos);
+        if pos < 0 { return -1; }
+        while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space | TK_Cdo | TK_Cdc } {
+            let sp = pos;
+            let gp_2 = pos;
+            sg_2: {
+                pos = gp_2;
+                sg_2_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Comment { break sg_2_0; }
+                    pos += 1;
+                    break sg_2;
+                }
+                pos = gp_2;
+                sg_2_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_2_1; }
+                    pos += 1;
+                    break sg_2;
+                }
+                pos = gp_2;
+                sg_2_2: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Cdo { break sg_2_2; }
+                    pos += 1;
+                    break sg_2;
+                }
+                pos = gp_2;
+                if pos >= tokens.len() || tokens[pos].kind != TK_Cdc { return -1; }
+                pos += 1;
+            }
+            if pos < 0 { pos = sp; break; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR | TK_LIT_PIPE | TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACE | TK_Media | TK_Page | TK_FontFace | TK_Keyframes | TK_Supports | TK_Viewport | TK_CounterStyle | TK_FontFeatureValues | TK_AtKeyword } {
+        let sp = pos;
+        pos = scan_nested_statement(tokens, pos);
+        if pos < 0 { return -1; }
+        while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space | TK_Cdo | TK_Cdc } {
+            let sp = pos;
+            let gp_3 = pos;
+            sg_3: {
+                pos = gp_3;
+                sg_3_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Comment { break sg_3_0; }
+                    pos += 1;
+                    break sg_3;
+                }
+                pos = gp_3;
+                sg_3_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Space { break sg_3_1; }
+                    pos += 1;
+                    break sg_3;
+                }
+                pos = gp_3;
+                sg_3_2: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Cdo { break sg_3_2; }
+                    pos += 1;
+                    break sg_3;
+                }
+                pos = gp_3;
+                if pos >= tokens.len() || tokens[pos].kind != TK_Cdc { return -1; }
+                pos += 1;
+            }
+            if pos < 0 { pos = sp; break; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_charset(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Charset { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Charset { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_String_ { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_imports(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Import { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            let gp_4 = pos;
+            sg_4: {
+                pos = gp_4;
+                sg_4_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_4_0; }
+                    pos += 1;
+                    break sg_4;
+                }
+                pos = gp_4;
+                pos = scan_url(tokens, pos);
+                if pos < 0 { return -1; }
+            }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_media_query_list(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Import { break try_1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_1; }
+            let gp_5 = pos;
+            sg_5: {
+                pos = gp_5;
+                sg_5_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_5_0; }
+                    pos += 1;
+                    break sg_5;
+                }
+                pos = gp_5;
+                pos = scan_url(tokens, pos);
+                if pos < 0 { return -1; }
+            }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_1; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { break try_1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Import { break try_2; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_2; }
+            let gp_6 = pos;
+            sg_6: {
+                pos = gp_6;
+                sg_6_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_6_0; }
+                    pos += 1;
+                    break sg_6;
+                }
+                pos = gp_6;
+                pos = scan_url(tokens, pos);
+                if pos < 0 { return -1; }
+            }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_2; }
+            pos = scan_media_query_list(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        let gp_7 = pos;
+        sg_7: {
+            pos = gp_7;
+            sg_7_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_7_0; }
+                pos += 1;
+                break sg_7;
+            }
+            pos = gp_7;
+            pos = scan_url(tokens, pos);
+            if pos < 0 { return -1; }
+        }
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_namespace_(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Namespace { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
+                let sp = pos;
+                pos = scan_namespace_prefix(tokens, pos);
+                if pos < 0 { return -1; }
+                pos = scan_ws(tokens, pos);
+                if pos < 0 { return -1; }
+                if pos < 0 { pos = sp; }
+            }
+            let gp_8 = pos;
+            sg_8: {
+                pos = gp_8;
+                sg_8_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_8_0; }
+                    pos += 1;
+                    break sg_8;
+                }
+                pos = gp_8;
+                pos = scan_url(tokens, pos);
+                if pos < 0 { return -1; }
+            }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Namespace { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
+            let sp = pos;
+            pos = scan_namespace_prefix(tokens, pos);
+            if pos < 0 { return -1; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { return -1; }
+            if pos < 0 { pos = sp; }
+        }
+        let gp_9 = pos;
+        sg_9: {
+            pos = gp_9;
+            sg_9_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_9_0; }
+                pos += 1;
+                break sg_9;
+            }
+            pos = gp_9;
+            pos = scan_url(tokens, pos);
+            if pos < 0 { return -1; }
+        }
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_namespace_prefix(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_ident(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_media(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Media { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_media_query_list(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_group_rule_body(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_media_query_list(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_MediaOnly | TK_Not | TK_Comment | TK_Space | TK_LIT_LPAREN } {
+        let sp = pos;
+        pos = scan_media_query(tokens, pos);
+        if pos < 0 { return -1; }
+        while pos < tokens.len() && tokens[pos].kind == TK_Comma {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_Comma { return -1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { return -1; }
+            pos = scan_media_query(tokens, pos);
+            if pos < 0 { return -1; }
+            if pos < 0 { pos = sp; break; }
+        }
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_media_query(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos < tokens.len() && tokens[pos].kind matches { TK_MediaOnly | TK_Not } {
+                let sp = pos;
+                let gp_10 = pos;
+                sg_10: {
+                    pos = gp_10;
+                    sg_10_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_MediaOnly { break sg_10_0; }
+                        pos += 1;
+                        break sg_10;
+                    }
+                    pos = gp_10;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Not { return -1; }
+                    pos += 1;
+                }
+                if pos < 0 { pos = sp; }
+            }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_media_type(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            while pos < tokens.len() && tokens[pos].kind == TK_And {
+                let sp = pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_And { return -1; }
+                pos += 1;
+                pos = scan_ws(tokens, pos);
+                if pos < 0 { return -1; }
+                pos = scan_media_expression(tokens, pos);
+                if pos < 0 { return -1; }
+                if pos < 0 { pos = sp; break; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_media_expression(tokens, pos);
+        if pos < 0 { return -1; }
+        while pos < tokens.len() && tokens[pos].kind == TK_And {
+            let sp = pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_And { return -1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { return -1; }
+            pos = scan_media_expression(tokens, pos);
+            if pos < 0 { return -1; }
+            if pos < 0 { pos = sp; break; }
+        }
+    }
+    return pos;
+}
+
+fn scan_media_type(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_ident(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_media_expression(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_media_feature(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind == TK_LIT_COLON {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_expr(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_media_feature(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_ident(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_page(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Page { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind == TK_LIT_COLON {
+        let sp = pos;
+        pos = scan_pseudo_page(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        let sp = pos;
+        pos = scan_declaration(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    while pos < tokens.len() && tokens[pos].kind == TK_LIT_SEMI {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+            let sp = pos;
+            pos = scan_declaration(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_pseudo_page(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+    pos += 1;
+    pos = scan_ident(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_selector_group(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_selector(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_Comma {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Comma { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_selector(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_selector(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_simple_selector_sequence(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Plus | TK_Greater | TK_Tilde | TK_Space } {
+        let sp = pos;
+        pos = scan_combinator(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_simple_selector_sequence(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_combinator(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Plus { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Greater { break try_1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Tilde { break try_2; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_simple_selector_sequence(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            let gp_11 = pos;
+            sg_11: {
+                pos = gp_11;
+                sg_11_0: {
+                    pos = scan_type_selector(tokens, pos);
+                    if pos < 0 { break sg_11_0; }
+                    break sg_11;
+                }
+                pos = gp_11;
+                pos = scan_universal(tokens, pos);
+                if pos < 0 { return -1; }
+            }
+            while pos < tokens.len() && tokens[pos].kind matches { TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot } {
+                let sp = pos;
+                let gp_12 = pos;
+                sg_12: {
+                    pos = gp_12;
+                    sg_12_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_Hash { break sg_12_0; }
+                        pos += 1;
+                        break sg_12;
+                    }
+                    pos = gp_12;
+                    sg_12_1: {
+                        pos = scan_class_name(tokens, pos);
+                        if pos < 0 { break sg_12_1; }
+                        break sg_12;
+                    }
+                    pos = gp_12;
+                    sg_12_2: {
+                        pos = scan_attrib(tokens, pos);
+                        if pos < 0 { break sg_12_2; }
+                        break sg_12;
+                    }
+                    pos = gp_12;
+                    sg_12_3: {
+                        pos = scan_pseudo(tokens, pos);
+                        if pos < 0 { break sg_12_3; }
+                        break sg_12;
+                    }
+                    pos = gp_12;
+                    pos = scan_negation(tokens, pos);
+                    if pos < 0 { return -1; }
+                }
+                if pos < 0 { pos = sp; break; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        let gp_13 = pos;
+        sg_13: {
+            pos = gp_13;
+            sg_13_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Hash { break sg_13_0; }
+                pos += 1;
+                break sg_13;
+            }
+            pos = gp_13;
+            sg_13_1: {
+                pos = scan_class_name(tokens, pos);
+                if pos < 0 { break sg_13_1; }
+                break sg_13;
+            }
+            pos = gp_13;
+            sg_13_2: {
+                pos = scan_attrib(tokens, pos);
+                if pos < 0 { break sg_13_2; }
+                break sg_13;
+            }
+            pos = gp_13;
+            sg_13_3: {
+                pos = scan_pseudo(tokens, pos);
+                if pos < 0 { break sg_13_3; }
+                break sg_13;
+            }
+            pos = gp_13;
+            pos = scan_negation(tokens, pos);
+            if pos < 0 { return -1; }
+        }
+        while pos < tokens.len() && tokens[pos].kind matches { TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot } {
+            let sp = pos;
+            let gp_14 = pos;
+            sg_14: {
+                pos = gp_14;
+                sg_14_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_Hash { break sg_14_0; }
+                    pos += 1;
+                    break sg_14;
+                }
+                pos = gp_14;
+                sg_14_1: {
+                    pos = scan_class_name(tokens, pos);
+                    if pos < 0 { break sg_14_1; }
+                    break sg_14;
+                }
+                pos = gp_14;
+                sg_14_2: {
+                    pos = scan_attrib(tokens, pos);
+                    if pos < 0 { break sg_14_2; }
+                    break sg_14;
+                }
+                pos = gp_14;
+                sg_14_3: {
+                    pos = scan_pseudo(tokens, pos);
+                    if pos < 0 { break sg_14_3; }
+                    break sg_14;
+                }
+                pos = gp_14;
+                pos = scan_negation(tokens, pos);
+                if pos < 0 { return -1; }
+            }
+            if pos < 0 { pos = sp; break; }
+        }
+    }
+    return pos;
+}
+
+fn scan_type_selector(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR | TK_LIT_PIPE } {
+        let sp = pos;
+        pos = scan_type_namespace_prefix(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_element_name(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_type_namespace_prefix(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR } {
+        let sp = pos;
+        let gp_15 = pos;
+        sg_15: {
+            pos = gp_15;
+            sg_15_0: {
+                pos = scan_ident(tokens, pos);
+                if pos < 0 { break sg_15_0; }
+                break sg_15;
+            }
+            pos = gp_15;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPE { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_element_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_ident(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_universal(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR | TK_LIT_PIPE } {
+        let sp = pos;
+        pos = scan_type_namespace_prefix(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_class_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
+    pos += 1;
+    pos = scan_ident(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_attrib(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR | TK_LIT_PIPE } {
+        let sp = pos;
+        pos = scan_type_namespace_prefix(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_ident(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_PrefixMatch | TK_SuffixMatch | TK_SubstringMatch | TK_LIT_EQ | TK_Includes | TK_DashMatch } {
+        let sp = pos;
+        let gp_16 = pos;
+        sg_16: {
+            pos = gp_16;
+            sg_16_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_PrefixMatch { break sg_16_0; }
+                pos += 1;
+                break sg_16;
+            }
+            pos = gp_16;
+            sg_16_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_SuffixMatch { break sg_16_1; }
+                pos += 1;
+                break sg_16;
+            }
+            pos = gp_16;
+            sg_16_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_SubstringMatch { break sg_16_2; }
+                pos += 1;
+                break sg_16;
+            }
+            pos = gp_16;
+            sg_16_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { break sg_16_3; }
+                pos += 1;
+                break sg_16;
+            }
+            pos = gp_16;
+            sg_16_4: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Includes { break sg_16_4; }
+                pos += 1;
+                break sg_16;
+            }
+            pos = gp_16;
+            if pos >= tokens.len() || tokens[pos].kind != TK_DashMatch { return -1; }
+            pos += 1;
+        }
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        let gp_17 = pos;
+        sg_17: {
+            pos = gp_17;
+            sg_17_0: {
+                pos = scan_ident(tokens, pos);
+                if pos < 0 { break sg_17_0; }
+                break sg_17;
+            }
+            pos = gp_17;
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { return -1; }
+            pos += 1;
+        }
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_pseudo(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos].kind == TK_LIT_COLON {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { pos = -1; } else { pos += 1; }
+        if pos < 0 { pos = sp; }
+    }
+    let gp_18 = pos;
+    sg_18: {
+        pos = gp_18;
+        sg_18_0: {
+            pos = scan_ident(tokens, pos);
+            if pos < 0 { break sg_18_0; }
+            break sg_18;
+        }
+        pos = gp_18;
+        pos = scan_functional_pseudo(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_functional_pseudo(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Function_ { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_expression(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_expression(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let gp_19 = pos;
+    sg_19: {
+        pos = gp_19;
+        sg_19_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Plus { break sg_19_0; }
+            pos += 1;
+            break sg_19;
+        }
+        pos = gp_19;
+        sg_19_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Minus { break sg_19_1; }
+            pos += 1;
+            break sg_19;
+        }
+        pos = gp_19;
+        sg_19_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Dimension { break sg_19_2; }
+            pos += 1;
+            break sg_19;
+        }
+        pos = gp_19;
+        sg_19_3: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_UnknownDimension { break sg_19_3; }
+            pos += 1;
+            break sg_19;
+        }
+        pos = gp_19;
+        sg_19_4: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Number { break sg_19_4; }
+            pos += 1;
+            break sg_19;
+        }
+        pos = gp_19;
+        sg_19_5: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_19_5; }
+            pos += 1;
+            break sg_19;
+        }
+        pos = gp_19;
+        pos = scan_ident(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Plus | TK_Minus | TK_Dimension | TK_UnknownDimension | TK_Number | TK_String_ | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
+        let sp = pos;
+        let gp_20 = pos;
+        sg_20: {
+            pos = gp_20;
+            sg_20_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Plus { break sg_20_0; }
+                pos += 1;
+                break sg_20;
+            }
+            pos = gp_20;
+            sg_20_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Minus { break sg_20_1; }
+                pos += 1;
+                break sg_20;
+            }
+            pos = gp_20;
+            sg_20_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Dimension { break sg_20_2; }
+                pos += 1;
+                break sg_20;
+            }
+            pos = gp_20;
+            sg_20_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_UnknownDimension { break sg_20_3; }
+                pos += 1;
+                break sg_20;
+            }
+            pos = gp_20;
+            sg_20_4: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Number { break sg_20_4; }
+                pos += 1;
+                break sg_20;
+            }
+            pos = gp_20;
+            sg_20_5: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_20_5; }
+                pos += 1;
+                break sg_20;
+            }
+            pos = gp_20;
+            pos = scan_ident(tokens, pos);
+            if pos < 0 { return -1; }
+        }
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_negation(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_PseudoNot { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_negation_arg(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_negation_arg(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_type_selector(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_universal(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Hash { break try_2; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            pos = scan_class_name(tokens, pos);
+            if pos < 0 { break try_3; }
+            break scan_alts;
+        }
+        pos = start;
+        try_4: {
+            pos = scan_attrib(tokens, pos);
+            if pos < 0 { break try_4; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_pseudo(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_operator_(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SLASH { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Comma { break try_1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Space { break try_2; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_EQ { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_property_(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_ident(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Variable { break try_1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break try_2; }
+            pos += 1;
+            pos = scan_ident(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT__ { return -1; }
+        pos += 1;
+        pos = scan_ident(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_ruleset(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_selector_group(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+                let sp = pos;
+                pos = scan_declaration_list(tokens, pos);
+                if pos < 0 { pos = sp; }
+            }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        while pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET } {
+            let sp = pos;
+            pos = scan_any_(tokens, pos);
+            if pos < 0 { pos = sp; break; }
+        }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+            let sp = pos;
+            pos = scan_declaration_list(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_declaration_list(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    while pos < tokens.len() && tokens[pos].kind == TK_LIT_SEMI {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    pos = scan_declaration(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_LIT_SEMI {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+            let sp = pos;
+            pos = scan_declaration(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_declaration(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_property_(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_expr(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos < tokens.len() && tokens[pos].kind == TK_Important {
+                let sp = pos;
+                pos = scan_prio(tokens, pos);
+                if pos < 0 { pos = sp; }
+            }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_property_(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_value(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_prio(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Important { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_value(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let gp_21 = pos;
+    sg_21: {
+        pos = gp_21;
+        sg_21_0: {
+            pos = scan_any_(tokens, pos);
+            if pos < 0 { break sg_21_0; }
+            break sg_21;
+        }
+        pos = gp_21;
+        sg_21_1: {
+            pos = scan_block(tokens, pos);
+            if pos < 0 { break sg_21_1; }
+            break sg_21;
+        }
+        pos = gp_21;
+        if pos >= tokens.len() || tokens[pos].kind != TK_AtKeyword { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_LBRACE | TK_AtKeyword } {
+        let sp = pos;
+        let gp_22 = pos;
+        sg_22: {
+            pos = gp_22;
+            sg_22_0: {
+                pos = scan_any_(tokens, pos);
+                if pos < 0 { break sg_22_0; }
+                break sg_22;
+            }
+            pos = gp_22;
+            sg_22_1: {
+                pos = scan_block(tokens, pos);
+                if pos < 0 { break sg_22_1; }
+                break sg_22;
+            }
+            pos = gp_22;
+            if pos >= tokens.len() || tokens[pos].kind != TK_AtKeyword { return -1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { return -1; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_expr(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_term(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SLASH | TK_Comma | TK_Space | TK_LIT_EQ | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_String_ | TK_UnicodeRange | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Var | TK_Url_ | TK_Url | TK_Hash | TK_Calc | TK_Function_ | TK_UnknownDimension | TK_DxImageTransform } {
+        let sp = pos;
+        if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SLASH | TK_Comma | TK_Space | TK_LIT_EQ } {
+            let sp = pos;
+            pos = scan_operator_(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+        pos = scan_term(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_term(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_number(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_percentage(tokens, pos);
+            if pos < 0 { break try_1; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_dimension(tokens, pos);
+            if pos < 0 { break try_2; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break try_3; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_3; }
+            break scan_alts;
+        }
+        pos = start;
+        try_4: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_UnicodeRange { break try_4; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_4; }
+            break scan_alts;
+        }
+        pos = start;
+        try_5: {
+            pos = scan_ident(tokens, pos);
+            if pos < 0 { break try_5; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_5; }
+            break scan_alts;
+        }
+        pos = start;
+        try_6: {
+            pos = scan_var_(tokens, pos);
+            if pos < 0 { break try_6; }
+            break scan_alts;
+        }
+        pos = start;
+        try_7: {
+            pos = scan_url(tokens, pos);
+            if pos < 0 { break try_7; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_7; }
+            break scan_alts;
+        }
+        pos = start;
+        try_8: {
+            pos = scan_hexcolor(tokens, pos);
+            if pos < 0 { break try_8; }
+            break scan_alts;
+        }
+        pos = start;
+        try_9: {
+            pos = scan_calc(tokens, pos);
+            if pos < 0 { break try_9; }
+            break scan_alts;
+        }
+        pos = start;
+        try_10: {
+            pos = scan_function_(tokens, pos);
+            if pos < 0 { break try_10; }
+            break scan_alts;
+        }
+        pos = start;
+        try_11: {
+            pos = scan_unknown_dimension(tokens, pos);
+            if pos < 0 { break try_11; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_11; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_dx_image_transform(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_function_(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Function_ { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_expr(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_dx_image_transform(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_DxImageTransform { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_expr(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_hexcolor(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Hash { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_number(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Plus | TK_Minus } {
+        let sp = pos;
+        let gp_23 = pos;
+        sg_23: {
+            pos = gp_23;
+            sg_23_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Plus { break sg_23_0; }
+                pos += 1;
+                break sg_23;
+            }
+            pos = gp_23;
+            if pos >= tokens.len() || tokens[pos].kind != TK_Minus { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Number { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_percentage(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Plus | TK_Minus } {
+        let sp = pos;
+        let gp_24 = pos;
+        sg_24: {
+            pos = gp_24;
+            sg_24_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Plus { break sg_24_0; }
+                pos += 1;
+                break sg_24;
+            }
+            pos = gp_24;
+            if pos >= tokens.len() || tokens[pos].kind != TK_Minus { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Percentage { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_dimension(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Plus | TK_Minus } {
+        let sp = pos;
+        let gp_25 = pos;
+        sg_25: {
+            pos = gp_25;
+            sg_25_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Plus { break sg_25_0; }
+                pos += 1;
+                break sg_25;
+            }
+            pos = gp_25;
+            if pos >= tokens.len() || tokens[pos].kind != TK_Minus { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Dimension { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_unknown_dimension(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Plus | TK_Minus } {
+        let sp = pos;
+        let gp_26 = pos;
+        sg_26: {
+            pos = gp_26;
+            sg_26_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Plus { break sg_26_0; }
+                pos += 1;
+                break sg_26;
+            }
+            pos = gp_26;
+            if pos >= tokens.len() || tokens[pos].kind != TK_Minus { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_UnknownDimension { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_any_(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_ident(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_number(tokens, pos);
+            if pos < 0 { break try_1; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_percentage(tokens, pos);
+            if pos < 0 { break try_2; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            pos = scan_dimension(tokens, pos);
+            if pos < 0 { break try_3; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_3; }
+            break scan_alts;
+        }
+        pos = start;
+        try_4: {
+            pos = scan_unknown_dimension(tokens, pos);
+            if pos < 0 { break try_4; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_4; }
+            break scan_alts;
+        }
+        pos = start;
+        try_5: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break try_5; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_5; }
+            break scan_alts;
+        }
+        pos = start;
+        try_6: {
+            pos = scan_url(tokens, pos);
+            if pos < 0 { break try_6; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_6; }
+            break scan_alts;
+        }
+        pos = start;
+        try_7: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Hash { break try_7; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_7; }
+            break scan_alts;
+        }
+        pos = start;
+        try_8: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_UnicodeRange { break try_8; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_8; }
+            break scan_alts;
+        }
+        pos = start;
+        try_9: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Includes { break try_9; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_9; }
+            break scan_alts;
+        }
+        pos = start;
+        try_10: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_DashMatch { break try_10; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_10; }
+            break scan_alts;
+        }
+        pos = start;
+        try_11: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { break try_11; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_11; }
+            break scan_alts;
+        }
+        pos = start;
+        try_12: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Function_ { break try_12; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_12; }
+            while pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_LBRACE | TK_AtKeyword | TK_LIT_SEMI | TK_Cdo | TK_Cdc } {
+                let sp = pos;
+                let gp_27 = pos;
+                sg_27: {
+                    pos = gp_27;
+                    sg_27_0: {
+                        pos = scan_any_(tokens, pos);
+                        if pos < 0 { break sg_27_0; }
+                        break sg_27;
+                    }
+                    pos = gp_27;
+                    pos = scan_unused(tokens, pos);
+                    if pos < 0 { return -1; }
+                }
+                if pos < 0 { pos = sp; break; }
+            }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_12; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_12; }
+            break scan_alts;
+        }
+        pos = start;
+        try_13: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_13; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_13; }
+            while pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_LBRACE | TK_AtKeyword | TK_LIT_SEMI | TK_Cdo | TK_Cdc } {
+                let sp = pos;
+                let gp_28 = pos;
+                sg_28: {
+                    pos = gp_28;
+                    sg_28_0: {
+                        pos = scan_any_(tokens, pos);
+                        if pos < 0 { break sg_28_0; }
+                        break sg_28;
+                    }
+                    pos = gp_28;
+                    pos = scan_unused(tokens, pos);
+                    if pos < 0 { return -1; }
+                }
+                if pos < 0 { pos = sp; break; }
+            }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_13; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_13; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        while pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_LBRACE | TK_AtKeyword | TK_LIT_SEMI | TK_Cdo | TK_Cdc } {
+            let sp = pos;
+            let gp_29 = pos;
+            sg_29: {
+                pos = gp_29;
+                sg_29_0: {
+                    pos = scan_any_(tokens, pos);
+                    if pos < 0 { break sg_29_0; }
+                    break sg_29;
+                }
+                pos = gp_29;
+                pos = scan_unused(tokens, pos);
+                if pos < 0 { return -1; }
+            }
+            if pos < 0 { pos = sp; break; }
+        }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_at_rule(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_AtKeyword { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET } {
+        let sp = pos;
+        pos = scan_any_(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    let gp_30 = pos;
+    sg_30: {
+        pos = gp_30;
+        sg_30_0: {
+            pos = scan_block(tokens, pos);
+            if pos < 0 { break sg_30_0; }
+            break sg_30;
+        }
+        pos = gp_30;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_unused(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_block(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_AtKeyword { break try_1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { break try_2; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Cdo { break try_3; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_3; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Cdc { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_block(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ | TK_LIT_PIPE | TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACE | TK_Media | TK_Page | TK_FontFace | TK_Keyframes | TK_Supports | TK_Viewport | TK_CounterStyle | TK_FontFeatureValues | TK_AtKeyword } {
+        let sp = pos;
+        let gp_31 = pos;
+        sg_31: {
+            pos = gp_31;
+            sg_31_0: {
+                pos = scan_declaration_list(tokens, pos);
+                if pos < 0 { break sg_31_0; }
+                break sg_31;
+            }
+            pos = gp_31;
+            sg_31_1: {
+                pos = scan_nested_statement(tokens, pos);
+                if pos < 0 { break sg_31_1; }
+                break sg_31;
+            }
+            pos = gp_31;
+            sg_31_2: {
+                pos = scan_any_(tokens, pos);
+                if pos < 0 { break sg_31_2; }
+                break sg_31;
+            }
+            pos = gp_31;
+            sg_31_3: {
+                pos = scan_block(tokens, pos);
+                if pos < 0 { break sg_31_3; }
+                break sg_31;
+            }
+            pos = gp_31;
+            sg_31_4: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_AtKeyword { break sg_31_4; }
+                pos += 1;
+                pos = scan_ws(tokens, pos);
+                if pos < 0 { break sg_31_4; }
+                break sg_31;
+            }
+            pos = gp_31;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { return -1; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_nested_statement(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_ruleset(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_media(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_page(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            pos = scan_font_face_rule(tokens, pos);
+            if pos < 0 { break try_3; }
+            break scan_alts;
+        }
+        pos = start;
+        try_4: {
+            pos = scan_keyframes_rule(tokens, pos);
+            if pos < 0 { break try_4; }
+            break scan_alts;
+        }
+        pos = start;
+        try_5: {
+            pos = scan_supports_rule(tokens, pos);
+            if pos < 0 { break try_5; }
+            break scan_alts;
+        }
+        pos = start;
+        try_6: {
+            pos = scan_viewport(tokens, pos);
+            if pos < 0 { break try_6; }
+            break scan_alts;
+        }
+        pos = start;
+        try_7: {
+            pos = scan_counter_style(tokens, pos);
+            if pos < 0 { break try_7; }
+            break scan_alts;
+        }
+        pos = start;
+        try_8: {
+            pos = scan_font_feature_values_rule(tokens, pos);
+            if pos < 0 { break try_8; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_at_rule(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_group_rule_body(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR | TK_LIT_PIPE | TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACE | TK_Media | TK_Page | TK_FontFace | TK_Keyframes | TK_Supports | TK_Viewport | TK_CounterStyle | TK_FontFeatureValues | TK_AtKeyword } {
+        let sp = pos;
+        pos = scan_nested_statement(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_supports_rule(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Supports { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_supports_condition(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_group_rule_body(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_supports_condition(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_supports_negation(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_supports_conjunction(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_supports_disjunction(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_supports_condition_in_parens(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_supports_condition_in_parens(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_supports_condition(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_supports_declaration_condition(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_general_enclosed(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_supports_negation(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Not { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_supports_condition_in_parens(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_supports_conjunction(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_supports_condition_in_parens(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_And { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_supports_condition_in_parens(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space } {
+        let sp = pos;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_And { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_supports_condition_in_parens(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_supports_disjunction(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_supports_condition_in_parens(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Or { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_supports_condition_in_parens(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space } {
+        let sp = pos;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_Or { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_supports_condition_in_parens(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_supports_declaration_condition(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_declaration(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_general_enclosed(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let gp_32 = pos;
+    sg_32: {
+        pos = gp_32;
+        sg_32_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Function_ { break sg_32_0; }
+            pos += 1;
+            break sg_32;
+        }
+        pos = gp_32;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+        pos += 1;
+    }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_LBRACE | TK_AtKeyword | TK_LIT_SEMI | TK_Cdo | TK_Cdc } {
+        let sp = pos;
+        let gp_33 = pos;
+        sg_33: {
+            pos = gp_33;
+            sg_33_0: {
+                pos = scan_any_(tokens, pos);
+                if pos < 0 { break sg_33_0; }
+                break sg_33;
+            }
+            pos = gp_33;
+            pos = scan_unused(tokens, pos);
+            if pos < 0 { return -1; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_url(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Url_ { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Url { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_var_(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Var { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Variable { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_calc(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Calc { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_calc_sum(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_calc_sum(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_calc_product(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_Space {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        let gp_34 = pos;
+        sg_34: {
+            pos = gp_34;
+            sg_34_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Plus { break sg_34_0; }
+                pos += 1;
+                break sg_34;
+            }
+            pos = gp_34;
+            if pos >= tokens.len() || tokens[pos].kind != TK_Minus { return -1; }
+            pos += 1;
+        }
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_calc_product(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_calc_product(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_calc_value(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_LIT_STAR | TK_LIT_SLASH } {
+        let sp = pos;
+        let gp_35 = pos;
+        sg_35: {
+            pos = gp_35;
+            sg_35_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break sg_35_0; }
+                pos += 1;
+                pos = scan_ws(tokens, pos);
+                if pos < 0 { break sg_35_0; }
+                pos = scan_calc_value(tokens, pos);
+                if pos < 0 { break sg_35_0; }
+                break sg_35;
+            }
+            pos = gp_35;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SLASH { return -1; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { return -1; }
+            pos = scan_number(tokens, pos);
+            if pos < 0 { return -1; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { return -1; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_calc_value(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_number(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_dimension(tokens, pos);
+            if pos < 0 { break try_1; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            pos = scan_unknown_dimension(tokens, pos);
+            if pos < 0 { break try_2; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_2; }
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            pos = scan_percentage(tokens, pos);
+            if pos < 0 { break try_3; }
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_3; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_calc_sum(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_font_face_rule(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_FontFace { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        let sp = pos;
+        pos = scan_font_face_declaration(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    while pos < tokens.len() && tokens[pos].kind == TK_LIT_SEMI {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+            let sp = pos;
+            pos = scan_font_face_declaration(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_font_face_declaration(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_property_(tokens, pos);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { break try_0; }
+            pos += 1;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_expr(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_property_(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_value(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    return pos;
+}
+
+fn scan_keyframes_rule(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Keyframes { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ident(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_From | TK_To | TK_Percentage } {
+        let sp = pos;
+        pos = scan_keyframe_block(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_keyframe_block(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_keyframe_selector(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        let sp = pos;
+        pos = scan_declaration_list(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_keyframe_selector(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let gp_36 = pos;
+    sg_36: {
+        pos = gp_36;
+        sg_36_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_From { break sg_36_0; }
+            pos += 1;
+            break sg_36;
+        }
+        pos = gp_36;
+        sg_36_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_To { break sg_36_1; }
+            pos += 1;
+            break sg_36;
+        }
+        pos = gp_36;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Percentage { return -1; }
+        pos += 1;
+    }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_Comma {
+        let sp = pos;
+        if pos >= tokens.len() || tokens[pos].kind != TK_Comma { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        let gp_37 = pos;
+        sg_37: {
+            pos = gp_37;
+            sg_37_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_From { break sg_37_0; }
+                pos += 1;
+                break sg_37;
+            }
+            pos = gp_37;
+            sg_37_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_To { break sg_37_1; }
+                pos += 1;
+                break sg_37;
+            }
+            pos = gp_37;
+            if pos >= tokens.len() || tokens[pos].kind != TK_Percentage { return -1; }
+            pos += 1;
+        }
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_viewport(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Viewport { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        let sp = pos;
+        pos = scan_declaration_list(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_counter_style(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_CounterStyle { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ident(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        let sp = pos;
+        pos = scan_declaration_list(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_font_feature_values_rule(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_FontFeatureValues { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_font_family_name_list(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind == TK_AtKeyword {
+        let sp = pos;
+        pos = scan_feature_value_block(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_font_family_name_list(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_font_family_name(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space } {
+        let sp = pos;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_Comma { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_font_family_name(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_font_family_name(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        pos = scan_ident(tokens, pos);
+        if pos < 0 { return -1; }
+        while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space } {
+            let sp = pos;
+            pos = scan_ws(tokens, pos);
+            if pos < 0 { return -1; }
+            pos = scan_ident(tokens, pos);
+            if pos < 0 { return -1; }
+            if pos < 0 { pos = sp; break; }
+        }
+    }
+    return pos;
+}
+
+fn scan_feature_value_block(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_feature_type(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
+        let sp = pos;
+        pos = scan_feature_value_definition(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space } {
+        let sp = pos;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+        pos += 1;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
+            let sp = pos;
+            pos = scan_feature_value_definition(tokens, pos);
+            if pos < 0 { pos = sp; }
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_feature_type(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_AtKeyword { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_feature_value_definition(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_ident(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_number(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space } {
+        let sp = pos;
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_number(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
+fn scan_ident(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Ident { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_MediaOnly { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Not { break try_2; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_3: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_And { break try_3; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_4: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_Or { break try_4; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_5: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_From { break try_5; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_To { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_ws(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Comment | TK_Space } {
+        let sp = pos;
+        let gp_38 = pos;
+        sg_38: {
+            pos = gp_38;
+            sg_38_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_Comment { break sg_38_0; }
+                pos += 1;
+                break sg_38;
+            }
+            pos = gp_38;
+            if pos >= tokens.len() || tokens[pos].kind != TK_Space { return -1; }
+            pos += 1;
+        }
+        if pos < 0 { pos = sp; break; }
+    }
+    return pos;
+}
+
 fn parse_stylesheet(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
     let start = p.peek().span.start;
     let ws = parse_ws(p)?;
@@ -29385,6 +32162,23 @@ fn parse_charset_bt_0(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     }));
 }
 
+fn parse_charset_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Charset { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_String_ { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_charset_bt_1(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     let start = p.peek().span.start;
     let charset = p.expect(TK_Charset)?;
@@ -29400,16 +32194,25 @@ fn parse_charset_bt_1(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     }));
 }
 
+fn parse_charset_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Charset { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_String_ { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_charset(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Charset {
-        let saved = p.pos;
-        let r_0 = parse_charset_bt_0(p);
-        if let Err(_) = r_0 {
-            p.pos = saved;
-        } else {
-            return r_0;
+        if parse_charset_scan_0(&p.tokens, p.pos) >= 0 {
+            return parse_charset_bt_0(p);
         }
         return parse_charset_bt_1(p);
     }
@@ -29454,6 +32257,35 @@ fn parse_imports_bt_0(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     }));
 }
 
+fn parse_imports_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    let gp_39 = pos;
+    sg_39: {
+        pos = gp_39;
+        sg_39_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_39_0; }
+            pos += 1;
+            break sg_39;
+        }
+        pos = gp_39;
+        pos = scan_url(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_media_query_list(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_imports_bt_1(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
     let import_ = p.expect(TK_Import)?;
@@ -29486,6 +32318,33 @@ fn parse_imports_bt_1(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     }));
 }
 
+fn parse_imports_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    let gp_40 = pos;
+    sg_40: {
+        pos = gp_40;
+        sg_40_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_40_0; }
+            pos += 1;
+            break sg_40;
+        }
+        pos = gp_40;
+        pos = scan_url(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_imports_bt_2(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
     let import_ = p.expect(TK_Import)?;
@@ -29516,6 +32375,31 @@ fn parse_imports_bt_2(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     }));
 }
 
+fn parse_imports_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    let gp_41 = pos;
+    sg_41: {
+        pos = gp_41;
+        sg_41_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_41_0; }
+            pos += 1;
+            break sg_41;
+        }
+        pos = gp_41;
+        pos = scan_url(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_media_query_list(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_imports_bt_3(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
     let import_ = p.expect(TK_Import)?;
@@ -29544,28 +32428,41 @@ fn parse_imports_bt_3(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     }));
 }
 
+fn parse_imports_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    let gp_42 = pos;
+    sg_42: {
+        pos = gp_42;
+        sg_42_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_42_0; }
+            pos += 1;
+            break sg_42;
+        }
+        pos = gp_42;
+        pos = scan_url(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_imports(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Import {
-        let saved = p.pos;
-        let r_0 = parse_imports_bt_0(p);
-        if let Err(_) = r_0 {
-            p.pos = saved;
-        } else {
-            return r_0;
+        if parse_imports_scan_0(&p.tokens, p.pos) >= 0 {
+            return parse_imports_bt_0(p);
         }
-        let r_1 = parse_imports_bt_1(p);
-        if let Err(_) = r_1 {
-            p.pos = saved;
-        } else {
-            return r_1;
+        if parse_imports_scan_1(&p.tokens, p.pos) >= 0 {
+            return parse_imports_bt_1(p);
         }
-        let r_2 = parse_imports_bt_2(p);
-        if let Err(_) = r_2 {
-            p.pos = saved;
-        } else {
-            return r_2;
+        if parse_imports_scan_2(&p.tokens, p.pos) >= 0 {
+            return parse_imports_bt_2(p);
         }
         return parse_imports_bt_3(p);
     }
@@ -29629,6 +32526,41 @@ fn parse_namespace__bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     }));
 }
 
+fn parse_namespace__scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Namespace { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
+        let sp = pos;
+        pos = scan_namespace_prefix(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; }
+    }
+    let gp_43 = pos;
+    sg_43: {
+        pos = gp_43;
+        sg_43_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_43_0; }
+            pos += 1;
+            break sg_43;
+        }
+        pos = gp_43;
+        pos = scan_url(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_namespace__bt_1(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     let start = p.peek().span.start;
     let namespace = p.expect(TK_Namespace)?;
@@ -29678,16 +32610,43 @@ fn parse_namespace__bt_1(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     }));
 }
 
+fn parse_namespace__scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_Namespace { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To } {
+        let sp = pos;
+        pos = scan_namespace_prefix(tokens, pos);
+        if pos < 0 { return -1; }
+        pos = scan_ws(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos < 0 { pos = sp; }
+    }
+    let gp_44 = pos;
+    sg_44: {
+        pos = gp_44;
+        sg_44_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_String_ { break sg_44_0; }
+            pos += 1;
+            break sg_44;
+        }
+        pos = gp_44;
+        pos = scan_url(tokens, pos);
+        if pos < 0 { return -1; }
+    }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_namespace_(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Namespace {
-        let saved = p.pos;
-        let r_0 = parse_namespace__bt_0(p);
-        if let Err(_) = r_0 {
-            p.pos = saved;
-        } else {
-            return r_0;
+        if parse_namespace__scan_0(&p.tokens, p.pos) >= 0 {
+            return parse_namespace__bt_0(p);
         }
         return parse_namespace__bt_1(p);
     }
@@ -30411,6 +33370,13 @@ fn parse_negation_arg_bt_0(p: &mut Parser) -> Result<NegationArgNode, ParseError
     }));
 }
 
+fn parse_negation_arg_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_type_selector(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_negation_arg_bt_1(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
     let start = p.peek().span.start;
     let universal = parse_universal(p)?;
@@ -30420,17 +33386,20 @@ fn parse_negation_arg_bt_1(p: &mut Parser) -> Result<NegationArgNode, ParseError
     }));
 }
 
+fn parse_negation_arg_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_universal(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_negation_arg(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR | TK_LIT_PIPE } {
         if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR | TK_LIT_PIPE } {
-            let saved = p.pos;
-            let r_0 = parse_negation_arg_bt_0(p);
-            if let Err(_) = r_0 {
-                p.pos = saved;
-            } else {
-                return r_0;
+            if parse_negation_arg_scan_0(&p.tokens, p.pos) >= 0 {
+                return parse_negation_arg_bt_0(p);
             }
             return parse_negation_arg_bt_1(p);
         }
@@ -30590,6 +33559,29 @@ fn parse_ruleset_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     }));
 }
 
+fn parse_ruleset_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    while pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET } {
+        let sp = pos;
+        pos = scan_any_(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        let sp = pos;
+        pos = scan_declaration_list(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_ruleset_bt_0(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     let start = p.peek().span.start;
     let selector_group = parse_selector_group(p)?;
@@ -30614,17 +33606,33 @@ fn parse_ruleset_bt_0(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     }));
 }
 
+fn parse_ruleset_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_selector_group(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        let sp = pos;
+        pos = scan_declaration_list(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_ruleset(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_LBRACE | TK_LIT_STAR | TK_LIT_PIPE | TK_LIT_DOT | TK_PseudoNot } {
         if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Hash | TK_LIT_LBRACKET | TK_LIT_COLON } {
-            let saved = p.pos;
-            let r_1 = parse_ruleset_bt_1(p);
-            if let Err(_) = r_1 {
-                p.pos = saved;
-            } else {
-                return r_1;
+            if parse_ruleset_scan_1(&p.tokens, p.pos) >= 0 {
+                return parse_ruleset_bt_1(p);
             }
             return parse_ruleset_bt_0(p);
         } else if p.peek_kind() matches { TK_LIT_STAR | TK_LIT_PIPE | TK_LIT_DOT | TK_PseudoNot } {
@@ -30702,6 +33710,24 @@ fn parse_declaration_bt_0(p: &mut Parser) -> Result<DeclarationNode, ParseError>
     }));
 }
 
+fn parse_declaration_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_property_(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_expr(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos].kind == TK_Important {
+        let sp = pos;
+        pos = scan_prio(tokens, pos);
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
 fn parse_declaration_bt_1(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let property_ = parse_property_(p)?;
@@ -30717,17 +33743,26 @@ fn parse_declaration_bt_1(p: &mut Parser) -> Result<DeclarationNode, ParseError>
     }));
 }
 
+fn parse_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_property_(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_value(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_declaration(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
-            let saved = p.pos;
-            let r_0 = parse_declaration_bt_0(p);
-            if let Err(_) = r_0 {
-                p.pos = saved;
-            } else {
-                return r_0;
+            if parse_declaration_scan_0(&p.tokens, p.pos) >= 0 {
+                return parse_declaration_bt_0(p);
             }
             return parse_declaration_bt_1(p);
         }
@@ -30818,6 +33853,15 @@ fn parse_term_bt_0(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
+fn parse_term_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_number(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_term_bt_1(p: &mut Parser) -> Result<TermNode, ParseError> {
     let start = p.peek().span.start;
     let percentage = parse_percentage(p)?;
@@ -30827,6 +33871,15 @@ fn parse_term_bt_1(p: &mut Parser) -> Result<TermNode, ParseError> {
         percentage,
         ws,
     }));
+}
+
+fn parse_term_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_percentage(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_term_bt_2(p: &mut Parser) -> Result<TermNode, ParseError> {
@@ -30840,6 +33893,15 @@ fn parse_term_bt_2(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
+fn parse_term_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_dimension(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_term_bt_11(p: &mut Parser) -> Result<TermNode, ParseError> {
     let start = p.peek().span.start;
     let unknown_dimension = parse_unknown_dimension(p)?;
@@ -30851,53 +33913,42 @@ fn parse_term_bt_11(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
+fn parse_term_scan_11(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_unknown_dimension(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension } {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                let saved = p.pos;
-                let r_0 = parse_term_bt_0(p);
-                if let Err(_) = r_0 {
-                    p.pos = saved;
-                } else {
-                    return r_0;
+                if parse_term_scan_0(&p.tokens, p.pos) >= 0 {
+                    return parse_term_bt_0(p);
                 }
-                let r_1 = parse_term_bt_1(p);
-                if let Err(_) = r_1 {
-                    p.pos = saved;
-                } else {
-                    return r_1;
+                if parse_term_scan_1(&p.tokens, p.pos) >= 0 {
+                    return parse_term_bt_1(p);
                 }
-                let r_2 = parse_term_bt_2(p);
-                if let Err(_) = r_2 {
-                    p.pos = saved;
-                } else {
-                    return r_2;
+                if parse_term_scan_2(&p.tokens, p.pos) >= 0 {
+                    return parse_term_bt_2(p);
                 }
                 return parse_term_bt_11(p);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                let saved = p.pos;
-                let r_0 = parse_term_bt_0(p);
-                if let Err(_) = r_0 {
-                    p.pos = saved;
-                } else {
-                    return r_0;
+                if parse_term_scan_0(&p.tokens, p.pos) >= 0 {
+                    return parse_term_bt_0(p);
                 }
-                let r_1 = parse_term_bt_1(p);
-                if let Err(_) = r_1 {
-                    p.pos = saved;
-                } else {
-                    return r_1;
+                if parse_term_scan_1(&p.tokens, p.pos) >= 0 {
+                    return parse_term_bt_1(p);
                 }
-                let r_2 = parse_term_bt_2(p);
-                if let Err(_) = r_2 {
-                    p.pos = saved;
-                } else {
-                    return r_2;
+                if parse_term_scan_2(&p.tokens, p.pos) >= 0 {
+                    return parse_term_bt_2(p);
                 }
                 return parse_term_bt_11(p);
             }
@@ -31129,6 +34180,15 @@ fn parse_any__bt_1(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }));
 }
 
+fn parse_any__scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_number(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_any__bt_2(p: &mut Parser) -> Result<AnyNode, ParseError> {
     let start = p.peek().span.start;
     let percentage = parse_percentage(p)?;
@@ -31138,6 +34198,15 @@ fn parse_any__bt_2(p: &mut Parser) -> Result<AnyNode, ParseError> {
         percentage,
         ws,
     }));
+}
+
+fn parse_any__scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_percentage(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_any__bt_3(p: &mut Parser) -> Result<AnyNode, ParseError> {
@@ -31151,6 +34220,15 @@ fn parse_any__bt_3(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }));
 }
 
+fn parse_any__scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_dimension(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_any__bt_4(p: &mut Parser) -> Result<AnyNode, ParseError> {
     let start = p.peek().span.start;
     let unknown_dimension = parse_unknown_dimension(p)?;
@@ -31160,6 +34238,15 @@ fn parse_any__bt_4(p: &mut Parser) -> Result<AnyNode, ParseError> {
         unknown_dimension,
         ws,
     }));
+}
+
+fn parse_any__scan_4(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_unknown_dimension(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
@@ -31177,47 +34264,27 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     if kind matches { TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension } {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                let saved = p.pos;
-                let r_1 = parse_any__bt_1(p);
-                if let Err(_) = r_1 {
-                    p.pos = saved;
-                } else {
-                    return r_1;
+                if parse_any__scan_1(&p.tokens, p.pos) >= 0 {
+                    return parse_any__bt_1(p);
                 }
-                let r_2 = parse_any__bt_2(p);
-                if let Err(_) = r_2 {
-                    p.pos = saved;
-                } else {
-                    return r_2;
+                if parse_any__scan_2(&p.tokens, p.pos) >= 0 {
+                    return parse_any__bt_2(p);
                 }
-                let r_3 = parse_any__bt_3(p);
-                if let Err(_) = r_3 {
-                    p.pos = saved;
-                } else {
-                    return r_3;
+                if parse_any__scan_3(&p.tokens, p.pos) >= 0 {
+                    return parse_any__bt_3(p);
                 }
                 return parse_any__bt_4(p);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                let saved = p.pos;
-                let r_1 = parse_any__bt_1(p);
-                if let Err(_) = r_1 {
-                    p.pos = saved;
-                } else {
-                    return r_1;
+                if parse_any__scan_1(&p.tokens, p.pos) >= 0 {
+                    return parse_any__bt_1(p);
                 }
-                let r_2 = parse_any__bt_2(p);
-                if let Err(_) = r_2 {
-                    p.pos = saved;
-                } else {
-                    return r_2;
+                if parse_any__scan_2(&p.tokens, p.pos) >= 0 {
+                    return parse_any__bt_2(p);
                 }
-                let r_3 = parse_any__bt_3(p);
-                if let Err(_) = r_3 {
-                    p.pos = saved;
-                } else {
-                    return r_3;
+                if parse_any__scan_3(&p.tokens, p.pos) >= 0 {
+                    return parse_any__bt_3(p);
                 }
                 return parse_any__bt_4(p);
             }
@@ -31689,6 +34756,13 @@ fn parse_supports_condition_bt_1(p: &mut Parser) -> Result<SupportsConditionNode
     }));
 }
 
+fn parse_supports_condition_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_supports_conjunction(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_supports_condition_bt_2(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
     let start = p.peek().span.start;
     let supports_disjunction = parse_supports_disjunction(p)?;
@@ -31698,6 +34772,13 @@ fn parse_supports_condition_bt_2(p: &mut Parser) -> Result<SupportsConditionNode
     }));
 }
 
+fn parse_supports_condition_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_supports_disjunction(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_supports_condition_bt_3(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
     let start = p.peek().span.start;
     let supports_condition_in_parens = parse_supports_condition_in_parens(p)?;
@@ -31705,6 +34786,13 @@ fn parse_supports_condition_bt_3(p: &mut Parser) -> Result<SupportsConditionNode
         span: Span::new(start, p.last_end()),
         supports_condition_in_parens,
     }));
+}
+
+fn parse_supports_condition_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_supports_condition_in_parens(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_supports_condition(p: &mut Parser) -> Result<SupportsConditionNode, ParseError> {
@@ -31719,18 +34807,11 @@ fn parse_supports_condition(p: &mut Parser) -> Result<SupportsConditionNode, Par
     }
     if kind matches { TK_LIT_LPAREN | TK_Function_ } {
         if p.peek_kind() matches { TK_LIT_LPAREN | TK_Function_ } {
-            let saved = p.pos;
-            let r_1 = parse_supports_condition_bt_1(p);
-            if let Err(_) = r_1 {
-                p.pos = saved;
-            } else {
-                return r_1;
+            if parse_supports_condition_scan_1(&p.tokens, p.pos) >= 0 {
+                return parse_supports_condition_bt_1(p);
             }
-            let r_2 = parse_supports_condition_bt_2(p);
-            if let Err(_) = r_2 {
-                p.pos = saved;
-            } else {
-                return r_2;
+            if parse_supports_condition_scan_2(&p.tokens, p.pos) >= 0 {
+                return parse_supports_condition_bt_2(p);
             }
             return parse_supports_condition_bt_3(p);
         }
@@ -31759,6 +34840,21 @@ fn parse_supports_condition_in_parens_bt_0(p: &mut Parser) -> Result<SupportsCon
     }));
 }
 
+fn parse_supports_condition_in_parens_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_supports_condition(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_supports_condition_in_parens_bt_1(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
     let start = p.peek().span.start;
     let supports_declaration_condition = parse_supports_declaration_condition(p)?;
@@ -31766,6 +34862,13 @@ fn parse_supports_condition_in_parens_bt_1(p: &mut Parser) -> Result<SupportsCon
         span: Span::new(start, p.last_end()),
         supports_declaration_condition,
     }));
+}
+
+fn parse_supports_condition_in_parens_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_supports_declaration_condition(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_supports_condition_in_parens_bt_2(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
@@ -31777,23 +34880,23 @@ fn parse_supports_condition_in_parens_bt_2(p: &mut Parser) -> Result<SupportsCon
     }));
 }
 
+fn parse_supports_condition_in_parens_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_general_enclosed(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_supports_condition_in_parens(p: &mut Parser) -> Result<SupportsConditionInParensNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_LIT_LPAREN | TK_Function_ } {
         if p.peek_kind() == TK_LIT_LPAREN {
-            let saved = p.pos;
-            let r_0 = parse_supports_condition_in_parens_bt_0(p);
-            if let Err(_) = r_0 {
-                p.pos = saved;
-            } else {
-                return r_0;
+            if parse_supports_condition_in_parens_scan_0(&p.tokens, p.pos) >= 0 {
+                return parse_supports_condition_in_parens_bt_0(p);
             }
-            let r_1 = parse_supports_condition_in_parens_bt_1(p);
-            if let Err(_) = r_1 {
-                p.pos = saved;
-            } else {
-                return r_1;
+            if parse_supports_condition_in_parens_scan_1(&p.tokens, p.pos) >= 0 {
+                return parse_supports_condition_in_parens_bt_1(p);
             }
             return parse_supports_condition_in_parens_bt_2(p);
         } else if p.peek_kind() == TK_Function_ {
@@ -32074,6 +35177,15 @@ fn parse_calc_value_bt_0(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     }));
 }
 
+fn parse_calc_value_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_number(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_calc_value_bt_1(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     let start = p.peek().span.start;
     let dimension = parse_dimension(p)?;
@@ -32083,6 +35195,15 @@ fn parse_calc_value_bt_1(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
         dimension,
         ws,
     }));
+}
+
+fn parse_calc_value_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_dimension(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_calc_value_bt_2(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
@@ -32096,6 +35217,15 @@ fn parse_calc_value_bt_2(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     }));
 }
 
+fn parse_calc_value_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_unknown_dimension(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_calc_value_bt_3(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     let start = p.peek().span.start;
     let percentage = parse_percentage(p)?;
@@ -32107,53 +35237,42 @@ fn parse_calc_value_bt_3(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     }));
 }
 
+fn parse_calc_value_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_percentage(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_calc_value(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_Plus | TK_Minus | TK_Number | TK_Dimension | TK_UnknownDimension | TK_Percentage } {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                let saved = p.pos;
-                let r_0 = parse_calc_value_bt_0(p);
-                if let Err(_) = r_0 {
-                    p.pos = saved;
-                } else {
-                    return r_0;
+                if parse_calc_value_scan_0(&p.tokens, p.pos) >= 0 {
+                    return parse_calc_value_bt_0(p);
                 }
-                let r_1 = parse_calc_value_bt_1(p);
-                if let Err(_) = r_1 {
-                    p.pos = saved;
-                } else {
-                    return r_1;
+                if parse_calc_value_scan_1(&p.tokens, p.pos) >= 0 {
+                    return parse_calc_value_bt_1(p);
                 }
-                let r_2 = parse_calc_value_bt_2(p);
-                if let Err(_) = r_2 {
-                    p.pos = saved;
-                } else {
-                    return r_2;
+                if parse_calc_value_scan_2(&p.tokens, p.pos) >= 0 {
+                    return parse_calc_value_bt_2(p);
                 }
                 return parse_calc_value_bt_3(p);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                let saved = p.pos;
-                let r_0 = parse_calc_value_bt_0(p);
-                if let Err(_) = r_0 {
-                    p.pos = saved;
-                } else {
-                    return r_0;
+                if parse_calc_value_scan_0(&p.tokens, p.pos) >= 0 {
+                    return parse_calc_value_bt_0(p);
                 }
-                let r_1 = parse_calc_value_bt_1(p);
-                if let Err(_) = r_1 {
-                    p.pos = saved;
-                } else {
-                    return r_1;
+                if parse_calc_value_scan_1(&p.tokens, p.pos) >= 0 {
+                    return parse_calc_value_bt_1(p);
                 }
-                let r_2 = parse_calc_value_bt_2(p);
-                if let Err(_) = r_2 {
-                    p.pos = saved;
-                } else {
-                    return r_2;
+                if parse_calc_value_scan_2(&p.tokens, p.pos) >= 0 {
+                    return parse_calc_value_bt_2(p);
                 }
                 return parse_calc_value_bt_3(p);
             }
@@ -32248,6 +35367,19 @@ fn parse_font_face_declaration_bt_0(p: &mut Parser) -> Result<FontFaceDeclaratio
     }));
 }
 
+fn parse_font_face_declaration_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_property_(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_expr(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_font_face_declaration_bt_1(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let property_ = parse_property_(p)?;
@@ -32263,17 +35395,26 @@ fn parse_font_face_declaration_bt_1(p: &mut Parser) -> Result<FontFaceDeclaratio
     }));
 }
 
+fn parse_font_face_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_property_(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos);
+    if pos < 0 { return -1; }
+    pos = scan_value(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn parse_font_face_declaration(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
-            let saved = p.pos;
-            let r_0 = parse_font_face_declaration_bt_0(p);
-            if let Err(_) = r_0 {
-                p.pos = saved;
-            } else {
-                return r_0;
+            if parse_font_face_declaration_scan_0(&p.tokens, p.pos) >= 0 {
+                return parse_font_face_declaration_bt_0(p);
             }
             return parse_font_face_declaration_bt_1(p);
         }

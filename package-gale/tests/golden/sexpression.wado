@@ -1079,6 +1079,92 @@ impl Parser {
     }
 }
 
+fn scan_sexpr(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    while pos < tokens.len() && tokens[pos].kind matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT | TK_LPAREN } {
+        let sp = pos;
+        pos = scan_item(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_item(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            pos = scan_atom(tokens, pos);
+            if pos < 0 { break try_0; }
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            pos = scan_list_(tokens, pos);
+            if pos < 0 { break try_1; }
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
+        pos += 1;
+        pos = scan_item(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_DOT { return -1; }
+        pos += 1;
+        pos = scan_item(tokens, pos);
+        if pos < 0 { return -1; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_list_(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
+    pos += 1;
+    while pos < tokens.len() && tokens[pos].kind matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT | TK_LPAREN } {
+        let sp = pos;
+        pos = scan_item(tokens, pos);
+        if pos < 0 { pos = sp; break; }
+    }
+    if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    let start = pos;
+    scan_alts: {
+        pos = start;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_STRING { break try_0; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_SYMBOL { break try_1; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        try_2: {
+            if pos >= tokens.len() || tokens[pos].kind != TK_NUMBER { break try_2; }
+            pos += 1;
+            break scan_alts;
+        }
+        pos = start;
+        if pos >= tokens.len() || tokens[pos].kind != TK_DOT { return -1; }
+        pos += 1;
+    }
+    return pos;
+}
+
 fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     let start = p.peek().span.start;
     let mut item_list: Array<ItemNode> = [];
@@ -1111,6 +1197,21 @@ fn parse_item_bt_2(p: &mut Parser) -> Result<ItemNode, ParseError> {
     }));
 }
 
+fn parse_item_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
+    pos += 1;
+    pos = scan_item(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_DOT { return -1; }
+    pos += 1;
+    pos = scan_item(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn parse_item_bt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let list_ = parse_list_(p)?;
@@ -1118,6 +1219,13 @@ fn parse_item_bt_1(p: &mut Parser) -> Result<ItemNode, ParseError> {
         span: Span::new(start, p.last_end()),
         list_,
     }));
+}
+
+fn parse_item_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_list_(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
 fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
@@ -1132,12 +1240,8 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     }
     if kind == TK_LPAREN {
         if p.peek_kind() == TK_LPAREN {
-            let saved = p.pos;
-            let r_2 = parse_item_bt_2(p);
-            if let Err(_) = r_2 {
-                p.pos = saved;
-            } else {
-                return r_2;
+            if parse_item_scan_2(&p.tokens, p.pos) >= 0 {
+                return parse_item_bt_2(p);
             }
             return parse_item_bt_1(p);
         }
