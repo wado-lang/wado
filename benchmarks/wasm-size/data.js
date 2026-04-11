@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775873592402,
+  "lastUpdate": 1775881188149,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11450,6 +11450,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3c815caba6c26985a7bdcd76b2676ada105788b3"
         },
         "date": 1775873592236,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1799,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8974,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19360,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "39c7e22aa5e2aa80e44b10664a5f0153e072702e",
+          "message": "Merge pull request #804 from wado-lang/claude/remove-parser-backtracking-YVe0L\n\nEliminate parser backtracking via scan-then-parse",
+          "timestamp": "2026-04-11T13:16:32+09:00",
+          "tree_id": "2d84a40b56cae34e343268b2f884997541a3d0cb",
+          "url": "https://github.com/wado-lang/wado/commit/39c7e22aa5e2aa80e44b10664a5f0153e072702e"
+        },
+        "date": 1775881187890,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
