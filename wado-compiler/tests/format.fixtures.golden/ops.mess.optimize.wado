@@ -10,6 +10,8 @@ global mut heap_offset: i32 = 8;
 
 global mut free_list: i32 = 0;
 
+global mut __modules_initialized: bool = false;
+
 fn grow_memory(new_offset: i32) {
     let current_bytes: i32 = (core::builtin::memory_size() * 65536);
     let deficit: i32 = (new_offset - current_bytes);
@@ -122,6 +124,12 @@ fn i32_clz(x: i32) -> i32;
 fn unreachable() -> !;
 
 export fn __cm_export__run() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        __modules_initialized = true;
+    };
     cm_raw_call task-return(0);
 }
 

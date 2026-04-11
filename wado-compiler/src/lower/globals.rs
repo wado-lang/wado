@@ -761,7 +761,9 @@ pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
         if func.module_source != entry_source {
             continue;
         }
-        if func.is_cm_export && let Some(ref mut body) = func.body {
+        if func.is_export
+            && let Some(ref mut body) = func.body
+        {
             body.stmts.insert(0, init_call_stmt.clone());
         }
     }

@@ -76,9 +76,17 @@ fn "wado-compiler/tests/fixtures/never_global_trap.wado/run"() with Stdout {
 }
 
 fn "wado-compiler/tests/fixtures/never_global_trap.wado/__cm_export__run"() {
-    __inline___initialize_modules_1: block {
+    __inline___initialize_modules_0: block {
         if global:__modules_initialized {
-            break __inline___initialize_modules_1;
+            break __inline___initialize_modules_0;
+        }
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("global boom"), used: 11 });
+        unreachable;
+        global:__modules_initialized = 1;
+    };
+    __inline___initialize_modules_3: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_3;
         }
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("global boom"), used: 11 });
         unreachable;
@@ -92,13 +100,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l3: loop {
+            l4: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l3;
+                continue l4;
             };
         };
     };

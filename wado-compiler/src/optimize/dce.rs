@@ -58,8 +58,9 @@ pub fn analyze_project(project: &mut FlatPackage) -> IndexSet<FunctionId> {
 
 /// Compute reachable functions from all entry points via call graph traversal.
 ///
-/// Entry points are functions marked `is_export` (user-declared `export fn`) or
-/// `is_cm_export` (synthesized CM export wrappers).
+/// Entry points are:
+/// - `is_cm_export`: synthesized CM export wrappers (world-specific, always correct)
+/// - `is_export` in `wasm_module` sources: raw wasm exports with no CM wrapper
 fn compute_reachable_from_entries(
     project: &FlatPackage,
     call_graph: &CallGraph,
@@ -68,7 +69,14 @@ fn compute_reachable_from_entries(
 
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if func.is_cm_export || func.is_export {
+
+        let is_root = func.is_cm_export
+            || (func.is_export
+                && project
+                    .wasm_module_sources
+                    .contains_key(&func.module_source));
+
+        if is_root {
             let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
                 &func.module_source,
                 &func.name,

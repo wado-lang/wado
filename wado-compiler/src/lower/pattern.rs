@@ -383,13 +383,9 @@ impl<'a> PatternLowerer<'a> {
                         | TirPattern::ConstantValue { .. }
                 )
             }),
-            TirPattern::Variant { bindings, .. } => bindings.iter().any(|p| {
-                matches!(
-                    p,
-                    TirPattern::Literal(_)
-                        | TirPattern::ConstantValue { .. }
-                )
-            }),
+            TirPattern::Variant { bindings, .. } => bindings
+                .iter()
+                .any(|p| matches!(p, TirPattern::Literal(_) | TirPattern::ConstantValue { .. })),
             _ => false,
         }
     }

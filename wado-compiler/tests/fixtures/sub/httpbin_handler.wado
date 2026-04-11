@@ -4,7 +4,8 @@
 use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers, StatusCode, Method } from "wasi:http";
 use { TreeMap } from "core:collections";
 use { decode } from "core:base64";
-use { JsonValue, stringify } from "./httpbin_json.wado";
+use { Value } from "core:json_value";
+use { to_string } from "core:json";
 
 pub fn method_name(m: Method) -> String {
     return match m {
@@ -30,8 +31,8 @@ pub fn split_path_query(full: String) -> [String, String] {
     return [full, ""];
 }
 
-fn parse_query_params(query: String) -> TreeMap<String, JsonValue> {
-    let mut params = TreeMap::<String, JsonValue>::new();
+fn parse_query_params(query: String) -> TreeMap<String, Value> {
+    let mut params = TreeMap::<String, Value>::new();
     if query.is_empty() {
         return params;
     }
@@ -42,22 +43,22 @@ fn parse_query_params(query: String) -> TreeMap<String, JsonValue> {
         if let Some(eq) = pair.find("=") {
             let key = pair.substr_bytes(0, eq);
             let val = pair.substr_bytes(eq + 1, pair.len());
-            params[key] = JsonValue::Str(val);
+            params[key] = Value::String(val);
         } else {
-            params[pair] = JsonValue::Str("");
+            params[pair] = Value::String("");
         }
     }
     return params;
 }
 
-fn headers_to_json(headers: &Fields) -> JsonValue {
+fn headers_to_json(headers: &Fields) -> Value {
     let all = headers.copy_all();
-    let mut map = TreeMap::<String, JsonValue>::new();
+    let mut map = TreeMap::<String, Value>::new();
     for let entry of all {
         let [name, value] = entry;
-        map[name] = JsonValue::Str(String::from_utf8_lossy(value));
+        map[name] = Value::String(String::from_utf8_lossy(value));
     }
-    return JsonValue::Obj(map);
+    return Value::Object(map);
 }
 
 fn get_header(headers: &Fields, name: String) -> String {
@@ -99,24 +100,24 @@ fn parse_status_code(s: String) -> Option<u16> {
 }
 
 fn build_request_json(method: String, path: String, query: String, headers: &Fields, body: Option<String>) -> String {
-    let mut obj = TreeMap::<String, JsonValue>::new();
-    obj["method"] = JsonValue::Str(method);
-    obj["path"] = JsonValue::Str(path);
-    obj["args"] = JsonValue::Obj(parse_query_params(query));
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["method"] = Value::String(method);
+    obj["path"] = Value::String(path);
+    obj["args"] = Value::Object(parse_query_params(query));
     obj["headers"] = headers_to_json(headers);
-    obj["origin"] = JsonValue::Str(get_header(headers, "x-forwarded-for"));
+    obj["origin"] = Value::String(get_header(headers, "x-forwarded-for"));
     let url = if query.is_empty() { path } else { path + "?" + query };
-    obj["url"] = JsonValue::Str(url);
+    obj["url"] = Value::String(url);
     if let Some(data) = body {
-        obj["data"] = JsonValue::Str(data);
+        obj["data"] = Value::String(data);
     }
-    return stringify(&JsonValue::Obj(obj));
+    return to_string(&Value::Object(obj)).unwrap();
 }
 
 fn json_error(msg: String) -> String {
-    let mut obj = TreeMap::<String, JsonValue>::new();
-    obj["error"] = JsonValue::Str(msg);
-    return stringify(&JsonValue::Obj(obj));
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["error"] = Value::String(msg);
+    return to_string(&Value::Object(obj)).unwrap();
 }
 
 /// Route an HTTP request. Returns [status, content_type, body].
@@ -182,25 +183,25 @@ pub fn route(request: Request, method_str: String, path: String, query: String) 
 
     if path == "/headers" {
         let h = request.get_headers();
-        let mut obj = TreeMap::<String, JsonValue>::new();
+        let mut obj = TreeMap::<String, Value>::new();
         obj["headers"] = headers_to_json(&(h as Fields));
-        return [200, "application/json", stringify(&JsonValue::Obj(obj)) + "\n"];
+        return [200, "application/json", to_string(&Value::Object(obj)).unwrap() + "\n"];
     }
 
     if path == "/ip" {
         let h = request.get_headers();
         let origin = get_header(&(h as Fields), "x-forwarded-for");
-        let mut obj = TreeMap::<String, JsonValue>::new();
-        obj["origin"] = JsonValue::Str(if origin.is_empty() { "unknown" } else { origin });
-        return [200, "application/json", stringify(&JsonValue::Obj(obj)) + "\n"];
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["origin"] = Value::String(if origin.is_empty() { "unknown" } else { origin });
+        return [200, "application/json", to_string(&Value::Object(obj)).unwrap() + "\n"];
     }
 
     if path == "/user-agent" {
         let h = request.get_headers();
         let ua = get_header(&(h as Fields), "user-agent");
-        let mut obj = TreeMap::<String, JsonValue>::new();
-        obj["user-agent"] = JsonValue::Str(ua);
-        return [200, "application/json", stringify(&JsonValue::Obj(obj)) + "\n"];
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["user-agent"] = Value::String(ua);
+        return [200, "application/json", to_string(&Value::Object(obj)).unwrap() + "\n"];
     }
 
     if path.starts_with("/status/") {
