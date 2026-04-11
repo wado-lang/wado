@@ -944,7 +944,10 @@ impl<'a> Lexer<'a> {
                     current_literal.push('\\');
                     self.advance();
                     match self.peek_char() {
-                        Some(ch @ ('{' | '}' | '\\' | '`' | 'n' | 'r' | 't' | '0' | '"' | '\'' | 'b' | 'f')) => {
+                        Some(
+                            ch @ ('{' | '}' | '\\' | '`' | 'n' | 'r' | 't' | '0' | '"' | '\'' | 'b'
+                            | 'f'),
+                        ) => {
                             current_literal.push(ch);
                             self.advance();
                         }
@@ -1115,7 +1118,6 @@ impl<'a> Lexer<'a> {
 
         Ok(TokenKind::CharLit(raw))
     }
-
 }
 
 #[cfg(test)]

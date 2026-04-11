@@ -203,18 +203,18 @@ pub(super) fn unescape_template_string(raw: &str) -> Result<String, String> {
     while let Some(ch) = chars.next() {
         if ch == '\\' {
             // Handle template-specific escapes first
-            if let Some(&next) = chars.peek() {
-                if next == '{' || next == '}' {
-                    if pending_high.is_some() {
-                        return Err(
-                            "invalid surrogate pair: high surrogate not followed by low surrogate"
-                                .to_string(),
-                        );
-                    }
-                    chars.next();
-                    result.push(next);
-                    continue;
+            if let Some(&next) = chars.peek()
+                && (next == '{' || next == '}')
+            {
+                if pending_high.is_some() {
+                    return Err(
+                        "invalid surrogate pair: high surrogate not followed by low surrogate"
+                            .to_string(),
+                    );
                 }
+                chars.next();
+                result.push(next);
+                continue;
             }
             let escaped = unescape_one(&mut chars)?;
             if let Some(code_unit) = as_surrogate_code_unit(escaped) {
