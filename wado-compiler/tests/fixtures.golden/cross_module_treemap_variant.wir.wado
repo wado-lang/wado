@@ -230,7 +230,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
             __local_5 = 0;
             block {
                 l3: loop {
-                    if (__local_5 < __local_4.used) == 0 {
+                    if __local_5 >= __local_4.used {
                         break __for_0;
                     }
                     if __local_5 > 0 {
@@ -310,7 +310,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l9: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -446,7 +446,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
         i = 0;
         block {
             l18: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
@@ -478,7 +478,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
         i = 0;
         block {
             l22: loop {
-                if (i < min_len) == 0 {
+                if i >= min_len {
                     break __for_2;
                 }
                 a_byte = builtin::array_get_u8(a_repr, i);
@@ -630,7 +630,7 @@ fn "core:prelude/array.wado/Array<TreeMapEntry<String,Value>>::grow"(self) {
         i = 0;
         block {
             l42: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:collections//TreeMapEntry<String,Value>">(new_repr, i, builtin::array_get<ref "core:collections//TreeMapEntry<String,Value>">(old_repr, i));
@@ -760,7 +760,7 @@ fn "core:prelude/array.wado/Array<Tuple<String,Value>>::grow"(self) {
         i = 0;
         block {
             l58: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "tuple//[String, Value]">(new_repr, i, builtin::array_get<ref "tuple//[String, Value]">(old_repr, i));

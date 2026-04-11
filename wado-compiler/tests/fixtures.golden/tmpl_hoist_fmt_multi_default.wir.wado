@@ -205,7 +205,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_multi_default.wado/run"() with S
         __fmt_buf_94 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __tmpl_buf_92 };
         block {
             l2: loop {
-                if (i_1 < 5) == 0 {
+                if i_1 >= 5 {
                     break __for_0;
                 }
                 x = i_1 * 10;
@@ -245,7 +245,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_multi_default.wado/run"() with S
         __fmt_buf_98 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __tmpl_buf_95 };
         block {
             l5: loop {
-                if (i_5 < 3) == 0 {
+                if i_5 >= 3 {
                     break __for_1;
                 }
                 a = i_5;
@@ -292,7 +292,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_fmt_multi_default.wado/run"() with S
         __fmt_buf_103 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __tmpl_buf_99 };
         block {
             l8: loop {
-                if (i_11 < 3) == 0 {
+                if i_11 >= 3 {
                     break __for_2;
                 }
                 s_12 = __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -386,7 +386,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l12: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -1058,7 +1058,7 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     _licm_repr_9 = buf.repr;
     b95: block {
         l96: loop {
-            if (idx >= offset) == 0 {
+            if idx < offset {
                 break b95;
             }
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
@@ -1152,7 +1152,7 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
         skip_11 = nd - digits_to_output;
         b103: block {
             l104: loop {
-                if (skip_11 > 0) == 0 {
+                if skip_11 <= 0 {
                     break b103;
                 }
                 trim_d_10 = trim_d_10 /u 10_i64;
@@ -1182,7 +1182,7 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
             skip_17 = nd - output_nd;
             b109: block {
                 l110: loop {
-                    if (skip_17 > 0) == 0 {
+                    if skip_17 <= 0 {
                         break b109;
                     }
                     trim_d_16 = trim_d_16 /u 10_i64;
@@ -1244,7 +1244,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         t = val;
         block {
             l118: loop {
-                if (t > 0_i64) == 0 {
+                if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
@@ -1267,7 +1267,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             temp = abs_val;
             block {
                 l122: loop {
-                    if (temp > 0_i64) == 0 {
+                    if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
@@ -1589,7 +1589,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l158: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
@@ -1655,7 +1655,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         _licm_repr_33 = _licm_buf_29.repr;
         b164: block {
             l165: loop {
-                if (i_8 >= 0) == 0 {
+                if i_8 < 0 {
                     break b164;
                 }
                 index_14 = (start_pos + left_pad) + i_8;
@@ -1674,7 +1674,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
             _licm_repr_34 = _licm_buf_30.repr;
             block {
                 l168: loop {
-                    if (j_9 < left_pad) == 0 {
+                    if j_9 >= left_pad {
                         break __for_1;
                     }
                     index_19 = start_pos + j_9;
@@ -1692,7 +1692,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         _licm_repr_35 = _licm_buf_31.repr;
         b170: block {
             l171: loop {
-                if (i_10 >= 0) == 0 {
+                if i_10 < 0 {
                     break b170;
                 }
                 index_22 = (start_pos + padding) + i_10;
@@ -1711,7 +1711,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
             _licm_repr_36 = _licm_buf_32.repr;
             block {
                 l174: loop {
-                    if (j_11 < padding) == 0 {
+                    if j_11 >= padding {
                         break __for_2;
                     }
                     index_27 = start_pos + j_11;
@@ -1836,7 +1836,7 @@ fn "core:prelude/array.wado/Array<u64>::grow"(self) {
         i = 0;
         block {
             l195: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));

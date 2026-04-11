@@ -222,7 +222,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l2: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -280,7 +280,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         t = val;
         block {
             l7: loop {
-                if (t > 0_i64) == 0 {
+                if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
@@ -303,7 +303,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             temp = abs_val;
             block {
                 l11: loop {
-                    if (temp > 0_i64) == 0 {
+                    if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
@@ -420,7 +420,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l23: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
@@ -533,7 +533,7 @@ fn "core:prelude/array.wado/Array<String>::grow"(self) {
         i = 0;
         block {
             l43: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
@@ -559,7 +559,7 @@ fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<String>:
             _licm_repr_8 = _licm_children_6.repr;
             block {
                 l47: loop {
-                    if (i < _licm_used_7) == 0 {
+                    if i >= _licm_used_7 {
                         break __for_0;
                     }
                     "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<String>::traverse"(builtin::array_get<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(_licm_repr_8, i), depth + 1);
@@ -601,7 +601,7 @@ fn "core:prelude/array.wado/Array<Node<String>>::grow"(self) {
         i = 0;
         block {
             l51: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(old_repr, i));

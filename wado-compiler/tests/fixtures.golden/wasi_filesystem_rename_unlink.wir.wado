@@ -1089,7 +1089,7 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
         i = 0;
         block {
             l182: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
@@ -1107,7 +1107,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l185: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -1299,7 +1299,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     temp = val_i64;
     b195: block {
         l196: loop {
-            if (temp != 0_i64) == 0 {
+            if temp == 0_i64 {
                 break b195;
             }
             digit_count = digit_count + 1;
@@ -1327,7 +1327,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     temp = val_i64;
     b200: block {
         l201: loop {
-            if (temp != 0_i64) == 0 {
+            if temp == 0_i64 {
                 break b200;
             }
             pos = pos - 1;
@@ -1440,7 +1440,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l215: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
@@ -1563,7 +1563,7 @@ fn "core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow"(self) {
         i = 0;
         block {
             l236: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "tuple//[Descriptor, String]">(new_repr, i, builtin::array_get<ref "tuple//[Descriptor, String]">(old_repr, i));
@@ -1605,7 +1605,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
         i = 0;
         block {
             l240: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));

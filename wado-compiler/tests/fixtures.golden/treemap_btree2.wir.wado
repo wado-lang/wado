@@ -502,7 +502,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l11: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -597,7 +597,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         t = val;
         block {
             l17: loop {
-                if (t > 0_i64) == 0 {
+                if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
@@ -620,7 +620,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             temp = abs_val;
             block {
                 l21: loop {
-                    if (temp > 0_i64) == 0 {
+                    if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
@@ -717,7 +717,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
         i = 0;
         block {
             l30: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
@@ -749,7 +749,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
         i = 0;
         block {
             l34: loop {
-                if (i < min_len) == 0 {
+                if i >= min_len {
                     break __for_2;
                 }
                 a_byte = builtin::array_get_u8(a_repr, i);
@@ -853,7 +853,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l49: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
@@ -1015,7 +1015,7 @@ fn "core:prelude/array.wado/Array<String>::grow"(self) {
         i = 0;
         block {
             l77: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "core:prelude/string.wado//String">(new_repr, i, builtin::array_get<ref "core:prelude/string.wado//String">(old_repr, i));
@@ -1073,7 +1073,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/BTreeNode<String,i32>::comp
         _licm_repr_36 = _licm_values_30.repr;
         block {
             l80: loop {
-                if (i_7 < _licm_used_31) == 0 {
+                if i_7 >= _licm_used_31 {
                     break __for_1;
                 }
                 if __inline_Array_bool__IndexValue_i32___index_value_10: block -> bool {
@@ -1109,7 +1109,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/BTreeNode<String,i32>::comp
             _licm_repr_39 = _licm_children_37.repr;
             block {
                 l87: loop {
-                    if (i_8 < _licm_used_38) == 0 {
+                    if i_8 >= _licm_used_38 {
                         break __for_2;
                     }
                     "wado-compiler/tests/fixtures/treemap_btree2.wado/BTreeNode<String,i32>::compact"(builtin::array_get<ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>">(_licm_repr_39, i_8));
@@ -1151,7 +1151,7 @@ fn "core:prelude/array.wado/Array<bool>::grow"(self) {
         i = 0;
         block {
             l91: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<bool>(new_repr, i, builtin::array_get<bool>(old_repr, i));
@@ -1193,7 +1193,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
         i = 0;
         block {
             l95: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));
@@ -1274,7 +1274,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::collec
     _licm_repr_29 = _licm_values_21.repr;
     b100: block {
         l101: loop {
-            if (i < _licm_used_22) == 0 {
+            if i >= _licm_used_22 {
                 break b100;
             }
             if (if _licm_is_leaf_18 == 0 -> i32 {
@@ -1359,7 +1359,7 @@ fn "core:prelude/array.wado/Array<Tuple<String,i32>>::grow"(self) {
         i = 0;
         block {
             l114: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "tuple//[String, i32]">(new_repr, i, builtin::array_get<ref "tuple//[String, i32]">(old_repr, i));
@@ -1742,7 +1742,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::insert
             break __inline_Array_BTreeNode_String_i32___IndexValue_i32___index_value_9: builtin::array_get<ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>">(__local_23.repr, __local_24);
         }, (2 * self.t) - 1) {
             "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::split_child"(self, node, pos_5);
-            if "core:prelude/string.wado/String^Ord::cmp"(key, __inline_Array_String__IndexValue_i32___index_value_11: block -> ref "core:prelude/string.wado//String" {
+            pos_5 = pos_5 + ("core:prelude/string.wado/String^Ord::cmp"(key, __inline_Array_String__IndexValue_i32___index_value_11: block -> ref "core:prelude/string.wado//String" {
                 __local_26 = node.keys;
                 __local_27 = pos_5;
                 if __local_27 >= __local_26.used {
@@ -1750,9 +1750,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::insert
                     unreachable;
                 }
                 break __inline_Array_String__IndexValue_i32___index_value_11: builtin::array_get<ref "core:prelude/string.wado//String">(__local_26.repr, __local_27);
-            }) == 2 {
-                pos_5 = pos_5 + 1;
-            }
+            }) == 2);
         }
         "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::insert_non_full"(self, __inline_Array_BTreeNode_String_i32___IndexValue_i32___index_value_12: block -> ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>" {
             __local_28 = node.children;
@@ -1802,15 +1800,15 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::sort_n
         _licm_used_50 = _licm_deleted_45.used;
         _licm_repr_51 = _licm_deleted_45.repr;
         block {
-            l172: loop {
-                if (i < _licm_used_46) == 0 {
+            l171: loop {
+                if i >= _licm_used_46 {
                     break __for_5;
                 }
                 __for_6: block {
                     j = i + 1;
                     block {
-                        l175: loop {
-                            if (j < _licm_used_46) == 0 {
+                        l174: loop {
+                            if j >= _licm_used_46 {
                                 break __for_6;
                             }
                             if "core:prelude/string.wado/String^Ord::cmp"(builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_47, i), builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_47, j)) == 2 {
@@ -1878,12 +1876,12 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::sort_n
                                 builtin::array_set<bool>(_licm_repr_51, index_41, temp_d);
                             }
                             j = j + 1;
-                            continue l175;
+                            continue l174;
                         };
                     };
                 };
                 i = i + 1;
-                continue l172;
+                continue l171;
             };
         };
     };
@@ -1946,8 +1944,8 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::split_
         _licm_used_39 = _licm_deleted_34.used;
         _licm_repr_40 = _licm_deleted_34.repr;
         block {
-            l190: loop {
-                if (i_6 < _licm_used_35) == 0 {
+            l189: loop {
+                if i_6 >= _licm_used_35 {
                     break __for_3;
                 }
                 "core:prelude/array.wado/Array<String>::push"(_licm_keys_30, builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_36, i_6));
@@ -1966,7 +1964,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::split_
                     break __inline_Array_bool__IndexValue_i32___index_value_4: builtin::array_get<bool>(_licm_repr_40, i_6);
                 });
                 i_6 = i_6 + 1;
-                continue l190;
+                continue l189;
             };
         };
     };
@@ -1978,13 +1976,13 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<String,i32>::split_
             _licm_used_43 = _licm_children_41.used;
             _licm_repr_44 = _licm_children_41.repr;
             block {
-                l196: loop {
-                    if (i_7 < _licm_used_43) == 0 {
+                l195: loop {
+                    if i_7 >= _licm_used_43 {
                         break __for_4;
                     }
                     "core:prelude/array.wado/Array<BTreeNode<String,i32>>::push"(_licm_children_42, builtin::array_get<ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>">(_licm_repr_44, i_7));
                     i_7 = i_7 + 1;
-                    continue l196;
+                    continue l195;
                 };
             };
         };
@@ -2049,13 +2047,13 @@ fn "core:prelude/array.wado/Array<BTreeNode<String,i32>>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l203: loop {
-                if (i < used) == 0 {
+            l202: loop {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>">(new_repr, i, builtin::array_get<ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<String,i32>">(old_repr, i));
                 i = i + 1;
-                continue l203;
+                continue l202;
             };
         };
     };
@@ -2099,21 +2097,19 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/BTreeNode<String,i32>::is_f
         _licm_used_10 = _licm_deleted_8.used;
         _licm_repr_11 = _licm_deleted_8.repr;
         block {
-            l206: loop {
-                if (i < _licm_used_9) == 0 {
+            l205: loop {
+                if i >= _licm_used_9 {
                     break __for_0;
                 }
-                if __inline_Array_bool__IndexValue_i32___index_value_1: block -> bool {
+                count = count + (__inline_Array_bool__IndexValue_i32___index_value_1: block -> bool {
                     if i >= _licm_used_10 {
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }
                     break __inline_Array_bool__IndexValue_i32___index_value_1: builtin::array_get<bool>(_licm_repr_11, i);
-                } == 0 {
-                    count = count + 1;
-                }
+                } == 0);
                 i = i + 1;
-                continue l206;
+                continue l205;
             };
         };
     };

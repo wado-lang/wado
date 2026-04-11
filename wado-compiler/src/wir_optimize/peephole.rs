@@ -368,7 +368,9 @@ fn try_fold_eqz(instr: &mut WirInstr) {
 /// in tight loops (e.g., `while x <= limit` lowers to `if !(x <= limit) break`).
 /// Only applies to integer comparisons — float comparisons are excluded due to NaN.
 fn try_negate_eqz_comparison(instr: &mut WirInstr) {
-    let WirInstr::I32Eqz(inner) = instr else { return };
+    let WirInstr::I32Eqz(inner) = instr else {
+        return;
+    };
     // Determine which negated constructor to use based on the inner comparison.
     // Take a reference first to decide, then destructure to move operands.
     let ctor: fn(Box<WirInstr>, Box<WirInstr>) -> WirInstr = match inner.as_ref() {
@@ -444,9 +446,7 @@ fn fold_branchless_increment(instrs: &mut [WirInstr]) {
 fn fold_branchless_increment_in(instr: &mut WirInstr) {
     // Recurse into nested blocks first.
     match instr {
-        WirInstr::Block { body, .. }
-        | WirInstr::Loop { body, .. }
-        | WirInstr::Seq(body) => {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
             fold_branchless_increment(body);
         }
         WirInstr::If {
@@ -480,10 +480,7 @@ fn fold_branchless_increment_in(instr: &mut WirInstr) {
     let WirInstr::I32Add(lhs, rhs) = value.as_ref() else {
         return;
     };
-    let WirInstr::LocalGet {
-        name: get_name, ..
-    } = lhs.as_ref()
-    else {
+    let WirInstr::LocalGet { name: get_name, .. } = lhs.as_ref() else {
         return;
     };
     if get_name != name {
@@ -1398,10 +1395,10 @@ fn relax_gc_operand_nullability(instrs: &mut [WirInstr]) {
                     relax_ref_local_get(src);
                 }
                 WirInstr::StructGet { expr, .. } | WirInstr::StructSet { expr, .. } => {
-                    relax_ref_local_get(expr)
+                    relax_ref_local_get(expr);
                 }
                 WirInstr::RefCast { expr, .. } | WirInstr::RefTest { expr, .. } => {
-                    relax_ref_local_get(expr)
+                    relax_ref_local_get(expr);
                 }
                 _ => {}
             }
@@ -1413,9 +1410,9 @@ fn relax_gc_operand_nullability(instrs: &mut [WirInstr]) {
 }
 
 fn relax_ref_local_get(instr: &mut WirInstr) {
-    if let WirInstr::LocalGet { result_ty, .. } = instr {
-        if result_ty.is_nonnull_ref() {
-            *result_ty = result_ty.clone().as_nullable();
-        }
+    if let WirInstr::LocalGet { result_ty, .. } = instr
+        && result_ty.is_nonnull_ref()
+    {
+        *result_ty = result_ty.clone().as_nullable();
     }
 }
