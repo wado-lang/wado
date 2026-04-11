@@ -353,7 +353,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l19: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -411,7 +411,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         t = val;
         block {
             l24: loop {
-                if (t > 0_i64) == 0 {
+                if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
@@ -434,7 +434,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             temp = abs_val;
             block {
                 l28: loop {
-                    if (temp > 0_i64) == 0 {
+                    if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
@@ -551,7 +551,7 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         _licm_buf_4 = self.buf;
         block {
             l40: loop {
-                if (i < n) == 0 {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
@@ -684,7 +684,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
         i = 0;
         block {
             l62: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<i32>(new_repr, i, builtin::array_get<i32>(old_repr, i));

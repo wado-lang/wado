@@ -1867,3 +1867,60 @@ fn test_roundtrip_ast_all_stdlib() {
         );
     }
 }
+
+#[test]
+fn test_format_attribute_numeric_arg_preserved() {
+    // Numeric attribute arguments must not be quoted: #[timeout_ms(120000)] stays as-is
+    let source = "#[timeout_ms(120000)]\ntest \"bench\" {\n    assert 1 == 1;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("#[timeout_ms(120000)]"),
+        "numeric attribute argument must not be quoted: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_template_string_escape_sequences_preserved() {
+    // Escape sequences in template strings must be preserved, not decoded
+    let source = "fn foo() {\n    let s = `hello\\nworld`;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("`hello\\nworld`"),
+        "\\n escape in template string must be preserved: {}",
+        formatted
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+#[test]
+fn test_format_template_string_escape_sequences_all() {
+    // All escape sequences: \n, \r, \t, \0, \\, \{, \}
+    let source = "fn foo() {\n    let s = `a\\nb\\rc\\td\\0e\\\\f\\{g\\}`;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("`a\\nb\\rc\\td\\0e\\\\f\\{g\\}`"),
+        "all escape sequences in template string must be preserved: {}",
+        formatted
+    );
+}
+
+#[test]
+fn test_format_match_two_arms_always_multiline() {
+    // Match with 2+ arms must always be formatted multiline, never collapsed to one line
+    let source = r#"
+fn foo(x: Option<i32>) -> i32 {
+    return match x { Some(v) => v, None => 0 };
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    // The match should be expanded to multiple lines
+    assert!(
+        formatted.contains("Some(v) => v,\n"),
+        "match with 2 arms must be multiline:\n{}",
+        formatted
+    );
+}

@@ -200,7 +200,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l10: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -262,7 +262,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
         i = 0;
         block {
             l15: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {

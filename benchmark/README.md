@@ -30,9 +30,9 @@ Sieve of Eratosthenes up to 10M (array operations).
 
 | Implementation    |  Time | vs best |
 | ----------------- | ----: | ------: |
-| C (gcc -O3)       | 50 ms |   1.00x |
-| JavaScript (Node) | 82 ms |   1.64x |
-| **Wado**          | 82 ms |   1.64x |
+| C (gcc -O3)       | 46 ms |   1.00x |
+| JavaScript (Node) | 68 ms |   1.48x |
+| **Wado**          | 77 ms |   1.67x |
 
 ## Float-to-String
 

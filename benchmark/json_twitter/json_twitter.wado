@@ -144,7 +144,10 @@ fn read_file(path: String) -> String with Preopens {
     if let Err(_) = open_result {
         panic(`failed to open {path}`);
     }
-    let file = match open_result { Ok(f) => f, Err(_) => unreachable() };
+    let file = match open_result {
+        Ok(f) => f,
+        Err(_) => unreachable(),
+    };
     let [stream, _done] = file.read_via_stream(0 as Filesize);
     let mut buf = String::with_capacity(1024 * 1024);
     loop {

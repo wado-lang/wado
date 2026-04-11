@@ -941,19 +941,47 @@ impl<'a> Lexer<'a> {
                     });
                 }
                 Some((_, '\\')) => {
+                    current_literal.push('\\');
                     self.advance();
                     match self.peek_char() {
-                        Some('{') => {
+                        Some(
+                            ch @ ('{' | '}' | '\\' | '`' | 'n' | 'r' | 't' | '0' | '"' | '\'' | 'b'
+                            | 'f'),
+                        ) => {
+                            current_literal.push(ch);
                             self.advance();
-                            current_literal.push('{');
                         }
-                        Some('}') => {
+                        Some('u') => {
+                            current_literal.push('u');
                             self.advance();
-                            current_literal.push('}');
+                            if self.peek_char() == Some('{') {
+                                current_literal.push('{');
+                                self.advance();
+                                while let Some(c) = self.peek_char() {
+                                    if c == '}' {
+                                        current_literal.push('}');
+                                        self.advance();
+                                        break;
+                                    }
+                                    current_literal.push(c);
+                                    self.advance();
+                                }
+                            } else {
+                                // \uXXXX form
+                                for _ in 0..4 {
+                                    if let Some(c) = self.peek_char() {
+                                        current_literal.push(c);
+                                        self.advance();
+                                    }
+                                }
+                            }
                         }
                         _ => {
-                            let ch = self.parse_escape_sequence(start, start_line, start_column)?;
-                            current_literal.push(ch);
+                            // Unknown escape — preserve as-is, let resolver report the error
+                            if let Some(c) = self.peek_char() {
+                                current_literal.push(c);
+                                self.advance();
+                            }
                         }
                     }
                 }
@@ -1090,152 +1118,6 @@ impl<'a> Lexer<'a> {
 
         Ok(TokenKind::CharLit(raw))
     }
-
-    fn parse_escape_sequence(
-        &mut self,
-        start: usize,
-        start_line: usize,
-        start_column: usize,
-    ) -> Result<char, LexError> {
-        match self.peek_char() {
-            Some('n') => {
-                self.advance();
-                Ok('\n')
-            }
-            Some('t') => {
-                self.advance();
-                Ok('\t')
-            }
-            Some('r') => {
-                self.advance();
-                Ok('\r')
-            }
-            Some('\\') => {
-                self.advance();
-                Ok('\\')
-            }
-            Some('"') => {
-                self.advance();
-                Ok('"')
-            }
-            Some('\'') => {
-                self.advance();
-                Ok('\'')
-            }
-            Some('/') => {
-                self.advance();
-                Ok('/')
-            }
-            Some('b') => {
-                self.advance();
-                Ok('\x08')
-            }
-            Some('f') => {
-                self.advance();
-                Ok('\x0C')
-            }
-            Some('0') => {
-                self.advance();
-                Ok('\0')
-            }
-            Some('u') => {
-                self.advance();
-                self.parse_unicode_escape(start, start_line, start_column)
-            }
-            Some(ch) => Err(LexError {
-                message: format!("invalid escape sequence: \\{ch}"),
-                span: Span::new(start, self.pos, start_line, start_column),
-            }),
-            None => Err(LexError {
-                message: "unterminated string literal".to_string(),
-                span: Span::new(start, self.pos, start_line, start_column),
-            }),
-        }
-    }
-
-    fn parse_unicode_escape(
-        &mut self,
-        start: usize,
-        start_line: usize,
-        start_column: usize,
-    ) -> Result<char, LexError> {
-        if self.peek_char() == Some('{') {
-            self.advance();
-            let mut hex = String::new();
-            while let Some((_, ch)) = self.peek() {
-                if ch == '}' {
-                    self.advance();
-                    break;
-                }
-                if ch.is_ascii_hexdigit() {
-                    hex.push(ch);
-                    self.advance();
-                } else {
-                    return Err(LexError {
-                        message: format!("invalid character in unicode escape: {ch}"),
-                        span: Span::new(start, self.pos, start_line, start_column),
-                    });
-                }
-            }
-            if hex.is_empty() {
-                return Err(LexError {
-                    message: "empty unicode escape".to_string(),
-                    span: Span::new(start, self.pos, start_line, start_column),
-                });
-            }
-            let code_point = u32::from_str_radix(&hex, 16).map_err(|_| LexError {
-                message: format!("invalid unicode escape: \\u{{{hex}}}"),
-                span: Span::new(start, self.pos, start_line, start_column),
-            })?;
-            char::from_u32(code_point).ok_or_else(|| LexError {
-                message: format!("invalid unicode code point: U+{code_point:04X}"),
-                span: Span::new(start, self.pos, start_line, start_column),
-            })
-        } else {
-            let mut hex = String::new();
-            for _ in 0..4 {
-                match self.peek_char() {
-                    Some(ch) if ch.is_ascii_hexdigit() => {
-                        hex.push(ch);
-                        self.advance();
-                    }
-                    _ => {
-                        return Err(LexError {
-                            message: "expected 4 hex digits after \\u".to_string(),
-                            span: Span::new(start, self.pos, start_line, start_column),
-                        });
-                    }
-                }
-            }
-            let code_unit = u16::from_str_radix(&hex, 16).map_err(|_| LexError {
-                message: format!("invalid unicode escape: \\u{hex}"),
-                span: Span::new(start, self.pos, start_line, start_column),
-            })?;
-            if is_high_surrogate(code_unit) || is_low_surrogate(code_unit) {
-                let pua_code = if is_high_surrogate(code_unit) {
-                    u32::from(code_unit - 0xD800) + 0xE000
-                } else {
-                    u32::from(code_unit - 0xDC00) + 0xE800
-                };
-                Ok(char::from_u32(pua_code).unwrap())
-            } else {
-                char::from_u32(u32::from(code_unit)).ok_or_else(|| LexError {
-                    message: format!("invalid unicode code point: U+{code_unit:04X}"),
-                    span: Span::new(start, self.pos, start_line, start_column),
-                })
-            }
-        }
-    }
-}
-
-// Helper functions for surrogate pair handling
-
-fn is_high_surrogate(code_unit: u16) -> bool {
-    (0xD800..=0xDBFF).contains(&code_unit)
-}
-
-fn is_low_surrogate(code_unit: u16) -> bool {
-    (0xDC00..=0xDFFF).contains(&code_unit)
 }
 
 #[cfg(test)]

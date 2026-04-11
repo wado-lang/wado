@@ -1,0 +1,38 @@
+// Test: Branchless increment — `if bool { x += 1 }` → `x += bool`
+//
+// When a boolean-valued expression gates an increment-by-one, the peephole
+// pass replaces the branch with an unconditional add of the 0/1 value.
+//
+// At O0: `if ... { count = count + 1; }` (conditional increment)
+// At O2: `count = count + builtin::array_get<bool>(...)` (branchless add)
+//
+// Requires O2 because the array access must be inlined first.
+
+fn count_trues(arr: Array<bool>) -> i32 {
+    let mut count = 0;
+    for let mut i = 0; i < arr.len(); i += 1 {
+        if arr[i] {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+test {
+    let a: Array<bool> = [true, false, true, true, false];
+    assert count_trues(a) == 3;
+
+    let empty: Array<bool> = [];
+    assert count_trues(empty) == 0;
+
+    let all_true: Array<bool> = [true, true, true];
+    assert count_trues(all_true) == 3;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": ["count = count + 1"],
+    "wir_not_expect:O2": ["count = count + 1"],
+    "wir_expect:O2": ["count + builtin::array_get<bool>"]
+}

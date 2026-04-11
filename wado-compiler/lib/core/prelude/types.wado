@@ -28,8 +28,14 @@ pub variant Result<T, E> {
 impl<T: Eq> Eq for Option<T> {
     pub fn eq(&self, other: &Self) -> bool {
         return match *self {
-            Some(a) => match *other { Some(b) => a == b, None => false },
-            None => match *other { Some(_) => false, None => true },
+            Some(a) => match *other {
+                Some(b) => a == b,
+                None => false,
+            },
+            None => match *other {
+                Some(_) => false,
+                None => true,
+            },
         };
     }
 }
@@ -37,8 +43,14 @@ impl<T: Eq> Eq for Option<T> {
 impl<T: Eq, E: Eq> Eq for Result<T, E> {
     pub fn eq(&self, other: &Self) -> bool {
         return match *self {
-            Ok(a) => match *other { Ok(b) => a == b, Err(_) => false },
-            Err(a) => match *other { Ok(_) => false, Err(b) => a == b },
+            Ok(a) => match *other {
+                Ok(b) => a == b,
+                Err(_) => false,
+            },
+            Err(a) => match *other {
+                Ok(_) => false,
+                Err(b) => a == b,
+            },
         };
     }
 }

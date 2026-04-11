@@ -1579,7 +1579,7 @@ condition: s == `\"A\"`
         __cond_9 = "core:prelude/string.wado/String^Eq::eq"(__v0_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"\\n\""), used: 4 });
         if __cond_9 == 0 {
             "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(120), used: 0 };
+                __local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(119), used: 0 };
                 "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
                 "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_11_char_ascii_and_special"), used: 32 });
                 "core:prelude/string.wado/String::push"(__local_17, 32);
@@ -1592,8 +1592,8 @@ condition: s == `\"A\"`
                 __local_34 = __local_18;
                 "core:prelude/primitive.wado/i32::fmt_decimal"(201, __local_34);
                 "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-condition: s2 == `\"\\\\n\"`
-"), used: 26 });
+condition: s2 == `\"\\n\"`
+"), used: 25 });
                 "core:prelude/string.wado/String::push"(__local_17, 115);
                 "core:prelude/string.wado/String::push"(__local_17, 50);
                 "core:prelude/string.wado/String::push"(__local_17, 58);
@@ -1619,7 +1619,7 @@ condition: s2 == `\"\\\\n\"`
         __cond_14 = "core:prelude/string.wado/String^Eq::eq"(__v0_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"\\\"\""), used: 4 });
         if __cond_14 == 0 {
             "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
-                __local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(120), used: 0 };
+                __local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(119), used: 0 };
                 "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 });
                 "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_11_char_ascii_and_special"), used: 32 });
                 "core:prelude/string.wado/String::push"(__local_19, 32);
@@ -1632,8 +1632,8 @@ condition: s2 == `\"\\\\n\"`
                 __local_41 = __local_20;
                 "core:prelude/primitive.wado/i32::fmt_decimal"(208, __local_41);
                 "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-condition: s3 == `\"\\\\\"\"`
-"), used: 26 });
+condition: s3 == `\"\\\"\"`
+"), used: 25 });
                 "core:prelude/string.wado/String::push"(__local_19, 115);
                 "core:prelude/string.wado/String::push"(__local_19, 51);
                 "core:prelude/string.wado/String::push"(__local_19, 58);
@@ -2022,7 +2022,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l77: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -2817,7 +2817,7 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
     _licm_repr_9 = buf.repr;
     b167: block {
         l168: loop {
-            if (idx >= offset) == 0 {
+            if idx < offset {
                 break b167;
             }
             value = (48 + (builtin::i32_wrap_i64(v %u 10_i64) & 255)) & 255;
@@ -2993,7 +2993,7 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
         skip_11 = nd - digits_to_output;
         b181: block {
             l182: loop {
-                if (skip_11 > 0) == 0 {
+                if skip_11 <= 0 {
                     break b181;
                 }
                 trim_d_10 = trim_d_10 /u 10_i64;
@@ -3023,7 +3023,7 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
             skip_17 = nd - output_nd;
             b187: block {
                 l188: loop {
-                    if (skip_17 > 0) == 0 {
+                    if skip_17 <= 0 {
                         break b187;
                     }
                     trim_d_16 = trim_d_16 /u 10_i64;
@@ -3131,7 +3131,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
         t = val;
         block {
             l197: loop {
-                if (t > 0_i64) == 0 {
+                if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
@@ -3154,7 +3154,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
             temp = abs_val;
             block {
                 l201: loop {
-                    if (temp > 0_i64) == 0 {
+                    if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
@@ -4052,7 +4052,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
         i = 0;
         block {
             l296: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
@@ -4248,7 +4248,7 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {
     _hfs_pos_8 = self.pos;
     b312: block {
         l313: loop {
-            if (_hfs_pos_8 < _licm_used_6) == 0 {
+            if _hfs_pos_8 >= _licm_used_6 {
                 break b312;
             }
             b = __inline_String__get_byte_1: block -> u8 {
@@ -4464,7 +4464,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     _licm_repr_91 = _licm_input_89.repr;
     b326: block {
         l327: loop {
-            if (scan_pos < _licm_used_90) == 0 {
+            if scan_pos >= _licm_used_90 {
                 break b326;
             }
             sb = builtin::array_get_u8(_licm_repr_91, scan_pos);
@@ -4501,7 +4501,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             _licm_repr_94 = _licm_input_92.repr;
             block {
                 l334: loop {
-                    if (i_7 < prefix_len) == 0 {
+                    if i_7 >= prefix_len {
                         break __for_0;
                     }
                     index_53 = start_6 + i_7;
@@ -4530,7 +4530,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
         _licm_repr_97 = _licm_input_95.repr;
         block {
             l337: loop {
-                if (i_10 < prefix_len) == 0 {
+                if i_10 >= prefix_len {
                     break __for_1;
                 }
                 index_59 = start_9 + i_10;
@@ -4548,11 +4548,11 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     _hfs_pos_98 = self.pos;
     b339: block {
         l340: loop {
-            if (_hfs_pos_98 < __inline_String__len_14: block -> i32 {
+            if _hfs_pos_98 >= __inline_String__len_14: block -> i32 {
                 __local_63 = self.input;
                 self.pos = _hfs_pos_98;
                 break __inline_String__len_14: __local_63.used;
-            }) == 0 {
+            } {
                 break b339;
             }
             b = __inline_String__get_byte_15: block -> u8 {
@@ -4758,7 +4758,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
         _licm_repr_17 = _licm_input_15.repr;
         block {
             l365: loop {
-                if (i < 4) == 0 {
+                if i >= 4 {
                     break __for_2;
                 }
                 b = __inline_String__get_byte_2: block -> u8 {
@@ -4899,7 +4899,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     _hfs_pos_51 = self.pos;
     b379: block {
         l380: loop {
-            if (_hfs_pos_51 < _licm_used_47) == 0 {
+            if _hfs_pos_51 >= _licm_used_47 {
                 break b379;
             }
             b = __inline_String__get_byte_8: block -> u8 {
@@ -4929,7 +4929,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                     _hfs_pos_49 = _hfs_pos_51;
                     b388: block {
                         l389: loop {
-                            if (_hfs_pos_49 < _licm_used_47) == 0 {
+                            if _hfs_pos_49 >= _licm_used_47 {
                                 self.pos = _hfs_pos_51;
                                 break b388;
                             }
@@ -4975,16 +4975,16 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                             if sb == 45 {
                                 exp_neg = 1;
                                 _hfs_pos_51 = _hfs_pos_51 + 1;
-                            } else if sb == 43 {
-                                _hfs_pos_51 = _hfs_pos_51 + 1;
+                            } else {
+                                _hfs_pos_51 = _hfs_pos_51 + (sb == 43);
                             }
                         }
                         _hfs_pos_50 = _hfs_pos_51;
-                        b399: block {
-                            l400: loop {
-                                if (_hfs_pos_50 < _licm_used_47) == 0 {
+                        b398: block {
+                            l399: loop {
+                                if _hfs_pos_50 >= _licm_used_47 {
                                     self.pos = _hfs_pos_51;
-                                    break b399;
+                                    break b398;
                                 }
                                 b3 = __inline_String__get_byte_16: block -> u8 {
                                     __local_40 = _hfs_pos_50;
@@ -4999,9 +4999,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                                     _hfs_pos_50 = _hfs_pos_50 + 1;
                                 } else {
                                     self.pos = _hfs_pos_51;
-                                    break b399;
+                                    break b398;
                                 }
-                                continue l400;
+                                continue l399;
                             };
                         };
                         _hfs_pos_51 = _hfs_pos_50;
@@ -5153,10 +5153,10 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
     _licm_used_49 = _licm_input_48.used;
     _licm_repr_50 = _licm_input_48.repr;
     _hfs_pos_57 = self.pos;
-    b415: block {
-        l416: loop {
-            if (_hfs_pos_57 < _licm_used_49) == 0 {
-                break b415;
+    b414: block {
+        l415: loop {
+            if _hfs_pos_57 >= _licm_used_49 {
+                break b414;
             }
             b_6 = __inline_String__get_byte_8: block -> u8 {
                 __local_32 = _hfs_pos_57;
@@ -5173,9 +5173,9 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
                 total_digits = total_digits + 1;
                 _hfs_pos_57 = _hfs_pos_57 + 1;
             } else {
-                break b415;
+                break b414;
             }
-            continue l416;
+            continue l415;
         };
     };
     self.pos = _hfs_pos_57;
@@ -5197,10 +5197,10 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
         _licm_used_52 = _licm_input_51.used;
         _licm_repr_53 = _licm_input_51.repr;
         _hfs_pos_58 = self.pos;
-        b423: block {
-            l424: loop {
-                if (_hfs_pos_58 < _licm_used_52) == 0 {
-                    break b423;
+        b422: block {
+            l423: loop {
+                if _hfs_pos_58 >= _licm_used_52 {
+                    break b422;
                 }
                 b_8 = __inline_String__get_byte_12: block -> u8 {
                     __local_38 = _hfs_pos_58;
@@ -5218,9 +5218,9 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
                     total_digits = total_digits + 1;
                     _hfs_pos_58 = _hfs_pos_58 + 1;
                 } else {
-                    break b423;
+                    break b422;
                 }
-                continue l424;
+                continue l423;
             };
         };
         self.pos = _hfs_pos_58;
@@ -5262,10 +5262,10 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
             _licm_used_55 = _licm_input_54.used;
             _licm_repr_56 = _licm_input_54.repr;
             _hfs_pos_59 = self.pos;
-            b435: block {
-                l436: loop {
-                    if (_hfs_pos_59 < _licm_used_55) == 0 {
-                        break b435;
+            b434: block {
+                l435: loop {
+                    if _hfs_pos_59 >= _licm_used_55 {
+                        break b434;
                     }
                     b3 = __inline_String__get_byte_18: block -> u8 {
                         __local_47 = _hfs_pos_59;
@@ -5279,9 +5279,9 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
                         exp = (exp * 10) + (b3 - 48);
                         _hfs_pos_59 = _hfs_pos_59 + 1;
                     } else {
-                        break b435;
+                        break b434;
                     }
-                    continue l436;
+                    continue l435;
                 };
             };
             self.pos = _hfs_pos_59;
@@ -5389,13 +5389,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l454: loop {
-                if (i < n) == 0 {
+            l453: loop {
+                if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l454;
+                continue l453;
             };
         };
     };
@@ -5488,10 +5488,10 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         i_8 = content_len - 1;
         _licm_buf_29 = self.buf;
         _licm_repr_33 = _licm_buf_29.repr;
-        b464: block {
-            l465: loop {
-                if (i_8 >= 0) == 0 {
-                    break b464;
+        b463: block {
+            l464: loop {
+                if i_8 < 0 {
+                    break b463;
                 }
                 index_14 = (start_pos + left_pad) + i_8;
                 value_15 = __inline_String__get_byte_2: block -> u8 {
@@ -5500,7 +5500,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_33, index_14, value_15);
                 i_8 = i_8 - 1;
-                continue l465;
+                continue l464;
             };
         };
         __for_1: block {
@@ -5508,14 +5508,14 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
             _licm_buf_30 = self.buf;
             _licm_repr_34 = _licm_buf_30.repr;
             block {
-                l468: loop {
-                    if (j_9 < left_pad) == 0 {
+                l467: loop {
+                    if j_9 >= left_pad {
                         break __for_1;
                     }
                     index_19 = start_pos + j_9;
                     builtin::array_set_u8(_licm_repr_34, index_19, fill_byte);
                     j_9 = j_9 + 1;
-                    continue l468;
+                    continue l467;
                 };
             };
         };
@@ -5525,10 +5525,10 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
         i_10 = content_len - 1;
         _licm_buf_31 = self.buf;
         _licm_repr_35 = _licm_buf_31.repr;
-        b470: block {
-            l471: loop {
-                if (i_10 >= 0) == 0 {
-                    break b470;
+        b469: block {
+            l470: loop {
+                if i_10 < 0 {
+                    break b469;
                 }
                 index_22 = (start_pos + padding) + i_10;
                 value_23 = __inline_String__get_byte_5: block -> u8 {
@@ -5537,7 +5537,7 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
                 };
                 builtin::array_set_u8(_licm_repr_35, index_22, value_23);
                 i_10 = i_10 - 1;
-                continue l471;
+                continue l470;
             };
         };
         __for_2: block {
@@ -5545,14 +5545,14 @@ fn "core:prelude/format.wado/Formatter::apply_padding"(self, start_pos) {
             _licm_buf_32 = self.buf;
             _licm_repr_36 = _licm_buf_32.repr;
             block {
-                l474: loop {
-                    if (j_11 < padding) == 0 {
+                l473: loop {
+                    if j_11 >= padding {
                         break __for_2;
                     }
                     index_27 = start_pos + j_11;
                     builtin::array_set_u8(_licm_repr_36, index_27, fill_byte);
                     j_11 = j_11 + 1;
-                    continue l474;
+                    continue l473;
                 };
             };
         };
@@ -5656,8 +5656,8 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b493: block {
-        l494: loop {
+    b492: block {
+        l493: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
@@ -5682,9 +5682,9 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, c);
                 }
             } else {
-                break b493;
+                break b492;
             }
-            continue l494;
+            continue l493;
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
@@ -5719,13 +5719,13 @@ fn "core:prelude/array.wado/Array<u64>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l503: loop {
-                if (i < used) == 0 {
+            l502: loop {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
                 i = i + 1;
-                continue l503;
+                continue l502;
             };
         };
     };

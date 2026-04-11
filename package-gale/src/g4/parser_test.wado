@@ -177,8 +177,12 @@ ID : [\\p{L}] ;";
         let mut has_upper = false;
         let mut has_lower = false;
         for let r of &cc.ranges {
-            if r.start == 'A' && r.end == 'Z' { has_upper = true; }
-            if r.start == 'a' && r.end == 'z' { has_lower = true; }
+            if r.start == 'A' && r.end == 'Z' {
+                has_upper = true;
+            }
+            if r.start == 'a' && r.end == 'z' {
+                has_lower = true;
+            }
         }
         assert has_upper, "\\p{L} must include A-Z";
         assert has_lower, "\\p{L} must include a-z";
@@ -195,7 +199,9 @@ DIGIT : [\\p{Nd}] ;";
     if let CharClass(cc) = body[0].elements[0] {
         let mut has_digits = false;
         for let r of &cc.ranges {
-            if r.start == '0' && r.end == '9' { has_digits = true; }
+            if r.start == '0' && r.end == '9' {
+                has_digits = true;
+            }
         }
         assert has_digits, "\\p{Nd} must include 0-9";
     } else {
@@ -211,7 +217,9 @@ WS : [\\p{Zs}] ;";
     if let CharClass(cc) = body[0].elements[0] {
         let mut has_space = false;
         for let r of &cc.ranges {
-            if r.start <= ' ' && ' ' <= r.end { has_space = true; }
+            if r.start <= ' ' && ' ' <= r.end {
+                has_space = true;
+            }
         }
         assert has_space, "\\p{Zs} must include U+0020 (space)";
     } else {
@@ -229,9 +237,15 @@ ID : [\\p{L}0-9_] ;";
         let mut has_digit = false;
         let mut has_underscore = false;
         for let r of &cc.ranges {
-            if r.start == 'A' && r.end == 'Z' { has_letter = true; }
-            if r.start == '0' && r.end == '9' { has_digit = true; }
-            if r.start == '_' && r.end == '_' { has_underscore = true; }
+            if r.start == 'A' && r.end == 'Z' {
+                has_letter = true;
+            }
+            if r.start == '0' && r.end == '9' {
+                has_digit = true;
+            }
+            if r.start == '_' && r.end == '_' {
+                has_underscore = true;
+            }
         }
         assert has_letter, "should include letters from \\p{L}";
         assert has_digit, "should include 0-9";

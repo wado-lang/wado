@@ -316,9 +316,15 @@ impl char {
     /// Returns the number of bytes this character needs in UTF-8 encoding.
     pub fn len_utf8(&self) -> i32 {
         let cp = *self as i32;
-        if cp < 0x80 { return 1; }
-        if cp < 0x800 { return 2; }
-        if cp < 0x10000 { return 3; }
+        if cp < 0x80 {
+            return 1;
+        }
+        if cp < 0x800 {
+            return 2;
+        }
+        if cp < 0x10000 {
+            return 3;
+        }
         return 4;
     }
 

@@ -126,7 +126,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
         i = 0;
         block {
             l4: loop {
-                if (i < len) == 0 {
+                if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
@@ -209,7 +209,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
         i = 0;
         block {
             l9: loop {
-                if (i < used) == 0 {
+                if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));

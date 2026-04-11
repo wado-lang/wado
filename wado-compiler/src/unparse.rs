@@ -406,7 +406,7 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(s);
                 self.output.push('"');
             }
-            AttrArg::Ident(s) => {
+            AttrArg::Ident(s) | AttrArg::Number(s) => {
                 self.output.push_str(s);
             }
             AttrArg::KeyValue(k, v) => {
@@ -2178,8 +2178,8 @@ impl<'a> Unparser<'a> {
 
     /// Try to format a match expression on a single line.
     fn try_inline_match(&mut self, m: &MatchExpr) -> bool {
-        // Match expressions with 3 or more arms are always formatted multiline
-        if m.arms.len() >= 3 {
+        // Match expressions with 2 or more arms are always formatted multiline
+        if m.arms.len() >= 2 {
             return false;
         }
         // All arms must have inline-safe bodies, and no comments inside the match body
@@ -3155,15 +3155,9 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
 }
 
 fn escape_template_literal_into(s: &str, output: &mut String) {
-    for c in s.chars() {
-        match c {
-            '\\' => output.push_str("\\\\"),
-            '`' => output.push_str("\\`"),
-            '{' => output.push_str("\\{"),
-            '}' => output.push_str("\\}"),
-            _ => output.push(c),
-        }
-    }
+    // Template literal parts are stored as raw text (escape sequences preserved).
+    // Just output as-is — escapes like \n, \{, \} are already in raw form.
+    output.push_str(s);
 }
 
 fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
