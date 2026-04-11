@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775869536300,
+  "lastUpdate": 1775870944668,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11372,6 +11372,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/55617fc2c5eb58bcebf4708d326cd4882d9c38d2"
         },
         "date": 1775869536191,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1799,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8974,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19360,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "00ac300f1b9e72767aedd2aaf25312e5ca92a3c5",
+          "message": "Merge pull request #801 from wado-lang/claude/uri-stdlib-design-2MUjx\n\nAdd `core:url` standard library module",
+          "timestamp": "2026-04-11T10:25:47+09:00",
+          "tree_id": "af24dd52f6ec9bc0c1b94bd92d4511bf5ece4c3c",
+          "url": "https://github.com/wado-lang/wado/commit/00ac300f1b9e72767aedd2aaf25312e5ca92a3c5"
+        },
+        "date": 1775870944406,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
