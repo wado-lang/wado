@@ -759,7 +759,9 @@ pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
         if func.module_source != entry_source {
             continue;
         }
-        let is_entry = func.name == "run" || func.name.starts_with("__test_");
+        let is_entry = func.name == "run"
+            || func.name.starts_with("__test_")
+            || func.name.starts_with("__cm_export__");
         if is_entry && let Some(ref mut body) = func.body {
             body.stmts.insert(0, init_call_stmt.clone());
         }

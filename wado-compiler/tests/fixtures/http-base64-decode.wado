@@ -1,0 +1,27 @@
+// Bug: core:base64/decode traps with null reference in HTTP handler at O0/O2.
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+use { decode } from "core:base64";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let result = decode("YWJj");
+    assert result matches { Some(bytes) && bytes.len() == 3 };
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    let text = if let Some(bytes) = decode("YWJj") {
+        String::from_utf8_lossy(bytes);
+    } else {
+        "FAIL";
+    };
+    body_tx.write(text.bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200, "body": "abc"}}
