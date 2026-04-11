@@ -98,7 +98,6 @@ Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated highlighter
 | Implementation              |    Time | vs best |
 | --------------------------- | ------: | ------: |
 | tree-sitter (Rust native)   |  466 ms |  1.00x |
-| tree-sitter (Wasm/wasmtime) |  577 ms |  1.24x |
 | **Wado** (Gale)             | 8,166 ms | 17.53x |
 
 ## Running
