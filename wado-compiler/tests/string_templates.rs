@@ -373,7 +373,7 @@ fn test_template_escape_sequences() {
     match expr {
         wado_compiler::ast::Expr::TemplateString(template) => match &template.parts[0] {
             wado_compiler::ast::TemplatePart::String(s) => {
-                assert_eq!(s, "Line 1\nLine 2\ttab");
+                assert_eq!(s, r#"Line 1\nLine 2\ttab"#);
             }
             other => panic!("expected String part, got {:?}", other),
         },

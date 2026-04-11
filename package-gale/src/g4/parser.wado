@@ -181,7 +181,7 @@ impl G4Parser {
         if !self.is_kind(G4Token::LBrace) {
             return;
         }
-        self.advance(); // skip '{'
+        self.advance();  // skip '{'
         while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
             if self.is_kind(G4Token::Identifier) {
                 virtual_tokens.push(self.peek().text.to_string());
@@ -603,14 +603,14 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
     while pos < end {
         // Detect \p{PropertyName} Unicode property escape
         if pos + 2 < end && chars[pos] == '\\' && chars[pos + 1] == 'p' && chars[pos + 2] == '{' {
-            pos += 3; // skip \p{
+            pos += 3;  // skip \p{
             let mut prop = String::with_capacity(16);
             while pos < end && chars[pos] != '}' {
                 prop.push(chars[pos]);
                 pos += 1;
             }
             if pos < end {
-                pos += 1; // skip }
+                pos += 1;  // skip }
             }
             expand_unicode_property(&prop, &mut ranges);
             continue;

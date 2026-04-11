@@ -200,7 +200,9 @@ pub fn normalize_tree(s: &String) -> String {
     for let c of s.chars() {
         if in_string {
             out.push(c);
-            if c == '"' { in_string = false; }
+            if c == '"' {
+                in_string = false;
+            }
         } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
             if out.len() > 0 {
                 space_pending = true;
@@ -210,7 +212,9 @@ pub fn normalize_tree(s: &String) -> String {
                 out.push(' ');
                 space_pending = false;
             }
-            if c == '"' { in_string = true; }
+            if c == '"' {
+                in_string = true;
+            }
             out.push(c);
         }
     }

@@ -106,7 +106,9 @@ fn classify_lexer_rule(rule: &LexerRule) -> String {
             return "";
         }
     }
-    if contains_upper(&name, "COMMENT") || contains_upper(&name, "LINE_COMMENT") || contains_upper(&name, "BLOCK_COMMENT") {
+    if contains_upper(&name, "COMMENT")
+        || contains_upper(&name, "LINE_COMMENT")
+        || contains_upper(&name, "BLOCK_COMMENT") {
         return "comment";
     }
     if contains_upper(&name, "DOC_COMMENT") {
@@ -118,9 +120,15 @@ fn classify_lexer_rule(rule: &LexerRule) -> String {
     if name == "CHAR" || name == "CHAR_LITERAL" || contains_upper(&name, "CHAR_LIT") {
         return "string";
     }
-    if name == "NUMBER" || name == "INT" || name == "INTEGER" || name == "FLOAT" || name == "DECIMAL"
-        || name == "INTEGER_LITERAL" || name == "FLOAT_LITERAL"
-        || contains_upper(&name, "NUMBER") || contains_upper(&name, "NUMERIC") {
+    if name == "NUMBER"
+        || name == "INT"
+        || name == "INTEGER"
+        || name == "FLOAT"
+        || name == "DECIMAL"
+        || name == "INTEGER_LITERAL"
+        || name == "FLOAT_LITERAL"
+        || contains_upper(&name, "NUMBER")
+        || contains_upper(&name, "NUMERIC") {
         return "number";
     }
     if name == "IDENTIFIER" || name == "ID" || name == "NAME" || name == "IDENT" {
@@ -161,10 +169,17 @@ fn classify_literal(text: &String) -> String {
 
 fn is_constant_builtin(text: &String) -> bool {
     let t = *text;
-    return t == "true" || t == "false" || t == "null"
-        || t == "nil" || t == "none" || t == "None"
-        || t == "True" || t == "False"
-        || t == "undefined" || t == "NaN" || t == "Infinity";
+    return t == "true"
+        || t == "false"
+        || t == "null"
+        || t == "nil"
+        || t == "none"
+        || t == "None"
+        || t == "True"
+        || t == "False"
+        || t == "undefined"
+        || t == "NaN"
+        || t == "Infinity";
 }
 
 fn is_all_alpha(text: &String) -> bool {
@@ -172,7 +187,7 @@ fn is_all_alpha(text: &String) -> bool {
         return false;
     }
     for let c of text.chars() {
-        if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
+        if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_') {
             return false;
         }
     }
