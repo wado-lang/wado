@@ -230,13 +230,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // e.g., I::Iter: Iterator when IntoIterator::Iter: Iterator
                 return bounds.iter().any(|b| b == trait_name);
             }
-            ResolvedType::Newtype { base_type, .. } => {
-                // Newtypes inherit trait implementations from their base type.
+            ResolvedType::Newtype {
+                name, base_type, ..
+            } => {
+                // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
+                if self.find_trait_impl_for_type(name, trait_name) {
+                    return true;
+                }
+                // Fall back to base type's trait implementation
                 let base_id = *base_type;
                 return self.type_implements_trait(base_id, trait_name);
             }
-            ResolvedType::Flags { .. } => {
-                // Flags inherit trait implementations from u32.
+            ResolvedType::Flags { name, .. } => {
+                // Check for a direct impl on the flags type first (e.g., impl Serialize for Perms)
+                if self.find_trait_impl_for_type(name, trait_name) {
+                    return true;
+                }
+                // Fall back to u32's trait implementation
                 return self.type_implements_trait(TypeTable::U32, trait_name);
             }
             _ => return false,

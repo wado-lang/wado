@@ -1,0 +1,108 @@
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+impl Serialize for Perms;
+impl Deserialize for Perms;
+
+test "flags serialize single" {
+    let p = Perms::Read;
+    let r = to_string::<Perms>(&p);
+    if let Ok(json) = r {
+        assert json == `["Read"]`;
+    } else {
+        panic("serialize Perms::Read failed");
+    }
+}
+
+test "flags serialize multiple" {
+    let p = Perms::Read | Perms::Write;
+    let r = to_string::<Perms>(&p);
+    if let Ok(json) = r {
+        assert json == `["Read","Write"]`;
+    } else {
+        panic("serialize Read|Write failed");
+    }
+}
+
+test "flags serialize none" {
+    let p = Perms::none();
+    let r = to_string::<Perms>(&p);
+    if let Ok(json) = r {
+        assert json == `[]`;
+    } else {
+        panic("serialize none failed");
+    }
+}
+
+test "flags serialize all" {
+    let p = Perms::all();
+    let r = to_string::<Perms>(&p);
+    if let Ok(json) = r {
+        assert json == `["Read","Write","Execute"]`;
+    } else {
+        panic("serialize all failed");
+    }
+}
+
+test "flags roundtrip single" {
+    let p = Perms::Execute;
+    let json_r = to_string::<Perms>(&p);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Perms>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed as u32 == p as u32;
+        } else {
+            panic("from_string Perms::Execute failed");
+        }
+    } else {
+        panic("to_string Perms::Execute failed");
+    }
+}
+
+test "flags roundtrip multiple" {
+    let p = Perms::Read | Perms::Execute;
+    let json_r = to_string::<Perms>(&p);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Perms>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed as u32 == p as u32;
+        } else {
+            panic("from_string Read|Execute failed");
+        }
+    } else {
+        panic("to_string Read|Execute failed");
+    }
+}
+
+test "flags roundtrip none" {
+    let p = Perms::none();
+    let json_r = to_string::<Perms>(&p);
+    if let Ok(json) = json_r {
+        let parsed_r = from_string::<Perms>(json);
+        if let Ok(parsed) = parsed_r {
+            assert parsed as u32 == 0;
+        } else {
+            panic("from_string none failed");
+        }
+    } else {
+        panic("to_string none failed");
+    }
+}
+
+test "flags deserialize unknown flag" {
+    let r = from_string::<Perms>(`["Read","Delete"]`);
+    if let Err(e) = r {
+        assert e.message == "unknown flag: Delete";
+    } else {
+        panic("expected error for unknown flag");
+    }
+}
+
+__DATA__
+{"test": {}}

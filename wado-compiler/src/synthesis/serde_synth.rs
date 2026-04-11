@@ -13,12 +13,12 @@ use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
-    TirTypeParam, TypeId, TypeTable,
+    TirTemplatePart, TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
 use super::common::{
-    alloc_local, block, break_stmt, deref_expr, expr_stmt, field_access, i32_const, if_stmt,
+    alloc_local, block, break_stmt, cast, deref_expr, expr_stmt, field_access, i32_const, if_stmt,
     let_mut_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, ref_expr, return_stmt,
     string_lit, synth_span,
 };
@@ -91,7 +91,8 @@ pub fn synthesize_serde(project: &mut Package) {
                     }
                     let func = generate_struct_serialize(module, req)
                         .or_else(|| generate_enum_serialize(module, req))
-                        .or_else(|| generate_variant_serialize(module, req));
+                        .or_else(|| generate_variant_serialize(module, req))
+                        .or_else(|| generate_flags_serialize(module, req));
                     if let Some(f) = func {
                         generated.push(Rc::new(RefCell::new(f)));
                     }
@@ -112,7 +113,8 @@ pub fn synthesize_serde(project: &mut Package) {
                         generated.push(Rc::new(RefCell::new(deser_func)));
                     } else {
                         let func = generate_enum_deserialize(module, req)
-                            .or_else(|| generate_variant_deserialize(module, req));
+                            .or_else(|| generate_variant_deserialize(module, req))
+                            .or_else(|| generate_flags_deserialize(module, req));
                         if let Some(f) = func {
                             generated.push(Rc::new(RefCell::new(f)));
                         }
@@ -2728,6 +2730,666 @@ fn generate_variant_deserialize(
         export_name: None,
         allocator_tag: None,
     })
+}
+
+fn find_flags<'a>(module: &'a TirModule, name: &str) -> Option<&'a crate::tir::TirFlags> {
+    module.flags.iter().find(|f| f.name == name)
+}
+
+/// Build `(*self as u32) & bitmask != 0` condition.
+fn flags_bit_check(ref_self_type: TypeId, flags_type: TypeId, bitmask: u32, span: Span) -> TirExpr {
+    let self_deref = deref_expr(local_ref(0, "self", ref_self_type), flags_type, span);
+    let self_as_u32 = cast(self_deref, TypeTable::U32);
+    let and_expr = TirExpr::new(
+        TirExprKind::Binary {
+            op: TirBinaryOp::BitAnd,
+            left: Box::new(self_as_u32),
+            right: Box::new(TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: u64::from(bitmask),
+                    repr: bitmask.to_string(),
+                },
+                TypeTable::U32,
+                span,
+            )),
+        },
+        TypeTable::U32,
+        span,
+    );
+    TirExpr::new(
+        TirExprKind::Binary {
+            op: TirBinaryOp::NotEq,
+            left: Box::new(and_expr),
+            right: Box::new(TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: 0,
+                    repr: "0".to_string(),
+                },
+                TypeTable::U32,
+                span,
+            )),
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
+/// Generate `impl Serialize for FlagsType` — serializes as array of set flag name strings.
+fn generate_flags_serialize(
+    module: &TirModule,
+    req: &crate::tir::SynthesisRequest,
+) -> Option<TirFunction> {
+    let flags_def = find_flags(module, &req.target_type_name)?;
+    let span = synth_span();
+    let serde_module = ModuleSource::core("serde");
+
+    let mut tt = module.type_table.borrow_mut();
+
+    let flags_type = req.target_type_id;
+    let ref_self_type = tt.make_ref(flags_type);
+    let s_type_param = tt.make_type_param("S".to_string(), 0);
+    let mut_ref_s = tt.make_mut_ref(s_type_param);
+    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let ref_string_type = tt.make_ref(string_type);
+    let ser_error_type = tt.make_struct("SerializeError".to_string(), serde_module.clone());
+    let ser_error_kind_type = tt
+        .find_enum_type_by_name("SerializeErrorKind")
+        .unwrap_or(TypeTable::I32);
+    let result_unit_err = tt.make_result(TypeTable::UNIT, ser_error_type);
+    let seq_ser_type = tt.make_assoc_type_projection(
+        s_type_param,
+        "SeqSerializer".to_string(),
+        vec!["SerializeSeq".to_string()],
+        vec![],
+    );
+    let result_seq_err = tt.make_result(seq_ser_type, ser_error_type);
+    let mut_ref_seq = tt.make_mut_ref(seq_ser_type);
+
+    let members: Vec<(String, u32)> = flags_def
+        .members
+        .iter()
+        .map(|m| (m.name.clone(), m.bitmask))
+        .collect();
+
+    drop(tt);
+
+    let mut local_types = vec![ref_self_type, mut_ref_s];
+    let mut next_local: u32 = 2;
+    let count_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+    let result_tmp = alloc_local(&mut next_local, &mut local_types, result_seq_err);
+    let seq_local = alloc_local(&mut next_local, &mut local_types, seq_ser_type);
+
+    let mut stmts = Vec::new();
+
+    // let mut count: i32 = 0;
+    stmts.push(let_mut_stmt(
+        "count",
+        count_local,
+        TypeTable::I32,
+        i32_const(0),
+    ));
+
+    // For each member: if bit set, count += 1
+    for (_member_name, bitmask) in &members {
+        let bit_check = flags_bit_check(ref_self_type, flags_type, *bitmask, span);
+        let inc = TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::Add,
+                left: Box::new(local_ref(count_local, "count", TypeTable::I32)),
+                right: Box::new(i32_const(1)),
+            },
+            TypeTable::I32,
+            span,
+        );
+        let assign = TirExpr::new(
+            TirExprKind::Assign {
+                target: Box::new(local_ref(count_local, "count", TypeTable::I32)),
+                value: Box::new(inc),
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        stmts.push(if_stmt(bit_check, block(vec![expr_stmt(assign)]), None));
+    }
+
+    // let __result = s.begin_seq(count);
+    let begin_call = type_param_method_call(
+        local_ref(1, "s", mut_ref_s),
+        "S",
+        "Serializer",
+        "begin_seq",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![local_ref(count_local, "count", TypeTable::I32)],
+        result_seq_err,
+        span,
+    );
+    stmts.push(let_mut_stmt(
+        "__result",
+        result_tmp,
+        result_seq_err,
+        begin_call,
+    ));
+
+    // Build the then-block: for each member, if bit set, seq.element::<String>(&"Name")
+    let mut then_stmts = Vec::new();
+    for (member_name, bitmask) in &members {
+        let bit_check = flags_bit_check(ref_self_type, flags_type, *bitmask, span);
+        let element_call = type_param_method_call(
+            local_ref(seq_local, "seq", mut_ref_seq),
+            "S::SeqSerializer",
+            "SerializeSeq",
+            "element",
+            serde_module.clone(),
+            vec!["String".to_string()],
+            vec![string_type],
+            vec![ref_expr(
+                string_lit(member_name, string_type, span),
+                ref_string_type,
+                span,
+            )],
+            result_unit_err,
+            span,
+        );
+        then_stmts.push(if_stmt(
+            bit_check,
+            block(vec![expr_stmt(element_call)]),
+            None,
+        ));
+    }
+
+    // return seq.end();
+    let end_call = type_param_method_call(
+        local_ref(seq_local, "seq", mut_ref_seq),
+        "S::SeqSerializer",
+        "SerializeSeq",
+        "end",
+        serde_module,
+        vec![],
+        vec![],
+        vec![],
+        result_unit_err,
+        span,
+    );
+    then_stmts.push(return_stmt(Some(end_call)));
+
+    // Else block: return Err(...)
+    let err_val = serialize_error_literal(
+        ser_error_type,
+        ser_error_kind_type,
+        "begin_seq failed",
+        string_type,
+        span,
+    );
+    let else_stmts = vec![return_stmt(Some(variant_err(
+        err_val,
+        result_unit_err,
+        span,
+    )))];
+
+    stmts.push(if_let_ok(
+        local_ref(result_tmp, "__result", result_seq_err),
+        result_seq_err,
+        seq_ser_type,
+        seq_local,
+        "seq",
+        block(then_stmts),
+        block(else_stmts),
+        span,
+    ));
+
+    let method_info = LocalMethodName::new(
+        req.target_type_name.clone(),
+        Some("Serialize".to_string()),
+        "serialize".to_string(),
+    );
+    let qualified_name =
+        MethodName::format_local(&req.target_type_name, Some("Serialize"), "serialize");
+
+    Some(TirFunction {
+        module_source: ModuleSource::default(),
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: vec![TirTypeParam {
+            name: "S".to_string(),
+            is_effect: false,
+            is_pack: false,
+            bounds: vec!["Serializer".to_string()],
+            default: None,
+            index: 0,
+        }],
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params: vec![
+            TirParam {
+                name: "self".to_string(),
+                type_id: ref_self_type,
+                local_index: 0,
+                is_mut: false,
+                span,
+            },
+            TirParam {
+                name: "s".to_string(),
+                type_id: mut_ref_s,
+                local_index: 1,
+                is_mut: false,
+                span,
+            },
+        ],
+        return_type: result_unit_err,
+        effects: Vec::new(),
+        stores: vec![],
+        body: Some(block(stmts)),
+        span,
+        local_count: next_local,
+        local_types,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+        export_name: None,
+        allocator_tag: None,
+    })
+}
+
+/// Generate `impl Deserialize for FlagsType` — deserializes from array of flag name strings.
+fn generate_flags_deserialize(
+    module: &TirModule,
+    req: &crate::tir::SynthesisRequest,
+) -> Option<TirFunction> {
+    let flags_def = find_flags(module, &req.target_type_name)?;
+    let span = synth_span();
+    let serde_module = ModuleSource::core("serde");
+
+    let mut tt = module.type_table.borrow_mut();
+
+    let flags_type = req.target_type_id;
+    let d_type_param = tt.make_type_param("D".to_string(), 0);
+    let mut_ref_d = tt.make_mut_ref(d_type_param);
+    let string_type = tt.make_struct("String".to_string(), ModuleSource::string());
+    let ref_string_type = tt.make_ref(string_type);
+    let deser_error_type = tt.make_struct("DeserializeError".to_string(), serde_module.clone());
+    let deser_error_kind_type = tt
+        .find_enum_type_by_name("DeserializeErrorKind")
+        .unwrap_or(TypeTable::I32);
+    let result_flags_err = tt.make_result(flags_type, deser_error_type);
+    let result_unit_err = tt.make_result(TypeTable::UNIT, deser_error_type);
+    let seq_access_type = tt.make_assoc_type_projection(
+        d_type_param,
+        "SeqAccess".to_string(),
+        vec!["DeserializeSeq".to_string()],
+        vec![],
+    );
+    let result_seq_err = tt.make_result(seq_access_type, deser_error_type);
+    let mut_ref_seq = tt.make_mut_ref(seq_access_type);
+    let option_string = tt.make_option(string_type);
+    let result_option_string_err = tt.make_result(option_string, deser_error_type);
+
+    let members: Vec<(String, u32)> = flags_def
+        .members
+        .iter()
+        .map(|m| (m.name.clone(), m.bitmask))
+        .collect();
+
+    drop(tt);
+
+    let mut local_types = vec![mut_ref_d];
+    let mut next_local: u32 = 1;
+    let result_seq_local = alloc_local(&mut next_local, &mut local_types, result_seq_err);
+    let seq_local = alloc_local(&mut next_local, &mut local_types, seq_access_type);
+    let bits_local = alloc_local(&mut next_local, &mut local_types, TypeTable::U32);
+    let elem_result_local =
+        alloc_local(&mut next_local, &mut local_types, result_option_string_err);
+    let elem_local = alloc_local(&mut next_local, &mut local_types, option_string);
+    let name_local = alloc_local(&mut next_local, &mut local_types, string_type);
+
+    let mut stmts = Vec::new();
+
+    // let __seq_r = d.begin_seq();
+    let begin_call = type_param_method_call(
+        local_ref(0, "d", mut_ref_d),
+        "D",
+        "Deserializer",
+        "begin_seq",
+        serde_module.clone(),
+        vec![],
+        vec![],
+        vec![],
+        result_seq_err,
+        span,
+    );
+    stmts.push(let_mut_stmt(
+        "__seq_r",
+        result_seq_local,
+        result_seq_err,
+        begin_call,
+    ));
+
+    // Build the body inside if let Ok(mut seq) = __seq_r { ... }
+    let mut ok_stmts = Vec::new();
+
+    // let mut bits: u32 = 0;
+    ok_stmts.push(let_mut_stmt(
+        "bits",
+        bits_local,
+        TypeTable::U32,
+        TirExpr::new(
+            TirExprKind::IntLiteral {
+                value: 0,
+                repr: "0".to_string(),
+            },
+            TypeTable::U32,
+            span,
+        ),
+    ));
+
+    // loop { let __elem_r = seq.next_element::<String>(); ... }
+    let next_call = type_param_method_call(
+        local_ref(seq_local, "seq", mut_ref_seq),
+        "D::SeqAccess",
+        "DeserializeSeq",
+        "next_element",
+        serde_module.clone(),
+        vec!["String".to_string()],
+        vec![string_type],
+        vec![],
+        result_option_string_err,
+        span,
+    );
+
+    let mut loop_body_stmts = Vec::new();
+    loop_body_stmts.push(let_mut_stmt(
+        "__elem_r",
+        elem_result_local,
+        result_option_string_err,
+        next_call,
+    ));
+
+    // if let Ok(elem) = __elem_r { ... } else { propagate err }
+    // Inside Ok: if let Some(name) = elem { match name... } else { break }
+    let mut name_match_stmts = Vec::new();
+    for (member_name, bitmask) in &members {
+        let key_ref = ref_expr(
+            local_ref(name_local, "__name", string_type),
+            ref_string_type,
+            span,
+        );
+        let lit_ref = ref_expr(
+            string_lit(member_name, string_type, span),
+            ref_string_type,
+            span,
+        );
+        let eq_method = LocalMethodName::new(
+            "String".to_string(),
+            Some("Eq".to_string()),
+            "eq".to_string(),
+        );
+        let condition = TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(key_ref),
+                func: FunctionRef {
+                    module_source: ModuleSource::prelude(),
+                    name: eq_method.to_mangled_name(),
+                    monomorph_info: None,
+                    method_info: Some(eq_method),
+                    is_cm_binding: false,
+                },
+                type_args: vec![],
+                args: vec![CallArg::new(lit_ref, false)],
+            },
+            TypeTable::BOOL,
+            span,
+        );
+
+        // bits = bits | bitmask
+        let or_expr = TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::BitOr,
+                left: Box::new(local_ref(bits_local, "bits", TypeTable::U32)),
+                right: Box::new(TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: u64::from(*bitmask),
+                        repr: bitmask.to_string(),
+                    },
+                    TypeTable::U32,
+                    span,
+                )),
+            },
+            TypeTable::U32,
+            span,
+        );
+        let assign = TirExpr::new(
+            TirExprKind::Assign {
+                target: Box::new(local_ref(bits_local, "bits", TypeTable::U32)),
+                value: Box::new(or_expr),
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        let continue_stmt = TirStmt {
+            kind: TirStmtKind::Continue,
+            span,
+        };
+        name_match_stmts.push(if_stmt(
+            condition,
+            block(vec![expr_stmt(assign), continue_stmt]),
+            None,
+        ));
+    }
+
+    // else: unknown flag error
+    // Build error: "unknown flag: " + name
+    let unknown_msg = TirExpr::new(
+        TirExprKind::TemplateString {
+            parts: vec![
+                TirTemplatePart::Literal("unknown flag: ".to_string()),
+                TirTemplatePart::Interpolation {
+                    expr: Box::new(local_ref(name_local, "__name", string_type)),
+                    format_spec: None,
+                },
+            ],
+        },
+        string_type,
+        span,
+    );
+    let unknown_err = deserialize_error_literal_with_expr(
+        deser_error_type,
+        deser_error_kind_type,
+        "InvalidValue",
+        4,
+        unknown_msg,
+        span,
+    );
+    name_match_stmts.push(return_stmt(Some(variant_err(
+        unknown_err,
+        result_flags_err,
+        span,
+    ))));
+
+    // if let Some(name) = elem { match... } else { break }
+    let some_then = block(name_match_stmts);
+    let none_else = block(vec![break_stmt()]);
+    let if_let_some_stmt = if_let_some(
+        local_ref(elem_local, "__elem", option_string),
+        option_string,
+        string_type,
+        name_local,
+        "__name",
+        some_then,
+        none_else,
+        span,
+    );
+
+    // if let Ok(elem) = __elem_r { if let Some... } else { propagate err }
+    let ok_elem_then = block(vec![if_let_some_stmt]);
+    let ok_elem_else = propagate_err_block(
+        elem_result_local,
+        "__elem_r",
+        result_option_string_err,
+        deser_error_type,
+        result_flags_err,
+        span,
+    );
+    loop_body_stmts.push(if_let_ok(
+        local_ref(elem_result_local, "__elem_r", result_option_string_err),
+        result_option_string_err,
+        option_string,
+        elem_local,
+        "__elem",
+        ok_elem_then,
+        ok_elem_else,
+        span,
+    ));
+
+    ok_stmts.push(loop_stmt(block(loop_body_stmts)));
+
+    // seq.end()?
+    let end_call = type_param_method_call(
+        local_ref(seq_local, "seq", mut_ref_seq),
+        "D::SeqAccess",
+        "DeserializeSeq",
+        "end",
+        serde_module,
+        vec![],
+        vec![],
+        vec![],
+        result_unit_err,
+        span,
+    );
+    ok_stmts.push(expr_stmt(end_call));
+
+    // return Ok(bits as FlagsType);
+    let bits_as_flags = cast(local_ref(bits_local, "bits", TypeTable::U32), flags_type);
+    ok_stmts.push(return_stmt(Some(variant_ok(
+        bits_as_flags,
+        result_flags_err,
+        span,
+    ))));
+
+    // if let Ok(mut seq) = __seq_r { ... } else { propagate err }
+    stmts.push(if_let_ok(
+        local_ref(result_seq_local, "__seq_r", result_seq_err),
+        result_seq_err,
+        seq_access_type,
+        seq_local,
+        "seq",
+        block(ok_stmts),
+        propagate_err_block(
+            result_seq_local,
+            "__seq_r",
+            result_seq_err,
+            deser_error_type,
+            result_flags_err,
+            span,
+        ),
+        span,
+    ));
+
+    let method_info = LocalMethodName::new(
+        req.target_type_name.clone(),
+        Some("Deserialize".to_string()),
+        "deserialize".to_string(),
+    );
+    let qualified_name =
+        MethodName::format_local(&req.target_type_name, Some("Deserialize"), "deserialize");
+
+    Some(TirFunction {
+        module_source: ModuleSource::default(),
+        name: qualified_name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: vec![TirTypeParam {
+            name: "D".to_string(),
+            is_effect: false,
+            is_pack: false,
+            bounds: vec!["Deserializer".to_string()],
+            default: None,
+            index: 0,
+        }],
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params: vec![TirParam {
+            name: "d".to_string(),
+            type_id: mut_ref_d,
+            local_index: 0,
+            is_mut: false,
+            span,
+        }],
+        return_type: result_flags_err,
+        effects: Vec::new(),
+        stores: vec![],
+        body: Some(block(stmts)),
+        span,
+        local_count: next_local,
+        local_types,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        inline_hint: InlineHint::Auto,
+        comp_features: 0,
+        export_name: None,
+        allocator_tag: None,
+    })
+}
+
+/// Create a `DeserializeError` literal with a dynamic message expression.
+fn deserialize_error_literal_with_expr(
+    deser_error_type: TypeId,
+    deser_error_kind_type: TypeId,
+    kind_name: &str,
+    kind_index: u32,
+    message_expr: TirExpr,
+    span: Span,
+) -> TirExpr {
+    let kind = TirExpr::new(
+        TirExprKind::EnumConstruct {
+            enum_type: deser_error_kind_type,
+            case_index: kind_index,
+            case_name: kind_name.to_string(),
+        },
+        deser_error_kind_type,
+        span,
+    );
+    let offset = TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: u64::MAX, // -1 as i64
+            repr: "-1".to_string(),
+        },
+        TypeTable::I64,
+        span,
+    );
+    TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type: deser_error_type,
+            struct_name: "DeserializeError".to_string(),
+            fields: vec![
+                TirStructField {
+                    name: "kind".to_string(),
+                    value: kind,
+                    field_index: 0,
+                },
+                TirStructField {
+                    name: "message".to_string(),
+                    value: message_expr,
+                    field_index: 1,
+                },
+                TirStructField {
+                    name: "offset".to_string(),
+                    value: offset,
+                    field_index: 2,
+                },
+            ],
+        },
+        deser_error_type,
+        span,
+    )
 }
 
 #[cfg(test)]

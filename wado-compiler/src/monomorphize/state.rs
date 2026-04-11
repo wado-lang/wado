@@ -211,7 +211,8 @@ impl Monomorphizer {
         match type_table.get(type_id) {
             ResolvedType::Struct { name, .. }
             | ResolvedType::Enum { name, .. }
-            | ResolvedType::Variant { name, .. } => Some(name.clone()),
+            | ResolvedType::Variant { name, .. }
+            | ResolvedType::Flags { name, .. } => Some(name.clone()),
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
             ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -226,6 +227,13 @@ impl Monomorphizer {
             ResolvedType::BuiltinArray(elem) => {
                 let arg = type_table.mangle_type_name(*elem);
                 Some(mangle_generic_name("Array", &[arg]))
+            }
+            // Newtypes are transparent for method lookup — unwrap to base type,
+            // same as Ref/MutRef. The resolver already resolves methods through
+            // newtypes, so the monomorphizer needs to see the base type to find
+            // the correct generic function template.
+            ResolvedType::Newtype { base_type, .. } => {
+                self.get_struct_name_from_type(*base_type, type_table)
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.get_struct_name_from_type(*inner, type_table)
@@ -254,6 +262,10 @@ impl Monomorphizer {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => Some((name.clone(), type_args.clone())),
+            // Newtypes are transparent — unwrap to base type for struct info lookup
+            ResolvedType::Newtype { base_type, .. } => {
+                self.get_struct_info_from_type(*base_type, type_table)
+            }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.get_struct_info_from_type(*inner, type_table)
             }
