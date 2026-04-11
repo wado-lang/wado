@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775870944668,
+  "lastUpdate": 1775873592402,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11411,6 +11411,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/00ac300f1b9e72767aedd2aaf25312e5ca92a3c5"
         },
         "date": 1775870944406,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1799,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8974,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19360,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c815caba6c26985a7bdcd76b2676ada105788b3",
+          "message": "Merge pull request #803 from wado-lang/claude/organize-benchmark-wasm-xL8ap\n\nOrganize benchmark/ and wasm-size/ directories",
+          "timestamp": "2026-04-11T11:09:49+09:00",
+          "tree_id": "a49b45556d3f312f07fd9fba849b206ac7051588",
+          "url": "https://github.com/wado-lang/wado/commit/3c815caba6c26985a7bdcd76b2676ada105788b3"
+        },
+        "date": 1775873592236,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
