@@ -326,8 +326,7 @@ fn escape_html_char(out: &mut String, c: char) {
     }
 }
 
-fn capture_to_class(capture: &String) -> String {
-    let mut out = String::with_capacity(capture.len());
+fn push_class(out: &mut String, capture: &String) {
     for let c of capture.chars() {
         if c == '.' {
             out.push(' ');
@@ -335,7 +334,6 @@ fn capture_to_class(capture: &String) -> String {
             out.push(c);
         }
     }
-    return out;
 }
 
 /// Produce a highlighted HTML fragment from source text and captures.
@@ -351,8 +349,9 @@ pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> St
             }
             pos += 1;
         }
-        let cls = capture_to_class(&cap.capture);
-        out.push_str(`<span class="{cls}">`);
+        out.push_str("<span class=\"");
+        push_class(&mut out, &cap.capture);
+        out.push_str("\">");
         let end = cap.end;
         while pos < end {
             if let Some(c) = iter.next() {
