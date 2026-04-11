@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775881188149,
+  "lastUpdate": 1775887886658,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11489,6 +11489,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/39c7e22aa5e2aa80e44b10664a5f0153e072702e"
         },
         "date": 1775881187890,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1799,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8974,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19360,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "152db71548148f829cf04b564edadcd2f4e6f64f",
+          "message": "Merge pull request #805 from wado-lang/claude/profile-syntax-highlight-wXMAv\n\nOptimize Gale highlight_html: eliminate GC allocations",
+          "timestamp": "2026-04-11T15:08:14+09:00",
+          "tree_id": "3127ebfe336e1f626829e642810764ac2d34e312",
+          "url": "https://github.com/wado-lang/wado/commit/152db71548148f829cf04b564edadcd2f4e6f64f"
+        },
+        "date": 1775887886372,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
