@@ -17,12 +17,48 @@ pub struct Module {
     include_paths: IndexSet<String>,
 }
 
-/// Inner attribute like `#![no_prelude]` or `#![wasm_module("mem")]`
+/// Inner attribute like `#![no_prelude]`, `#![wasm_module("mem")]`, or
+/// `#![generated(by = "tool", sources = ["path"])]`.
+///
+/// Arguments use the same `AttrArg` representation as outer attributes so that
+/// key-value and key-array metadata (e.g. `by = "tool"`,
+/// `sources = ["a.wit", "b.wit"]`) survive unparse/reformat.
 #[derive(Debug, Clone)]
 pub struct InnerAttribute {
     pub name: String,
-    pub args: Vec<String>,
+    pub args: Vec<AttrArg>,
     pub span: Span,
+}
+
+impl InnerAttribute {
+    /// Find the first key = "value" argument with the given key.
+    ///
+    /// For `#![generated(by = "gale")]`, `attr.kv_value("by")` returns `Some("gale")`.
+    /// Key = \[...\] array arguments are ignored — use [`Self::kv_array`] for those.
+    pub fn kv_value(&self, key: &str) -> Option<&str> {
+        self.args.iter().find_map(|arg| {
+            if let AttrArg::KeyValue(k, v) = arg {
+                if k == key { Some(v.as_str()) } else { None }
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Find the first key = \["value", ...\] argument with the given key and
+    /// return its values.
+    ///
+    /// For `#![generated(sources = ["a.wit", "b.wit"])]`,
+    /// `attr.kv_array("sources")` returns the slice `["a.wit", "b.wit"]`.
+    pub fn kv_array(&self, key: &str) -> Option<&[String]> {
+        self.args.iter().find_map(|arg| {
+            if let AttrArg::KeyArray(k, vs) = arg {
+                if k == key { Some(vs.as_slice()) } else { None }
+            } else {
+                None
+            }
+        })
+    }
 }
 
 impl Module {
@@ -82,7 +118,33 @@ impl Module {
             .iter()
             .find(|a| a.name == "wasm_module")
             .and_then(|a| a.args.first())
-            .map(String::as_str)
+            .map(AttrArg::as_str)
+    }
+
+    /// Returns the value of a scalar `key = "value"` argument on any
+    /// `#![generated(...)]` inner attribute.
+    ///
+    /// Scans all `#![generated(...)]` attributes and returns the first matching
+    /// `key = "value"` pair. For example, given
+    /// `#![generated(by = "wado-from-idl")]`,
+    /// `module.generated_meta("by")` returns `Some("wado-from-idl")`.
+    pub fn generated_meta(&self, key: &str) -> Option<&str> {
+        self.inner_attributes
+            .iter()
+            .filter(|a| a.name == "generated")
+            .find_map(|a| a.kv_value(key))
+    }
+
+    /// Returns the values of a `key = ["v1", "v2", ...]` array argument on any
+    /// `#![generated(...)]` inner attribute.
+    ///
+    /// For `#![generated(sources = ["a.wit", "b.wit"])]`,
+    /// `module.generated_meta_array("sources")` returns `["a.wit", "b.wit"]`.
+    pub fn generated_meta_array(&self, key: &str) -> Option<&[String]> {
+        self.inner_attributes
+            .iter()
+            .filter(|a| a.name == "generated")
+            .find_map(|a| a.kv_array(key))
     }
 
     /// Returns the shebang line, if present.
@@ -150,10 +212,11 @@ pub struct GlobalDecl {
 ///
 /// Examples:
 /// - `#[cm("wasi:cli/stdout")]`          → `[Str("wasi:cli/stdout")]`
-/// - `#[inline(always)]`                   → `[Ident("always")]`
-/// - `#[serde(rename = "type")]`           → `[KeyValue("rename", "type")]`
-/// - `#[canonical("wasi", "stream-new")]`  → `[Str("wasi"), Str("stream-new")]`
-/// - `#[timeout_ms(120000)]`               → `[Number("120000")]`
+/// - `#[inline(always)]`                           → `[Ident("always")]`
+/// - `#[serde(rename = "type")]`                   → `[KeyValue("rename", "type")]`
+/// - `#[canonical("wasi", "stream-new")]`          → `[Str("wasi"), Str("stream-new")]`
+/// - `#[timeout_ms(120000)]`                       → `[Number("120000")]`
+/// - `#![generated(sources = ["a.wit", "b.wit"])]` → `[KeyArray("sources", ["a.wit", "b.wit"])]`
 #[derive(Debug, Clone)]
 pub enum AttrArg {
     /// A quoted string literal, e.g. `"value"`.
@@ -162,16 +225,21 @@ pub enum AttrArg {
     Ident(String),
     /// A key = "value" pair, e.g. `rename = "type"`.
     KeyValue(String, String),
+    /// A key = \["value", ...\] pair whose value is a string array literal,
+    /// e.g. `sources = ["a.wit", "b.wit"]`.
+    KeyArray(String, Vec<String>),
     /// A numeric literal, e.g. `120000`.
     Number(String),
 }
 
 impl AttrArg {
-    /// Returns the string value: for `Str`/`Ident` the contained string; for `KeyValue` the value side.
+    /// Returns the string value: for `Str`/`Ident`/`Number` the contained string;
+    /// for `KeyValue` the value side; for `KeyArray` the first element (empty if none).
     pub fn as_str(&self) -> &str {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
             Self::KeyValue(_, v) => v,
+            Self::KeyArray(_, vs) => vs.first().map(String::as_str).unwrap_or(""),
         }
     }
 }
@@ -210,7 +278,7 @@ impl Attribute {
     pub fn has_arg(&self, name: &str) -> bool {
         self.args.iter().any(|arg| match arg {
             AttrArg::Str(s) | AttrArg::Ident(s) | AttrArg::Number(s) => s == name,
-            AttrArg::KeyValue(k, _) => k == name,
+            AttrArg::KeyValue(k, _) | AttrArg::KeyArray(k, _) => k == name,
         })
     }
 }

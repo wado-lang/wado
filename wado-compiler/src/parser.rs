@@ -525,7 +525,8 @@ impl Parser {
         Ok(attrs)
     }
 
-    /// Parse a single inner attribute: `#![name]` or `#![name("arg")]`
+    /// Parse a single inner attribute: `#![name]`, `#![name("arg")]`, or
+    /// `#![name(key = "value", other = "v")]`.
     fn parse_inner_attribute(&mut self) -> ParseResult<InnerAttribute> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Hash)?;
@@ -536,25 +537,7 @@ impl Parser {
 
         let args = if self.check(&TokenKind::LParen) {
             self.advance();
-            let mut args = Vec::new();
-            loop {
-                match self.peek_kind().clone() {
-                    TokenKind::StringLit(raw) => {
-                        self.advance();
-                        args.push(raw);
-                    }
-                    TokenKind::Ident(value) => {
-                        self.advance();
-                        args.push(value);
-                    }
-                    _ => break,
-                }
-                if self.check(&TokenKind::Comma) {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
+            let args = self.parse_attr_arg_list()?;
             self.expect(&TokenKind::RParen)?;
             args
         } else {
@@ -570,6 +553,78 @@ impl Parser {
         })
     }
 
+    /// Parse a comma-separated list of attribute arguments up to the closing
+    /// delimiter. Shared between inner attributes (`#![...]`) and outer
+    /// attributes (`#[...]`). Does not consume the closing `)`.
+    fn parse_attr_arg_list(&mut self) -> ParseResult<Vec<AttrArg>> {
+        let mut args: Vec<AttrArg> = Vec::new();
+        loop {
+            let arg = match self.peek_kind().clone() {
+                TokenKind::StringLit(raw) => {
+                    self.advance();
+                    AttrArg::Str(raw)
+                }
+                TokenKind::Ident(value) => {
+                    self.advance();
+                    // Check if this identifier is followed by '=' making it a key=value pair
+                    if self.check(&TokenKind::Eq) {
+                        self.advance();
+                        match self.peek_kind().clone() {
+                            TokenKind::StringLit(val) => {
+                                self.advance();
+                                AttrArg::KeyValue(value, val)
+                            }
+                            TokenKind::LBracket => {
+                                self.advance();
+                                let mut items: Vec<String> = Vec::new();
+                                if !self.check(&TokenKind::RBracket) {
+                                    loop {
+                                        if let TokenKind::StringLit(item) = self.peek_kind().clone()
+                                        {
+                                            self.advance();
+                                            items.push(item);
+                                        } else {
+                                            let span = self.peek().span;
+                                            return Err(self.error_at_span(
+                                                span,
+                                                "expected string literal in attribute array",
+                                            ));
+                                        }
+                                        if self.check(&TokenKind::Comma) {
+                                            self.advance();
+                                            if self.check(&TokenKind::RBracket) {
+                                                break;
+                                            }
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                }
+                                self.expect(&TokenKind::RBracket)?;
+                                AttrArg::KeyArray(value, items)
+                            }
+                            _ => AttrArg::Ident(value),
+                        }
+                    } else {
+                        AttrArg::Ident(value)
+                    }
+                }
+                TokenKind::NumberLit(value) => {
+                    self.advance();
+                    AttrArg::Number(value)
+                }
+                _ => break,
+            };
+            args.push(arg);
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        Ok(args)
+    }
+
     fn parse_attribute(&mut self) -> ParseResult<Attribute> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Hash)?;
@@ -579,45 +634,7 @@ impl Parser {
 
         let args = if self.check(&TokenKind::LParen) {
             self.advance();
-            // Parse comma-separated arguments (string literals or identifiers).
-            // Supports key=value pairs: #[serde(rename = "name")] → KeyValue("rename", "name")
-            let mut args: Vec<AttrArg> = Vec::new();
-            loop {
-                let arg = match self.peek_kind().clone() {
-                    TokenKind::StringLit(raw) => {
-                        self.advance();
-                        AttrArg::Str(raw)
-                    }
-                    TokenKind::Ident(value) => {
-                        self.advance();
-                        // Check if this identifier is followed by '=' making it a key=value pair
-                        if self.check(&TokenKind::Eq) {
-                            self.advance();
-                            // Expect a string literal as the value
-                            match self.peek_kind().clone() {
-                                TokenKind::StringLit(val) => {
-                                    self.advance();
-                                    AttrArg::KeyValue(value, val)
-                                }
-                                _ => AttrArg::Ident(value),
-                            }
-                        } else {
-                            AttrArg::Ident(value)
-                        }
-                    }
-                    TokenKind::NumberLit(value) => {
-                        self.advance();
-                        AttrArg::Number(value)
-                    }
-                    _ => break,
-                };
-                args.push(arg);
-                if self.check(&TokenKind::Comma) {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
+            let args = self.parse_attr_arg_list()?;
             self.expect(&TokenKind::RParen)?;
             args
         } else {
@@ -5287,5 +5304,65 @@ line 2
     fn test_tuple_literal_trailing_comma() {
         let expr = parse_expr_from("[1, 2, 3,]");
         assert!(matches!(&expr, Expr::TupleLiteral(t) if t.elements.len() == 3));
+    }
+
+    #[test]
+    fn test_inner_attribute_generated_bare() {
+        let module = parse("#![generated]\n").unwrap();
+        assert!(module.has_generated());
+        assert_eq!(module.inner_attributes().len(), 1);
+        assert!(module.inner_attributes()[0].args.is_empty());
+    }
+
+    #[test]
+    fn test_inner_attribute_generated_key_value_metadata() {
+        let source = r#"#![generated(by = "tool", sources = ["a.wit", "b.wit"])]
+"#;
+        let module = parse(source).unwrap();
+        assert!(module.has_generated());
+        assert_eq!(module.generated_meta("by"), Some("tool"));
+        // Array values are exposed via generated_meta_array.
+        let sources = module.generated_meta_array("sources").unwrap();
+        let owned: Vec<&str> = sources.iter().map(String::as_str).collect();
+        assert_eq!(owned, vec!["a.wit", "b.wit"]);
+        // Unknown keys return None.
+        assert_eq!(module.generated_meta("unknown"), None);
+        assert!(module.generated_meta_array("unknown").is_none());
+    }
+
+    #[test]
+    fn test_inner_attribute_generated_single_source_array() {
+        // A single source file is still expressed as an array literal for
+        // uniformity: `sources = ["a.wit"]`.
+        let source = r#"#![generated(by = "tool", sources = ["a.wit"])]
+"#;
+        let module = parse(source).unwrap();
+        let sources = module.generated_meta_array("sources").unwrap();
+        assert_eq!(sources, &["a.wit".to_string()]);
+    }
+
+    #[test]
+    fn test_inner_attribute_generated_round_trips_through_unparse() {
+        let source = r#"#![generated(by = "tool", sources = ["a.wit", "b.wit"])]
+"#;
+        let module = parse(source).unwrap();
+        let formatted = crate::format(source).unwrap();
+        // The attribute must round-trip unchanged through the formatter.
+        assert!(
+            formatted.starts_with(r#"#![generated(by = "tool", sources = ["a.wit", "b.wit"])]"#,),
+            "formatted output did not preserve metadata: {formatted}",
+        );
+        // Metadata is also queryable after unparse+reparse.
+        let reparsed = parse(&formatted).unwrap();
+        assert_eq!(reparsed.generated_meta("by"), Some("tool"));
+        assert_eq!(
+            reparsed.generated_meta_array("sources").unwrap(),
+            &["a.wit".to_string(), "b.wit".to_string()],
+        );
+        // Sanity: the original module still works too.
+        assert_eq!(
+            module.generated_meta_array("sources").unwrap(),
+            &["a.wit".to_string(), "b.wit".to_string()],
+        );
     }
 }

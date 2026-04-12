@@ -50,13 +50,16 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
         let bytes = read_all(&file);
         let content = String::from_utf8_unchecked(bytes);
 
-        let grammar = match parse(content) {
+        let mut grammar = match parse(content) {
             Ok(g) => g,
             Err(e) => {
                 eprintln(`gale: {path}: parse error: {e.message}`);
                 return;
             },
         };
+        // Record the source path on the grammar so gen_header can emit it as
+        // provenance metadata (`#![generated(sources = [...])]`).
+        grammar.source_files.push(path);
         grammars.push(grammar);
     }
 

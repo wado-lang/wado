@@ -36,6 +36,11 @@ pub struct Grammar {
     /// Grammar-level `@name { ... }` / `@scope::name { ... }` actions,
     /// in declaration order. Action bodies themselves are discarded.
     pub named_actions: Array<NamedAction>,
+    /// Source `.g4` paths that contributed to this grammar, in the order
+    /// they were supplied on the command line. Populated by `cmd_gen` after
+    /// parsing — `parse()` itself returns an empty array because it operates
+    /// on the file contents, not the path.
+    pub source_files: Array<String>,
 }
 
 pub global DEFAULT_MODE: i32 = 0;
@@ -239,7 +244,12 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
     let mut channels: Array<String> = [];
     let mut options: Array<GrammarOption> = [];
     let mut named_actions: Array<NamedAction> = [];
+    let mut source_files: Array<String> = [];
     for let g of grammars {
+        // Concatenate source paths so every input contributes a provenance entry.
+        for let sf of &g.source_files {
+            source_files.push(*sf);
+        }
         // Preserve grammar-level options from every split. Later splits
         // override earlier ones on collision — ANTLR4 leaves conflict
         // resolution to the tool, but keeping the last value is a sensible
@@ -327,7 +337,16 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
             }
         }
     }
-    return Grammar { name, parser_rules, lexer_rules, mode_names, channels, options, named_actions };
+    return Grammar {
+        name,
+        parser_rules,
+        lexer_rules,
+        mode_names,
+        channels,
+        options,
+        named_actions,
+        source_files,
+    };
 }
 
 fn find_or_add_mode(modes: &mut Array<String>, name: &String) -> i32 {

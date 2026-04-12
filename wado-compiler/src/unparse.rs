@@ -104,9 +104,7 @@ impl<'a> Unparser<'a> {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.output.push('"');
-                    self.output.push_str(arg);
-                    self.output.push('"');
+                    self.unparse_attr_arg(arg);
                 }
                 self.output.push(')');
             }
@@ -414,6 +412,19 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(" = \"");
                 self.output.push_str(v);
                 self.output.push('"');
+            }
+            AttrArg::KeyArray(k, vs) => {
+                self.output.push_str(k);
+                self.output.push_str(" = [");
+                for (i, v) in vs.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push('"');
+                    self.output.push_str(v);
+                    self.output.push('"');
+                }
+                self.output.push(']');
             }
         }
     }
