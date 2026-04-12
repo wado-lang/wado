@@ -1,11 +1,11 @@
 use std::fmt::Write as _;
 use std::net::SocketAddr;
+use std::pin::pin;
 use std::process;
 use std::sync::Arc;
 
 use anyhow::Result;
 use bytes::Bytes;
-use futures::try_join;
 use http_body_util::{BodyExt, Full};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -198,85 +198,74 @@ fn create_http_state() -> HttpWasiState {
     }
 }
 
-/// Handle a single HTTP request using the Wasm component
+/// Handle a single HTTP request using the Wasm component.
+///
+/// Mirrors the wasmtime p3 reference and wado-compiler e2e harness pattern:
+/// both the guest handler and the response-body collection run inside
+/// `run_concurrent`, so the guest's post-`task-return` continuation keeps
+/// getting polled until it finishes writing the body and trailers. Collecting
+/// outside `run_concurrent` deadlocks because the store stops polling as soon
+/// as the closure future resolves.
+///
+/// The handler arm and the request-body I/O arm are raced via `tokio::select!`
+/// — handler completing first is the normal case (a guest may never consume
+/// the request body, in which case the I/O future only resolves when the
+/// request resource is dropped).
 async fn handle_http_request(
     engine: &Engine,
     component: &Component,
     linker: &Linker<HttpWasiState>,
     req: HyperRequest<hyper::body::Incoming>,
 ) -> Result<HyperResponse<Full<Bytes>>> {
+    type HttpErrorCode = wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
+
     let state = create_http_state();
     let mut store = Store::new(engine, state);
 
     let service = Service::instantiate_async(&mut store, component, linker).await?;
 
-    // Convert hyper request to http::Request, preserving the body
     let (parts, body) = req.into_parts();
-    let body = body.map_err(
-        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode::from_hyper_request_error,
-    );
+    let body = body.map_err(HttpErrorCode::from_hyper_request_error);
     let http_req = http::Request::from_parts(parts, body);
-
     let (wasi_req, io) = WasiRequest::from_http(http_req);
 
-    // Channel to receive the response
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    // Run handler and request body I/O concurrently, then collect the response.
-    // Use select! so that when the handler completes, io is dropped (the handler
-    // may not consume the request body).
-    let result = try_join!(
-        async {
-            store
-                .run_concurrent(async |store| {
-                    use std::pin::pin;
-                    let handler = pin!(async {
-                        let res = match service.handle(store, wasi_req).await? {
-                            Ok(res) => res,
-                            Err(err) => return Ok(Err(Some(err))),
-                        };
-                        let _ =
-                            tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
-                        Ok(Ok(()))
-                    });
-                    let io = pin!(async {
-                        io.await
-                            .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
-                    });
-                    tokio::select! {
-                        result = handler => result,
-                        result = io => result.map(|()| Ok(())),
-                    }
-                })
-                .await?
-        },
-        async {
-            let res = rx.await?;
-            let (parts, body) = res.into_parts();
-            let body = BodyExt::collect(body)
-                .await
-                .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?;
-            anyhow::Ok(http::Response::from_parts(parts, body.to_bytes()))
-        }
-    );
+    let result = store
+        .run_concurrent(async |store| -> Result<Result<http::Response<Bytes>, Option<HttpErrorCode>>> {
+            let handler = pin!(async {
+                let res = match service.handle(store, wasi_req).await? {
+                    Ok(res) => res,
+                    Err(err) => return anyhow::Ok(Err(Some(err))),
+                };
+                let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
+                let (parts, body) = res.into_parts();
+                let body = BodyExt::collect(body)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?
+                    .to_bytes();
+                anyhow::Ok(Ok(http::Response::from_parts(parts, body)))
+            });
+            let io = pin!(async {
+                io.await
+                    .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
+            });
+            tokio::select! {
+                result = handler => result,
+                result = io => result.map(|()| Err(None)),
+            }
+        })
+        .await??;
 
     match result {
-        Ok((Ok(()), res)) => {
+        Ok(res) => {
             let (parts, body) = res.into_parts();
             Ok(HyperResponse::from_parts(parts, Full::new(body)))
         }
-        Ok((Err(Some(error_code)), _)) => {
-            // Handler returned error code - map to HTTP 500
-            Ok(HyperResponse::builder()
-                .status(500)
-                .body(Full::new(Bytes::from(format!("{error_code:?}"))))?)
-        }
-        Ok((Err(None), _)) => Ok(HyperResponse::builder()
+        Err(Some(error_code)) => Ok(HyperResponse::builder()
+            .status(500)
+            .body(Full::new(Bytes::from(format!("{error_code:?}"))))?),
+        Err(None) => Ok(HyperResponse::builder()
             .status(500)
             .body(Full::new(Bytes::from("Handler returned error")))?),
-        Err(e) => Ok(HyperResponse::builder()
-            .status(500)
-            .body(Full::new(Bytes::from(format!("Internal error: {e}"))))?),
     }
 }
 
