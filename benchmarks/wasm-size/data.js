@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775974934218,
+  "lastUpdate": 1775976910940,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12191,6 +12191,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/678fc089ec44f727bd77eda94ae787fd8a2f25e7"
         },
         "date": 1775974933932,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "545c717e43aaba0ecc78c7fa91a3f1d65d910a13",
+          "message": "Merge pull request #823 from wado-lang/claude/complete-package-gale-todos-3hSIc\n\nGale: close TODO gaps (sections A, C, D, F)",
+          "timestamp": "2026-04-12T15:52:01+09:00",
+          "tree_id": "9fe207f1e2db5fccdce3f8076a6465664bb81475",
+          "url": "https://github.com/wado-lang/wado/commit/545c717e43aaba0ecc78c7fa91a3f1d65d910a13"
+        },
+        "date": 1775976910658,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
