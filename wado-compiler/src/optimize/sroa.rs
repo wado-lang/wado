@@ -939,12 +939,7 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
             TirExprKind::Call { func, args, .. } => {
                 for (i, arg) in args.iter().enumerate() {
                     if is_immut_ref_to_candidate(&arg.expr, self.candidates)
-                        && !callee_stores_param_at(
-                            func,
-                            i,
-                            self.current_module,
-                            self.stores_lookup,
-                        )
+                        && !callee_stores_param_at(func, i, self.current_module, self.stores_lookup)
                     {
                         continue;
                     }
@@ -959,12 +954,7 @@ impl TirRefVisitor for SoftEscapeChecker<'_> {
             } => {
                 // &self on non-stores method → safe, skip receiver.
                 if !is_immut_ref_to_candidate(receiver, self.candidates)
-                    || callee_stores_param_at(
-                        func,
-                        0,
-                        self.current_module,
-                        self.stores_lookup,
-                    )
+                    || callee_stores_param_at(func, 0, self.current_module, self.stores_lookup)
                 {
                     self.visit_expr(receiver);
                 }
