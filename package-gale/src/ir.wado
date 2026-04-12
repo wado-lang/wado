@@ -1,17 +1,69 @@
+/// GrammarOption is a single `key = value ;` entry from an ANTLR4
+/// `options { ... }` block. Gale records the raw textual value so the full
+/// surface syntax (bare identifiers, qualified names, string literals,
+/// integer literals) round-trips without loss. ANTLR4 spec:
+/// `vendor/antlr4/doc/options.md`.
+pub struct GrammarOption {
+    pub name: String,
+    pub value: String,
+}
+
+/// NamedAction records the presence and position of a grammar-level
+/// `@name { ... }` or `@scope::name { ... }` prequel action. The action body
+/// itself is always discarded (it would be host-language code Gale cannot
+/// transpile), but downstream stages still need to know which actions were
+/// declared and on what scope. ANTLR4 spec: `vendor/antlr4/doc/actions.md`.
+pub struct NamedAction {
+    /// Optional scope qualifier (`parser` in `@parser::members`). `None`
+    /// for a bare `@name { ... }` action.
+    pub scope: Option<String>,
+    pub name: String,
+}
+
 /// Grammar is the top-level IR representing a parsed .g4 file.
 pub struct Grammar {
     pub name: String,
     pub parser_rules: Array<ParserRule>,
     pub lexer_rules: Array<LexerRule>,
     pub mode_names: Array<String>,
+    /// User-defined channel names from `channels { }` blocks, in declaration
+    /// order. Predefined channels (DEFAULT=0, HIDDEN=1) are NOT included —
+    /// user channels receive sequential ids starting at 2.
+    pub channels: Array<String>,
+    /// Grammar-level options from `options { ... }` prequel blocks
+    /// (`caseInsensitive`, `language`, `tokenVocab`, `superClass`, ...).
+    pub options: Array<GrammarOption>,
+    /// Grammar-level `@name { ... }` / `@scope::name { ... }` actions,
+    /// in declaration order. Action bodies themselves are discarded.
+    pub named_actions: Array<NamedAction>,
 }
 
 pub global DEFAULT_MODE: i32 = 0;
 pub global NO_MODE: i32 = -1;
 
+/// Predefined ANTLR4 channel ids. User channels declared via
+/// `channels { }` start at 2.
+pub global DEFAULT_CHANNEL: i32 = 0;
+pub global HIDDEN_CHANNEL: i32 = 1;
+
+/// Visibility of a rule (`public`/`private`/`protected` modifiers in ANTLR4).
+///
+/// ANTLR4 accepts these modifiers at the rule level but ignores them during
+/// code generation — every rule is effectively public in the generated code.
+/// Gale preserves the value on the IR so downstream tooling can observe it.
+pub enum Visibility {
+    Default,
+    Public,
+    Private,
+    Protected,
+}
+
 /// ParserRule represents a parser rule (lowercase name in .g4).
 pub struct ParserRule {
     pub name: String,
+    pub visibility: Visibility,
+    /// Rule-level options from `options { ... }` prequel blocks.
+    pub options: Array<GrammarOption>,
     pub alternatives: Array<Alternative>,
 }
 
@@ -79,6 +131,7 @@ pub enum RepeatKind {
 ///   `channels {}` block are looked up later by the code generator.
 pub struct LexerRule {
     pub name: String,
+    pub visibility: Visibility,
     pub is_fragment: bool,
     pub skip: bool,
     pub more: bool,
@@ -88,6 +141,13 @@ pub struct LexerRule {
     pub set_mode: i32,
     pub push_mode: i32,
     pub pop_mode: bool,
+    /// True when this entry originates from a `tokens { }` block and has no
+    /// matching lexer rule body. Generators should still emit a token-id
+    /// constant for it, but the tokenizer cannot produce it directly — only
+    /// grammar actions or `type(X)` rewrites can.
+    pub is_virtual: bool,
+    /// Rule-level options from `options { ... }` prequel blocks.
+    pub options: Array<GrammarOption>,
     pub body: Array<LexerAlt>,
 }
 
@@ -95,6 +155,7 @@ impl LexerRule {
     pub fn new(name: String, is_fragment: bool, skip: bool, body: Array<LexerAlt>) -> LexerRule {
         return LexerRule {
             name,
+            visibility: Visibility::Default,
             is_fragment,
             skip,
             more: false,
@@ -104,8 +165,17 @@ impl LexerRule {
             set_mode: NO_MODE,
             push_mode: NO_MODE,
             pop_mode: false,
+            is_virtual: false,
+            options: [],
             body,
         };
+    }
+
+    /// Construct a virtual lexer rule entry from a `tokens { }` declaration.
+    pub fn virtual_token(name: String) -> LexerRule {
+        let mut rule = LexerRule::new(name, false, false, []);
+        rule.is_virtual = true;
+        return rule;
     }
 }
 
@@ -166,12 +236,43 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
     let mut parser_rules: Array<ParserRule> = [];
     let mut lexer_rules: Array<LexerRule> = [];
     let mut mode_names: Array<String> = ["DEFAULT_MODE"];
+    let mut channels: Array<String> = [];
+    let mut options: Array<GrammarOption> = [];
+    let mut named_actions: Array<NamedAction> = [];
     for let g of grammars {
+        // Preserve grammar-level options from every split. Later splits
+        // override earlier ones on collision — ANTLR4 leaves conflict
+        // resolution to the tool, but keeping the last value is a sensible
+        // default for Gale's merge.
+        for let opt of &g.options {
+            let mut found = false;
+            for let mut i = 0; i < options.len(); i += 1 {
+                if options[i].name == opt.name {
+                    options[i] = *opt;
+                    found = true;
+                }
+            }
+            if !found {
+                options.push(*opt);
+            }
+        }
+        // Named actions are concatenated — they are position-bearing markers,
+        // not key/value pairs, so duplicates are preserved.
+        for let act of &g.named_actions {
+            named_actions.push(*act);
+        }
         // Build mode index remapping table for this grammar
         let mut remap: Array<i32> = [];
         for let mn of g.mode_names {
             let idx = find_or_add_mode(&mut mode_names, &mn);
             remap.push(idx);
+        }
+        // Build channel id remapping table. User channels start at id 2
+        // (0=DEFAULT, 1=HIDDEN). Preserve existing ids when names line up.
+        let mut chan_remap: Array<i32> = [];
+        for let cn of &g.channels {
+            let id = find_or_add_channel(&mut channels, cn);
+            chan_remap.push(id);
         }
         for let r of g.parser_rules {
             parser_rules.push(r);
@@ -184,6 +285,13 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
             }
             if r.set_mode >= 0 {
                 r.set_mode = remap[r.set_mode];
+            }
+            // Remap user-defined channel ids (>= 2). 0 and 1 are predefined.
+            if r.channel >= 2 {
+                let src_idx = r.channel - 2;
+                if src_idx < chan_remap.len() {
+                    r.channel = chan_remap[src_idx];
+                }
             }
             lexer_rules.push(r);
         }
@@ -219,7 +327,7 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
             }
         }
     }
-    return Grammar { name, parser_rules, lexer_rules, mode_names };
+    return Grammar { name, parser_rules, lexer_rules, mode_names, channels, options, named_actions };
 }
 
 fn find_or_add_mode(modes: &mut Array<String>, name: &String) -> i32 {
@@ -230,4 +338,16 @@ fn find_or_add_mode(modes: &mut Array<String>, name: &String) -> i32 {
     }
     modes.push(*name);
     return modes.len() - 1;
+}
+
+/// Allocate a channel id for `name`. User channel ids start at 2
+/// (0=DEFAULT, 1=HIDDEN are predefined by ANTLR4).
+fn find_or_add_channel(channels: &mut Array<String>, name: &String) -> i32 {
+    for let mut i = 0; i < channels.len(); i += 1 {
+        if channels[i] == *name {
+            return i + 2;
+        }
+    }
+    channels.push(*name);
+    return channels.len() - 1 + 2;
 }

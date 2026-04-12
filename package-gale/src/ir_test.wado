@@ -11,6 +11,7 @@ use {
     LexerElement,
     CharClass,
     CharRange,
+    Visibility,
 } from "./ir.wado";
 
 test "Grammar construction" {
@@ -19,16 +20,24 @@ test "Grammar construction" {
         parser_rules: [],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
     };
     assert g.name == "JSON";
     assert g.parser_rules.is_empty();
     assert g.lexer_rules.is_empty();
     assert g.mode_names.len() == 1;
+    assert g.channels.is_empty();
+    assert g.options.is_empty();
+    assert g.named_actions.is_empty();
 }
 
 test "ParserRule with alternatives" {
     let rule = ParserRule {
         name: "value",
+        visibility: Visibility::Default,
+        options: [],
         alternatives: [
             Alternative { label: Option::<String>::Some("Str"), elements: [Element::TokenRef("STRING")] },
             Alternative { label: Option::<String>::Some("Num"), elements: [Element::TokenRef("NUMBER")] },
@@ -79,6 +88,7 @@ test "Element variants" {
 test "LexerRule construction" {
     let rule = LexerRule {
         name: "WS",
+        visibility: Visibility::Default,
         is_fragment: false,
         skip: true,
         more: false,
@@ -88,6 +98,8 @@ test "LexerRule construction" {
         set_mode: -1,
         push_mode: -1,
         pop_mode: false,
+        is_virtual: false,
+        options: [],
         body: [
             LexerAlt {
                 elements: [

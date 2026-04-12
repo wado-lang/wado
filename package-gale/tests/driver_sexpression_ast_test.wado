@@ -7,7 +7,13 @@ use {
 } from "./golden/sexpression.wado";
 
 fn tok(kind: i32, text: String, start: i32, end: i32) -> Token {
-    return Token { kind, text: LexerSlice::from_string(text), span: Span { start, end }, leading_trivia: [] };
+    return Token {
+        kind,
+        text: LexerSlice::from_string(text),
+        span: Span { start, end },
+        leading_trivia: [],
+        channel: 0,
+    };
 }
 
 fn s(start: i32, end: i32) -> Span {

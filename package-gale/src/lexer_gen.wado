@@ -508,6 +508,19 @@ fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>) -> O
     if rule.is_fragment || rule.body.len() != 1 {
         return null;
     }
+    // Rules carrying lexer commands (more, channel, type(X), mode(X)/pushMode/popMode, skip)
+    // cannot be shortcut via keyword dispatch — the keyword classifier only rewrites
+    // `best_kind`, it does not propagate the command state to the tokenize loop.
+    if rule.skip
+        || rule.more
+        || rule.channel != 0
+        || rule.type_override matches { Some(_) }
+        || rule.mode != 0
+        || rule.set_mode >= 0
+        || rule.push_mode >= 0
+        || rule.pop_mode {
+        return null;
+    }
     let alt = &rule.body[0];
     if alt.elements.is_empty() {
         return null;
@@ -753,6 +766,33 @@ fn has_modes(mode_names: &Array<String>) -> bool {
     return mode_names.len() > 1;
 }
 
+fn has_set_mode(rules: &Array<LexerRule>) -> bool {
+    for let r of rules {
+        if r.set_mode >= 0 {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn has_more(rules: &Array<LexerRule>) -> bool {
+    for let r of rules {
+        if r.more {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn has_channel(rules: &Array<LexerRule>) -> bool {
+    for let r of rules {
+        if r.channel != 0 {
+            return true;
+        }
+    }
+    return false;
+}
+
 // --- First-character dispatch ---
 
 struct TryCall {
@@ -765,18 +805,84 @@ struct TryCall {
     match_length: i32,
 }
 
-/// Compute the first-char set for a lexer rule body's first element.
-fn compute_first_chars(rule: &LexerRule, all_rules: &Array<LexerRule>) -> TryCall {
-    let fn_name = `try_{to_lower(&rule.name)}`;
-    let token_kind = `TK_{rule.name}`;
-    let mut extra = String::with_capacity(64);
-    if rule.push_mode >= 0 {
-        extra.push_str(` best_push_mode = {rule.push_mode};`);
-    } else if rule.push_mode == -1 {
-        // only add if modes are used (caller will check)
+/// Build the default "reset" extras for state variables that exist in the
+/// current lexer shape. Used for literal-token calls that have no rule flags
+/// of their own — they still need to reset the state written by the previous
+/// best match.
+fn default_extras(
+    use_modes: bool,
+    has_set_mode_rules: bool,
+    has_more_rules: bool,
+    has_channel_rules: bool,
+) -> String {
+    let mut extras = String::with_capacity(64);
+    if use_modes {
+        extras.push_str(" best_push_mode = -1; best_pop_mode = false;");
     }
-    if rule.pop_mode {
-        extra.push_str(" best_pop_mode = true;");
+    if has_set_mode_rules {
+        extras.push_str(" best_set_mode = -1;");
+    }
+    if has_more_rules {
+        extras.push_str(" best_more = false;");
+    }
+    if has_channel_rules {
+        extras.push_str(" best_channel = 0;");
+    }
+    return extras;
+}
+
+/// Compute the first-char set for a lexer rule body's first element.
+fn compute_first_chars(
+    rule: &LexerRule,
+    all_rules: &Array<LexerRule>,
+    use_modes: bool,
+    has_set_mode_rules: bool,
+    has_more_rules: bool,
+    has_channel_rules: bool,
+) -> TryCall {
+    let fn_name = `try_{to_lower(&rule.name)}`;
+    // `type(X)` rewrites the kind used when emitting the token. Use the
+    // override kind at emit time so downstream code (parser, token_kind_name)
+    // sees the renamed type. The rule itself still has its own TK_<name>
+    // constant; the override only affects emission.
+    let token_kind = if let Some(override_name) = rule.type_override {
+        `TK_{override_name}`;
+    } else {
+        `TK_{rule.name}`;
+    };
+    let mut extra = String::with_capacity(64);
+    if use_modes {
+        if rule.push_mode >= 0 {
+            extra.push_str(` best_push_mode = {rule.push_mode};`);
+        } else {
+            extra.push_str(" best_push_mode = -1;");
+        }
+        if rule.pop_mode {
+            extra.push_str(" best_pop_mode = true;");
+        } else {
+            extra.push_str(" best_pop_mode = false;");
+        }
+    }
+    if has_set_mode_rules {
+        if rule.set_mode >= 0 {
+            extra.push_str(` best_set_mode = {rule.set_mode};`);
+        } else {
+            extra.push_str(" best_set_mode = -1;");
+        }
+    }
+    if has_more_rules {
+        if rule.more {
+            extra.push_str(" best_more = true;");
+        } else {
+            extra.push_str(" best_more = false;");
+        }
+    }
+    if has_channel_rules {
+        if rule.channel != 0 {
+            extra.push_str(` best_channel = {rule.channel};`);
+        } else {
+            extra.push_str(" best_channel = 0;");
+        }
     }
     let mut chars: Array<[char, char]> = [];
     let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars);
@@ -1034,10 +1140,10 @@ fn build_dispatch_groups(calls: &Array<TryCall>) -> Array<DispatchGroup> {
     return groups;
 }
 
-fn emit_dispatch_groups(w: &mut CodeWriter, calls: &Array<TryCall>, groups: &Array<DispatchGroup>, use_modes: bool) {
+fn emit_dispatch_groups(w: &mut CodeWriter, calls: &Array<TryCall>, groups: &Array<DispatchGroup>, needs_extras: bool) {
     // If only a wildcard group exists, emit calls directly without dispatch
     if groups.len() == 1 && groups[0].guard == "true" {
-        emit_group_calls(w, calls, &groups[0].calls, use_modes, true);
+        emit_group_calls(w, calls, &groups[0].calls, needs_extras, true);
         return;
     }
     let mut first_group = true;
@@ -1045,7 +1151,7 @@ fn emit_dispatch_groups(w: &mut CodeWriter, calls: &Array<TryCall>, groups: &Arr
         let is_wc = g.guard == "true";
         if is_wc {
             if first_group {
-                emit_group_calls(w, calls, &g.calls, use_modes, true);
+                emit_group_calls(w, calls, &g.calls, needs_extras, true);
                 continue;
             }
             w.else_begin("else");
@@ -1055,38 +1161,30 @@ fn emit_dispatch_groups(w: &mut CodeWriter, calls: &Array<TryCall>, groups: &Arr
             w.else_begin(`else if {g.guard}`);
         }
         first_group = false;
-        emit_group_calls(w, calls, &g.calls, use_modes, is_wc);
+        emit_group_calls(w, calls, &g.calls, needs_extras, is_wc);
     }
     if !first_group {
         w.end();
     }
 }
 
-fn emit_group_calls(w: &mut CodeWriter, calls: &Array<TryCall>, indices: &Array<i32>, use_modes: bool, is_wildcard_group: bool) {
+fn emit_group_calls(w: &mut CodeWriter, calls: &Array<TryCall>, indices: &Array<i32>, needs_extras: bool, is_wildcard_group: bool) {
     for let ci of indices {
         let call = &calls[*ci];
         // In specific dispatch branches, single-char literals are guaranteed to match
         // (the dispatch already confirmed the character). Inline the result
         // instead of calling the try_* function.
         if !is_wildcard_group && call.match_length == 1 {
-            if use_modes {
-                let mut extra = String::from(call.extra);
-                if extra.is_empty() {
-                    extra = String::from(" best_push_mode = -1; best_pop_mode = false;");
-                }
-                w.line(`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind};{extra} \}`);
+            if needs_extras {
+                w.line(`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind};{call.extra} \}`);
             } else {
                 w.line(`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind}; \}`);
             }
             continue;
         }
         w.line(`end = {call.fn_name}(&lexer.chars, start);`);
-        if use_modes {
-            let mut extra = String::from(call.extra);
-            if extra.is_empty() {
-                extra = String::from(" best_push_mode = -1; best_pop_mode = false;");
-            }
-            w.line(`if end > best_end \{ best_end = end; best_kind = {call.token_kind};{extra} \}`);
+        if needs_extras {
+            w.line(`if end > best_end \{ best_end = end; best_kind = {call.token_kind};{call.extra} \}`);
         } else {
             w.line(`if end > best_end \{ best_end = end; best_kind = {call.token_kind}; \}`);
         }
@@ -1107,6 +1205,9 @@ fn arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
 
 fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>, mode_names: &Array<String>, keywords: &Array<KeywordInfo>) {
     let use_modes = has_modes(mode_names);
+    let has_set_mode_rules = has_set_mode(lexer_rules);
+    let has_more_rules = has_more(lexer_rules);
+    let has_channel_rules = has_channel(lexer_rules);
 
     let mut f = FnSpec::new("tokenize");
     f.set_pub();
@@ -1116,6 +1217,14 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.line("let mut lexer = Lexer::new(input);");
     w.line("let mut tokens: Array<Token> = [];");
     w.line("let mut trivia: Array<Token> = [];");
+
+    if has_more_rules {
+        // Tracks the start position of a pending `more` sequence; -1 means
+        // no pending `more` data. When a non-`more` rule emits, it uses
+        // `more_start` as the token start so the emitted text includes
+        // all previously-`more`'d characters.
+        w.line("let mut more_start: i32 = -1;");
+    }
 
     if use_modes {
         w.line("let mut mode_stack: Array<i32> = [];");
@@ -1133,6 +1242,15 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
         w.line("let mut best_push_mode: i32 = -1;");
         w.line("let mut best_pop_mode = false;");
     }
+    if has_set_mode_rules {
+        w.line("let mut best_set_mode: i32 = -1;");
+    }
+    if has_more_rules {
+        w.line("let mut best_more = false;");
+    }
+    if has_channel_rules {
+        w.line("let mut best_channel: i32 = 0;");
+    }
 
     if use_modes {
         // Generate mode dispatch
@@ -1147,8 +1265,18 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                 for let lit of lit_tokens {
                     let fn_name = lit_try_fn_name(&lit.const_name);
                     w.line(`end = {fn_name}(&lexer.chars, start);`);
+                    let mut lit_reset = String::from(" best_push_mode = -1; best_pop_mode = false;");
+                    if has_set_mode_rules {
+                        lit_reset.push_str(" best_set_mode = -1;");
+                    }
+                    if has_more_rules {
+                        lit_reset.push_str(" best_more = false;");
+                    }
+                    if has_channel_rules {
+                        lit_reset.push_str(" best_channel = 0;");
+                    }
                     w.line(
-                        `if end > best_end \{ best_end = end; best_kind = {lit.const_name}; best_push_mode = -1; best_pop_mode = false; \}`,
+                        `if end > best_end \{ best_end = end; best_kind = {lit.const_name};{lit_reset} \}`,
                     );
                 }
             }
@@ -1171,13 +1299,44 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                     } else {
                         extra.push_str(" best_pop_mode = false;");
                     }
-                    w.line(`if end > best_end \{ best_end = end; best_kind = TK_{rule.name};{extra} \}`);
+                    if has_set_mode_rules {
+                        if rule.set_mode >= 0 {
+                            extra.push_str(` best_set_mode = {rule.set_mode};`);
+                        } else {
+                            extra.push_str(" best_set_mode = -1;");
+                        }
+                    }
+                    if has_more_rules {
+                        if rule.more {
+                            extra.push_str(" best_more = true;");
+                        } else {
+                            extra.push_str(" best_more = false;");
+                        }
+                    }
+                    if has_channel_rules {
+                        if rule.channel != 0 {
+                            extra.push_str(` best_channel = {rule.channel};`);
+                        } else {
+                            extra.push_str(" best_channel = 0;");
+                        }
+                    }
+                    // `type(X)` rewrites the emitted kind. The rule still has
+                    // its own TK_<name> constant; the override only affects
+                    // the emitted token.
+                    let emit_kind = if let Some(override_name) = rule.type_override {
+                        `TK_{override_name}`;
+                    } else {
+                        `TK_{rule.name}`;
+                    };
+                    w.line(`if end > best_end \{ best_end = end; best_kind = {emit_kind};{extra} \}`);
                 }
             }
         }
         w.end();  // mode dispatch
     } else {
         // No modes — first-character dispatch
+        let needs_extras = has_set_mode_rules || has_more_rules || has_channel_rules;
+        let lit_extras = default_extras(false, has_set_mode_rules, has_more_rules, has_channel_rules);
         let mut all_calls: Array<TryCall> = [];
         for let lit of lit_tokens {
             let fn_name = lit_try_fn_name(&lit.const_name);
@@ -1189,7 +1348,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
             all_calls.push(TryCall {
                 fn_name,
                 token_kind: tk,
-                extra: String::from(""),
+                extra: lit_extras,
                 first_chars: fc,
                 is_wildcard: false,
                 is_catch_all: false,
@@ -1201,11 +1360,18 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                 && !rule.body.is_empty()
                 && !is_keyword_rule_name(&rule.name, keywords)
                 && !is_literal_duplicate(rule, lit_tokens) {
-                all_calls.push(compute_first_chars(rule, lexer_rules));
+                all_calls.push(compute_first_chars(
+                    rule,
+                    lexer_rules,
+                    false,
+                    has_set_mode_rules,
+                    has_more_rules,
+                    has_channel_rules,
+                ));
             }
         }
         let groups = build_dispatch_groups(&all_calls);
-        emit_dispatch_groups(w, &all_calls, &groups, false);
+        emit_dispatch_groups(w, &all_calls, &groups, needs_extras);
     }
 
     // Keyword reclassification: check if the matched text is actually a keyword.
@@ -1226,6 +1392,15 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
     w.line("lexer.pos = start + 1;");
     w.else_begin("else");
 
+    // `more` rules accumulate text into the next emitted token. `tok_start`
+    // is the earliest start position of the current pending `more` chain,
+    // or `start` if no `more` is pending.
+    if has_more_rules {
+        w.line("let tok_start = if more_start >= 0 { more_start } else { start };");
+    } else {
+        w.line("let tok_start = start;");
+    }
+
     let mut skip_names: Array<String> = [];
     for let rule of lexer_rules {
         if rule.skip {
@@ -1245,13 +1420,44 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
         w.write(" };\n");
     }
 
-    w.begin("if is_skip");
-    w.line("trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));");
-    w.else_begin("else");
-    w.line("let tok = Token::with_trivia(best_kind, lexer.slice(start, best_end), Span::new(start, best_end), trivia);");
-    w.line("tokens.push(tok);");
-    w.line("trivia = [];");
-    w.end();
+    if has_more_rules {
+        // A `more` match suppresses emission and remembers the starting
+        // position so the next non-`more` match covers the full span.
+        w.begin("if best_more");
+        w.line("if more_start < 0 { more_start = start; }");
+        w.else_begin("else if is_skip");
+        w.line("trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));");
+        w.line("more_start = -1;");
+        if has_channel_rules {
+            // Non-default channels are invisible to the parser — route to
+            // trivia with the channel id preserved. ANTLR4 treats any
+            // non-DEFAULT channel the same way at the parser boundary.
+            w.else_begin("else if best_channel != 0");
+            w.line("trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));");
+            w.line("more_start = -1;");
+        }
+        w.else_begin("else");
+        w.line("let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);");
+        w.line("tokens.push(tok);");
+        w.line("trivia = [];");
+        w.line("more_start = -1;");
+        w.end();
+    } else {
+        w.begin("if is_skip");
+        w.line("trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));");
+        if has_channel_rules {
+            // Non-default channels are invisible to the parser — route to
+            // trivia with the channel id preserved. ANTLR4 treats any
+            // non-DEFAULT channel the same way at the parser boundary.
+            w.else_begin("else if best_channel != 0");
+            w.line("trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));");
+        }
+        w.else_begin("else");
+        w.line("let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);");
+        w.line("tokens.push(tok);");
+        w.line("trivia = [];");
+        w.end();
+    }
 
     if use_modes {
         w.begin("if best_push_mode >= 0");
@@ -1268,6 +1474,13 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
         w.end();
         w.line("best_pop_mode = false;");
         w.end();
+        if has_set_mode_rules {
+            // `mode(X)` replaces the current mode directly — no stack push.
+            w.begin("if best_set_mode >= 0");
+            w.line("current_mode = best_set_mode;");
+            w.line("best_set_mode = -1;");
+            w.end();
+        }
     }
 
     w.line("lexer.pos = best_end;");

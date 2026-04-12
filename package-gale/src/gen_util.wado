@@ -171,6 +171,19 @@ fn symbol_char_names(c: char) -> Option<[String, String]> {
     };
 }
 
+/// Field base name for a parser-side `~ X` (set complement). The inner element
+/// is typically a terminal (TokenRef / Literal) or a simple terminal set; we
+/// derive a readable name from it so multi-element alternatives can dedup.
+pub fn not_element_field_name(inner: &Element) -> String {
+    if let TokenRef(name) = inner {
+        return `not_{to_lower(name)}`;
+    }
+    if let Literal(text) = inner {
+        return `not_{literal_field_name(text)}`;
+    }
+    return "not_set";
+}
+
 pub fn literal_field_name(text: &String) -> String {
     let chars: Array<char> = text.chars().collect();
     if chars.len() == 1 {
