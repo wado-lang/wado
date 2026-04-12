@@ -367,8 +367,12 @@ rule : ID ;";
     let mut found_a = false;
     let mut found_b = false;
     for let r of &g.lexer_rules {
-        if r.name == "VIRTUAL_A" { found_a = true; }
-        if r.name == "VIRTUAL_B" { found_b = true; }
+        if r.name == "VIRTUAL_A" {
+            found_a = true;
+        }
+        if r.name == "VIRTUAL_B" {
+            found_b = true;
+        }
     }
     assert found_a, "VIRTUAL_A must be declared";
     assert found_b, "VIRTUAL_B must be declared";
@@ -673,4 +677,96 @@ INSIDE : 'x' -> more ;";
     assert g.mode_names[g.lexer_rules[0].push_mode as i32] == "PROC";
     assert g.lexer_rules[1].more == true;
     assert g.lexer_rules[1].mode == 1;
+}
+
+test "ARG_ACTION supports nested brackets in returns" {
+    // ANTLR4 ARG_ACTION is host-language code; nested `[]` (e.g. Java
+    // array types like `int[]`) must not terminate the action early.
+    let input = "grammar Test;
+expr returns [int[] arr] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "ARG_ACTION supports nested brackets in rule arguments" {
+    let input = "grammar Test;
+expr[int[] xs, String[] names] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "ARG_ACTION supports nested brackets in locals" {
+    let input = "grammar Test;
+expr locals [int[] xs] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "ARG_ACTION supports nested brackets in catch" {
+    let input = "grammar Test;
+expr : ID ; catch [Exception[] es] { handle(es); }";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "ARG_ACTION supports nested brackets in rule ref" {
+    let input = "grammar Test;
+expr : sub[arr[0], xs[1]] ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let RuleRef(name) = elems[0] {
+        assert name == "sub";
+    } else {
+        panic("expected RuleRef sub");
+    }
+}
+
+test "action body with brace inside string literal" {
+    // ANTLR4 actions are host-language code, so a `}` inside a string
+    // literal must NOT terminate the action block.
+    let input = "grammar Test;
+@header { String s = \"a } b\"; }
+expr : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "action body with brace inside char literal" {
+    let input = "grammar Test;
+@header { char c = '}'; }
+expr : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "action body with brace inside line comment" {
+    let input = "grammar Test;
+@header { // close brace } in comment
+int x = 0; }
+expr : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "action body with brace inside block comment" {
+    let input = "grammar Test;
+@header { /* close brace } in block */ int x = 0; }
+expr : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "mode declaration is rejected in parser grammar" {
+    // ANTLR4 only allows `mode X;` in lexer grammars (combined or split lexer).
+    // Spec: vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g — mode rules
+    // appear only under lexerRule branches.
+    let input = "parser grammar Test;
+mode FOO;
+expr : ID ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected mode in parser grammar to be rejected";
 }

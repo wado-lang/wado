@@ -13,7 +13,7 @@ The single exception is **action bodies**, which are intentionally skipped:
 - `catch [ ... ] { ... }` and `finally { ... }` bodies
 - `@init { ... }` / `@after { ... }` rule prequel actions
 
-These are recognized by the parser (so files containing them parse without error) but their bodies are discarded — they would have to be transpiled from the host language anyway, which is out of scope. Everything *around* the action — its presence, position, and surrounding constructs — is preserved in the IR.
+These are recognized by the parser (so files containing them parse without error) but their bodies are discarded — they would have to be transpiled from the host language anyway, which is out of scope. Everything _around_ the action — its presence, position, and surrounding constructs — is preserved in the IR.
 
 All other ANTLR4 features (`import`, `options`, `channels`, `tokens`, modes, `returns`/`throws`/`locals`, rule arguments, list labels `+=`, parser-side `~`/`.`, element options `<...>`, qualified IDs, lexer commands including `mode(X)`, etc.) are first-class and preserved.
 
