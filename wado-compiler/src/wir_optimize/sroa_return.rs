@@ -833,6 +833,14 @@ fn validate_call_sites_in_body(
         if let WirInstr::LocalSet { name, value } = instr
             && let Some(func_id_idx) = unwrap_to_candidate_call(value, candidate_ids)
         {
+            // Reject when the local has more than one definition: SROA assumes
+            // the temp is exclusively defined by this call. With mutable locals
+            // (e.g. `let mut s: String;` assigned in multiple branches), the
+            // other definitions would be silently dropped, producing wrong code.
+            if count_local_set_in_body(root_body, name) > 1 {
+                invalid.insert(func_id_idx);
+                continue;
+            }
             if variant_candidate_ids.contains(&func_id_idx) {
                 // Variant candidate: uses must be RefTest or StructGet(RefCast(...))
                 if !all_uses_are_variant_access(root_body, name) {
@@ -846,6 +854,29 @@ fn validate_call_sites_in_body(
             }
         }
     }
+}
+
+/// Count `LocalSet { name, .. }` and `LocalTee { name, .. }` for `local_name`
+/// across the entire instruction tree.
+fn count_local_set_in_body(instrs: &[WirInstr], local_name: &str) -> usize {
+    let mut total = 0;
+    for instr in instrs {
+        total += count_local_set_in_instr(instr, local_name);
+    }
+    total
+}
+
+fn count_local_set_in_instr(instr: &WirInstr, local_name: &str) -> usize {
+    let mut count = match instr {
+        WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } if name == local_name => {
+            1
+        }
+        _ => 0,
+    };
+    instr.for_each_child(&mut |child| {
+        count += count_local_set_in_instr(child, local_name);
+    });
+    count
 }
 
 /// Check that every reference to `local_name` is a valid variant access pattern:
