@@ -1,0 +1,480 @@
+# Code Generation Framework
+
+## Context
+
+Wado is a language that is frequently expected to talk to schema-defined external systems: protocol buffers, JSON-RPC, gRPC, GraphQL, OpenAPI, ORM definitions, ANTLR-style grammars, WIT, WebIDL, and so on. For every such schema, someone has to turn it into idiomatic Wado source code. Today, we already have two one-off IDL-to-Wado pipelines living in the repository:
+
+- `wado-from-idl` generates the `wasi:*` standard library from WIT and Web APIs from WebIDL. See [`wep-2026-04-01-tide.md`](./wep-2026-04-01-tide.md).
+- Gale (`package-gale`) generates Wado parsers from ANTLR `.g4` grammars. See [`wep-2026-03-02-gale.md`](./wep-2026-03-02-gale.md).
+
+Each pipeline is wired up by hand in `mise.toml`, runs out-of-band, and produces output that is committed to the repository. There is no shared contract, no cache, no first-class story for users who want to do the same thing in their own projects. A user who wants to generate Wado from their own `.proto` files today has no better option than writing an external script and calling `wado compile` afterwards.
+
+This WEP introduces a first-class mechanism for **schema-driven code generation** — the Wado equivalent of Java annotation processors (APT/KSP), Roslyn source generators, Swift macros, or Dart's `build_runner`, narrowed to a single use case: **IDL → Wado source**.
+
+### Scope
+
+In scope:
+
+- Users register code generators in `wado.toml` or inline at a `use` site.
+- Generators read schema files (`.proto`, `.graphql`, `.g4`, `.wit`, `.json`, custom IDLs, …) and emit `.wado` source files.
+- Generators are compiled to WebAssembly components and executed by the compiler via wasmtime.
+- Generated `.wado` files are written to a user-specified directory and are expected to be committed to version control.
+- Invocation is automatic: the compiler runs the relevant generators during `wado compile`, with content-addressed caching so unchanged inputs skip the generator.
+
+Out of scope:
+
+- In-compiler token-level macros, à la Rust `proc_macro` or Scala 3 quoted macros.
+- Type-driven derive (e.g., `#[derive(Eq)]`). Wado already auto-derives `Eq` and `Ord` when all fields satisfy the trait; richer type-driven codegen is a separate concern.
+- Arbitrary pre-build scripts, à la `build.rs`. This WEP does not expose "run this program of my choice before compile"; all code generation goes through the `codegen` world and its sandbox.
+- Compile-time file inclusion. That is handled by [`wep-2026-03-02-include-str.md`](./wep-2026-03-02-include-str.md).
+
+### Prior art (brief)
+
+Every language with a serious IDL story has picked one of a small number of designs, and the relevant design axes turn out to be:
+
+- **In-compiler plugin (Rust `proc_macro`, Roslyn, KSP)** — fast, IDE-friendly, but the generator runs with full host privileges and IDE freezes are a recurring problem.
+- **Out-of-process sandboxed plugin (Swift macros, protoc plugins)** — safer, cacheable, language-agnostic protocol.
+- **Pre-build arbitrary program (`build.rs`, `build_runner`)** — flexible, but unbounded and fragile; the user must remember to re-run it.
+- **Manual "on demand" generation (`go generate`)** — simplest, but output drifts from source and IDE integration is zero.
+
+Wado's constraints point firmly at the sandboxed-plugin design: generators are Wado programs compiled to Wasm components, which is exactly the execution model Wado already speaks. Wasmtime gives us deterministic sandboxing for free. The only question is the shape of the plugin contract, which is the subject of this WEP.
+
+### What Wado already has that we build on
+
+- **`CompilerHost` abstraction** ([`wep-2026-01-16-source-provider-abstraction.md`](./wep-2026-01-16-source-provider-abstraction.md)) — `wado-compiler` is itself I/O-free. All source reads go through a trait implemented by `wado-cli`. The codegen framework reuses this boundary: generators never touch the filesystem directly; they call a host-provided `read-file` import that the compiler forwards to `CompilerHost`.
+- **`wado.toml` + `wado.lock`** ([`wep-2026-02-14-package-manifest.md`](./wep-2026-02-14-package-manifest.md)) — package manifest and lock file. We add a new `[build.generators]` section and record generator cache entries in the lock file.
+- **Wado → WIT mapping** ([`wep-2026-01-29-wit-wado-mapping.md`](./wep-2026-01-29-wit-wado-mapping.md)) — the mapping from Wado types to WIT records, variants, enums, flags, and resources. This lets a generator package declare its `Options` type as a plain Wado `struct`, and the compiler can read the resulting WIT `record` out of the generator's component binary to type-check options at manifest parse time.
+- **`#![generated]` module attribute** — already parsed by the compiler (see `wado-compiler/src/ast.rs`). It marks a module as machine-generated. The codegen framework emits this attribute on every file it writes.
+
+## Decision
+
+### Design principles
+
+Three principles drive every detail in this WEP:
+
+1. **Determinism by construction.** The `codegen` world provides no access to clocks, randomness, the network, environment variables, or ambient filesystems. A generator is a pure function `(inputs, options) → outputs + diagnostics`. Violating this requires rebuilding the compiler; it is not a runtime flag. This is the one thing in-compiler macro systems (Rust, Roslyn) cannot cleanly guarantee.
+2. **Every input is statically enumerable.** There is no `list-dir` host function and there is no glob in the manifest. Every file that feeds a generator must appear by literal path in `wado.toml` or in a `use ... with` declaration. This lets the LSP jump from the `use` site both to the generated `.wado` and to the original IDL, and lets `wado` precompute the full dependency graph before invoking any generator.
+3. **Single-file scripts are first-class.** Wado is designed so that a useful program can live in one `.wado` file with a shebang line. The codegen framework honors this: any generator configuration that can be written in `wado.toml` can also be written inline at the `use` site, with exactly the same schema. A user with a single-file script does not need to invent a `wado.toml` merely to consume a `.proto`.
+
+### Overview
+
+A **generator** is a Wado package or module that exports the `codegen` world. The compiler builds the generator to a `wasm32-wasip*` component (if necessary), caches it, runs it inside wasmtime, and collects its output. The generator reads schema files through a host-provided `read-file` import and emits a `response` record containing the `.wado` files to write and any diagnostics.
+
+A typical build proceeds as follows:
+
+1. `wado compile` parses `wado.toml` and all source files.
+2. From `[build.generators]` sections and `use ... with { generator: { ... } }` clauses, the compiler assembles the full list of generator invocations to perform.
+3. For each invocation, the compiler computes a cache key — the hash of the generator's source (or its resolved wasm), the schema file contents, and the options — and looks it up in `wado.lock`. On a hit, it reuses the cached output.
+4. On a miss, the compiler instantiates the generator component in wasmtime, linking only `read-file` and `emit-diagnostic`. It calls the generator's exported `generate` function with a `request` record.
+5. The generator reads additional files via `read-file` (these are recorded in the cache key), builds its output, and returns a `response`.
+6. The compiler writes every file in the response to its configured output directory, stamps each file with a `#![generated]` attribute and a `// @source` header, records the cache entry in `wado.lock`, and continues with normal compilation.
+7. If the generator traps or returns an error, the compiler surfaces the result as a regular compile error with the appropriate span.
+
+Generators are ordered **bottom-up through the build graph**: a generator that itself depends on another generator's output runs after its dependency. Circular dependencies between generators are a compile error.
+
+The rest of this WEP specifies the `codegen` world, the manifest and inline syntax, the caching model, the diagnostic extension, and the bootstrap relationship with existing pipelines.
+
+### The `codegen` world
+
+The contract between the compiler and a generator is a single WIT world, `wado:codegen/generator`, provisionally sketched as follows. The final WIT lives alongside the other Wado-authored worlds and is regenerated from Wado source via [`wep-2026-01-29-wit-wado-mapping.md`](./wep-2026-01-29-wit-wado-mapping.md) once that pipeline exists.
+
+```wit
+package wado:codegen;
+
+interface host {
+    /// Read a file from the compiler's CompilerHost.
+    /// `path` is resolved relative to the package root that declared the generator
+    /// invocation (or the script file, in inline-use mode).
+    /// All calls are recorded by the compiler and contribute to the cache key.
+    read-file: func(path: string) -> result<list<u8>, host-error>;
+
+    /// Report a diagnostic that will be surfaced as a normal compile
+    /// diagnostic. Multiple diagnostics may be reported; they are all
+    /// printed even if the generator eventually returns a successful response.
+    emit-diagnostic: func(diagnostic: diagnostic);
+
+    variant host-error {
+        not-found,
+        permission-denied,
+        io(string),
+    }
+
+    record diagnostic {
+        level: diagnostic-level,
+        span: option<source-span>,
+        message: string,
+    }
+
+    enum diagnostic-level { error, warning, info, hint }
+
+    /// A span into any file the generator has read, or into a file
+    /// path that the generator knows about by other means. The compiler
+    /// renders the snippet by consulting CompilerHost.
+    record source-span {
+        path: string,
+        byte-start: u32,
+        byte-end: u32,
+    }
+}
+
+interface types {
+    /// One schema file the compiler has pre-loaded for the generator.
+    /// The file is always supplied by value so that the initial input
+    /// set is fully determined by the manifest / use-site declaration.
+    record input-file {
+        path: string,
+        content: list<u8>,
+    }
+
+    /// The top-level request handed to the generator.
+    /// `options` is typed per-generator via the Wado->WIT mapping.
+    /// See "Options schema" below.
+    record request {
+        inputs: list<input-file>,
+        options: /* generator-defined */ any-options,
+    }
+
+    /// One generated Wado file. `path` is relative to the output directory
+    /// configured in the manifest (or alongside the script in inline mode).
+    record output-file {
+        path: string,
+        content: string,
+    }
+
+    record response {
+        files: list<output-file>,
+    }
+
+    variant error {
+        invalid-schema(string),
+        unsupported(string),
+        other(string),
+    }
+}
+
+world generator {
+    import host;
+    use types.{request, response, error};
+
+    export generate: func(req: request) -> result<response, error>;
+}
+```
+
+Notes on the shape:
+
+- There is no `write-file` import. All outputs are returned in the `response` record. This keeps the contract a pure function of its inputs and makes caching a straight hash comparison.
+- There is no `list-dir`, no `wasi:clocks`, no `wasi:random`, no `wasi:http`, no `wasi:sockets`, and no `wasi:cli/environment`. A generator that wants non-determinism has to work for it, and to work for it it would have to export a different world, which the compiler refuses to load.
+- `read-file` exists even though `request.inputs` already carries the initial file set, because real schemas have transitive references (`.proto` files `import` other `.proto` files, GraphQL SDL has `extend type`, WIT has `use` statements). The generator calls `read-file` for transitive pickups; every such call is logged and contributes to the cache key.
+- `source-span` is `(path, byte-start, byte-end)`. The compiler renders the snippet by re-reading the file via `CompilerHost`. This is a small extension to Wado's existing diagnostic system — today spans reference internal file ids, and the codegen framework needs spans to point at files the compiler itself did not load directly. See "Diagnostics" below.
+- `options` is typed per-generator, not a generic JSON blob. See the next section.
+
+### Options schema
+
+A generator declares its options as an ordinary Wado type, typically a `struct`. That type becomes a WIT `record` in the generator's component interface via [`wep-2026-01-29-wit-wado-mapping.md`](./wep-2026-01-29-wit-wado-mapping.md). The compiler extracts the record from the component binary when the generator is first loaded and uses it to type-check the `options = { ... }` block wherever the generator is invoked (manifest or inline use site).
+
+A generator module MUST export a type named `Options` (by convention) for this to work. A missing or ill-typed `Options` export is a compile error at the point the generator is registered, not at the point it runs.
+
+```wado
+// In the generator module: example:proto-codegen/generator.wado
+
+pub struct Options {
+    style: Style,
+    emit_comments: bool,
+}
+
+pub enum Style {
+    Rpc,
+    Grpc,
+    JsonRpc,
+}
+
+export async fn generate(req: Request<Options>) -> Result<Response, Error> {
+    // ... parse proto, emit Wado ...
+}
+```
+
+Several useful consequences fall out:
+
+- Typos in options (`stile = "rpc"`, `style = "rcp"`) are reported at manifest parse time, not after the generator has run and failed cryptically.
+- The LSP can offer completions for option fields inside `wado.toml` and inside `use ... with { generator: { options: { ... } } }`, because the expected type is a real Wado record.
+- When a generator evolves its `Options` incompatibly, consuming projects fail to parse their `wado.toml` with a precise error naming the missing or renamed field. No silent degradation.
+
+Until the Wado→WIT pipeline is implemented, generators may declare their `Options` type in Wado source as above, and the compiler may extract it directly from the Wado IR of the generator module. The end state is to route through the WIT mapping so that generators written in other languages (if that ever becomes useful) can participate without a special case.
+
+### Anatomy of a generator module
+
+A generator is a normal Wado module. It may be:
+
+- a standalone package distributed via the registry, a git URL, or a path;
+- a subdirectory of the consuming project (for project-local generators); or
+- a single `.wado` file inside the consuming project.
+
+The module is distinguished as a generator solely by the fact that it exports the `wado:codegen/generator` world. No special package kind, no `proc-macro = true`-style flag.
+
+```wado
+// tools/my-codegen.wado — a local generator used only by this project.
+
+pub struct Options {
+    namespace: String,
+}
+
+export async fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let proto = req.inputs[0];
+    let text = String::from_utf8(proto.content)?;
+    // ... parse text, produce Wado source ...
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: `{req.options.namespace}.wado`,
+            content: generated_source,
+        }],
+    });
+}
+```
+
+The generator is compiled to a component targeting the `wasm32-wasip*` family at the moment the compiler first needs to invoke it (see "Build pipeline integration"). It runs inside wasmtime with the `host` interface linked to compiler-provided host functions; all other world imports are refused at link time.
+
+### Manifest schema: `[build.generators]`
+
+A new top-level section in `wado.toml` declares generator invocations. The section key is an arbitrary identifier that names the invocation; it is not tied to a file extension, so a project may have multiple invocations of the same generator package, or different generators that consume the same file extension.
+
+```toml
+[build-dependencies]
+proto-codegen = { registry = "example", package = "proto-codegen", version = "1.2" }
+my-graphql = { path = "../my-graphql-gen" }
+
+[build.generators.proto-rpc]
+package = "example:proto-codegen@1.2"
+inputs = [
+    "schemas/user.proto",
+    "schemas/billing.proto",
+]
+output-dir = "src/generated/proto-rpc"
+options = { style = "rpc", emit_comments = true }
+
+[build.generators.proto-grpc]
+package = "example:proto-codegen@1.2"
+inputs = ["schemas/service.proto"]
+output-dir = "src/generated/proto-grpc"
+options = { style = "grpc" }
+
+[build.generators.graphql]
+package = { path = "../my-graphql-gen" }
+inputs = ["schema.graphql"]
+output-dir = "src/generated/graphql"
+```
+
+Fields of a `[build.generators.<name>]` table:
+
+- `package` (required) — a reference to a build-dependency, in the same form accepted by `[dependencies]` and `[build-dependencies]`. Either a string of the form `"namespace:package@version"` that must match an entry in `[build-dependencies]`, or an inline dependency record.
+- `inputs` (required) — a list of literal paths relative to the manifest directory. Globs are not accepted. Every schema the generator will directly consume must appear here. Transitive files pulled in via `read-file` need not appear in this list but contribute to the cache key as they are read.
+- `output-dir` (required) — the directory where generated `.wado` files are written, relative to the manifest directory. The compiler creates it if missing. Every file in the directory with a `#![generated]` attribute belongs to this generator and may be overwritten or deleted by subsequent runs; files without that attribute are left alone and produce an error if they collide with a generator output path.
+- `options` (optional) — a TOML table whose shape must match the generator's exported `Options` type. Missing required fields and type mismatches are reported at manifest parse time.
+
+Multiple `[build.generators.<name>]` sections may reference the same `package`. They are independent invocations with independent caches.
+
+#### New section: `[build-dependencies]`
+
+Generators are delivered as normal Wado packages, but they are built for a different target (`wasm32-wasip*`) and must not appear in the consuming project's runtime dependency graph. This WEP introduces `[build-dependencies]` in `wado.toml`, mirroring Cargo's `[build-dependencies]`. Entries use the same `Dependency` source shapes as `[dependencies]` — `Git`, `Registry`, `Path`, `Workspace`. They are resolved independently from runtime dependencies and are locked in a separate section of `wado.lock`.
+
+### Inline syntax at `use` sites
+
+The manifest form above is convenient for projects with many schemas, but Wado is designed so that a single `.wado` file with a shebang can be a useful program. To keep that property, any generator configuration that can be written in `wado.toml` can also be written inline at the `use` site, with the same schema.
+
+```wado
+#!/usr/bin/env wado run
+
+use { User, Billing } from "./user.wado" with {
+    generator: {
+        package: "example:proto-codegen@1.2",
+        source: "./user.proto",
+        options: { style: "rpc", emit_comments: true },
+    },
+};
+
+export fn run() with Stdout {
+    let u = User { id: 1, name: "Ada" };
+    println(`{u:?}`);
+}
+```
+
+Semantics of `use ... with { generator: { ... } }`:
+
+- The `from` target is the **generated `.wado`** file, exactly as it would be if the generator had been declared in `wado.toml`. The LSP treats this as the primary jump target; `go-to-definition` lands in the generated file.
+- The `source` key is the IDL input file. It is resolved relative to the source file containing the `use` statement. The LSP treats this as the secondary jump target; an explicit "go to schema" action in the LSP jumps here.
+- The `package` and `options` keys have the same meaning as in `[build.generators.<name>]`.
+- When the compiler sees this `use` statement, it synthesizes an anonymous `[build.generators.<anonymous>]` entry whose `inputs` contains just `source` and whose `output-dir` is the directory of the generated `.wado` file. The generator runs, the file is written next to its literal `from` path, and everything from there on is identical to the manifest form.
+
+Rules around mixing the two forms:
+
+- A given schema file may be targeted by at most one generator invocation in the whole compilation unit. If a path appears in a manifest `[build.generators.*].inputs` list, it may not also appear as the `source` of a `use ... with`. The compiler reports this as a duplicate-generator error, listing both declarations.
+- A `with { generator: { ... } }` block must include at least `package` and `source`. Partial forms that only override `options` are not supported in v1; manifest and inline are full equivalents, not a cascade.
+
+Both surfaces parse to the same internal representation (an `Invocation { package, inputs, output-dir, options }`), so downstream logic — caching, scheduling, diagnostics — does not need to care which form the user wrote.
+
+### Build pipeline integration
+
+The codegen framework sits between parsing and name resolution in the compiler pipeline described by [`wep-2026-01-14-compiler-pipeline-refactoring.md`](./wep-2026-01-14-compiler-pipeline-refactoring.md). The sequence for a `wado compile` run is:
+
+1. Read `wado.toml`, resolve `[build-dependencies]`, and fetch generator packages into the build-dependency graph. Each generator package is built for `wasm32-wasip*` if a cached component binary is not already available.
+2. Parse every `.wado` source file in the project. Parsing does not fail on `use` statements whose `from` target does not yet exist, so long as the `use` has a `with { generator: { ... } }` clause; the compiler defers resolution of those statements.
+3. Walk parsed ASTs and collect all inline `use ... with` generator invocations. Merge these with the manifest invocations into a single invocation list. Detect duplicate schema targets and error out.
+4. Build the **generator dependency graph**: an edge from invocation A to invocation B exists if A's `source` or any `read-file` target (known from cache metadata) lies inside B's `output-dir`. Run a topological sort. A cycle is a compile error.
+5. For each invocation in topological order:
+   a. Compute the cache key.
+   b. If `wado.lock` has an entry matching the cache key, and every output file exists on disk with the recorded hash, skip to 5(e).
+   c. Instantiate the generator component in wasmtime. Link `host.read-file` and `host.emit-diagnostic` to compiler-provided closures. All other imports are unlinked and will trap on first use.
+   d. Call `generate(request)` with the initial `inputs` pre-loaded from `CompilerHost`. Every `read-file` made by the generator is forwarded to `CompilerHost` and appended to a per-invocation dependency list.
+   e. Persist each `output-file` in `response` to `<output-dir>/<path>`, stamping the header described below. Delete any existing file in `output-dir` that carries a `#![generated]` attribute and was not produced by this run (garbage collection of stale files from previous generator versions).
+   f. Record the cache entry in `wado.lock`.
+6. Resume parsing for any source files whose `use ... with` pulled in now-materialized `.wado` files. Proceed with name resolution, type checking, and the rest of the normal compile.
+
+The design deliberately re-parses generated files through the same parser path as user-authored Wado, rather than accepting a pre-parsed AST from the generator. This is important because it means a generator that emits syntactically invalid Wado fails with a normal parse error over the generator's own output, and the user can inspect the file on disk to see what went wrong.
+
+### Generated file header
+
+Every file a generator produces is rewritten by the compiler to begin with a fixed header:
+
+```wado
+// @generated by example:proto-codegen@1.2 from ./schemas/user.proto
+// Do not edit by hand; run `wado compile` to regenerate.
+#![generated]
+```
+
+The `@generated` comment is not semantically significant to the compiler, but serves three purposes:
+
+- `wado format` and linters recognize the comment and refuse to rewrite the file's contents.
+- The LSP reads the comment to offer "go to schema" as a secondary navigation target, independently of whether the user wrote `with { generator: { ... } }` at the use site.
+- A human browsing the repository sees immediately that the file is derived.
+
+The `#![generated]` module attribute is the machine-readable version and is what the cache uses to distinguish generated files from hand-written ones when cleaning up stale outputs.
+
+### Caching and `wado.lock`
+
+Each invocation's cache key is the SHA-256 of a canonical concatenation of:
+
+- the resolved generator package identity (`namespace:name@version` + content hash of its source distribution);
+- the content of each initial `input-file`;
+- the content of each file the generator retrieved via `read-file` during the previous successful run;
+- the canonical serialization of the `options` value;
+- the `codegen` world protocol version (see "Versioning" below).
+
+Crucially, the **compiled generator `.wasm` binary is not part of the cache key**. Its content is determined by the generator source plus the Wado compiler version, both of which are already part of the lock file. Including the `.wasm` hash would mean every upgrade of `wado-compiler` forces every generator to re-run, which is undesirable and unnecessary: if the source hash matches, the rebuilt `.wasm` is deterministic enough for caching purposes.
+
+`wado.lock` gains two new sections:
+
+```toml
+[[build-dependency]]
+name = "example:proto-codegen"
+version = "1.2.3"
+source = "registry+https://example.com/wado-registry"
+source-hash = "sha256:abcd1234..."
+# dependencies of the generator itself, resolved in a separate
+# (build-only) graph
+dependencies = ["wado:prelude@0.1", "example:wit-parser@0.4"]
+
+[[generator-cache]]
+invocation = "proto-rpc"          # the manifest key, or a stable synthesized id for inline invocations
+generator = "example:proto-codegen@1.2.3"
+inputs = [
+    { path = "schemas/user.proto",    hash = "sha256:..." },
+    { path = "schemas/billing.proto", hash = "sha256:..." },
+    { path = "schemas/common.proto",  hash = "sha256:..." },  # transitive via read-file
+]
+options-hash = "sha256:..."
+outputs = [
+    { path = "src/generated/proto-rpc/user.wado",    hash = "sha256:..." },
+    { path = "src/generated/proto-rpc/billing.wado", hash = "sha256:..." },
+]
+```
+
+On every build, the compiler recomputes the cache key and compares the expected output hashes against the files actually on disk. If either the key or any output file is out of date, the generator is re-run. If every file matches, the generator is skipped and parsing proceeds against the existing files.
+
+Because all outputs are committed to the repository, this is also the mechanism that makes the framework CI-friendly: a `wado compile --check-clean` mode can run every relevant generator, refuse to overwrite, and fail if the on-disk files differ from what the generator would have produced. This is the same discipline that `cargo fmt --check` enforces for formatting.
+
+### Determinism as a guarantee
+
+Because Wado already targets Wasm, deterministic generator execution is essentially free. The `codegen` world does not import `wasi:clocks`, `wasi:random`, `wasi:http`, `wasi:sockets`, or `wasi:cli/environment`. Wasmtime enforces this at link time: a generator that tries to import anything outside of `wado:codegen/host` fails to instantiate, with a compile error naming the offending import. The consequence is that a generator is, by construction, a pure function of its request plus the files it reads through `host.read-file`. This is the property that makes content-addressed caching sound and that makes CI reproducibility trivial.
+
+This is one place where Wado's choice of Wasm as the language substrate pays off. In-compiler macro systems for non-Wasm languages (Rust, Nim, Scala 3) have to fight determinism via convention; Wado gets it by construction.
+
+### Diagnostics: extending spans to external files
+
+Today, `wado-compiler` spans reference an internal `FileId` assigned when a source file is loaded into a `SourceMap`. The codegen framework needs spans to point at IDL files that the compiler itself did not originally parse — it only read them on behalf of a generator via `host.read-file`. Two small extensions handle this:
+
+1. `SourceMap` is taught to register any file that comes in via `CompilerHost::load_source`, including files read on behalf of a generator. Once a file has been read, it has a stable `FileId` for the rest of the compilation and can back span-based diagnostics.
+2. The generator-facing `source-span` WIT record carries `(path, byte-start, byte-end)` instead of a raw `FileId`. When the compiler materializes a diagnostic produced via `host.emit-diagnostic`, it looks up (or registers) the `FileId` for `path` and emits the diagnostic in its normal format. If `path` refers to a file that was never read by this generator run, the compiler still displays the diagnostic but omits the source excerpt and adds a note that the span is unverified.
+
+This is a small, targeted extension. No new span kind is required for user code, and the behavior of existing Wado diagnostics is unchanged. The detailed implementation lives in follow-up patches rather than a separate WEP.
+
+### Relationship to existing pipelines
+
+`wado-from-idl` remains a Tier 0 bootstrap tool. It generates the `wasi:*` standard library that Wado itself depends on, so it cannot be authored in Wado without a chicken-and-egg problem. It continues to run from `mise run update-stdlib-wasi`, and its output remains committed. This WEP does not propose migrating `wado-from-idl` to the new framework.
+
+Gale is a Tier 1 user-space tool and migrates to the new framework. A `.g4`-consuming invocation registered in `wado.toml` or inline at a `use` site replaces the current `mise run update-gale-golden` dance. The Gale package exports the `wado:codegen/generator` world and accepts an `Options` type that matches the options Gale currently consumes on its command line.
+
+`wado-bundled-libm` and `wado syntax` are unrelated to schema-driven codegen and are not affected by this WEP.
+
+### Versioning
+
+The `codegen` world is versioned as an ordinary WIT interface. The initial version is `wado:codegen@0.1`. A generator declares the exact version it targets in its own `wado.toml`; the compiler refuses to instantiate a generator whose targeted version does not match the compiler's supported set, with an error that names both sides. Until the framework stabilizes, compatibility across `0.x` versions is not guaranteed. Post-1.0 versions follow the usual component-model versioning rules.
+
+The world version is part of the cache key, so a compiler upgrade that bumps the world version invalidates every cached generator output automatically.
+
+## Alternatives considered
+
+### In-compiler macro system
+
+Running generator code directly inside `wado-compiler` — the Rust proc-macro model — would be faster and require no wasmtime dependency. It was rejected for three reasons. First, it would expose the full Rust host environment to every generator, forfeiting determinism. Second, generators written in Wado could not be used this way, so the natural bootstrap story (Gale, `wado-from-idl`) would be a different, second mechanism. Third, Wasm sandboxing is already integral to Wado's story; using it for the compiler's own plugin surface is consistent with the rest of the language.
+
+### Pre-build arbitrary program (`build.rs` equivalent)
+
+Allowing `wado.toml` to declare an arbitrary command line that runs before compile would be maximally flexible. It was rejected because the goal is specifically to introduce a _supervised_ mechanism. Users who need an arbitrary pre-build step can run their own shell and then call `wado compile` — that path already exists and does not need language blessing.
+
+### Glob-based input discovery
+
+An earlier draft allowed `inputs = ["schemas/**/*.proto"]`. It was rejected because globs make the input set of a generator invisible to the LSP and to static tooling in general. With an explicit list, `wado` and the LSP can point at every file that feeds every generator, and there is no ambient "the file appeared in the directory" failure mode. The ergonomic cost — listing files — is paid exactly once per schema file per project.
+
+### `list-dir` host import
+
+For the same reason as globs, the host interface does not expose directory enumeration. A generator that wants to process several files reads them through the initial `request.inputs` list (which is statically enumerable) plus transitive `read-file` calls (which are logged).
+
+### Inline-only configuration
+
+Dropping `[build.generators]` entirely and requiring every generator invocation to be declared at a `use` site would make the framework uniform. It was rejected because a large project with many schemas would spread generator configuration across many files, making global changes (e.g., bumping the generator version) a tedious search-and-replace. The two forms coexist with the rule that a given schema file belongs to exactly one invocation.
+
+### JSON/TOML options instead of typed `Options`
+
+A simpler v1 could have accepted `options` as an opaque JSON/TOML value and left validation to the generator. It was rejected because it defers all feedback to generator runtime, where error messages are necessarily worse than the compiler's own. Typed options also let the LSP offer completions for `wado.toml` and `use ... with { generator: { options: { ... } } }`, which matters for discoverability.
+
+## Open questions
+
+The following are deliberately unresolved in this WEP and will be decided during implementation or in follow-up WEPs.
+
+- [ ] **Watch mode.** `wado compile --watch` is natural for iterative development (edit `.proto`, see `.wado` regenerate). The v1 of this WEP does not specify watch mode; the caching design is already correct for one.
+- [ ] **Parallel execution of independent generator invocations.** The framework is structured so that independent invocations may run in parallel. Whether v1 exploits this is an implementation choice.
+- [ ] **Fine-grained error shape in `response.error`.** The `error` variant is currently `invalid-schema | unsupported | other`. Real generators may want richer structured errors, but we can extend the variant backward-compatibly in a `0.x` bump.
+- [ ] **Target directory for locally compiled generators.** Project-local generators (a `.wado` file inside the consuming project) are compiled to a component on demand. Where the compiled artifact lives — `target/wado-gen/`, a package-global cache, or both — is deferred to the WEP that formally defines a Wado `target/` layout.
+- [ ] **`host.read-file` access scope.** A generator can, in principle, attempt to read any path the compiler host is willing to serve. The v1 behavior is "any path `CompilerHost` accepts", which in practice means any path inside the project directory and the build-dependency cache. A stricter policy (e.g., explicit allow-list per invocation) may be revisited if it turns out to matter.
+- [ ] **Exact `wado.lock` layout.** The sketch in this WEP is indicative. The final layout is decided as part of implementation in `wado-manifest/`.
+- [ ] **Inline-use `source` resolution relative to project root vs. source file.** The WEP specifies resolution relative to the source file containing the `use` statement. If we later want project-root-relative paths for some reason, a new `with { generator: { root: "workspace" } }` key can be added without breaking existing uses.
+
+## Consequences
+
+- Users gain a first-class way to consume any schema language that has (or can acquire) a Wado generator package. The ergonomic bar is close to Dart's `build_runner` and the operational model is close to Swift macros: sandboxed, deterministic, cacheable, automatic.
+- `wado.toml` grows a `[build-dependencies]` section and a `[build.generators]` section. `wado.lock` grows `[[build-dependency]]` and `[[generator-cache]]` entries.
+- `wado-compiler` grows a new phase between parsing and name resolution that runs generators and materializes their output. It gains a wasmtime dependency scoped to the generator-execution path. The core compiler remains I/O-free; all filesystem access still routes through `CompilerHost`.
+- The `CompilerHost` trait gains responsibility for serving generator file reads, in addition to its existing responsibility for user source files. Implementations in `wado-cli` and in the test harness must be updated accordingly.
+- Wado's `SourceMap` and diagnostic renderer are extended to handle spans in files that were read on behalf of a generator. This is a small change; existing diagnostics are unaffected.
+- Gale migrates from `mise run update-gale-golden` to a registered `[build.generators]` invocation. The update task is retired once migration completes. `wado-from-idl` is unchanged.
+- Adding a new schema language to Wado's ecosystem becomes a matter of publishing a package that exports the `wado:codegen/generator` world. No compiler changes are required.
+
+## References
+
+- [`wep-2026-01-16-source-provider-abstraction.md`](./wep-2026-01-16-source-provider-abstraction.md) — `CompilerHost`, the I/O boundary this WEP builds on.
+- [`wep-2026-02-14-package-manifest.md`](./wep-2026-02-14-package-manifest.md) — `wado.toml` and `wado.lock`, to which this WEP adds new sections.
+- [`wep-2026-01-29-wit-wado-mapping.md`](./wep-2026-01-29-wit-wado-mapping.md) — the Wado→WIT mapping used to type the generator's `Options`.
+- [`wep-2026-03-02-include-str.md`](./wep-2026-03-02-include-str.md) — compile-time file inclusion, complementary to this WEP.
+- [`wep-2026-04-01-tide.md`](./wep-2026-04-01-tide.md) — the WebIDL/WIT binding generator, which remains Tier 0.
+- [`wep-2026-03-02-gale.md`](./wep-2026-03-02-gale.md) — the ANTLR grammar generator, to be migrated to this framework.
+- [`wep-2026-01-14-compiler-pipeline-refactoring.md`](./wep-2026-01-14-compiler-pipeline-refactoring.md) — pipeline phases, into which codegen is inserted.
+- [`research-code-generation.md`](./research-code-generation.md) — orthogonal research on generator-authoring ergonomics (reducing `out.push_str()` noise).
