@@ -1,0 +1,18 @@
+// Two modules define struct Widget with an instance method `label`.
+// Each module's method must resolve to its own implementation.
+//
+// Regression test for wir_build::resolve_function_ref suffix-match fallback.
+// Before the fix, both method calls could silently resolve to the same function.
+
+use { new_a } from "./sub/cross_module_same_name_method_a.wado";
+use { new_b } from "./sub/cross_module_same_name_method_b.wado";
+
+test "cross-module same-name methods resolve independently" {
+    let a = new_a(1);
+    let b = new_b(2);
+    assert a.label() == "A";
+    assert b.label() == "B";
+}
+
+__DATA__
+{"test": {}}

@@ -17,6 +17,68 @@ use crate::wir::{
 
 use super::context::WirContext;
 
+/// Classification of a TIR primitive type by the Wasm numeric type family
+/// it is represented as, together with signedness for integer types.
+///
+/// Used by binary / unary op dispatch to pick the correct WIR instruction
+/// (e.g., `I32Add` vs `I64Add`, `I32DivU` vs `I32DivS`) without repeatedly
+/// matching on individual `PrimitiveType` variants.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PrimitiveKind {
+    /// `i8`, `i16`, `i32` — represented as Wasm `i32`, signed.
+    I32Signed,
+    /// `u8`, `u16`, `u32`, `bool`, `char` — represented as Wasm `i32`, unsigned.
+    I32Unsigned,
+    /// `i64` — represented as Wasm `i64`, signed.
+    I64Signed,
+    /// `u64` — represented as Wasm `i64`, unsigned.
+    I64Unsigned,
+    /// `f32`.
+    F32,
+    /// `f64`.
+    F64,
+    /// Anything else — reference types or primitives not handled by
+    /// scalar binop/unop dispatch (e.g., `i128`, `u128`, `v128`).
+    Other,
+}
+
+impl PrimitiveKind {
+    /// Classify a `TypeId`'s underlying primitive.
+    fn from_type_id(type_table: &TypeTable, type_id: TypeId) -> Self {
+        match type_table.get(type_id) {
+            ResolvedType::Primitive(p) => Self::from_primitive(*p),
+            _ => Self::Other,
+        }
+    }
+
+    /// Classify a `PrimitiveType` value.
+    fn from_primitive(p: PrimitiveType) -> Self {
+        match p {
+            PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 => Self::I32Signed,
+            PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::Bool
+            | PrimitiveType::Char => Self::I32Unsigned,
+            PrimitiveType::I64 => Self::I64Signed,
+            PrimitiveType::U64 => Self::I64Unsigned,
+            PrimitiveType::F32 => Self::F32,
+            PrimitiveType::F64 => Self::F64,
+            PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => Self::Other,
+        }
+    }
+
+    /// True for `I64Signed` / `I64Unsigned`.
+    fn is_i64(self) -> bool {
+        matches!(self, Self::I64Signed | Self::I64Unsigned)
+    }
+
+    /// True for unsigned integer families (`I32Unsigned`, `I64Unsigned`).
+    fn is_unsigned(self) -> bool {
+        matches!(self, Self::I32Unsigned | Self::I64Unsigned)
+    }
+}
+
 /// Helper macro for unary f64 builtins.
 macro_rules! unary_f64 {
     ($self:expr, $args:expr, $variant:path) => {{
@@ -256,7 +318,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     ctx: &mut *ctx,
                     type_table: &type_table,
                     tir_func: &tir_func,
-                    _module_source: pending_body.module_source.clone(),
                     label_stack: Vec::new(),
                     match_counter: 0,
                     local_counter: 0,
@@ -287,8 +348,6 @@ struct FunctionTranslator<'a, 'b> {
     ctx: &'a mut WirContext<'b>,
     type_table: &'a TypeTable,
     tir_func: &'a TirFunction,
-    /// The module source this function belongs to.
-    _module_source: ModuleSource,
     /// Stack of Wasm block scopes for computing br depths.
     label_stack: Vec<LabelEntry>,
     /// Counter for generating unique match scrutinee local names.
@@ -2021,234 +2080,119 @@ impl FunctionTranslator<'_, '_> {
         right: Box<WirInstr>,
         left_type_id: TypeId,
     ) -> WirInstr {
-        let is_i64 = matches!(
-            self.type_table.get(left_type_id),
-            ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-        );
-        let is_f64 = matches!(
-            self.type_table.get(left_type_id),
-            ResolvedType::Primitive(PrimitiveType::F64)
-        );
-        let is_f32 = matches!(
-            self.type_table.get(left_type_id),
-            ResolvedType::Primitive(PrimitiveType::F32)
-        );
-        let is_unsigned = matches!(
-            self.type_table.get(left_type_id),
-            ResolvedType::Primitive(
-                PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
-            )
-        );
+        let kind = PrimitiveKind::from_type_id(self.type_table, left_type_id);
 
         match op {
-            TirBinaryOp::Add => {
-                if is_f64 {
-                    WirInstr::F64Add(left, right)
-                } else if is_f32 {
-                    WirInstr::F32Add(left, right)
-                } else if is_i64 {
-                    WirInstr::I64Add(left, right)
-                } else {
-                    WirInstr::I32Add(left, right)
-                }
-            }
-            TirBinaryOp::Sub => {
-                if is_f64 {
-                    WirInstr::F64Sub(left, right)
-                } else if is_f32 {
-                    WirInstr::F32Sub(left, right)
-                } else if is_i64 {
-                    WirInstr::I64Sub(left, right)
-                } else {
-                    WirInstr::I32Sub(left, right)
-                }
-            }
-            TirBinaryOp::Mul => {
-                if is_f64 {
-                    WirInstr::F64Mul(left, right)
-                } else if is_f32 {
-                    WirInstr::F32Mul(left, right)
-                } else if is_i64 {
-                    WirInstr::I64Mul(left, right)
-                } else {
-                    WirInstr::I32Mul(left, right)
-                }
-            }
-            TirBinaryOp::Div => {
-                if is_f64 {
-                    WirInstr::F64Div(left, right)
-                } else if is_f32 {
-                    WirInstr::F32Div(left, right)
-                } else if is_i64 {
-                    if is_unsigned {
-                        WirInstr::I64DivU(left, right)
-                    } else {
-                        WirInstr::I64DivS(left, right)
-                    }
-                } else if is_unsigned {
-                    WirInstr::I32DivU(left, right)
-                } else {
-                    WirInstr::I32DivS(left, right)
-                }
-            }
-            TirBinaryOp::Mod => {
-                if is_i64 {
-                    if is_unsigned {
-                        WirInstr::I64RemU(left, right)
-                    } else {
-                        WirInstr::I64RemS(left, right)
-                    }
-                } else if is_unsigned {
-                    WirInstr::I32RemU(left, right)
-                } else {
-                    WirInstr::I32RemS(left, right)
-                }
-            }
-            TirBinaryOp::Eq => {
-                if is_f64 {
-                    WirInstr::F64Eq(left, right)
-                } else if is_f32 {
-                    WirInstr::F32Eq(left, right)
-                } else if is_i64 {
-                    WirInstr::I64Eq(left, right)
-                } else {
-                    WirInstr::I32Eq(left, right)
-                }
-            }
-            TirBinaryOp::NotEq => {
-                if is_f64 {
-                    WirInstr::F64Ne(left, right)
-                } else if is_f32 {
-                    WirInstr::F32Ne(left, right)
-                } else if is_i64 {
-                    WirInstr::I64Ne(left, right)
-                } else {
-                    WirInstr::I32Ne(left, right)
-                }
-            }
-            TirBinaryOp::Lt => {
-                if is_f64 {
-                    WirInstr::F64Lt(left, right)
-                } else if is_f32 {
-                    WirInstr::F32Lt(left, right)
-                } else if is_i64 {
-                    if is_unsigned {
-                        WirInstr::I64LtU(left, right)
-                    } else {
-                        WirInstr::I64LtS(left, right)
-                    }
-                } else if is_unsigned {
-                    WirInstr::I32LtU(left, right)
-                } else {
-                    WirInstr::I32LtS(left, right)
-                }
-            }
-            TirBinaryOp::LtEq => {
-                if is_f64 {
-                    WirInstr::F64Le(left, right)
-                } else if is_f32 {
-                    WirInstr::F32Le(left, right)
-                } else if is_i64 {
-                    if is_unsigned {
-                        WirInstr::I64LeU(left, right)
-                    } else {
-                        WirInstr::I64LeS(left, right)
-                    }
-                } else if is_unsigned {
-                    WirInstr::I32LeU(left, right)
-                } else {
-                    WirInstr::I32LeS(left, right)
-                }
-            }
-            TirBinaryOp::Gt => {
-                if is_f64 {
-                    WirInstr::F64Gt(left, right)
-                } else if is_f32 {
-                    WirInstr::F32Gt(left, right)
-                } else if is_i64 {
-                    if is_unsigned {
-                        WirInstr::I64GtU(left, right)
-                    } else {
-                        WirInstr::I64GtS(left, right)
-                    }
-                } else if is_unsigned {
-                    WirInstr::I32GtU(left, right)
-                } else {
-                    WirInstr::I32GtS(left, right)
-                }
-            }
-            TirBinaryOp::GtEq => {
-                if is_f64 {
-                    WirInstr::F64Ge(left, right)
-                } else if is_f32 {
-                    WirInstr::F32Ge(left, right)
-                } else if is_i64 {
-                    if is_unsigned {
-                        WirInstr::I64GeU(left, right)
-                    } else {
-                        WirInstr::I64GeS(left, right)
-                    }
-                } else if is_unsigned {
-                    WirInstr::I32GeU(left, right)
-                } else {
-                    WirInstr::I32GeS(left, right)
-                }
-            }
-            TirBinaryOp::And => {
-                if is_i64 {
+            TirBinaryOp::Add => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Add(left, right),
+                PrimitiveKind::F32 => WirInstr::F32Add(left, right),
+                k if k.is_i64() => WirInstr::I64Add(left, right),
+                _ => WirInstr::I32Add(left, right),
+            },
+            TirBinaryOp::Sub => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Sub(left, right),
+                PrimitiveKind::F32 => WirInstr::F32Sub(left, right),
+                k if k.is_i64() => WirInstr::I64Sub(left, right),
+                _ => WirInstr::I32Sub(left, right),
+            },
+            TirBinaryOp::Mul => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Mul(left, right),
+                PrimitiveKind::F32 => WirInstr::F32Mul(left, right),
+                k if k.is_i64() => WirInstr::I64Mul(left, right),
+                _ => WirInstr::I32Mul(left, right),
+            },
+            TirBinaryOp::Div => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Div(left, right),
+                PrimitiveKind::F32 => WirInstr::F32Div(left, right),
+                PrimitiveKind::I64Unsigned => WirInstr::I64DivU(left, right),
+                PrimitiveKind::I64Signed => WirInstr::I64DivS(left, right),
+                PrimitiveKind::I32Unsigned => WirInstr::I32DivU(left, right),
+                _ => WirInstr::I32DivS(left, right),
+            },
+            TirBinaryOp::Mod => match kind {
+                PrimitiveKind::I64Unsigned => WirInstr::I64RemU(left, right),
+                PrimitiveKind::I64Signed => WirInstr::I64RemS(left, right),
+                PrimitiveKind::I32Unsigned => WirInstr::I32RemU(left, right),
+                _ => WirInstr::I32RemS(left, right),
+            },
+            TirBinaryOp::Eq => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Eq(left, right),
+                PrimitiveKind::F32 => WirInstr::F32Eq(left, right),
+                k if k.is_i64() => WirInstr::I64Eq(left, right),
+                _ => WirInstr::I32Eq(left, right),
+            },
+            TirBinaryOp::NotEq => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Ne(left, right),
+                PrimitiveKind::F32 => WirInstr::F32Ne(left, right),
+                k if k.is_i64() => WirInstr::I64Ne(left, right),
+                _ => WirInstr::I32Ne(left, right),
+            },
+            TirBinaryOp::Lt => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Lt(left, right),
+                PrimitiveKind::F32 => WirInstr::F32Lt(left, right),
+                PrimitiveKind::I64Unsigned => WirInstr::I64LtU(left, right),
+                PrimitiveKind::I64Signed => WirInstr::I64LtS(left, right),
+                PrimitiveKind::I32Unsigned => WirInstr::I32LtU(left, right),
+                _ => WirInstr::I32LtS(left, right),
+            },
+            TirBinaryOp::LtEq => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Le(left, right),
+                PrimitiveKind::F32 => WirInstr::F32Le(left, right),
+                PrimitiveKind::I64Unsigned => WirInstr::I64LeU(left, right),
+                PrimitiveKind::I64Signed => WirInstr::I64LeS(left, right),
+                PrimitiveKind::I32Unsigned => WirInstr::I32LeU(left, right),
+                _ => WirInstr::I32LeS(left, right),
+            },
+            TirBinaryOp::Gt => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Gt(left, right),
+                PrimitiveKind::F32 => WirInstr::F32Gt(left, right),
+                PrimitiveKind::I64Unsigned => WirInstr::I64GtU(left, right),
+                PrimitiveKind::I64Signed => WirInstr::I64GtS(left, right),
+                PrimitiveKind::I32Unsigned => WirInstr::I32GtU(left, right),
+                _ => WirInstr::I32GtS(left, right),
+            },
+            TirBinaryOp::GtEq => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Ge(left, right),
+                PrimitiveKind::F32 => WirInstr::F32Ge(left, right),
+                PrimitiveKind::I64Unsigned => WirInstr::I64GeU(left, right),
+                PrimitiveKind::I64Signed => WirInstr::I64GeS(left, right),
+                PrimitiveKind::I32Unsigned => WirInstr::I32GeU(left, right),
+                _ => WirInstr::I32GeS(left, right),
+            },
+            TirBinaryOp::And | TirBinaryOp::BitAnd => {
+                if kind.is_i64() {
                     WirInstr::I64And(left, right)
                 } else {
                     WirInstr::I32And(left, right)
                 }
             }
-            TirBinaryOp::Or => {
-                if is_i64 {
-                    WirInstr::I64Or(left, right)
-                } else {
-                    WirInstr::I32Or(left, right)
-                }
-            }
-            TirBinaryOp::BitAnd => {
-                if is_i64 {
-                    WirInstr::I64And(left, right)
-                } else {
-                    WirInstr::I32And(left, right)
-                }
-            }
-            TirBinaryOp::BitOr => {
-                if is_i64 {
+            TirBinaryOp::Or | TirBinaryOp::BitOr => {
+                if kind.is_i64() {
                     WirInstr::I64Or(left, right)
                 } else {
                     WirInstr::I32Or(left, right)
                 }
             }
             TirBinaryOp::BitXor => {
-                if is_i64 {
+                if kind.is_i64() {
                     WirInstr::I64Xor(left, right)
                 } else {
                     WirInstr::I32Xor(left, right)
                 }
             }
             TirBinaryOp::Shl => {
-                if is_i64 {
+                if kind.is_i64() {
                     WirInstr::I64Shl(left, right)
                 } else {
                     WirInstr::I32Shl(left, right)
                 }
             }
-            TirBinaryOp::Shr => {
-                if is_i64 {
-                    if is_unsigned {
-                        WirInstr::I64ShrU(left, right)
-                    } else {
-                        WirInstr::I64ShrS(left, right)
-                    }
-                } else if is_unsigned {
-                    WirInstr::I32ShrU(left, right)
-                } else {
-                    WirInstr::I32ShrS(left, right)
-                }
-            }
+            TirBinaryOp::Shr => match kind {
+                PrimitiveKind::I64Unsigned => WirInstr::I64ShrU(left, right),
+                PrimitiveKind::I64Signed => WirInstr::I64ShrS(left, right),
+                k if k.is_unsigned() => WirInstr::I32ShrU(left, right),
+                _ => WirInstr::I32ShrS(left, right),
+            },
             TirBinaryOp::RefEq => WirInstr::RefEq(left, right),
             TirBinaryOp::RefNotEq => WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right))),
         }
@@ -2261,34 +2205,18 @@ impl FunctionTranslator<'_, '_> {
         operand: Box<WirInstr>,
         operand_type_id: TypeId,
     ) -> WirInstr {
-        let is_i64 = matches!(
-            self.type_table.get(operand_type_id),
-            ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-        );
-        let is_f64 = matches!(
-            self.type_table.get(operand_type_id),
-            ResolvedType::Primitive(PrimitiveType::F64)
-        );
-        let is_f32 = matches!(
-            self.type_table.get(operand_type_id),
-            ResolvedType::Primitive(PrimitiveType::F32)
-        );
+        let kind = PrimitiveKind::from_type_id(self.type_table, operand_type_id);
 
         match op {
-            TirUnaryOp::Neg => {
-                if is_f64 {
-                    WirInstr::F64Neg(operand)
-                } else if is_f32 {
-                    WirInstr::F32Neg(operand)
-                } else if is_i64 {
-                    WirInstr::I64Sub(Box::new(WirInstr::I64Const(0)), operand)
-                } else {
-                    WirInstr::I32Sub(Box::new(WirInstr::I32Const(0)), operand)
-                }
-            }
+            TirUnaryOp::Neg => match kind {
+                PrimitiveKind::F64 => WirInstr::F64Neg(operand),
+                PrimitiveKind::F32 => WirInstr::F32Neg(operand),
+                k if k.is_i64() => WirInstr::I64Sub(Box::new(WirInstr::I64Const(0)), operand),
+                _ => WirInstr::I32Sub(Box::new(WirInstr::I32Const(0)), operand),
+            },
             TirUnaryOp::Not => WirInstr::I32Eqz(operand),
             TirUnaryOp::BitNot => {
-                if is_i64 {
+                if kind.is_i64() {
                     WirInstr::I64Xor(operand, Box::new(WirInstr::I64Const(-1)))
                 } else {
                     WirInstr::I32Xor(operand, Box::new(WirInstr::I32Const(-1)))
@@ -2552,13 +2480,6 @@ impl FunctionTranslator<'_, '_> {
                 return Some(id);
             }
         }
-        // Try suffix match
-        let suffix = format!("/{name}");
-        for key in self.ctx.func_map.keys() {
-            if key.ends_with(&suffix) {
-                return self.ctx.func_map.get(key).cloned();
-            }
-        }
         None
     }
 
@@ -2579,17 +2500,7 @@ impl FunctionTranslator<'_, '_> {
         resolved_info.base_struct_name = base_name;
         let mangled = resolved_info.to_mangled_name();
         let fq = format!("{module_source}/{mangled}");
-        if let Some(id) = self.ctx.func_map.get(&fq) {
-            return Some(id.clone());
-        }
-        // Try suffix match with the resolved name
-        let suffix = format!("/{mangled}");
-        for key in self.ctx.func_map.keys() {
-            if key.ends_with(&suffix) {
-                return self.ctx.func_map.get(key).cloned();
-            }
-        }
-        None
+        self.ctx.func_map.get(&fq).cloned()
     }
 
     /// Resolve a newtype name to the ultimate base struct/primitive name.
@@ -4137,10 +4048,8 @@ impl FunctionTranslator<'_, '_> {
             // === WASI call indirects ===
             "builtin::call_indirect_stdout_write_via_stream"
             | "builtin::call_indirect_stderr_write_via_stream" => {
-                // These call the appropriate WASI write_via_stream function.
-                // For async write_via_stream (canon lower with async option),
-                // a buffer_size hint (i32.const 2048) is appended.
-                // For sync write_via_stream returning Future<T>, no extra arg is needed.
+                // Wado uses stackful async: canon lower without async flag,
+                // so sync lower returns the result directly.
                 let is_stderr = builtin_name.contains("stderr");
                 let wasi_func_name = if is_stderr {
                     "wasi:cli/Stderr::write_via_stream"
@@ -4149,105 +4058,8 @@ impl FunctionTranslator<'_, '_> {
                 };
                 let key = format!("wasi/{wasi_func_name}");
                 if let Some(func_id) = self.ctx.func_map.get(&key).cloned() {
-                    let mut call_args: Vec<WirInstr> =
+                    let call_args: Vec<WirInstr> =
                         args.iter().map(|a| self.translate_expr(&a.expr)).collect();
-                    // Async canon lower (used for streaming functions) adds buffer_size argument
-                    // get_function uses "Effect::method" key format
-                    let effect_method = if is_stderr {
-                        "Stderr::write_via_stream"
-                    } else {
-                        "Stdout::write_via_stream"
-                    };
-                    let func_info = self.ctx.package.wasi_registry.get_function(effect_method);
-                    // Wado uses stackful async: canon lower without async flag.
-                    // Sync lower returns the result directly (no subtask handle).
-                    let needs_async = false;
-                    let _ = func_info; // suppress unused warning
-                    if needs_async {
-                        // Allocate outptr for async result (Future handle)
-                        let realloc_id = self.ctx.func_map.get("builtin/realloc").cloned();
-                        if let Some(realloc_id) = realloc_id {
-                            // outptr = realloc(0, 0, 4, 4) — 4 bytes for a single i32 (Future handle)
-                            let outptr = WirInstr::Call {
-                                func_id: realloc_id.clone(),
-                                args: vec![
-                                    WirInstr::I32Const(0),
-                                    WirInstr::I32Const(0),
-                                    WirInstr::I32Const(4),
-                                    WirInstr::I32Const(4),
-                                ],
-                            };
-                            // Store outptr in a local so we can read from it after the call
-                            let outptr_local = format!("__cis_outptr_{}", self.local_counter);
-                            self.local_counter += 1;
-                            let subtask_local = format!("__cis_subtask_{}", self.local_counter);
-                            self.local_counter += 1;
-                            let future_local = format!("__cis_future_{}", self.local_counter);
-                            self.local_counter += 1;
-                            call_args.push(WirInstr::LocalGet {
-                                name: outptr_local.clone(),
-                                result_ty: WirType::I32,
-                            });
-                            return Some(WirInstr::Seq(vec![
-                                WirInstr::DeclareLocal {
-                                    name: outptr_local.clone(),
-                                    ty: WirType::I32,
-                                },
-                                WirInstr::DeclareLocal {
-                                    name: subtask_local.clone(),
-                                    ty: WirType::I32,
-                                },
-                                WirInstr::DeclareLocal {
-                                    name: future_local.clone(),
-                                    ty: WirType::I32,
-                                },
-                                WirInstr::LocalSet {
-                                    name: outptr_local.clone(),
-                                    value: Box::new(outptr),
-                                },
-                                // Call WASI import with outptr
-                                WirInstr::LocalSet {
-                                    name: subtask_local,
-                                    value: Box::new(WirInstr::Call {
-                                        func_id,
-                                        args: call_args,
-                                    }),
-                                },
-                                // Read Future handle from outptr
-                                WirInstr::LocalSet {
-                                    name: future_local.clone(),
-                                    value: Box::new(WirInstr::I32Load {
-                                        offset: 0,
-                                        align: 2,
-                                        addr: Box::new(WirInstr::LocalGet {
-                                            name: outptr_local.clone(),
-                                            result_ty: WirType::I32,
-                                        }),
-                                    }),
-                                },
-                                // Free outptr
-                                WirInstr::Drop(Box::new(WirInstr::Call {
-                                    func_id: realloc_id,
-                                    args: vec![
-                                        WirInstr::LocalGet {
-                                            name: outptr_local,
-                                            result_ty: WirType::I32,
-                                        },
-                                        WirInstr::I32Const(4),
-                                        WirInstr::I32Const(4),
-                                        WirInstr::I32Const(0),
-                                    ],
-                                })),
-                                // Return Future handle (not subtask handle)
-                                WirInstr::LocalGet {
-                                    name: future_local,
-                                    result_ty: WirType::I32,
-                                },
-                            ]));
-                        }
-                        // Fallback: no realloc available
-                        call_args.push(WirInstr::I32Const(0));
-                    }
                     Some(WirInstr::Call {
                         func_id,
                         args: call_args,
@@ -4360,25 +4172,20 @@ impl FunctionTranslator<'_, '_> {
 
     /// Determine the WASI package source for an `ErrorCode` type.
     ///
-    /// Uses the WASI registry to find which package (cli, filesystem, http, sockets)
-    /// defines this `ErrorCode`. Falls back to "cli" if not found.
+    /// Extracts the package name from the type's `ModuleSource::Wasi { interface }`
+    /// (e.g. `"http/types.wado"` → `"http"`). Falls back to `"cli"` if the error
+    /// type is not a WASI-defined enum or variant.
     fn error_code_source(&self, error_type_id: TypeId) -> String {
-        // Try to get the type's module source
-        match self.type_table.get(error_type_id) {
+        let module_source = match self.type_table.get(error_type_id) {
             ResolvedType::Enum { module_source, .. }
-            | ResolvedType::Variant { module_source, .. } => {
-                // Extract package from module source (e.g., "wasi:cli/types.wado" → "cli")
-                let source = module_source.to_string();
-                if source.contains("filesystem") {
-                    return "filesystem".to_string();
-                } else if source.contains("http") {
-                    return "http".to_string();
-                } else if source.contains("sockets") {
-                    return "sockets".to_string();
-                }
-                "cli".to_string()
-            }
-            _ => "cli".to_string(),
+            | ResolvedType::Variant { module_source, .. } => module_source,
+            _ => return "cli".to_string(),
+        };
+        if let crate::name::ModuleSource::Wasi { interface } = module_source {
+            // interface format is "{package}/..." (e.g., "http/types.wado")
+            interface.split('/').next().unwrap_or("cli").to_string()
+        } else {
+            "cli".to_string()
         }
     }
 

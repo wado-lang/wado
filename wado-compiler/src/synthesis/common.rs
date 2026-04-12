@@ -59,13 +59,16 @@ pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> Tir
 }
 
 /// Create a call to a synthesized function in the entry module.
-pub fn entry_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
+pub fn entry_call(
+    name: &str,
+    args: Vec<TirExpr>,
+    return_type: TypeId,
+    entry_module_source: ModuleSource,
+) -> TirExpr {
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
-                module_source: ModuleSource::EntryPoint {
-                    filename: String::new(),
-                },
+                module_source: entry_module_source,
                 name: name.to_string(),
                 monomorph_info: None,
                 method_info: None,
