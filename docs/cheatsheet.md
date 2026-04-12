@@ -56,7 +56,7 @@ foo(100);                      // integer literal coerced to i64
 
 // Strings
 "Hello"         // String
-`Hello, {name}` // Template string (see Strings for details)
+`Hello, {name}` // Template string
 `\{"key"\}`     // Escaped braces in template string → {"key"}
 "Hello,
 world!"         // Multi-line string
@@ -128,12 +128,12 @@ bool
 // 128-bit integers (prelude types, work like primitives)
 i128, u128
 
-// Composite
+// Composite (provided by prelude)
 String                  // UTF-8 string
 Array<T>                // dynamic array
 [T, U, V]               // tuple
-Option<T>               // optional value (prelude type)
-Result<T, E>            // result type (prelude type)
+Option<T>               // optional value
+Result<T, E>            // result type
 
 // Reference
 &T                      // immutable reference
@@ -201,7 +201,7 @@ nums.sort_by(|a: &i32, b: &i32| { ... });  // sort with custom Ordering comparat
 
 ### Strings
 
-`String` is a prelude struct with a literal syntax.
+`String` is a prelude type with a literal syntax.
 
 ```wado
 // Template strings (interpolation)
@@ -212,12 +212,12 @@ let greeting = `Hello, {name}!`;         // "Hello, Alice!"
 let s = `{5.0}`;                         // "5"
 let s = `{3.14}`;                        // "3.14"
 
-// Format specifiers (see docs/wep-2026-01-17-template-format-specifiers.md)
+// Format specifiers via Display (see docs/wep-2026-01-17-template-format-specifiers.md)
 let formatted = `{3.14159:0.2f}`;        // "3.14"
 let hex = `{255:x}`;                     // "ff"
-let hex_alt = `{255:#x}`;               // "0xff" (alternate flag adds 0x prefix)
+let hex_alt = `{255:#x}`;                // "0xff" (via alternate flag)
 
-// Inspect — debug output for any type (see docs/wep-2026-02-21-inspect-debug-output.md)
+// Inspect — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
 println(`{point:?}`);                    // "Point { x: 10, y: 20 }"
 println(`{point:#?}`);                   // pretty-print with indentation (see below)
 println(`{point}`);                      // falls back to inspect when no Display impl
@@ -231,10 +231,9 @@ println(`{arr:#?}`);
 //   3,
 // ]
 
-// String methods
-let n = s.len();                         // byte length
-let chars = s.chars().count();           // character count (differs from len() for non-ASCII)
-let empty = s.is_empty();
+// String methods (mostly Rust compatible)
+let n = s.len();                         // UTF8 byte length
+let chars = s.chars().count();           // character count based on Unicode scalars
 
 // String building
 let mut builder = String::with_capacity(20);
@@ -255,9 +254,10 @@ struct Point {
     y: i32,
 }
 
-// Generic struct
-struct Box<T> {
-    value: T,
+// Generics
+struct Pair<F, S> {
+    first: F,
+    second: S,
 }
 
 // Field visibility
@@ -268,7 +268,7 @@ pub struct Config {
 
 // Construction
 let p = Point { x: 10, y: 20 };
-let b = Box { value: 42 };  // T is inferred as i32
+let b = Pair { first: 0, second: 1 };  // F and S are inferred as i32
 
 // Shorthand (variable name matches field)
 let x = 10;
@@ -279,13 +279,13 @@ let p: Point = { x, y };
 let sum = p.x + p.y;
 
 // Destructuring
-let { x, y } = p;                     // unnamed
-let Point { x, y } = p;               // named
+let { x, y } = p;                        // unnamed
+let Point { x, y } = p;                  // named
 let { x: horizontal, y: vertical } = p;  // renaming
-let { name, .. } = person;            // ignore remaining fields
-let mut { x, y } = p;                 // mutable
+let { name, .. } = person;               // ignore remaining fields
+let mut { x, y } = p;                    // mutable
 
-// Recursive types (no Box needed — GC handles indirection)
+// Recursive types
 struct Node {
     value: i32,
     next: Option<Node>,
@@ -334,7 +334,7 @@ variant Shape {
     Point,                 // no payload
 }
 
-// Generic variant
+// Generics
 variant Maybe<T> {
     Just(T),
     Nothing,
@@ -345,7 +345,7 @@ variant Maybe<T> {
 // pub variant Result<T, E> { Ok(T), Err(E) }
 
 // Construction
-let some_val = Option::Some(42);
+let some_val = Option::Some(42);                         // type inferred
 let none_val: Option<i32> = null;                        // Option::None
 let ok_val: Result<i32, String> = Result::Ok(42);
 let err_val: Result<i32, String> = Result::Err("fail");
@@ -397,10 +397,10 @@ fn read(r: &i32) { ... }
 read(&mut y);         // OK: &mut i32 coerced to &i32
 ```
 
-Key differences from Rust (see Value Semantics):
+Key differences from Rust:
 
 - No borrow checker: multiple mutable references allowed
-- Can return references to local variables (GC keeps them alive)
+- Can return references to local variables
 - No lifetime annotations needed
 
 ## Operators
@@ -428,7 +428,7 @@ See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-prece
 'A' as i32              // char -> i32: 65
 // 65 as char           // compile error: use char::from_u32()
 
-// Range (see Range section below)
+// Range: exclusive and inclusive
 ..<  ..=
 
 // Pattern testing (returns bool)
@@ -492,7 +492,6 @@ let t = [42, "hello", true];
 for let v of t {
     println(`{v}`);
 }
-// break and continue are not allowed inside tuple for-of
 
 // Infinite loop
 loop {
@@ -500,7 +499,7 @@ loop {
     continue;
 }
 
-// Labeled block — all blocks require a label (Wado has no unlabeled blocks)
+// Labeled block — all blocks require a label
 scope: {
     let x = 20;  // new scope
 }
@@ -519,7 +518,7 @@ let result = match opt {
     None => 0,
 };
 
-// Or patterns
+// Match statement with "or" patterns
 match color {
     Red | Blue => "cool",
     Green => "warm",
@@ -533,6 +532,7 @@ match expr {
 
 // Or patterns in matches operator
 if shape matches { Circle(_) | Square(_) } { ... }
+
 // Note: matches bindings don't escape — use guard instead
 // if opt matches { Some(x) } && x > 0 { ... }  // Error: x not in scope
 if opt matches { Some(x) && x > 0 } { ... }     // OK: guard inside braces
@@ -563,20 +563,6 @@ let grade = match score {
     90..=100 => "A",
     _ => "invalid",
 };
-
-// Range in matches operator
-if code matches { 0..<128 } { println("ASCII"); }
-
-// Nested sub-patterns in tuples/structs
-match [a, b] {
-    [Some(x), Some(y)] => x + y,
-    [None, _] => 0,
-}
-match [x, y] {
-    [0, 0] => "origin",
-    _ => "other",
-}
-if let { x: 0, y: 0 } = point { println("origin") }
 ```
 
 Semicolons do not have particular semantics; they are just separators to statements. Convention in `wado format`: single-line block does not use semicolon.
@@ -584,15 +570,11 @@ Semicolons do not have particular semantics; they are just separators to stateme
 ```wado
 let a = if true { 1 } else { 2 };   // either 1 or 2
 let b = if true { 1; } else { 2; }; // ditto
-
-let y = if true {
-    1; // ok - semicolon doesn't have particular semantics
-} else {
-    2;
-};
 ```
 
 ## Assert
+
+`assert` behaves like power assert.
 
 ```wado
 assert x > 0;
@@ -622,7 +604,7 @@ pub fn api_function() -> i32 {
 export fn run() { ... }
 ```
 
-A function must have `return` if it returns a value. See Visibility for `pub` and `export` details.
+A function must have `return` if it returns a value.
 
 ### Methods
 
@@ -659,7 +641,7 @@ See [WEP: Closure Implementation](./wep-2026-01-16-closure-implementation.md).
 // Expression body
 let add_one = |x: i32| x + 1;
 
-// Block body (requires explicit return)
+// Block body
 let compute = |x: i32| {
     let doubled = x * 2;
     return doubled + x * 3;
@@ -797,19 +779,17 @@ All entity definitions can have `pub` visibility, including struct fields.
 ## Traits
 
 ```wado
-// Trait declaration
 trait Greet {
     fn greet(&self) -> String;
 }
 
-// Trait implementation
 impl Greet for Person {
     fn greet(&self) -> String {
         return `Hello, {self.name}!`;
     }
 }
 
-// Default method
+// Default methods
 trait Summary {
     fn title(&self) -> String;
 
@@ -849,40 +829,20 @@ trait Default { fn default() -> Self; }
 trait IndexValue<I> { type Output; fn index_value(&self, index: I) -> Self::Output; }
 trait IndexAssign<I> { type Input; fn index_assign(&mut self, index: I, value: Self::Input); }
 trait Index<I> { type Output; fn index(&self, index: I) -> &Self::Output; }
+
+// For string template interpolation
+pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify with specifiers
+pub trait DisplayAlt { fn fmt_alt(&self, f: &mut Formatter); }  // for # (alt) flag
 ```
-
-Custom `Eq`/`Ord` example:
-
-```wado
-impl Eq for Point {
-    fn eq(&self, other: &Self) -> bool {
-        return self.x == other.x && self.y == other.y;
-    }
-}
-
-impl Ord for Point {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let d1 = self.x * self.x + self.y * self.y;
-        let d2 = other.x * other.x + other.y * other.y;
-        if d1 < d2 { return Ordering::Less; }
-        if d1 > d2 { return Ordering::Greater; }
-        return Ordering::Equal;
-    }
-}
-```
-
-`IndexValue` returns by value (copy) and panics if not found. Use `.get()` for `Option<T>`. `Index` is for reference-type elements.
 
 ### Trait Bounds
 
 See [WEP: Trait Bounds Enforcement](./wep-2026-02-07-trait-bounds.md).
 
 ```wado
-// On structs
 struct SortedPair<T: Ord> { first: T, second: T }
 struct PrintableOrd<T: Ord + Printable> { value: T }
 
-// On functions
 fn max<T: Ord>(a: T, b: T) -> T {
     if a > b { return a; }
     return b;
@@ -901,7 +861,13 @@ impl<T: Eq> Eq for Pair<T> {
 }
 ```
 
-All primitives implement `Eq` and `Ord`. Structs auto-derive `Eq` and `Ord` when all fields implement the trait. Variants auto-derive `Eq` when all payload types implement `Eq`. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
+### Auto-Derived Traits
+
+All primitives implement `Eq` and `Ord`. Structs auto-derive `Eq` and `Ord` when all fields implement the trait.
+
+Variants auto-derive `Eq` and `Ord` as well. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
+
+`Inspect` and `InspectAlt` are auto-derived, and `Display` and `DisplayAlt` default to `Inspect` and `InspectAlt` respectively.
 
 ## Associated Constants
 
@@ -910,7 +876,7 @@ impl f64 {
     pub const PI: f64 = 3.14159265358979323846;
 }
 
-let pi = f64::PI;    // Type::CONST syntax
+let pi = f64::PI;
 let max = i32::MAX;
 ```
 
@@ -938,6 +904,9 @@ let d = char::from_u32_unchecked(65); // if you have already validated the u32 v
 'a'.is_ascii_lowercase()              // true
 'A'.to_ascii_lowercase()              // 'a'
 'a'.to_ascii_uppercase()              // 'A'
+
+'a'.is_hexdigit()                     // true
+'a'.hex_digit_value()                 // 10 (panic if the char is not a hex digit)
 ```
 
 ## Iterators
@@ -952,17 +921,17 @@ let arr: Array<i32> = [1, 2, 3, 4, 5];
 for let x of arr { println(`{x}`); }
 
 // Explicit iterator
-let mut iter = arr.iter();
+let mut iter = arr.into_iter();
 iter.next();                              // Option<i32>
 let rest = iter.collect();                // Array<i32>
 
 // Combinators
-let doubled = arr.iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]
-let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect(); // [2, 4]
-let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);     // 15
+let doubled = arr.into_iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]
+let evens = arr.into_iter().filter(|x: i32| x % 2 == 0).collect(); // [2, 4]
+let sum = arr.into_iter().fold(0, |acc: i32, x: i32| acc + x);     // 15
 
 // Chaining
-let result = arr.iter()
+let result = arr.into_iter()
     .filter(|x: i32| x > 2)
     .map(|x: i32| x * 10)
     .collect();  // [30, 40, 50]
@@ -976,7 +945,7 @@ Implement `IntoIterator` to make custom types work with `for-of`. See [Core Stan
 
 See [WEP: Range Object](./wep-2026-03-03-range-object.md).
 
-Two range types: `RangeExclusive<T>` (half-open) and `RangeInclusive<T>` (inclusive). Both are generic structs in `core:prelude`.
+Two range types: `RangeExclusive<T>` and `RangeInclusive<T>`. Both are generic structs in `core:prelude`.
 
 ```wado
 // Range expressions
@@ -987,30 +956,7 @@ Two range types: `RangeExclusive<T>` (half-open) and `RangeInclusive<T>` (inclus
 // Iteration (integers and char via Step trait)
 for let i of 0..<5 { println(`{i}`); }    // 0, 1, 2, 3, 4
 for let c of 'a'..='e' { print(`{c}`); }  // abcde
-
-// Iterator combinators
-let sum = (1..=100).fold(0, |acc: i32, x: i32| acc + x);  // 5050
-let evens = (0..<20).filter(|x: i32| x % 2 == 0).collect();  // [0, 2, ..., 18]
-
-// Pattern matching with ranges
-let grade = match score {
-    90..=100 => "A",
-    80..<90 => "B",
-    _ => "other",
-};
-
-// Exhaustiveness checking (integer types)
-let bit: u8 = get_bit();
-let name = match bit {
-    0 => "zero",
-    1..=255 => "nonzero",
-};  // exhaustive — no wildcard needed
-
-// Overlap detection (compile error)
-// match n { 0..=10 => "a", 5..=15 => "b", _ => "c" }  // error: overlapping ranges
 ```
-
-Operator precedence: `..<` and `..=` sit between assignment and logical OR, and are non-associative (`a..<b..<c` is a compile error).
 
 ## Effects
 
@@ -1134,9 +1080,9 @@ unreachable();            // trap
 
 // core:cli
 use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
-use { log_stdout, log_stderr } from "core:cli";  // no effect required (debug only)
+use { log_stdout, log_stderr } from "core:cli";  // no effect required
 
-// core:collections - TreeMap, TreeSet
+// core:collections
 use { TreeMap, TreeSet } from "core:collections";
 let mut map = TreeMap::<String, i32>::new();
 map["key"] = 42;          // index assignment
@@ -1145,6 +1091,15 @@ let opt = map.get("key"); // fallible access returns Option<V>
 
 let set = ["foo", "bar", "baz"] as TreeSet<String>;
 assert set.contains("foo");
+
+// other standard library
+import { encode, encode_url, encode_with, decode, decode_bytes } from "core:base64";
+import zlib from "core:zlib";             // Wado port of the original zlib
+import serde from "core:serde";           // Wado port of serde crate
+import json from "core:json";             // a.k.a. "serde json"
+import json_value from "core:json_value"; // dynamic JSON value
+import simd from "core:simd";             // interface to Wasm SIMD
+import url from "core:url";               // WHATWG URL
 ```
 
 ## Compile-Time Literals
@@ -1165,8 +1120,8 @@ Paths in `#include_str` and `#include_bytes` are resolved relative to the source
 
 ```wado
 #![no_prelude]             // disable auto-import of core:prelude
-#![TODO]                   // all tests must fail; compile errors also accepted
-#![generated]              // marks machine-generated code (wado-from-idl, gale)
+#![TODO]                   // all tests must fail or not compile
+#![generated]              // marks machine-generated code for tools
 
 struct Foo {
     #[hidden]
@@ -1192,5 +1147,3 @@ Wado supports 128-bit SIMD operations including Relaxed SIMD. See [WEP: SIMD v12
 - [Core Standard Library Reference](./cheatsheet-stdlib-core.md) - Core stdlib quick reference
 - [WASI Standard Library Reference](./cheatsheet-stdlib-wasi.md) - WASI stdlib quick reference
 - [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures) - E2E test fixtures
-
-Note: Wado intentionally does not support macros.
