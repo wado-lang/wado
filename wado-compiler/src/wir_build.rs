@@ -11,6 +11,11 @@ pub mod component_plan;
 mod context;
 mod functions;
 mod translate;
+mod translate_calls;
+mod translate_canonical;
+mod translate_match;
+mod translate_ops;
+mod translate_value_copy;
 mod types;
 
 pub use context::DEFINED_FUNC_BASE;
