@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776030219964,
+  "lastUpdate": 1776030314717,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12503,6 +12503,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7953c65f9ec2bd8af501b10ebce3e46cdf8a6dc1"
         },
         "date": 1776030219689,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c1a9e04cb67b25f257a541deaaf893f764dbf1da",
+          "message": "Merge pull request #831 from wado-lang/claude/research-code-generation-JNKVh\n\ndocs: add WEP for Kiln code generation framework",
+          "timestamp": "2026-04-13T06:41:54+09:00",
+          "tree_id": "ff2f64f9580f3a5d0dc835c7370a08302f193f2f",
+          "url": "https://github.com/wado-lang/wado/commit/c1a9e04cb67b25f257a541deaaf893f764dbf1da"
+        },
+        "date": 1776030314443,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
