@@ -155,18 +155,17 @@ To initialize: `git submodule update --init --recommend-shallow`
 
 ## General Rules
 
-- All the documents and comments must be written in English.
-- If you find a compiler bug, always write a minimum reproducible e2e fixture first. If the bug blocks the current task, fix it immediately before continuing. Otherwise, commit the fixture and continue the current task.
-- Use sub-agents only for research tasks (searching, reading, exploring). Never use sub-agents for editing files.
+- Documents and comments must be written in English.
+- If you find a compiler bug, always write a minimum reproducible e2e fixture as a P0 task. If the bug blocks the current task, fix it immediately before continuing.
+- Use sub-agents only for research tasks. Never use sub-agents for editing files.
 - `CLAUDE.md` is a symlink to `AGENTS.md`.
 
 ## Rules for Rust
 
-- Write correct code with correct design.
+- Avoid ad-hoc fixes. Write correct code with the correct design.
 - Manage dependencies in the workspace `Cargo.toml`.
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!` macro for things that are not yet implemented or not supported.
-- YAGNI. Do the simplest thing that could possibly work.
 - Use `IndexMap` and `IndexSet` from the `indexmap` crate in order to ensure deterministic behaviors.
 - Do not use any comment sections to separate or organize code.
 - Follow TDD: write a failing test case first, then implement the concern.
@@ -234,7 +233,7 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - docs/compiler.md
   - docs/optimizer.md
 - Run `time mise run on-task-done`
-  - It performs format, clippy-fix, update golden fixtures, generation of stdlib docs, and tests.
+  - It performs format, clippy-fix, update / regenerate golden fixtures & artifacts, and tests.
   - It will take 20+ minutes.
   - Run it without `| tail` in order not to lose the results.
   - Commit the entire results of `on-task-done`.
