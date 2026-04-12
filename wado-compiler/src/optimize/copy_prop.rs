@@ -30,9 +30,6 @@ struct CopyBinding {
     source: CopySource,
     /// Type of the binding
     type_id: TypeId,
-    /// Whether the target is mutable
-    #[allow(dead_code)]
-    is_mut: bool,
 }
 
 /// Source of a copy binding
@@ -71,9 +68,6 @@ struct LocalUsage {
     is_assigned: bool,
     /// Whether a field of this local is ever assigned (e.g., `x.field = ...`)
     has_field_mutation: bool,
-    /// Whether the local is used in a loop condition (risky to propagate)
-    #[allow(dead_code)]
-    in_loop_condition: bool,
     /// Whether the local has its address taken
     address_taken: bool,
     /// Whether the local is captured by a closure
@@ -84,7 +78,6 @@ struct LocalUsage {
 fn analyze_copy_binding(stmt: &TirStmt) -> Option<CopyBinding> {
     let TirStmtKind::Let {
         local_index,
-        is_mut,
         value,
         skip_value_copy,
         ..
@@ -143,7 +136,6 @@ fn analyze_copy_binding(stmt: &TirStmt) -> Option<CopyBinding> {
         target_local: *local_index,
         source,
         type_id: value.type_id,
-        is_mut: *is_mut,
     })
 }
 
@@ -158,31 +150,31 @@ fn analyze_function_body(body: &TirBlock) -> AnalysisResult {
         bindings: Vec::new(),
         usage: IndexMap::default(),
     };
-    analyze_block(body, &mut result, false);
+    analyze_block(body, &mut result);
     result
 }
 
-fn analyze_block(block: &TirBlock, result: &mut AnalysisResult, in_loop: bool) {
+fn analyze_block(block: &TirBlock, result: &mut AnalysisResult) {
     for stmt in &block.stmts {
         // Check for copy bindings at statement level
         if let Some(binding) = analyze_copy_binding(stmt) {
             result.bindings.push(binding);
         }
-        analyze_stmt(stmt, result, in_loop);
+        analyze_stmt(stmt, result);
     }
 }
 
-fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult, in_loop: bool) {
+fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } => {
-            analyze_expr(value, result, in_loop, false);
+            analyze_expr(value, result);
         }
         TirStmtKind::Expr(expr) => {
-            analyze_expr(expr, result, in_loop, false);
+            analyze_expr(expr, result);
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                analyze_expr(v, result, in_loop, false);
+                analyze_expr(v, result);
             }
         }
         TirStmtKind::If {
@@ -190,17 +182,17 @@ fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult, in_loop: bool) {
             then_block,
             else_block,
         } => {
-            analyze_expr(condition, result, in_loop, false);
-            analyze_block(then_block, result, in_loop);
+            analyze_expr(condition, result);
+            analyze_block(then_block, result);
             if let Some(eb) = else_block {
-                analyze_block(eb, result, in_loop);
+                analyze_block(eb, result);
             }
         }
         TirStmtKind::Loop { body } => {
-            analyze_block(body, result, true);
+            analyze_block(body, result);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            analyze_block(block, result, in_loop);
+            analyze_block(block, result);
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -208,20 +200,20 @@ fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult, in_loop: bool) {
             else_block,
             ..
         } => {
-            analyze_expr(scrutinee, result, in_loop, false);
-            analyze_block(then_block, result, in_loop);
+            analyze_expr(scrutinee, result);
+            analyze_block(then_block, result);
             if let Some(eb) = else_block {
-                analyze_block(eb, result, in_loop);
+                analyze_block(eb, result);
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                analyze_expr(v, result, in_loop, false);
+                analyze_expr(v, result);
             }
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LetDestructure { value, .. } => {
-            analyze_expr(value, result, in_loop, false);
+            analyze_expr(value, result);
         }
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -232,14 +224,10 @@ fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult, in_loop: bool) {
     }
 }
 
-fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_condition: bool) {
+fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult) {
     match &expr.kind {
         TirExprKind::Local { index, .. } => {
-            let entry = result.usage.entry(*index).or_default();
-            entry.read_count += 1;
-            if in_loop && in_condition {
-                entry.in_loop_condition = true;
-            }
+            result.usage.entry(*index).or_default().read_count += 1;
         }
         TirExprKind::Assign { target, value } => {
             if let TirExprKind::Local { index, .. } = &target.kind {
@@ -251,8 +239,8 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_c
             {
                 result.usage.entry(*index).or_default().has_field_mutation = true;
             }
-            analyze_expr(target, result, in_loop, in_condition);
-            analyze_expr(value, result, in_loop, in_condition);
+            analyze_expr(target, result);
+            analyze_expr(value, result);
         }
         TirExprKind::Unary { op, expr: inner } => {
             if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
@@ -260,36 +248,36 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_c
             {
                 result.usage.entry(*index).or_default().address_taken = true;
             }
-            analyze_expr(inner, result, in_loop, in_condition);
+            analyze_expr(inner, result);
         }
         TirExprKind::Binary { left, right, .. } => {
-            analyze_expr(left, result, in_loop, in_condition);
-            analyze_expr(right, result, in_loop, in_condition);
+            analyze_expr(left, result);
+            analyze_expr(right, result);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                analyze_expr(&arg.expr, result, in_loop, in_condition);
+                analyze_expr(&arg.expr, result);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                analyze_expr(arg, result, in_loop, in_condition);
+                analyze_expr(arg, result);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            analyze_expr(receiver, result, in_loop, in_condition);
+            analyze_expr(receiver, result);
             for arg in args {
-                analyze_expr(&arg.expr, result, in_loop, in_condition);
+                analyze_expr(&arg.expr, result);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            analyze_expr(callee, result, in_loop, in_condition);
+            analyze_expr(callee, result);
             for arg in args {
-                analyze_expr(arg, result, in_loop, in_condition);
+                analyze_expr(arg, result);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            analyze_expr(functor, result, in_loop, in_condition);
+            analyze_expr(functor, result);
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
@@ -297,47 +285,47 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_c
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
-            analyze_expr(inner, result, in_loop, in_condition);
+            analyze_expr(inner, result);
         }
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            analyze_expr(inner, result, in_loop, in_condition);
-            analyze_expr(index, result, in_loop, in_condition);
+            analyze_expr(inner, result);
+            analyze_expr(index, result);
         }
         TirExprKind::Cast { expr: inner, .. } => {
-            analyze_expr(inner, result, in_loop, in_condition);
+            analyze_expr(inner, result);
         }
         TirExprKind::Block(block) => {
-            analyze_block(block, result, in_loop);
+            analyze_block(block, result);
         }
         TirExprKind::LabeledBlock { block, .. } => {
-            analyze_block(block, result, in_loop);
+            analyze_block(block, result);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            analyze_expr(condition, result, in_loop, in_condition);
-            analyze_block(then_branch, result, in_loop);
+            analyze_expr(condition, result);
+            analyze_block(then_branch, result);
             if let Some(eb) = else_branch {
-                analyze_block(eb, result, in_loop);
+                analyze_block(eb, result);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                analyze_expr(&field.value, result, in_loop, in_condition);
+                analyze_expr(&field.value, result);
             }
         }
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                analyze_expr(elem, result, in_loop, in_condition);
+                analyze_expr(elem, result);
             }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
-                analyze_expr(payload_expr, result, in_loop, in_condition);
+                analyze_expr(payload_expr, result);
             }
         }
         TirExprKind::Closure { body, captures, .. } => {
@@ -348,25 +336,25 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_c
                     .or_default()
                     .is_captured = true;
             }
-            analyze_expr(body, result, in_loop, in_condition);
+            analyze_expr(body, result);
         }
         TirExprKind::Match { expr: inner, arms } => {
-            analyze_expr(inner, result, in_loop, in_condition);
+            analyze_expr(inner, result);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    analyze_expr(guard, result, in_loop, in_condition);
+                    analyze_expr(guard, result);
                 }
-                analyze_expr(&arm.body, result, in_loop, in_condition);
+                analyze_expr(&arm.body, result);
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            analyze_expr(value, result, in_loop, in_condition);
+            analyze_expr(value, result);
         }
         TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            analyze_expr(expr, result, in_loop, in_condition);
+            analyze_expr(expr, result);
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            analyze_expr(expr, result, in_loop, in_condition);
+            analyze_expr(expr, result);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -374,11 +362,11 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, in_loop: bool, in_c
             default,
             ..
         } => {
-            analyze_expr(scrutinee, result, in_loop, in_condition);
+            analyze_expr(scrutinee, result);
             for arm in arms {
-                analyze_block(arm, result, in_loop);
+                analyze_block(arm, result);
             }
-            analyze_block(default, result, in_loop);
+            analyze_block(default, result);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
