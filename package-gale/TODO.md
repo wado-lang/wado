@@ -10,24 +10,6 @@ exception). The remaining work is mostly about **propagating** parsed
 information into the IR and **using** it in the code generator so that
 generated parsers are semantically correct, not just syntactically accepted.
 
-## E. Test density / regression safety
-
-- **Integration tests for most real grammars are loose.** Most tests in
-  `g4/integration_test.wado` only assert `parser_rules.len() > N` and
-  similar shape checks. After Batch 5 the HTMLLexer / TypeScriptLexer
-  / css3Lexer tests verify specific lexer-command fields, but the
-  Rust, SQLite, ANTLRv4, and HTMLParser tests still need similar
-  tightening.
-- **No negative test cases.** No fixtures for malformed `.g4` input
-  (syntax errors, missing rules, duplicate rule names) — robustness
-  regressions are easy to miss.
-- **Golden test timeouts were bumped, not fixed.** `generate_typescript_golden`,
-  `generate_rust_golden`, and `generate_css3_golden` are right at the
-  edge of their (now 120 s) timeouts. The root cause is slow code
-  generation for the largest grammars. Investigate which generator
-  pass is the bottleneck (likely SLL prediction or string building)
-  and fix it instead of widening the timeout further.
-
 ## Performance: sqlite-parse Benchmark
 
 ### Remaining Bottleneck: `Parser::last_end` (11.7%)
