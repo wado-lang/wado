@@ -230,29 +230,31 @@ async fn handle_http_request(
     let (wasi_req, io) = WasiRequest::from_http(http_req);
 
     let result = store
-        .run_concurrent(async |store| -> Result<Result<http::Response<Bytes>, Option<HttpErrorCode>>> {
-            let handler = pin!(async {
-                let res = match service.handle(store, wasi_req).await? {
-                    Ok(res) => res,
-                    Err(err) => return anyhow::Ok(Err(Some(err))),
-                };
-                let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
-                let (parts, body) = res.into_parts();
-                let body = BodyExt::collect(body)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?
-                    .to_bytes();
-                anyhow::Ok(Ok(http::Response::from_parts(parts, body)))
-            });
-            let io = pin!(async {
-                io.await
-                    .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
-            });
-            tokio::select! {
-                result = handler => result,
-                result = io => result.map(|()| Err(None)),
-            }
-        })
+        .run_concurrent(
+            async |store| -> Result<Result<http::Response<Bytes>, Option<HttpErrorCode>>> {
+                let handler = pin!(async {
+                    let res = match service.handle(store, wasi_req).await? {
+                        Ok(res) => res,
+                        Err(err) => return anyhow::Ok(Err(Some(err))),
+                    };
+                    let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
+                    let (parts, body) = res.into_parts();
+                    let body = BodyExt::collect(body)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?
+                        .to_bytes();
+                    anyhow::Ok(Ok(http::Response::from_parts(parts, body)))
+                });
+                let io = pin!(async {
+                    io.await
+                        .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
+                });
+                tokio::select! {
+                    result = handler => result,
+                    result = io => result.map(|()| Err(None)),
+                }
+            },
+        )
         .await??;
 
     match result {
