@@ -1283,7 +1283,6 @@ impl FunctionTranslator<'_, '_> {
 
     fn translate_expr_inner(&mut self, expr: &TirExpr) -> WirInstr {
         match &expr.kind {
-            // === Literals ===
             TirExprKind::IntLiteral { value, .. } => match self.type_table.get(expr.type_id) {
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
                     WirInstr::I64Const(*value as i64)
@@ -1307,20 +1306,19 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Null => {
                 // For Option types, construct a None variant struct.
                 if let Some(inner) = self.type_table.as_option(expr.type_id) {
-                    // If the inner type is unresolved (UNKNOWN), use unreachable
-                    // since we can't construct a concrete variant struct without
-                    // knowing the type. This only happens in error recovery paths.
                     if matches!(self.type_table.get(inner), ResolvedType::Unknown) {
-                        WirInstr::Unreachable
-                    } else {
-                        self.translate_variant_construct(
-                            expr.type_id, // variant_type
-                            1,            // case_index: None is case 1
-                            "None",
-                            None, // no payload
-                            expr.type_id,
-                        )
+                        panic!(
+                            "[WIR] Null with unresolved Option inner type (type_id={:?})",
+                            expr.type_id
+                        );
                     }
+                    self.translate_variant_construct(
+                        expr.type_id, // variant_type
+                        1,            // case_index: None is case 1
+                        "None",
+                        None, // no payload
+                        expr.type_id,
+                    )
                 } else {
                     // Non-Option null: emit ref.null as a placeholder value.
                     // Used by CM bindings for local initialization before conditional assignment.
@@ -1334,7 +1332,6 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::Nop
             }
 
-            // === Variables ===
             TirExprKind::Local { index, .. } => {
                 // Unit-type locals have no Wasm representation
                 if expr.type_id == TypeTable::UNIT {
@@ -1377,7 +1374,6 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            // === Binary Operations ===
             TirExprKind::Binary { op, left, right } => {
                 // Short-circuit logical operators: defer right-side evaluation
                 if matches!(op, TirBinaryOp::And) {
@@ -1426,7 +1422,6 @@ impl FunctionTranslator<'_, '_> {
                 result
             }
 
-            // === Unary Operations ===
             TirExprKind::Unary { op, expr: inner } => match op {
                 TirUnaryOp::Ref | TirUnaryOp::MutRef => self.translate_expr(inner),
                 TirUnaryOp::Deref => self.translate_expr(inner),
@@ -1443,7 +1438,6 @@ impl FunctionTranslator<'_, '_> {
                 }
             },
 
-            // === Function Calls ===
             TirExprKind::Call { func, args, .. } => {
                 // Check for instruction-builtins first
                 let builtin = func
@@ -1483,12 +1477,11 @@ impl FunctionTranslator<'_, '_> {
                         args: translated_args,
                     }
                 } else {
-                    eprintln!(
+                    panic!(
                         "[WIR] unresolved Call: name={:?} builtin={:?}",
                         func.name.clone(),
                         builtin
                     );
-                    WirInstr::Unreachable
                 }
             }
             TirExprKind::MethodCall {
@@ -1533,32 +1526,32 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            // === Struct Literal ===
             TirExprKind::StructLiteral { fields, .. } => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    // Unit-typed fields have no Wasm representation; skip them.
-                    let non_unit_fields: Vec<_> = fields
-                        .iter()
-                        .filter(|f| {
-                            !matches!(
-                                self.ctx
-                                    .type_id_to_wir_type(self.type_table, f.value.type_id),
-                                WirType::Unit
-                            )
-                        })
-                        .collect();
-                    let field_instrs: Vec<WirInstr> = non_unit_fields
-                        .iter()
-                        .map(|f| self.translate_expr(&f.value))
-                        .collect();
-                    self.struct_new(type_id, field_instrs)
-                } else {
-                    WirInstr::Unreachable
-                }
+                let WirType::Ref { type_id, .. } = wir_type else {
+                    panic!(
+                        "[WIR] StructLiteral expected Ref WirType, got {wir_type:?} (type_id={:?})",
+                        expr.type_id
+                    );
+                };
+                // Unit-typed fields have no Wasm representation; skip them.
+                let non_unit_fields: Vec<_> = fields
+                    .iter()
+                    .filter(|f| {
+                        !matches!(
+                            self.ctx
+                                .type_id_to_wir_type(self.type_table, f.value.type_id),
+                            WirType::Unit
+                        )
+                    })
+                    .collect();
+                let field_instrs: Vec<WirInstr> = non_unit_fields
+                    .iter()
+                    .map(|f| self.translate_expr(&f.value))
+                    .collect();
+                self.struct_new(type_id, field_instrs)
             }
 
-            // === Field Access ===
             TirExprKind::FieldAccess {
                 expr: receiver,
                 field_name,
@@ -1574,20 +1567,21 @@ impl FunctionTranslator<'_, '_> {
                 let wir_type = self
                     .ctx
                     .type_id_to_wir_type(self.type_table, receiver.type_id);
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    let result_ty = self.struct_field_wir_type(&type_id, field_name);
-                    WirInstr::StructGet {
-                        type_id,
-                        field_name: field_name.clone(),
-                        expr: Box::new(recv),
-                        result_ty,
-                    }
-                } else {
-                    WirInstr::Unreachable
+                let WirType::Ref { type_id, .. } = wir_type else {
+                    panic!(
+                        "[WIR] FieldAccess receiver expected Ref WirType, got {wir_type:?} (field={field_name}, type_id={:?})",
+                        receiver.type_id
+                    );
+                };
+                let result_ty = self.struct_field_wir_type(&type_id, field_name);
+                WirInstr::StructGet {
+                    type_id,
+                    field_name: field_name.clone(),
+                    expr: Box::new(recv),
+                    result_ty,
                 }
             }
 
-            // === Assignment ===
             TirExprKind::Assign { target, value } => {
                 let val = self.translate_expr(value);
                 match &target.kind {
@@ -1645,11 +1639,13 @@ impl FunctionTranslator<'_, '_> {
                         let wir_type = self
                             .ctx
                             .type_id_to_wir_type(self.type_table, receiver.type_id);
-                        if let WirType::Ref { type_id, .. } = wir_type {
-                            self.struct_set(type_id, field_name.clone(), recv, val)
-                        } else {
-                            WirInstr::Unreachable
-                        }
+                        let WirType::Ref { type_id, .. } = wir_type else {
+                            panic!(
+                                "[WIR] FieldAccess assignment expected Ref receiver, got {wir_type:?} (field={field_name}, type_id={:?})",
+                                receiver.type_id
+                            );
+                        };
+                        self.struct_set(type_id, field_name.clone(), recv, val)
                     }
                     TirExprKind::Index {
                         expr: array_expr,
@@ -1662,7 +1658,6 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            // === Cast ===
             TirExprKind::Cast {
                 expr: inner,
                 target_type,
@@ -1671,7 +1666,6 @@ impl FunctionTranslator<'_, '_> {
                 self.translate_cast(inner, inner.type_id, *target_type)
             }
 
-            // === Block ===
             TirExprKind::Block(block) => {
                 let body = if expr.type_id == TypeTable::UNIT {
                     self.translate_stmts(&block.stmts)
@@ -1681,7 +1675,6 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::Seq(body)
             }
 
-            // === If Expression ===
             TirExprKind::If {
                 condition,
                 then_branch,
@@ -1720,19 +1713,16 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            // === Match Expression ===
             TirExprKind::Match {
                 expr: scrutinee,
                 arms,
             } => self.translate_match(scrutinee, arms, expr.type_id),
 
-            // === Index ===
             TirExprKind::Index {
                 expr: array_expr,
                 index: index_expr,
             } => self.translate_index(array_expr, index_expr),
 
-            // === Tuple Literal ===
             TirExprKind::TupleLiteral { elements } => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
                 let wir_type_id = match &wir_type {
@@ -1751,24 +1741,27 @@ impl FunctionTranslator<'_, '_> {
                     }
                     _ => None,
                 };
-                if let Some(type_id) = wir_type_id {
-                    let non_unit_elements: Vec<_> = elements
-                        .iter()
-                        .filter(|e| {
-                            !matches!(
-                                self.ctx.type_id_to_wir_type(self.type_table, e.type_id),
-                                WirType::Unit
-                            )
-                        })
-                        .collect();
-                    let field_instrs: Vec<WirInstr> = non_unit_elements
-                        .iter()
-                        .map(|e| self.translate_expr(e))
-                        .collect();
-                    self.struct_new(type_id, field_instrs)
-                } else {
-                    WirInstr::Unreachable
-                }
+                let Some(type_id) = wir_type_id else {
+                    panic!(
+                        "[WIR] TupleLiteral could not resolve a tuple struct type (expr type_id={:?}, elements={})",
+                        expr.type_id,
+                        elements.len()
+                    );
+                };
+                let non_unit_elements: Vec<_> = elements
+                    .iter()
+                    .filter(|e| {
+                        !matches!(
+                            self.ctx.type_id_to_wir_type(self.type_table, e.type_id),
+                            WirType::Unit
+                        )
+                    })
+                    .collect();
+                let field_instrs: Vec<WirInstr> = non_unit_elements
+                    .iter()
+                    .map(|e| self.translate_expr(e))
+                    .collect();
+                self.struct_new(type_id, field_instrs)
             }
 
             TirExprKind::TupleSpread { .. }
@@ -1779,7 +1772,6 @@ impl FunctionTranslator<'_, '_> {
                 )
             }
 
-            // === Switch (lowered pattern matching) ===
             TirExprKind::Switch {
                 scrutinee,
                 min_value,
@@ -1787,7 +1779,6 @@ impl FunctionTranslator<'_, '_> {
                 default,
             } => self.translate_switch(scrutinee, *min_value, arms, default, expr.type_id),
 
-            // === Variant Operations (lowered) ===
             TirExprKind::VariantTag { expr: inner } => {
                 // Get discriminant field from variant base type
                 let val = self.translate_expr(inner);
@@ -1827,7 +1818,6 @@ impl FunctionTranslator<'_, '_> {
             ),
             TirExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
 
-            // === CM Raw Call ===
             TirExprKind::CmRawCall {
                 local_name, args, ..
             } => {
@@ -1878,15 +1868,13 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            // === Closure ===
             TirExprKind::Closure { .. } => {
-                // Closure should be lowered to StructLiteral or ClosureToCanonical
-                // before reaching this point. If it's still here, emit unreachable.
-                WirInstr::Unreachable
+                panic!(
+                    "[WIR] Closure should be lowered to StructLiteral or ClosureToCanonical before WIR build"
+                );
             }
             TirExprKind::Capture { .. } => {
-                // Capture should be lowered to FieldAccess before reaching this point.
-                WirInstr::Unreachable
+                panic!("[WIR] Capture should be lowered to FieldAccess before WIR build");
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.translate_indirect_call(callee, args, expr.type_id)
@@ -1907,7 +1895,6 @@ impl FunctionTranslator<'_, '_> {
                 unreachable!("TemplateString should have been expanded before WIR build")
             }
 
-            // === Labeled Block Expression ===
             TirExprKind::LabeledBlock { label, block, .. } => {
                 let has_result = expr.type_id != TypeTable::UNIT;
                 self.label_stack.push(LabelEntry {
@@ -1983,8 +1970,7 @@ impl FunctionTranslator<'_, '_> {
         let string_type = self.ctx.struct_type_map.get(&string_struct_name).cloned();
 
         let (Some(array_type_id), Some(string_type_id)) = (u8_array_type, string_type) else {
-            // Types not registered — fall back to unreachable
-            return WirInstr::Unreachable;
+            panic!("[WIR] String literal: u8 array or String struct type not registered");
         };
 
         if byte_len == 0 {
@@ -2039,7 +2025,7 @@ impl FunctionTranslator<'_, '_> {
 
         let (Some(gc_array_type_id), Some(struct_type_id)) = (u8_array_type, array_struct_type)
         else {
-            return WirInstr::Unreachable;
+            panic!("[WIR] Bytes literal: u8 array or Array<u8> struct type not registered");
         };
 
         if byte_len == 0 {
@@ -2522,7 +2508,6 @@ impl FunctionTranslator<'_, '_> {
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         match builtin_name {
-            // === Memory Load Instructions ===
             "builtin::i32_load" => {
                 let addr = self.translate_expr(&args[0].expr);
                 Some(WirInstr::I32Load {
@@ -2557,7 +2542,6 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            // === Memory Store Instructions ===
             "builtin::i32_store" => {
                 let addr = self.translate_expr(&args[0].expr);
                 let val = self.translate_expr(&args[1].expr);
@@ -2599,7 +2583,6 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            // === Array GC Instructions ===
             "builtin::array_new" => {
                 // array.new_default: creates a new array of the given element type
                 let len = self.translate_expr(&args[0].expr);
@@ -2725,7 +2708,6 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            // === Float Math (single-instruction) ===
             "builtin::f64_abs" => unary_f64!(self, args, WirInstr::F64Abs),
             "builtin::f64_ceil" => unary_f64!(self, args, WirInstr::F64Ceil),
             "builtin::f64_floor" => unary_f64!(self, args, WirInstr::F64Floor),
@@ -2745,14 +2727,12 @@ impl FunctionTranslator<'_, '_> {
             "builtin::f32_max" => binary_f32!(self, args, WirInstr::F32Max),
             "builtin::f32_copysign" => binary_f32!(self, args, WirInstr::F32Copysign),
 
-            // === Reference Identity ===
             "builtin::ref_eq" => {
                 let l = self.translate_expr(&args[0].expr);
                 let r = self.translate_expr(&args[1].expr);
                 Some(WirInstr::RefEq(Box::new(l), Box::new(r)))
             }
 
-            // === Bitwise/Integer ===
             "builtin::i32_and" => {
                 let l = self.translate_expr(&args[0].expr);
                 let r = self.translate_expr(&args[1].expr);
@@ -2787,7 +2767,6 @@ impl FunctionTranslator<'_, '_> {
                 Some(WirInstr::I64Popcnt(Box::new(o)))
             }
 
-            // === Reinterpretation ===
             "builtin::i64_reinterpret_f64" => {
                 let o = self.translate_expr(&args[0].expr);
                 Some(WirInstr::I64ReinterpretF64(Box::new(o)))
@@ -3968,7 +3947,6 @@ impl FunctionTranslator<'_, '_> {
                 ))
             }
 
-            // === Memory ===
             "builtin::memory_grow" => {
                 let o = self.translate_expr(&args[0].expr);
                 Some(WirInstr::MemoryGrow(Box::new(o)))
@@ -3985,7 +3963,6 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            // === Control ===
             "builtin::unreachable" => Some(WirInstr::Unreachable),
             "builtin::likely" | "builtin::unlikely" => {
                 let likely = builtin_name == "builtin::likely";
@@ -4010,7 +3987,6 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            // === Multi-value 128-bit integer operations ===
             "builtin::i64_add128" => {
                 let a_lo = Box::new(self.translate_expr(&args[0].expr));
                 let a_hi = Box::new(self.translate_expr(&args[1].expr));
@@ -4042,10 +4018,8 @@ impl FunctionTranslator<'_, '_> {
                 Some(self.wrap_multivalue_i64(WirInstr::I64MulWideS(a, b), result_type_id))
             }
 
-            // === No-op casts ===
             "builtin::i32_as_char" => Some(self.translate_expr(&args[0].expr)),
 
-            // === WASI call indirects ===
             "builtin::call_indirect_stdout_write_via_stream"
             | "builtin::call_indirect_stderr_write_via_stream" => {
                 // Wado uses stackful async: canon lower without async flag,
@@ -4233,10 +4207,7 @@ impl FunctionTranslator<'_, '_> {
                 Some(self.emit_drop_handle(CanonicalIntrinsic::FutureDropWritable(payload), handle))
             }
 
-            other => {
-                eprintln!("[WIR] unhandled canonical method: {other}");
-                None
-            }
+            other => panic!("[WIR] unhandled canonical method: {other}"),
         }
     }
 
@@ -4304,7 +4275,9 @@ impl FunctionTranslator<'_, '_> {
             .type_id_to_wir_type(self.type_table, result_type_id);
         let type_id = match wir_type {
             WirType::Ref { type_id, .. } => type_id,
-            _ => return WirInstr::Unreachable,
+            _ => panic!(
+                "[WIR] emit_stream_or_future_new expected Ref result type, got {wir_type:?} (result_type_id={result_type_id:?})"
+            ),
         };
 
         // Declare a temp local, call import → i64, split into [rx, tx] tuple
@@ -4360,7 +4333,7 @@ impl FunctionTranslator<'_, '_> {
         payload: CmFuturePayload,
     ) -> WirInstr {
         let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
-            return WirInstr::Unreachable;
+            panic!("[WIR] emit_future_read: builtin/realloc not registered");
         };
         // future-read: (handle: i32, ptr: i32) -> i32
         let future_read_id = self.ctx.ensure_canonical(
@@ -4651,7 +4624,9 @@ impl FunctionTranslator<'_, '_> {
     fn lift_future_read_payload(&mut self, option_type_id: TypeId, ptr_name: &str) -> WirInstr {
         // option_type_id = Option<T>; extract T
         let Some(inner_t) = self.type_table.as_option(option_type_id) else {
-            return WirInstr::Unreachable;
+            panic!(
+                "[WIR] lift_future_read_payload: expected Option<T>, got type_id={option_type_id:?}"
+            );
         };
 
         // Check if T is a scalar numeric type (i32, i64, f32, f64, etc.)
@@ -4684,9 +4659,7 @@ impl FunctionTranslator<'_, '_> {
             }
         }
 
-        // Fallback: unsupported T type — emit unreachable
-        // (will trap at runtime if this code path is reached)
-        WirInstr::Unreachable
+        panic!("[WIR] lift_future_read_payload: unsupported payload type (inner_t={inner_t:?})");
     }
 
     /// Lift a scalar numeric value from CM linear memory at `ptr_name + 0`.
@@ -4883,7 +4856,7 @@ impl FunctionTranslator<'_, '_> {
         payload: CmFuturePayload,
     ) -> WirInstr {
         let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
-            return WirInstr::Unreachable;
+            panic!("[WIR] emit_future_write_scalar: builtin/realloc not registered");
         };
         let future_write_id = self.ctx.ensure_canonical(
             CanonicalIntrinsic::FutureWrite(payload),
@@ -4898,14 +4871,16 @@ impl FunctionTranslator<'_, '_> {
 
         // Determine buffer size/alignment from the primitive type
         let ResolvedType::Primitive(prim) = self.type_table.get(value_type_id) else {
-            return WirInstr::Unreachable;
+            panic!(
+                "[WIR] emit_future_write_scalar: expected primitive type, got type_id={value_type_id:?}"
+            );
         };
         let (buf_size, buf_align): (i32, i32) = match prim {
             PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => (1, 1),
             PrimitiveType::I16 | PrimitiveType::U16 => (2, 2),
             PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char => (4, 4),
             PrimitiveType::I64 | PrimitiveType::U64 => (8, 8),
-            _ => return WirInstr::Unreachable,
+            other => panic!("[WIR] emit_future_write_scalar: unsupported primitive {other:?}"),
         };
 
         let mut seq = vec![];
@@ -4962,7 +4937,9 @@ impl FunctionTranslator<'_, '_> {
                 addr: Box::new(ptr()),
                 value: Box::new(value),
             },
-            _ => return WirInstr::Unreachable,
+            other => {
+                panic!("[WIR] emit_future_write_scalar: unsupported store primitive {other:?}")
+            }
         };
         seq.push(store_instr);
 
@@ -5090,7 +5067,7 @@ impl FunctionTranslator<'_, '_> {
     /// for the reader to consume the value before continuing.
     fn emit_future_write_ok_none(&mut self, handle: WirInstr) -> WirInstr {
         let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
-            return WirInstr::Unreachable;
+            panic!("[WIR] emit_future_write_ok_none: builtin/realloc not registered");
         };
         let future_write_id = self.ctx.ensure_canonical(
             CanonicalIntrinsic::FutureWrite(CmFuturePayload::Trailers),
@@ -5236,8 +5213,7 @@ impl FunctionTranslator<'_, '_> {
         if let Some(element_type_id) = self.type_table.as_array(base_type_id) {
             self.build_array_get(arr, idx, base_type_id, element_type_id)
         } else {
-            // Not an array type — fallback
-            WirInstr::Unreachable
+            panic!("[WIR] translate_index: expected array type, got type_id={base_type_id:?}");
         }
     }
 
@@ -5257,7 +5233,9 @@ impl FunctionTranslator<'_, '_> {
             ..
         } = array_struct_wir
         else {
-            return WirInstr::Unreachable;
+            panic!(
+                "[WIR] build_array_get: expected Ref Array<T> struct, got {array_struct_wir:?} (array_type_id={array_type_id:?})"
+            );
         };
 
         // Get the raw GC array type
@@ -5269,7 +5247,9 @@ impl FunctionTranslator<'_, '_> {
             .or_else(|| self.ctx.array_type_map.get(&element_type_id))
             .cloned();
         let Some(raw_type) = raw_array_type else {
-            return WirInstr::Unreachable;
+            panic!(
+                "[WIR] build_array_get: raw GC array type not registered (element_type_id={element_type_id:?}, elem_name={elem_name})"
+            );
         };
 
         // StructGet field "repr" (field 0) to get raw array
@@ -6507,7 +6487,9 @@ impl FunctionTranslator<'_, '_> {
                     module_source.clone(),
                 )
             }
-            _ => return WirInstr::Unreachable,
+            other => panic!(
+                "[WIR] translate_variant_construct: expected Variant/GenericInstance, got {other:?} (variant_type={variant_type:?})"
+            ),
         };
 
         let fq = format!("{variant_module_source}//{variant_name}");
@@ -6525,15 +6507,16 @@ impl FunctionTranslator<'_, '_> {
         } else {
             // Fallback: try the base variant type
             let wir_type = self.ctx.type_id_to_wir_type(self.type_table, result_type);
-            if let WirType::Ref { type_id, .. } = wir_type {
-                let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-                if let Some(payload_expr) = payload {
-                    fields.push(self.translate_expr(payload_expr));
-                }
-                self.struct_new(type_id, fields)
-            } else {
-                WirInstr::Unreachable
+            let WirType::Ref { type_id, .. } = wir_type else {
+                panic!(
+                    "[WIR] translate_variant_construct: case type {case_fq} not registered, and result type {result_type:?} is not a Ref ({wir_type:?})"
+                );
+            };
+            let mut fields = vec![WirInstr::I32Const(case_index as i32)];
+            if let Some(payload_expr) = payload {
+                fields.push(self.translate_expr(payload_expr));
             }
+            self.struct_new(type_id, fields)
         }
     }
 
@@ -6569,7 +6552,9 @@ impl FunctionTranslator<'_, '_> {
                     module_source.clone(),
                 )
             }
-            _ => return WirInstr::Unreachable,
+            other => panic!(
+                "[WIR] build_variant_case_wir: expected Variant/GenericInstance, got {other:?} (variant_type_id={variant_type_id:?})"
+            ),
         };
 
         let fq = format!("{variant_module_source}//{variant_name}");
@@ -6585,15 +6570,16 @@ impl FunctionTranslator<'_, '_> {
             let wir_type = self
                 .ctx
                 .type_id_to_wir_type(self.type_table, variant_type_id);
-            if let WirType::Ref { type_id, .. } = wir_type {
-                let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-                if let Some(payload_instr) = payload {
-                    fields.push(payload_instr);
-                }
-                self.struct_new(type_id, fields)
-            } else {
-                WirInstr::Unreachable
+            let WirType::Ref { type_id, .. } = wir_type else {
+                panic!(
+                    "[WIR] build_variant_case_wir: case type {case_fq} not registered, and variant type {variant_type_id:?} is not a Ref ({wir_type:?})"
+                );
+            };
+            let mut fields = vec![WirInstr::I32Const(case_index as i32)];
+            if let Some(payload_instr) = payload {
+                fields.push(payload_instr);
             }
+            self.struct_new(type_id, fields)
         }
     }
 
@@ -6770,7 +6756,10 @@ impl FunctionTranslator<'_, '_> {
                 return_type,
                 ..
             } => (params.clone(), *return_type),
-            _ => return WirInstr::Unreachable,
+            other => panic!(
+                "[WIR] translate_indirect_call: expected Function type, got {other:?} (callee type_id={:?})",
+                callee.type_id
+            ),
         };
 
         // Compute canonical closure types directly by signature key
@@ -6785,12 +6774,15 @@ impl FunctionTranslator<'_, '_> {
                 vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
             };
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
-        let (fn_type_id, closure_struct_type_id) =
-            if let Some((ftid, stid)) = self.ctx.canonical_closure_types.get(&key) {
-                (ftid.clone(), stid.clone())
-            } else {
-                return WirInstr::Unreachable;
-            };
+        let (fn_type_id, closure_struct_type_id) = if let Some((ftid, stid)) =
+            self.ctx.canonical_closure_types.get(&key)
+        {
+            (ftid.clone(), stid.clone())
+        } else {
+            panic!(
+                "[WIR] translate_indirect_call: canonical closure type not registered for signature {key:?}"
+            );
+        };
 
         // Generate a temp local for the callee as canonical closure struct ref
         let temp_name = format!("__indirect_call_{}", self.local_counter);
@@ -6886,7 +6878,9 @@ impl FunctionTranslator<'_, '_> {
                 return_type,
                 ..
             } => (params.clone(), *return_type),
-            _ => return WirInstr::Unreachable,
+            other => panic!(
+                "[WIR] translate_closure_to_canonical: expected Function type, got {other:?} (target_fn_type={target_fn_type:?})"
+            ),
         };
 
         let param_wirs: Vec<WirType> = param_types
@@ -6905,7 +6899,9 @@ impl FunctionTranslator<'_, '_> {
         let struct_type_id = if let Some((_, stid)) = self.ctx.canonical_closure_types.get(&key) {
             stid.clone()
         } else {
-            return WirInstr::Unreachable;
+            panic!(
+                "[WIR] translate_closure_to_canonical: canonical closure type not registered for signature {key:?}"
+            );
         };
 
         // Look up the pre-registered wrapper function for this functor.
@@ -6915,7 +6911,9 @@ impl FunctionTranslator<'_, '_> {
         let wrapper_func_id = if let Some(id) = self.ctx.closure_wrapper_funcs.get(&functor_key) {
             id.clone()
         } else {
-            return WirInstr::Unreachable;
+            panic!(
+                "[WIR] translate_closure_to_canonical: closure wrapper function not registered for {functor_key:?}"
+            );
         };
 
         // Build: CanonicalClosure { env: functor_as_structref, func: ref.func $wrapper }

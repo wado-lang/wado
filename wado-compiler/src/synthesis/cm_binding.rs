@@ -5960,8 +5960,17 @@ fn synthesize_record_stream_reads(project: &mut Package) {
         return;
     }
 
-    // Generate binding functions for each element type
-    let entry_module = project.tir_modules.values().next().unwrap();
+    // Generate binding functions for each element type.
+    // Use the actual entry module — not `values().next()`, which returns the
+    // first module in the IndexMap and is not guaranteed to be the entry module.
+    // Calls synthesized by `rewrite_cm_resource_methods` target the entry module
+    // via `entry_call`, so the binding functions must live there for resolution
+    // to succeed in wir_build.
+    let entry_source = project.entry_module_source.clone();
+    let entry_module = project
+        .tir_modules
+        .get(&entry_source)
+        .expect("entry module must exist in tir_modules");
     let type_table = entry_module.type_table.clone();
     let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
 
@@ -5992,8 +6001,10 @@ fn synthesize_record_stream_reads(project: &mut Package) {
         new_functions.push(Rc::new(RefCell::new(func)));
     }
 
-    // Add generated functions to the entry module
-    let entry_module = project.tir_modules.values_mut().next().unwrap();
+    let entry_module = project
+        .tir_modules
+        .get_mut(&entry_source)
+        .expect("entry module must exist in tir_modules");
     for func in new_functions {
         entry_module.functions.push(func);
     }

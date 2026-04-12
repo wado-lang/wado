@@ -476,8 +476,6 @@ fn register_raw_array_type(
     }
 }
 
-// === Phase implementations ===
-
 fn register_box_structs(ctx: &mut WirContext<'_>) {
     let type_table = &*ctx.package.type_table.borrow();
     for s in &ctx.package.structs {
