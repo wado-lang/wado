@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775961840368,
+  "lastUpdate": 1775961904045,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11879,6 +11879,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fedb9c5cdc43cdf4418735f59fa4ef3f3697a26b"
         },
         "date": 1775961840223,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "652693d02b5bcb1fbac2ffca15f0c896b30e647d",
+          "message": "Merge pull request #815 from wado-lang/claude/expand-pattern-tests-LqKOR\n\nExpand e2e tests for nested pattern matching and fix bugs",
+          "timestamp": "2026-04-12T11:41:48+09:00",
+          "tree_id": "6afc5a930069440fb0f66d6002d7209ba0b47556",
+          "url": "https://github.com/wado-lang/wado/commit/652693d02b5bcb1fbac2ffca15f0c896b30e647d"
+        },
+        "date": 1775961903749,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
