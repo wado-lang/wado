@@ -370,7 +370,6 @@ fn build_template_block(
                     None,
                     "with_capacity".to_string(),
                 )),
-                is_cm_binding: false,
             },
             type_args: vec![],
             args: vec![CallArg::new(
@@ -430,7 +429,6 @@ fn build_template_block(
                                 None,
                                 "push_str".to_string(),
                             )),
-                            is_cm_binding: false,
                         },
                         type_args: vec![],
                         args: vec![CallArg::new(
@@ -474,7 +472,6 @@ fn build_template_block(
                                     None,
                                     "push_str".to_string(),
                                 )),
-                                is_cm_binding: false,
                             },
                             type_args: vec![],
                             args: vec![CallArg::new(derefed, false)],
@@ -706,7 +703,6 @@ fn build_formatter_expr(
                         None,
                         "new".to_string(),
                     )),
-                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: vec![CallArg::new(buf_mut_ref, false)],
@@ -942,7 +938,6 @@ fn trait_fmt_call(
                         name: mangled,
                         monomorph_info,
                         method_info: Some(local_name),
-                        is_cm_binding: false,
                     },
                     type_args: vec![],
                     args: vec![CallArg::new(fmt, false)],
@@ -1119,7 +1114,6 @@ fn write_str_stmt(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: S
                     None,
                     "write_str".into(),
                 )),
-                is_cm_binding: false,
             },
             type_args: vec![],
             args: vec![CallArg::new(

@@ -2814,7 +2814,6 @@ fn synthesize_adapter(
                                 name: iv_mangled,
                                 monomorph_info: None,
                                 method_info: Some(iv_info),
-                                is_cm_binding: false,
                             },
                             type_args: vec![],
                             args: vec![CallArg::new(
@@ -6260,7 +6259,6 @@ fn synthesize_stream_read_func(
                     is_ref_impl: false,
                     cm_name: None,
                 }),
-                is_cm_binding: false,
             },
             type_args: vec![],
             args: vec![CallArg::new(
@@ -6359,7 +6357,6 @@ fn synthesize_stream_read_func(
                     is_ref_impl: false,
                     cm_name: None,
                 }),
-                is_cm_binding: false,
             },
             type_args: vec![],
             args: vec![CallArg::new(

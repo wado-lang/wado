@@ -171,7 +171,6 @@ fn match_to_switch(
                             name: "unreachable".to_string(),
                             monomorph_info: None,
                             method_info: None,
-                            is_cm_binding: false,
                         },
                         args: vec![],
                         type_args: vec![],
@@ -842,7 +841,6 @@ impl<'a> PatternLowerer<'a> {
                         Some("Eq".to_string()),
                         "eq".to_string(),
                     )),
-                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: vec![CallArg::new(

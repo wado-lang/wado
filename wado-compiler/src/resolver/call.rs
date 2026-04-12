@@ -628,7 +628,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                             trait_name,
                                             method_name.to_string(),
                                         )),
-                                        is_cm_binding: false,
                                     },
                                     type_args: vec![],
                                     args: call_args,
@@ -775,7 +774,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     name: func_name,
                     monomorph_info: None,
                     method_info: None, // Free function call,
-                    is_cm_binding: false,
                 },
                 type_args,
                 args: call_args,
@@ -1184,7 +1182,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     name: mangled_func_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
-                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: vec![
@@ -1795,7 +1792,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         name: mangled_name,
                         monomorph_info,
                         method_info: Some(method_info),
-                        is_cm_binding: false,
                     },
                     type_args: vec![],
                     args: args

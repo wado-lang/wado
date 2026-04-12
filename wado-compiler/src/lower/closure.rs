@@ -429,7 +429,6 @@ impl ClosureLowerer {
                             name: func_name,
                             monomorph_info: None,
                             method_info: None,
-                            is_cm_binding: false,
                         },
                         type_args: Vec::new(),
                         args: call_args,
@@ -3150,7 +3149,6 @@ impl ClosureLowerer {
                                     name: call_method_name,
                                     monomorph_info: None,
                                     method_info: Some(call_method_info),
-                                    is_cm_binding: false,
                                 },
                                 args: call_args,
                                 type_args: Vec::new(),
@@ -4079,7 +4077,6 @@ impl ClosureLowerer {
             name: specialized_name.clone(),
             monomorph_info: orig_monomorph_info,
             method_info: specialized_method_info,
-            is_cm_binding: false,
         };
     }
 

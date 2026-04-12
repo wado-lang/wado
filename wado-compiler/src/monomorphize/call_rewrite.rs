@@ -135,7 +135,6 @@ impl Monomorphizer {
                             is_blanket: false,
                         }),
                         method_info: original_method_info,
-                        is_cm_binding: false,
                     };
 
                     if let ResolvedType::TypeParam { index, .. } = type_table.get(expr.type_id)
@@ -187,7 +186,6 @@ impl Monomorphizer {
                                 is_blanket: false,
                             }),
                             method_info: original_method_info,
-                            is_cm_binding: false,
                         };
                         break;
                     }
@@ -254,7 +252,6 @@ impl Monomorphizer {
                             is_blanket: false,
                         }),
                         method_info: original_method_info,
-                        is_cm_binding: false,
                     };
                     type_args.clear();
                     rewritten = true;
@@ -307,7 +304,6 @@ impl Monomorphizer {
                                     is_blanket: false,
                                 }),
                                 method_info: original_method_info,
-                                is_cm_binding: false,
                             };
                             type_args.clear();
 
@@ -394,7 +390,6 @@ impl Monomorphizer {
                             is_blanket: false,
                         }),
                         method_info: original_method_info,
-                        is_cm_binding: false,
                     };
                     break;
                 }
@@ -441,7 +436,6 @@ impl Monomorphizer {
                         is_blanket: true,
                     }),
                     method_info: original_method_info,
-                    is_cm_binding: false,
                 };
             }
         }
@@ -489,7 +483,6 @@ impl Monomorphizer {
                             is_blanket: false,
                         }),
                         method_info: original_method_info,
-                        is_cm_binding: false,
                     };
                 }
             }
