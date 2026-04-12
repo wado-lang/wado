@@ -1,0 +1,242 @@
+// Comprehensive nested pattern matching tests:
+// tuples inside variants, variants inside tuples, deeply nested, literals in sub-patterns, etc.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Line {
+    start: Point,
+    end: Point,
+}
+
+struct Tagged {
+    label: String,
+    value: Option<i32>,
+}
+
+variant Shape {
+    Circle(f64),
+    Rect([i32, i32]),
+    Labeled([String, Point]),
+    Point,
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+// 1. Variant inside tuple (match)
+fn variant_inside_tuple() with Stdout {
+    let a = Option::Some(10);
+    let b: Option<i32> = null;
+    let pair = [a, b];
+    let result = match pair {
+        [Some(a), Some(b)] => `both: {a},{b}`,
+        [Some(a), None] => `left: {a}`,
+        [None, Some(b)] => `right: {b}`,
+        [None, None] => "neither",
+    };
+    println(result);
+
+    let pair2 = [Option::Some(3), Option::Some(7)];
+    let result2 = match pair2 {
+        [Some(a), Some(b)] => `both: {a},{b}`,
+        [Some(a), None] => `left: {a}`,
+        [None, Some(b)] => `right: {b}`,
+        [None, None] => "neither",
+    };
+    println(result2);
+}
+
+// 2. Tuple inside variant (match)
+fn tuple_inside_variant() with Stdout {
+    let s = Shape::Rect([3, 4]);
+    let desc = match s {
+        Circle(r) => `circle r={r}`,
+        Rect([w, h]) => `rect {w}x{h}`,
+        Labeled(_) => "labeled",
+        Point => "point",
+    };
+    println(desc);
+
+    let s2 = Shape::Labeled(["origin", Point { x: 0, y: 0 }]);
+    let desc2 = match s2 {
+        Circle(_) => "circle",
+        Rect(_) => "rect",
+        Labeled([name, { x, y }]) => `{name}: {x},{y}`,
+        Point => "point",
+    };
+    println(desc2);
+}
+
+// 3. Variant inside struct (match)
+fn variant_inside_struct() with Stdout {
+    let t = Tagged { label: "test", value: Option::Some(99) };
+    let result = match t {
+        { value: Some(n), .. } => `has: {n}`,
+        { value: None, .. } => "empty",
+    };
+    println(result);
+}
+
+// 4. Literal sub-patterns inside tuple (match)
+fn literal_in_tuple() with Stdout {
+    let pair = [1, 2];
+    let desc = match pair {
+        [0, 0] => "origin",
+        [0, y] => `y-axis: {y}`,
+        [x, 0] => `x-axis: {x}`,
+        [x, y] => `point: {x},{y}`,
+    };
+    println(desc);
+
+    let pair2 = [0, 5];
+    let desc2 = match pair2 {
+        [0, 0] => "origin",
+        [0, y] => `y-axis: {y}`,
+        [x, 0] => `x-axis: {x}`,
+        [x, y] => `point: {x},{y}`,
+    };
+    println(desc2);
+}
+
+// 5. Enum inside tuple (match)
+fn enum_inside_tuple() with Stdout {
+    let pair = [Color::Red, 100];
+    let desc = match pair {
+        [Red, n] => `red: {n}`,
+        [Green, n] => `green: {n}`,
+        [Blue, n] => `blue: {n}`,
+    };
+    println(desc);
+}
+
+// 6. Or patterns with nested variant
+fn or_pattern_nested() with Stdout {
+    let s1 = Shape::Circle(1.0);
+    let s2 = Shape::Point;
+    let s3 = Shape::Rect([2, 3]);
+
+    for let s of [s1, s2, s3] {
+        let desc = match s {
+            Circle(_) | Point => "simple",
+            Rect(_) | Labeled(_) => "complex",
+        };
+        println(desc);
+    }
+}
+
+// 7. if-let with nested tuple inside variant
+fn if_let_nested() with Stdout {
+    let opt = Option::Some([10, 20]);
+    if let Some([a, b]) = opt {
+        println(`if-let: {a},{b}`);
+    }
+}
+
+// 8. while-let with nested pattern
+fn while_let_nested() with Stdout {
+    let items: Array<[i32, i32]> = [[1, 2], [3, 4]];
+    let mut iter = items.iter();
+    let mut sum = 0;
+    while let Some([a, b]) = iter.next() {
+        sum += a + b;
+    }
+    println(`while-let sum: {sum}`);
+}
+
+// 9. matches operator with nested pattern
+fn matches_nested() with Stdout {
+    let opt = Option::Some([1, 2]);
+    println(`matches tuple: {opt matches { Some([_, _]) }}`);
+
+    let opt2 = Option::Some(Option::Some(42));
+    println(`matches nested: {opt2 matches { Some(Some(_)) }}`);
+
+    let opt3 = Option::Some(Point { x: 0, y: 0 });
+    println(`matches struct: {opt3 matches { Some({ x: 0, .. }) }}`);
+}
+
+// 10. Nested patterns in for-of with match
+fn for_of_with_nested_match() with Stdout {
+    let items: Array<[Color, i32]> = [
+        [Color::Red, 1],
+        [Color::Green, 2],
+        [Color::Blue, 3],
+    ];
+    for let [color, n] of items {
+        let desc = match color {
+            Red => `R:{n}`,
+            Green => `G:{n}`,
+            Blue => `B:{n}`,
+        };
+        println(desc);
+    }
+}
+
+// 11. Struct destructuring in match with literal fields
+fn struct_literal_in_match() with Stdout {
+    let p = Point { x: 0, y: 5 };
+    let desc = match p {
+        { x: 0, y: 0 } => "origin",
+        { x: 0, y } => `y-axis: {y}`,
+        { x, y: 0 } => `x-axis: {x}`,
+        { x, y } => `point: {x},{y}`,
+    };
+    println(desc);
+}
+
+// 12. Nested struct inside struct in match
+fn nested_struct_match() with Stdout {
+    let line = Line {
+        start: Point { x: 0, y: 0 },
+        end: Point { x: 10, y: 20 },
+    };
+    let desc = match line {
+        { start: { x: 0, y: 0 }, end: { x, y } } => `from origin to ({x},{y})`,
+        { start: { x: sx, y: sy }, end: { x: ex, y: ey } } => `({sx},{sy})->({ex},{ey})`,
+    };
+    println(desc);
+}
+
+// 13. Variant inside variant (Option<Option<T>>) in if-let
+fn variant_inside_variant_iflet() with Stdout {
+    let nested = Option::Some(Option::Some(42));
+    if let Some(Some(n)) = nested {
+        println(`nested if-let: {n}`);
+    }
+}
+
+// 14. Struct inside variant in if-let
+fn struct_inside_variant_iflet() with Stdout {
+    let opt = Option::Some(Point { x: 5, y: 10 });
+    if let Some({ x, y }) = opt {
+        println(`struct if-let: {x},{y}`);
+    }
+}
+
+export fn run() with Stdout {
+    variant_inside_tuple();
+    tuple_inside_variant();
+    variant_inside_struct();
+    literal_in_tuple();
+    enum_inside_tuple();
+    or_pattern_nested();
+    if_let_nested();
+    while_let_nested();
+    matches_nested();
+    for_of_with_nested_match();
+    struct_literal_in_match();
+    nested_struct_match();
+    variant_inside_variant_iflet();
+    struct_inside_variant_iflet();
+}
+
+__DATA__
+{"stdout": "left: 10\nboth: 3,7\nrect 3x4\norigin: 0,0\nhas: 99\npoint: 1,2\ny-axis: 5\nred: 100\nsimple\nsimple\ncomplex\nif-let: 10,20\nwhile-let sum: 10\nmatches tuple: true\nmatches nested: true\nmatches struct: true\nR:1\nG:2\nB:3\ny-axis: 5\nfrom origin to (10,20)\nnested if-let: 42\nstruct if-let: 5,10\n"}

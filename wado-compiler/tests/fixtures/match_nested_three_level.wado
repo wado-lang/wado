@@ -1,0 +1,19 @@
+// Bug: 3-level nested patterns (struct inside tuple inside variant) produce zeroed bindings.
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    let data = Option::Some([Point { x: 1, y: 2 }, Point { x: 3, y: 4 }]);
+    let result = match data {
+        Some([{ x: x1, y: y1 }, { x: x2, y: y2 }]) => `({x1},{y1})->({x2},{y2})`,
+        None => "none",
+    };
+    println(result);
+}
+
+__DATA__
+{"stdout": "(1,2)->(3,4)\n"}

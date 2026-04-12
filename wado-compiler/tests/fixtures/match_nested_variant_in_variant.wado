@@ -1,0 +1,33 @@
+// Bug: nested variant patterns in match produce wrong bindings.
+// Some(Some(n)) should extract n=42 but produces 0.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let nested = Option::Some(Option::Some(42));
+    let result = match nested {
+        Some(Some(n)) => `inner: {n}`,
+        Some(None) => "some-none",
+        None => "none",
+    };
+    println(result);
+
+    let inner: Option<i32> = null;
+    let outer_some = Option::Some(inner);
+    let result2 = match outer_some {
+        Some(Some(n)) => `inner: {n}`,
+        Some(None) => "some-none",
+        None => "none",
+    };
+    println(result2);
+
+    let outer_none: Option<Option<i32>> = null;
+    let result3 = match outer_none {
+        Some(Some(n)) => `inner: {n}`,
+        Some(None) => "some-none",
+        None => "none",
+    };
+    println(result3);
+}
+
+__DATA__
+{"stdout": "inner: 42\nsome-none\nnone\n"}

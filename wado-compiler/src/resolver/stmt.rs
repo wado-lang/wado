@@ -1137,6 +1137,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if let Some(types) = self.type_table.borrow().as_tuple(scrutinee_type) {
                         types
                     } else {
+                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                            expected: "tuple type".to_string(),
+                            found: self.type_table.borrow().type_name(scrutinee_type),
+                            span,
+                        });
                         vec![TypeTable::UNKNOWN; patterns.len()]
                     };
 
