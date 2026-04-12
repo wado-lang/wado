@@ -69,8 +69,7 @@ fn parse_query_params(query: String) -> TreeMap<String, JsonValue> {
 fn headers_to_json(headers: &Fields) -> JsonValue {
     let all = headers.copy_all();
     let mut map = TreeMap::<String, JsonValue>::new();
-    for let entry of all {
-        let [name, value] = entry;
+    for let [name, value] of all {
         map[name] = JsonValue::Str(String::from_utf8_lossy(value));
     }
     return JsonValue::Obj(map);
@@ -107,16 +106,16 @@ fn parse_status_code(s: String) -> Option<u16> {
     }
     if let Some(f) = f64::parse(s) {
         let code = f as i32;
-        if code >= 100 && code <= 599 && f == code as f64 {
-            return Option::<u16>::Some(code as u16);
+        if 100 <= code <= 599 && f == code as f64 {
+            return Option::Some(code as u16);
         }
     }
     return null;
 }
 
-fn build_request_json(method: String, path: String, query: String, headers: &Fields, body: Option<String>) -> String {
+fn build_request_json(method: Method, path: String, query: String, headers: &Fields, body: Option<String>) -> String {
     let mut obj = TreeMap::<String, JsonValue>::new();
-    obj["method"] = JsonValue::Str(method);
+    obj["method"] = JsonValue::Str(method_name(method));
     obj["path"] = JsonValue::Str(path);
     obj["args"] = JsonValue::Obj(parse_query_params(query));
     obj["headers"] = headers_to_json(headers);
@@ -144,7 +143,6 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         "/";
     };
     let method = request.get_method();
-    let method_str = method_name(method);
     let [path, query] = split_path_query(full_path);
 
     let mut status: StatusCode = 200;
@@ -155,47 +153,47 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         content_type = "text/html; charset=utf-8";
         body_str = HOMEPAGE;
     } else if path == "/get" {
-        if method_str != "GET" {
+        if method != Method::Get {
             status = 405;
             body_str = json_error("Method Not Allowed. Use GET.") + "\n";
         } else {
             let h = request.get_headers();
-            body_str = build_request_json(method_str, path, query, &(h as Fields), null) + "\n";
+            body_str = build_request_json(method, path, query, &(h as Fields), null) + "\n";
         }
     } else if path == "/post" {
-        if method_str != "POST" {
+        if method != Method::Post {
             status = 405;
             body_str = json_error("Method Not Allowed. Use POST.") + "\n";
         } else {
             let h = request.get_headers();
             let data = read_body_from_request(request);
-            body_str = build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
         }
     } else if path == "/put" {
-        if method_str != "PUT" {
+        if method != Method::Put {
             status = 405;
             body_str = json_error("Method Not Allowed. Use PUT.") + "\n";
         } else {
             let h = request.get_headers();
             let data = read_body_from_request(request);
-            body_str = build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
         }
     } else if path == "/patch" {
-        if method_str != "PATCH" {
+        if method != Method::Patch {
             status = 405;
             body_str = json_error("Method Not Allowed. Use PATCH.") + "\n";
         } else {
             let h = request.get_headers();
             let data = read_body_from_request(request);
-            body_str = build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
         }
     } else if path == "/delete" {
-        if method_str != "DELETE" {
+        if method != Method::Delete {
             status = 405;
             body_str = json_error("Method Not Allowed. Use DELETE.") + "\n";
         } else {
             let h = request.get_headers();
-            body_str = build_request_json(method_str, path, query, &(h as Fields), null) + "\n";
+            body_str = build_request_json(method, path, query, &(h as Fields), null) + "\n";
         }
     } else if path == "/headers" {
         let h = request.get_headers();
@@ -235,11 +233,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         }
     } else if path == "/anything" || path.starts_with("/anything/") {
         let h = request.get_headers();
-        if method_str == "POST" || method_str == "PUT" || method_str == "PATCH" {
+        if method matches { Post | Put | Patch } {
             let data = read_body_from_request(request);
-            body_str = build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
         } else {
-            body_str = build_request_json(method_str, path, query, &(h as Fields), null) + "\n";
+            body_str = build_request_json(method, path, query, &(h as Fields), null) + "\n";
         }
     } else {
         status = 404;
@@ -250,13 +248,13 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [body_rx, body_tx] = Stream::<u8>::new();
 
     let resp_headers = Fields::new();
-    let _ = resp_headers.append("content-type" as FieldName, content_type.bytes().collect() as FieldValue);
-    let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+    resp_headers.append("content-type", content_type.bytes().collect() as FieldValue);
+    let [response, _response_tx] = Response::new(resp_headers, Option::Some(body_rx), trailers_future);
     response.set_status_code(status);
 
-    task return Result::<Response, ErrorCode>::Ok(response);
+    task return Result::Ok(response);
 
     body_tx.write(body_str.bytes().collect());
     body_tx.drop();
-    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+    trailers_tx.write(Result::Ok(null));
 }
