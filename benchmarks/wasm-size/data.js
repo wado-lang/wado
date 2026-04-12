@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775976910940,
+  "lastUpdate": 1775981561384,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12230,6 +12230,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/545c717e43aaba0ecc78c7fa91a3f1d65d910a13"
         },
         "date": 1775976910658,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "47141d48f9c7c79c0152e4e8ff35c95f59b1a744",
+          "message": "Merge pull request #824 from wado-lang/gfx/update_syntax\n\nchore: update syntax.rs & vscode ext",
+          "timestamp": "2026-04-12T17:09:23+09:00",
+          "tree_id": "8448437d8d0b852fe5c267a93dc219f42bf090d1",
+          "url": "https://github.com/wado-lang/wado/commit/47141d48f9c7c79c0152e4e8ff35c95f59b1a744"
+        },
+        "date": 1775981561226,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
