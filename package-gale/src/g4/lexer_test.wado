@@ -36,12 +36,15 @@ test "arrow token" {
 }
 
 test "keywords" {
+    // Only `grammar` and `fragment` are hard keywords; everything else
+    // (including soft lexer-command keywords like `skip` and `channel`) is
+    // a plain identifier per ANTLR4 lexicon.
     let tokens = tokenize("grammar fragment skip EOF channel");
     assert_token(&tokens[0], G4Token::Grammar, "grammar");
     assert_token(&tokens[1], G4Token::Fragment, "fragment");
-    assert_token(&tokens[2], G4Token::Skip, "skip");
+    assert_token(&tokens[2], G4Token::Identifier, "skip");
     assert_token(&tokens[3], G4Token::Identifier, "EOF");
-    assert_token(&tokens[4], G4Token::Channel, "channel");
+    assert_token(&tokens[4], G4Token::Identifier, "channel");
 }
 
 test "identifiers" {
@@ -95,7 +98,7 @@ test "lexer rule with skip" {
     assert_token(&tokens[2], G4Token::CharClass, "[ \\t\\n\\r]");
     assert_token(&tokens[3], G4Token::Plus, "+");
     assert_token(&tokens[4], G4Token::Arrow, "->");
-    assert_token(&tokens[5], G4Token::Skip, "skip");
+    assert_token(&tokens[5], G4Token::Identifier, "skip");
     assert_token(&tokens[6], G4Token::Semicolon, ";");
 }
 
@@ -135,4 +138,41 @@ test "label assignment" {
     assert_token(&tokens[4], G4Token::Pipe, "|");
     assert_token(&tokens[5], G4Token::StringLit, "-");
     assert_token(&tokens[6], G4Token::RParen, ")");
+}
+
+test "plus_assign list label" {
+    let tokens = tokenize("ids += ID");
+    assert_token(&tokens[0], G4Token::Identifier, "ids");
+    assert_token(&tokens[1], G4Token::PlusAssign, "+=");
+    assert_token(&tokens[2], G4Token::Identifier, "ID");
+}
+
+test "colon_colon scope separator" {
+    let tokens = tokenize("@parser::header");
+    assert_token(&tokens[0], G4Token::At, "@");
+    assert_token(&tokens[1], G4Token::Identifier, "parser");
+    assert_token(&tokens[2], G4Token::ColonColon, "::");
+    assert_token(&tokens[3], G4Token::Identifier, "header");
+}
+
+test "int literal token" {
+    let tokens = tokenize("channel(2)");
+    assert_token(&tokens[0], G4Token::Identifier, "channel");
+    assert_token(&tokens[1], G4Token::LParen, "(");
+    assert_token(&tokens[2], G4Token::IntLit, "2");
+    assert_token(&tokens[3], G4Token::RParen, ")");
+}
+
+test "int literal multi-digit" {
+    let tokens = tokenize("123 0 9999");
+    assert_token(&tokens[0], G4Token::IntLit, "123");
+    assert_token(&tokens[1], G4Token::IntLit, "0");
+    assert_token(&tokens[2], G4Token::IntLit, "9999");
+}
+
+test "char class with literal left bracket inside" {
+    // Real grammars (e.g. TypeScript regex rules) use a literal `[` inside
+    // a char set. Must be treated as content, not as a nested delimiter.
+    let tokens = tokenize("[*\\r\\n\\\\/[]");
+    assert_token(&tokens[0], G4Token::CharClass, "[*\\r\\n\\\\/[]");
 }

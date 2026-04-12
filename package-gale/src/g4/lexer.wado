@@ -141,6 +141,12 @@ impl G4Lexer {
     }
 
     fn read_char_class(&mut self) -> Token {
+        // ANTLR4 char-set lexicon: only `\X` escapes are recognized; the
+        // first unescaped `]` ends the set. A literal `[` inside a set is
+        // just content (not a delimiter), so depth tracking would be wrong
+        // for sets like `[*[]` (used by e.g. TypeScript regex lexer rules).
+        // Argument-action style nesting (`[int[] arr]`) is handled by the
+        // parser via re-scanning, not at this layer.
         let start = self.pos;
         self.pos += 1;
         let mut text = String::with_capacity(16);
@@ -151,19 +157,35 @@ impl G4Lexer {
             }
             let c = self.chars[self.pos];
             self.pos += 1;
-            if c == ']' {
-                text.push(']');
-                return make_token(G4Token::CharClass, text, start, self.pos);
-            } else if c == '\\' {
+            if c == '\\' {
                 text.push(c);
                 if !self.at_end() {
                     text.push(self.chars[self.pos]);
                     self.pos += 1;
                 }
-            } else {
+                continue;
+            }
+            if c == ']' {
                 text.push(c);
+                return make_token(G4Token::CharClass, text, start, self.pos);
+            }
+            text.push(c);
+        }
+    }
+
+    fn read_int_literal(&mut self) -> Token {
+        let start = self.pos;
+        let mut text = String::with_capacity(4);
+        while !self.at_end() {
+            let c = self.chars[self.pos];
+            if '0' <= c <= '9' {
+                text.push(c);
+                self.pos += 1;
+            } else {
+                break;
             }
         }
+        return make_token(G4Token::IntLit, text, start, self.pos);
     }
 
     fn read_identifier(&mut self) -> Token {
@@ -178,11 +200,16 @@ impl G4Lexer {
                 break;
             }
         }
+        // Hard keywords only: `grammar` and `fragment` introduce structural
+        // constructs that the parser disambiguates by token kind. Lexer command
+        // names like `skip`, `channel`, `mode`, `more`, `pushMode`, `popMode`,
+        // `type`, and the rule prequel keywords (`returns`, `throws`, `locals`,
+        // `catch`, `finally`, `import`, `options`, `tokens`, `channels`,
+        // `parser`, `lexer`) remain plain identifiers — they are matched by
+        // text in the parser when their context demands it.
         let kind = match text {
             "grammar" => G4Token::Grammar,
             "fragment" => G4Token::Fragment,
-            "skip" => G4Token::Skip,
-            "channel" => G4Token::Channel,
             _ => G4Token::Identifier,
         };
         return make_token(kind, text, start, self.pos);
@@ -203,6 +230,18 @@ impl G4Lexer {
         }
         if is_ident_start(c) {
             return self.read_identifier();
+        }
+        if '0' <= c <= '9' {
+            return self.read_int_literal();
+        }
+        // Two-char operators: peek ahead before consuming `c`.
+        if c == '+' && self.peek_at(1) matches { Some('=') } {
+            self.pos += 2;
+            return make_token(G4Token::PlusAssign, "+=", start, self.pos);
+        }
+        if c == ':' && self.peek_at(1) matches { Some(':') } {
+            self.pos += 2;
+            return make_token(G4Token::ColonColon, "::", start, self.pos);
         }
         self.pos += 1;
         let text = String::from(c);

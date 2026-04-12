@@ -29,6 +29,10 @@ pub variant Element {
     Group(Array<Alternative>),
     Repeat(RepeatElement),
     Label(LabelElement),
+    /// `.` wildcard — matches any single token. ANTLR4 spec: doc/wildcard.md.
+    Wildcard,
+    /// `~ X` set complement — matches any token NOT in the inner set.
+    Not(NotElement),
 }
 
 pub struct RepeatElement {
@@ -39,6 +43,12 @@ pub struct RepeatElement {
 
 pub struct LabelElement {
     pub name: String,
+    /// `=` for single-value labels, `+=` for list labels.
+    pub list: bool,
+    pub element: Element,
+}
+
+pub struct NotElement {
     pub element: Element,
 }
 
@@ -50,13 +60,32 @@ pub enum RepeatKind {
 }
 
 /// LexerRule represents a lexer rule (uppercase name in .g4).
-/// `mode` is an index into `Grammar.mode_names` (0 = DEFAULT_MODE).
-/// `push_mode` is an index into `Grammar.mode_names`, or NO_MODE (-1) if none.
+///
+/// Mode fields:
+/// - `mode` is the index into `Grammar.mode_names` for the mode this rule
+///   lives in (0 = DEFAULT_MODE).
+/// - `push_mode` is an index into `Grammar.mode_names` for `pushMode(X)`,
+///   or NO_MODE (-1) if no push.
+/// - `set_mode` is an index into `Grammar.mode_names` for `mode(X)` (which
+///   replaces the top of the mode stack), or NO_MODE (-1) if not set.
+/// - `pop_mode` is true if `popMode` was specified.
+///
+/// Token semantics fields (lexer commands per ANTLR4):
+/// - `skip` is true if `-> skip` was specified.
+/// - `more` is true if `-> more` was specified (collect more text, no token).
+/// - `type_override` is the target token name from `-> type(X)`.
+/// - `channel` is the channel id (0 = default, 1 = HIDDEN; integer literals
+///   like `channel(2)` are stored as-is). Named channels declared in a
+///   `channels {}` block are looked up later by the code generator.
 pub struct LexerRule {
     pub name: String,
     pub is_fragment: bool,
     pub skip: bool,
+    pub more: bool,
+    pub type_override: Option<String>,
+    pub channel: i32,
     pub mode: i32,
+    pub set_mode: i32,
     pub push_mode: i32,
     pub pop_mode: bool,
     pub body: Array<LexerAlt>,
@@ -64,7 +93,19 @@ pub struct LexerRule {
 
 impl LexerRule {
     pub fn new(name: String, is_fragment: bool, skip: bool, body: Array<LexerAlt>) -> LexerRule {
-        return LexerRule { name, is_fragment, skip, mode: DEFAULT_MODE, push_mode: NO_MODE, pop_mode: false, body };
+        return LexerRule {
+            name,
+            is_fragment,
+            skip,
+            more: false,
+            type_override: null,
+            channel: 0,
+            mode: DEFAULT_MODE,
+            set_mode: NO_MODE,
+            push_mode: NO_MODE,
+            pop_mode: false,
+            body,
+        };
     }
 }
 
@@ -140,6 +181,9 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
             r.mode = remap[r.mode];
             if r.push_mode >= 0 {
                 r.push_mode = remap[r.push_mode];
+            }
+            if r.set_mode >= 0 {
+                r.set_mode = remap[r.set_mode];
             }
             lexer_rules.push(r);
         }

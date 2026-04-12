@@ -4,6 +4,62 @@
 
 Gale is a Wado-native parser generator. See [README.md](./README.md) and [WEP: Gale](../docs/wep-2026-03-02-gale.md) for design context.
 
+## Compatibility Principle
+
+**Gale aims for full compatibility with the ANTLR4 `.g4` grammar syntax.** The g4 parser must accept any well-formed grammar that the upstream `antlr4` tool accepts. Treat this as a hard contract: if you find a real-world `.g4` file that ANTLR4 accepts but Gale rejects, that is a bug in Gale.
+
+The single intentional exception is **action bodies**, whose contents are skipped:
+
+- `{ ... }` action blocks (rule-level, element-level, named actions like `@header`/`@members`/`@parser::name`)
+- `{ ... }?` semantic predicates
+- `catch [ ... ] { ... }` and `finally { ... }` exception handlers
+- `@init { ... }` / `@after { ... }` rule prequel actions
+
+The parser must still **recognize** these constructs (so files containing them parse without error) and preserve their _presence_ and _position_ in the surrounding IR — only the host-language code inside the braces is discarded. Everything else (`import`, `options`, `channels`, `tokens`, `mode`, `returns`/`throws`/`locals`, rule arguments, list labels `+=`, parser-side `~`/`.`, element options `<...>`, qualified IDs, `mode(X)` lexer command, integer channel arguments, etc.) is first-class.
+
+When fixing or extending the g4 frontend:
+
+- Cross-check the canonical semantics against `vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g` and the curated doc index below.
+- Drive every change with a unit test in `src/g4/{lexer,parser}_test.wado` (TDD: failing test first, then implementation).
+- If an existing test encodes a wrong expectation that diverges from ANTLR4, fix the test — the spec wins.
+
+## ANTLR4 Reference
+
+The upstream ANTLR4 source — including its full documentation and the `LICENSE.txt` (BSD 3-Clause) — is vendored as a shallow git submodule at `vendor/antlr4/`. Read it directly when you need the canonical semantics of a `.g4` construct; do not duplicate the docs into this repo.
+
+Initialize the submodule (first time only):
+
+```sh
+git submodule update --init --recommend-shallow vendor/antlr4
+```
+
+To bump the pinned revision later:
+
+```sh
+git -C vendor/antlr4 fetch --depth 1 origin dev
+git -C vendor/antlr4 checkout FETCH_HEAD
+git add vendor/antlr4
+```
+
+### Curated doc index for Gale development
+
+These are the upstream pages that matter most when working on the g4 parser, the lexer/parser code generator, or the runtime. Read them in roughly this order when ramping up.
+
+| File                                                                                                | Why it matters for Gale                                                                                |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| [`vendor/antlr4/doc/grammars.md`](../vendor/antlr4/doc/grammars.md)                                 | Top-level grammar structure: combined vs. `lexer grammar` / `parser grammar`, `tokens {}`, `import`.   |
+| [`vendor/antlr4/doc/lexer-rules.md`](../vendor/antlr4/doc/lexer-rules.md)                           | Lexer rule semantics: fragments, modes, channels, lexer commands (`skip`, `more`, `pushMode`, `type`). |
+| [`vendor/antlr4/doc/parser-rules.md`](../vendor/antlr4/doc/parser-rules.md)                         | Parser rule semantics: alternatives, EBNF operators, labels, rule arguments and return values.         |
+| [`vendor/antlr4/doc/left-recursion.md`](../vendor/antlr4/doc/left-recursion.md)                     | How ANTLR4 rewrites direct left recursion. Essential context for any parser-generator design choice.   |
+| [`vendor/antlr4/doc/wildcard.md`](../vendor/antlr4/doc/wildcard.md)                                 | Semantics of `.` and non-greedy operators — easy to get wrong in code generation.                      |
+| [`vendor/antlr4/doc/options.md`](../vendor/antlr4/doc/options.md)                                   | Grammar / rule / element options the g4 parser must accept (e.g. `caseInsensitive`, `assoc`).          |
+| [`vendor/antlr4/doc/lexicon.md`](../vendor/antlr4/doc/lexicon.md)                                   | Lexical structure of `.g4` source itself: identifiers, literals, comments, escapes.                    |
+| [`vendor/antlr4/doc/actions.md`](../vendor/antlr4/doc/actions.md)                                   | Action / attribute syntax. Gale skips these, but the parser must recognize and warn on them.           |
+| [`vendor/antlr4/doc/predicates.md`](../vendor/antlr4/doc/predicates.md)                             | Semantic predicate syntax. Same story as actions: must be recognized and skipped.                      |
+| [`vendor/antlr4/doc/target-agnostic-grammars.md`](../vendor/antlr4/doc/target-agnostic-grammars.md) | Best practices for writing host-language-free grammars — exactly the subset Gale targets.              |
+
+For everything else (target-specific runtimes, IDE integration, building ANTLR itself, etc.), browse `vendor/antlr4/doc/` directly.
+
 ## Running Tests
 
 ```sh
