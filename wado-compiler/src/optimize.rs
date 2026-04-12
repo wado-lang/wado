@@ -5,6 +5,7 @@
 //! - Function inlining via `inline` module
 //! - Labeled block fusion via `labeled_block_fusion` module
 //! - Reference elimination via `ref_elim` module
+//! - Container SROA (AoS→SoA for `Array<Tuple<...>>`) via `container_sroa` module
 //! - Scalar Replacement of Aggregates (SROA) via `sroa` module
 //! - Copy propagation via `copy_prop` module
 //! - Common Subexpression Elimination (CSE) via `cse` module
@@ -21,6 +22,7 @@ mod const_branch_prune;
 mod const_folding;
 mod const_global_promotion;
 mod const_propagation;
+mod container_sroa;
 mod copy_prop;
 mod cse;
 pub mod dce;
@@ -39,6 +41,7 @@ use const_branch_prune::prune_constant_branches;
 use const_folding::fold_constants;
 use const_global_promotion::promote_constant_globals;
 use const_propagation::propagate_constants;
+use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
 use dce::{
@@ -236,6 +239,9 @@ fn run_optimization_passes(
     for i in 0..config.iterations {
         profiler.span_start(&format!("tir/iteration {}", i + 1));
         let mut changed = false;
+        changed |= run_pass("tir/container_sroa", project, profiler, |p| {
+            scalarize_containers(p)
+        });
         changed |= run_pass("tir/inline", project, profiler, |p| {
             inline_functions(p, threshold)
         });

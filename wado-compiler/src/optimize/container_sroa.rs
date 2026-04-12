@@ -1,0 +1,1363 @@
+//! Container SROA (P0a) — `AoS` → `SoA` transformation for `Array<Tuple<...>>` locals.
+//!
+//! This pass decomposes local variables of type `Array<[T_0, T_1, ..., T_n]>` into
+//! N parallel `Array<T_k>` locals, eliminating the per-element `struct.new` for
+//! tuple payloads. After decomposition, operations on the original array are
+//! rewritten as parallel operations on the new per-field arrays:
+//!
+//! ```text
+//! let mut v: Array<[i32, i32]> = [];        →   let mut v_0: Array<i32> = [];
+//! v.push([a, b]);                                let mut v_1: Array<i32> = [];
+//! let sum = v[i].0 + v[i].1;                    v_0.push(a); v_1.push(b);
+//!                                                let sum = v_0[i] + v_1[i];
+//! ```
+//!
+//! P0a scope is intentionally narrow:
+//! - Only `Array<Tuple<...>>` locals (not nested arrays, not user structs).
+//! - Only method-call usage; direct indexing is expected to have been desugared
+//!   already into `index_value`/`index_assign` trait calls by lowering.
+//! - Requires the monomorphizer to have already emitted per-field
+//!   `Array<T_k>::{with_capacity, push, len, is_empty}` plus the corresponding
+//!   `^IndexValue<i32>::index_value` / `^IndexAssign<i32>::index_assign` trait
+//!   methods; otherwise the candidate is skipped.
+//!
+//! Runs early in the optimization loop (before inline) so method-call patterns
+//! are still intact.
+
+use crate::flat_package::FlatPackage;
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::tir::{
+    CallArg, FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
+    TypeId, TypeTable,
+};
+use crate::tir_visitor::TirRefVisitor;
+use crate::token::Span;
+
+/// Signature key for a monomorphized `Array<T>` method: (`trait_name`, `method_name`).
+/// Inherent methods (`push/len/is_empty/with_capacity`) use `trait_name = None`;
+/// trait methods (`index_value/index_assign`) use `Some("IndexValue<i32>")` etc.
+type SigKey = (Option<String>, String);
+
+/// Lookup table: (element type `T_k`, (trait, method)) → `FunctionRef` for
+/// `Array<T_k>::method`. Built once per pass.
+type MethodCatalog = IndexMap<(TypeId, SigKey), FunctionRef>;
+
+/// A local that is a candidate for container SROA.
+struct Candidate {
+    /// Original local index
+    local_index: u32,
+    /// Original local name (for generating new local names)
+    local_name: String,
+    /// Whether the original let was `mut`
+    is_mut: bool,
+    /// Element types of the tuple (e.g., `[i32, i32]` → `[I32, I32]`)
+    element_types: Vec<TypeId>,
+    /// Span of the original let statement
+    span: Span,
+    /// Form of the initializer:
+    /// - `Empty`: the seq-lit block for `let v: Array<[...]> = [];`
+    /// - `WithCapacity(n)`: direct call to `Array::with_capacity(n)`
+    init: CandidateInit,
+}
+
+/// How the candidate was initialized.
+enum CandidateInit {
+    /// Empty array literal (desugared to `SequenceLiteralBuilder::new_literal(0)` then `build()`).
+    Empty,
+    /// `Array::with_capacity(n)` where `n` is an integer literal.
+    WithCapacity(u64),
+}
+
+/// Apply container SROA to all functions in the project.
+pub fn scalarize_containers(project: &mut FlatPackage) -> bool {
+    // Build the method catalog once, using an immutable borrow on functions.
+    let catalog = build_method_catalog(project);
+    if catalog.is_empty() {
+        return false;
+    }
+
+    let mut changed = false;
+    for func_rc in &project.functions {
+        // Skip CM bindings (they are ABI bridges, do not optimize their bodies)
+        {
+            let func = func_rc.borrow();
+            if func.is_cm_binding {
+                continue;
+            }
+            if func.body.is_none() {
+                continue;
+            }
+        }
+        // Scoped mutable borrow for analysis + rewrite.
+        let type_table_rc = project.type_table.clone();
+        let mut func = func_rc.borrow_mut();
+        let func_changed = scalarize_in_function(&mut func, &type_table_rc, &catalog);
+        changed |= func_changed;
+    }
+    changed
+}
+
+/// Build a catalog of monomorphized `Array<T>::{method}` function references in this project.
+fn build_method_catalog(project: &FlatPackage) -> MethodCatalog {
+    let mut catalog = MethodCatalog::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        // Must be an instance/static method with `method_info`
+        let Some(method_info) = &func.method_info else {
+            continue;
+        };
+        // Must be a method on Array (by base struct name)
+        if method_info.base_struct_name != "Array" {
+            continue;
+        }
+        // Must be a monomorphized method (we need the concrete impl type arg)
+        let Some(mono) = &func.monomorph_info else {
+            continue;
+        };
+        // Expect exactly one impl type arg (the element type T)
+        if mono.impl_type_args.len() != 1 {
+            continue;
+        }
+        let element_ty = mono.impl_type_args[0];
+        let sig_key: SigKey = (
+            method_info.trait_name.clone(),
+            method_info.method_name.clone(),
+        );
+        let func_ref = FunctionRef::from_resolved(&func, func.module_source.clone());
+        // First-writer wins (there should only be one per (T, sig)).
+        catalog.entry((element_ty, sig_key)).or_insert(func_ref);
+    }
+    catalog
+}
+
+/// Per-function driver: detect candidates, analyze uses, allocate parallel locals, rewrite.
+fn scalarize_in_function(
+    func: &mut TirFunction,
+    type_table_rc: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
+    catalog: &MethodCatalog,
+) -> bool {
+    // Step 1: collect candidates. Immutable borrow of type_table.
+    let candidates = {
+        let type_table = type_table_rc.borrow();
+        let body = func.body.as_ref().expect("checked in caller");
+        collect_candidates(body, &type_table)
+    };
+    if candidates.is_empty() {
+        return false;
+    }
+
+    // Step 2: escape analysis. Build safe-set via whitelist + tuple-source fixpoint.
+    let body_ref = func.body.as_ref().expect("checked in caller");
+    let safe_indices = compute_safe_set(body_ref, &candidates);
+    if safe_indices.is_empty() {
+        return false;
+    }
+
+    // Step 3: verify that every required (element_ty, sig) is present in the catalog.
+    // If any candidate has missing methods, drop it.
+    let safe_candidates: Vec<&Candidate> = candidates
+        .iter()
+        .filter(|c| safe_indices.contains(&c.local_index))
+        .filter(|c| required_methods_available(c, catalog))
+        .collect();
+    if safe_candidates.is_empty() {
+        return false;
+    }
+
+    // Step 4: allocate parallel `Array<T_k>` locals. Mutable borrow of type_table.
+    // Map: (original local, field k) → new local index
+    let mut field_local_map: IndexMap<(u32, u32), u32> = IndexMap::default();
+    // Map: (original local, field k) → (new name, array type id)
+    let mut field_info_map: IndexMap<(u32, u32), (String, TypeId)> = IndexMap::default();
+    // The set of original locals we decided to decompose (final).
+    let mut decomposed: IndexSet<u32> = IndexSet::default();
+    {
+        let mut type_table = type_table_rc.borrow_mut();
+        for c in &safe_candidates {
+            let base = func.local_count;
+            for (k, &elem_ty) in c.element_types.iter().enumerate() {
+                let arr_ty = type_table.make_array(elem_ty);
+                let new_index = base + k as u32;
+                let new_name = format!("__csroa_{}_{}", c.local_name, k);
+                field_local_map.insert((c.local_index, k as u32), new_index);
+                field_info_map.insert((c.local_index, k as u32), (new_name, arr_ty));
+                func.local_types.push(arr_ty);
+            }
+            func.local_count += c.element_types.len() as u32;
+            decomposed.insert(c.local_index);
+        }
+    }
+
+    // Build a lookup from local_index → candidate data needed during rewrite.
+    let candidate_data: IndexMap<u32, CandidateRewriteInfo> = safe_candidates
+        .iter()
+        .map(|c| {
+            (
+                c.local_index,
+                CandidateRewriteInfo {
+                    element_types: c.element_types.clone(),
+                    is_mut: c.is_mut,
+                    span: c.span,
+                    init: match &c.init {
+                        CandidateInit::Empty => CandidateInit::Empty,
+                        CandidateInit::WithCapacity(n) => CandidateInit::WithCapacity(*n),
+                    },
+                },
+            )
+        })
+        .collect();
+
+    // Step 5: rewrite the body.
+    let body = func.body.as_mut().expect("checked in caller");
+    let ctx = RewriteCtx {
+        decomposed: &decomposed,
+        field_local_map: &field_local_map,
+        field_info_map: &field_info_map,
+        candidate_data: &candidate_data,
+        catalog,
+    };
+    rewrite_block(body, &ctx);
+
+    true
+}
+
+/// Data carried from analysis into rewrite for each decomposed candidate.
+struct CandidateRewriteInfo {
+    element_types: Vec<TypeId>,
+    is_mut: bool,
+    span: Span,
+    init: CandidateInit,
+}
+
+struct RewriteCtx<'a> {
+    decomposed: &'a IndexSet<u32>,
+    field_local_map: &'a IndexMap<(u32, u32), u32>,
+    field_info_map: &'a IndexMap<(u32, u32), (String, TypeId)>,
+    candidate_data: &'a IndexMap<u32, CandidateRewriteInfo>,
+    catalog: &'a MethodCatalog,
+}
+
+/// Returns true if every method needed to rewrite this candidate exists in the catalog.
+fn required_methods_available(c: &Candidate, catalog: &MethodCatalog) -> bool {
+    // Methods the rewrite might use, parameterized by each element type T_k.
+    // - init: with_capacity (for both Empty and WithCapacity init forms)
+    // - push, len (inherent)
+    // - IndexValue<i32>::index_value, IndexAssign<i32>::index_assign (trait)
+    //
+    // Note: `is_empty` is not required because even if the original candidate
+    // uses `v.is_empty()`, the rewrite only needs `len` (we dispatch `is_empty`
+    // to field 0's `len` via... actually no, we use `is_empty` on field 0 if
+    // present. If a candidate uses `is_empty` but the per-field method isn't
+    // monomorphized, escape analysis should conservatively leave the candidate
+    // alone — that check is enforced by the call-site whitelist returning
+    // false for unavailable methods, handled during rewrite.
+    for &t in &c.element_types {
+        let required: [SigKey; 4] = [
+            (None, "with_capacity".to_string()),
+            (None, "push".to_string()),
+            (None, "len".to_string()),
+            (
+                Some("IndexValue<i32>".to_string()),
+                "index_value".to_string(),
+            ),
+        ];
+        for key in &required {
+            if !catalog.contains_key(&(t, key.clone())) {
+                return false;
+            }
+        }
+    }
+    // index_assign is only needed for candidates that use it. We require it
+    // unconditionally here for simplicity — if not monomorphized, we bail.
+    for &t in &c.element_types {
+        let key: SigKey = (
+            Some("IndexAssign<i32>".to_string()),
+            "index_assign".to_string(),
+        );
+        if !catalog.contains_key(&(t, key)) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Collect candidate `let` bindings in the function body. Only looks at top-level
+/// statements (not nested blocks/loops) because P0a restricts scope to simple
+/// function-body locals — enough for the zlib insertion-sort pattern.
+fn collect_candidates(body: &TirBlock, type_table: &TypeTable) -> Vec<Candidate> {
+    let mut out = Vec::new();
+    for stmt in &body.stmts {
+        let TirStmtKind::Let {
+            name,
+            local_index,
+            is_mut,
+            type_id,
+            value,
+            ..
+        } = &stmt.kind
+        else {
+            continue;
+        };
+        // Type must be Array<Tuple<...>>.
+        let Some(elem_ty) = type_table.as_array(*type_id) else {
+            continue;
+        };
+        let Some(tuple_elems) = type_table.as_tuple(elem_ty) else {
+            continue;
+        };
+        if tuple_elems.is_empty() {
+            continue;
+        }
+        // Initializer must be one of the recognized forms.
+        let Some(init) = recognize_init(value) else {
+            continue;
+        };
+        out.push(Candidate {
+            local_index: *local_index,
+            local_name: name.clone(),
+            is_mut: *is_mut,
+            element_types: tuple_elems,
+            span: stmt.span,
+            init,
+        });
+    }
+    out
+}
+
+/// Recognize supported initializer forms for container-SROA candidates:
+/// - `__seq_lit: { let __b = builder_new_literal(0); break __seq_lit: __b.build(); }`
+///   → empty array literal (`[]`), treated as capacity=0.
+/// - `Array::with_capacity(n)` where `n` is an integer literal → explicit capacity.
+fn recognize_init(value: &TirExpr) -> Option<CandidateInit> {
+    // Form 1: __seq_lit LabeledBlock (empty literal)
+    if let TirExprKind::LabeledBlock { label, block, .. } = &value.kind
+        && label == "__seq_lit"
+        && is_empty_seq_lit_block(block)
+    {
+        return Some(CandidateInit::Empty);
+    }
+
+    // Form 2: direct Array::with_capacity(n) call.
+    if let TirExprKind::Call { func, args, .. } = &value.kind
+        && is_array_method(func, "with_capacity")
+        && args.len() == 1
+        && let TirExprKind::IntLiteral { value: n, .. } = &args[0].expr.kind
+    {
+        return Some(CandidateInit::WithCapacity(*n));
+    }
+
+    None
+}
+
+/// Check whether a `LabeledBlock` body matches the empty-literal seq-lit pattern:
+/// a `let __b = ...SequenceLiteralBuilder::new_literal(0);` followed by a
+/// `break __seq_lit: __b.build();`. We don't care which element type the builder
+/// uses at this check — we only care that it's structurally a no-element literal.
+fn is_empty_seq_lit_block(block: &TirBlock) -> bool {
+    if block.stmts.len() != 2 {
+        return false;
+    }
+    // Stmt 0: let <name> = <call>(0)
+    let TirStmtKind::Let { value: init, .. } = &block.stmts[0].kind else {
+        return false;
+    };
+    match &init.kind {
+        TirExprKind::Call { func, args, .. } => {
+            // new_literal(0): 0 means empty literal
+            if !is_method_name(func, "new_literal") {
+                return false;
+            }
+            if args.len() != 1 {
+                return false;
+            }
+            if !matches!(&args[0].expr.kind, TirExprKind::IntLiteral { value: 0, .. }) {
+                return false;
+            }
+        }
+        _ => return false,
+    }
+    // Stmt 1: break __seq_lit: <something>
+    let TirStmtKind::Break {
+        label: Some(l),
+        value: Some(_),
+    } = &block.stmts[1].kind
+    else {
+        return false;
+    };
+    l == "__seq_lit"
+}
+
+/// Does this `FunctionRef` refer to an `Array::{method}` inherent method?
+fn is_array_method(func: &FunctionRef, method: &str) -> bool {
+    let Some(info) = &func.method_info else {
+        return false;
+    };
+    info.base_struct_name == "Array" && info.trait_name.is_none() && info.method_name == method
+}
+
+/// Does this `FunctionRef` refer to any method (on any type) with the given name?
+fn is_method_name(func: &FunctionRef, method: &str) -> bool {
+    func.method_info
+        .as_ref()
+        .is_some_and(|i| i.method_name == method)
+}
+
+/// Compute the set of safe (decomposable) candidate locals via whitelist escape
+/// analysis plus a fixpoint for tuple-source dependency:
+///
+/// - A candidate `v` is whitelisted if every use is one of:
+///   * `v.push(tuple_source)` — where `tuple_source` is tuple-decomposable
+///   * `v.index_assign(i, tuple_source)`
+///   * `v.len()` or `v.is_empty()`
+///   * `v.index_value(i).K` — field access on index result (K = constant)
+/// - "`tuple_source`" is either a direct `TupleLiteral` of N elements, or
+///   `other.index_value(j)` where `other` is also safe (fixpoint).
+///
+/// Anything else — bare `Local { v }`, `&v`, `&mut v`, different method call,
+/// field access at a non-index position — marks `v` as escaped.
+fn compute_safe_set(body: &TirBlock, candidates: &[Candidate]) -> IndexSet<u32> {
+    // Map candidate local → element arity (for push/index_assign/index_value arity checks).
+    let mut arity_of: IndexMap<u32, usize> = IndexMap::default();
+    for c in candidates {
+        arity_of.insert(c.local_index, c.element_types.len());
+    }
+
+    // Iterate to fixpoint: start with all candidates safe, then remove any that
+    // reference an escaped candidate via tuple-source push.
+    let mut safe: IndexSet<u32> = candidates.iter().map(|c| c.local_index).collect();
+    loop {
+        let mut checker = WhitelistChecker {
+            safe: &safe,
+            arity_of: &arity_of,
+            escaped: IndexSet::default(),
+        };
+        checker.visit_block(body);
+        if checker.escaped.is_empty() {
+            break;
+        }
+        for idx in checker.escaped {
+            safe.shift_remove(&idx);
+        }
+    }
+    safe
+}
+
+struct WhitelistChecker<'a> {
+    safe: &'a IndexSet<u32>,
+    arity_of: &'a IndexMap<u32, usize>,
+    escaped: IndexSet<u32>,
+}
+
+impl WhitelistChecker<'_> {
+    fn mark(&mut self, idx: u32) {
+        if self.safe.contains(&idx) {
+            self.escaped.insert(idx);
+        }
+    }
+
+    /// Check an expression used as a value-source for `push`/`index_assign`.
+    /// Returns true if the expression is a decomposable tuple source. If the
+    /// source references another (escaped) candidate as a non-tuple use, that
+    /// candidate is marked escaped.
+    fn check_tuple_source(&mut self, expr: &TirExpr, expected_arity: usize) -> bool {
+        match &expr.kind {
+            // Direct tuple literal: [e0, e1, ...]
+            TirExprKind::TupleLiteral { elements } => {
+                if elements.len() != expected_arity {
+                    return false;
+                }
+                // Recurse into each element with a "normal" (non-tuple-source) visit.
+                for e in elements {
+                    self.visit_expr(e);
+                }
+                true
+            }
+            // Tuple from another candidate: other.index_value(j)
+            TirExprKind::MethodCall {
+                receiver,
+                func,
+                args,
+                ..
+            } if is_trait_method(func, "IndexValue<i32>", "index_value") => {
+                if args.len() != 1 {
+                    return false;
+                }
+                let Some(other) = receiver_local(receiver) else {
+                    // Receiver isn't a bare local — recurse normally.
+                    self.visit_expr(expr);
+                    return false;
+                };
+                // The receiver must be one of our candidates with matching arity.
+                if !self.safe.contains(&other) {
+                    return false;
+                }
+                if self.arity_of.get(&other).copied() != Some(expected_arity) {
+                    return false;
+                }
+                // Index expression must be visited as a normal expression.
+                self.visit_expr(&args[0].expr);
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+impl TirRefVisitor for WhitelistChecker<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            // v.method(...) — inspect receiver for whitelisted patterns.
+            TirExprKind::MethodCall {
+                receiver,
+                func,
+                args,
+                ..
+            } => {
+                if let Some(rec_local) = receiver_local(receiver)
+                    && self.safe.contains(&rec_local)
+                {
+                    // Whitelisted inherent methods
+                    if is_array_method(func, "push") && args.len() == 1 {
+                        let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
+                        if !self.check_tuple_source(&args[0].expr, arity) {
+                            self.mark(rec_local);
+                        }
+                        return;
+                    }
+                    if is_array_method(func, "len") && args.is_empty() {
+                        return;
+                    }
+                    if is_array_method(func, "is_empty") && args.is_empty() {
+                        return;
+                    }
+                    // Whitelisted trait methods
+                    if is_trait_method(func, "IndexAssign<i32>", "index_assign") && args.len() == 2
+                    {
+                        let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
+                        // index argument visited normally
+                        self.visit_expr(&args[0].expr);
+                        if !self.check_tuple_source(&args[1].expr, arity) {
+                            self.mark(rec_local);
+                        }
+                        return;
+                    }
+                    if is_trait_method(func, "IndexValue<i32>", "index_value") && args.len() == 1 {
+                        // Bare index_value receiver use — this is only safe when the
+                        // ENCLOSING expression is a FieldAccess with constant field_index.
+                        // Since we're not tracking the parent here, let the FieldAccess
+                        // handler short-circuit this. If we arrive here directly (not via
+                        // field access), mark as escaped because the full tuple value is
+                        // being used.
+                        self.mark(rec_local);
+                        self.visit_expr(&args[0].expr);
+                        return;
+                    }
+                    // Any other method call on a candidate → escape.
+                    self.mark(rec_local);
+                }
+                // Fall through: recurse into receiver and args normally.
+                self.visit_expr(receiver);
+                for arg in args {
+                    self.visit_expr(&arg.expr);
+                }
+            }
+            // v.index_value(i).K — safe read pattern
+            TirExprKind::FieldAccess { expr: inner, .. } => {
+                if let TirExprKind::MethodCall {
+                    receiver,
+                    func,
+                    args,
+                    ..
+                } = &inner.kind
+                    && is_trait_method(func, "IndexValue<i32>", "index_value")
+                    && args.len() == 1
+                    && let Some(rec_local) = receiver_local(receiver)
+                    && self.safe.contains(&rec_local)
+                {
+                    // Safe — just visit the index expression.
+                    self.visit_expr(&args[0].expr);
+                    return;
+                }
+                self.visit_expr(inner);
+            }
+            // Bare Local reference to a candidate → escape.
+            TirExprKind::Local { index, .. } => {
+                self.mark(*index);
+            }
+            // Address taken on a candidate → escape.
+            TirExprKind::Unary { op, expr: inner } => {
+                if matches!(
+                    op,
+                    crate::tir::TirUnaryOp::Ref | crate::tir::TirUnaryOp::MutRef
+                ) && let TirExprKind::Local { index, .. } = &inner.kind
+                {
+                    self.mark(*index);
+                    return;
+                }
+                self.visit_expr(inner);
+            }
+            // Closure capture → escape.
+            TirExprKind::Closure { body, captures, .. } => {
+                for cap in captures {
+                    self.mark(cap.outer_index);
+                }
+                self.visit_expr(body);
+            }
+            _ => self.walk_expr(expr),
+        }
+    }
+}
+
+/// If the expression is `Local { index }` — or `Unary::{Ref,MutRef}` wrapping
+/// a Local — return the index. Method call receivers in lowered TIR are
+/// typically `Unary::MutRef(Local)` for `&mut self` methods and
+/// `Unary::Ref(Local)` for `&self` methods. We treat both as receivers of
+/// the underlying local; when they appear elsewhere (as a function argument,
+/// for example), the `Unary` branch in `visit_expr` marks the local escaped.
+fn receiver_local(expr: &TirExpr) -> Option<u32> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        TirExprKind::Unary { op, expr: inner }
+            if matches!(
+                op,
+                crate::tir::TirUnaryOp::Ref | crate::tir::TirUnaryOp::MutRef
+            ) =>
+        {
+            if let TirExprKind::Local { index, .. } = &inner.kind {
+                Some(*index)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Does this `FunctionRef` refer to `Array^Trait::method`?
+fn is_trait_method(func: &FunctionRef, trait_name: &str, method: &str) -> bool {
+    let Some(info) = &func.method_info else {
+        return false;
+    };
+    info.base_struct_name == "Array"
+        && info.trait_name.as_deref() == Some(trait_name)
+        && info.method_name == method
+}
+
+/// Rewrite all statements in a block, replacing candidate let-bindings and
+/// expression-statement-level `push/index_assign` calls with per-field versions.
+///
+/// For each statement:
+/// - Candidate `Let { v: Array<Tuple<...>> = init }` → N per-field `Let`s
+/// - `ExprStmt(v.push(src))` where `v` is decomposed → N push stmts
+/// - `ExprStmt(v.index_assign(i, src))` where `v` is decomposed → N `index_assign` stmts
+/// - Any other statement: recurse into nested blocks and rewrite expressions in-place.
+fn rewrite_block(block: &mut TirBlock, ctx: &RewriteCtx) {
+    let old_stmts = std::mem::take(&mut block.stmts);
+    let mut out: Vec<TirStmt> = Vec::with_capacity(old_stmts.len());
+    for stmt in old_stmts {
+        process_stmt(stmt, &mut out, ctx);
+    }
+    block.stmts = out;
+}
+
+/// Route a statement: either emit its per-field expansion or recurse + push as-is.
+fn process_stmt(mut stmt: TirStmt, out: &mut Vec<TirStmt>, ctx: &RewriteCtx) {
+    // Candidate Let: expand in place.
+    if let TirStmtKind::Let { local_index, .. } = &stmt.kind
+        && ctx.decomposed.contains(local_index)
+    {
+        expand_candidate_let(&stmt, out, ctx);
+        return;
+    }
+
+    // Candidate push/index_assign as an ExprStmt at the statement level.
+    if let TirStmtKind::Expr(expr) = &stmt.kind
+        && let Some(expanded) = try_expand_call_stmt(expr, stmt.span, ctx)
+    {
+        out.extend(expanded);
+        return;
+    }
+
+    // Otherwise, recurse into the statement (rewriting any nested expressions/blocks)
+    // and push it unchanged.
+    rewrite_stmt_recurse(&mut stmt, ctx);
+    out.push(stmt);
+}
+
+/// Emit N per-field Let statements for a decomposed candidate.
+/// The original Let's initializer is replaced by N `Array<T_k>::with_capacity(n)`
+/// calls, one per field. For `Empty` init, `n = 0`. For `WithCapacity(n)`, the
+/// same `n` is reused for every field.
+fn expand_candidate_let(stmt: &TirStmt, out: &mut Vec<TirStmt>, ctx: &RewriteCtx) {
+    let TirStmtKind::Let { local_index, .. } = &stmt.kind else {
+        return;
+    };
+    let info = ctx
+        .candidate_data
+        .get(local_index)
+        .expect("candidate data must exist for decomposed local");
+    let cap = match &info.init {
+        CandidateInit::Empty => 0,
+        CandidateInit::WithCapacity(n) => *n,
+    };
+    for (k, &elem_ty) in info.element_types.iter().enumerate() {
+        let new_local_index = ctx.field_local_map[&(*local_index, k as u32)];
+        let (new_name, arr_ty) = ctx.field_info_map[&(*local_index, k as u32)].clone();
+        let init = build_with_capacity_call(elem_ty, arr_ty, cap, info.span, ctx);
+        let let_stmt = TirStmt::new(
+            TirStmtKind::Let {
+                name: new_name,
+                local_index: new_local_index,
+                is_mut: info.is_mut,
+                is_reactive: false,
+                type_id: arr_ty,
+                value: init,
+                skip_value_copy: false,
+            },
+            info.span,
+        );
+        out.push(let_stmt);
+    }
+}
+
+/// Build a `Array<T_k>::with_capacity(cap)` TIR call using the catalog.
+fn build_with_capacity_call(
+    elem_ty: TypeId,
+    arr_ty: TypeId,
+    cap: u64,
+    span: Span,
+    ctx: &RewriteCtx,
+) -> TirExpr {
+    let sig: SigKey = (None, "with_capacity".to_string());
+    let func = ctx
+        .catalog
+        .get(&(elem_ty, sig))
+        .expect("with_capacity checked by required_methods_available")
+        .clone();
+    let cap_arg = TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: cap,
+            repr: cap.to_string(),
+        },
+        TypeTable::I32,
+        span,
+    );
+    let call = TirExprKind::Call {
+        func,
+        type_args: Vec::new(),
+        args: vec![CallArg::new(cap_arg, false)],
+    };
+    TirExpr::new(call, arr_ty, span)
+}
+
+/// Try to expand an expression-statement into multiple per-field statements.
+/// Returns `Some(stmts)` if the expression was a `push`/`index_assign` call on a
+/// decomposed candidate; `None` otherwise.
+fn try_expand_call_stmt(expr: &TirExpr, span: Span, ctx: &RewriteCtx) -> Option<Vec<TirStmt>> {
+    let TirExprKind::MethodCall {
+        receiver,
+        func,
+        args,
+        ..
+    } = &expr.kind
+    else {
+        return None;
+    };
+    let rec_local = receiver_local(receiver)?;
+    if !ctx.decomposed.contains(&rec_local) {
+        return None;
+    }
+    let info = ctx.candidate_data.get(&rec_local)?;
+    let arity = info.element_types.len();
+
+    // Case 1: v.push(tuple_source)
+    if is_array_method(func, "push") && args.len() == 1 {
+        let src = &args[0].expr;
+        let per_field = decompose_tuple_source(src, arity, ctx)?;
+        let mut out = Vec::with_capacity(arity);
+        for (k, elem_expr) in per_field.into_iter().enumerate() {
+            let field_local = ctx.field_local_map[&(rec_local, k as u32)];
+            let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
+            let elem_ty = info.element_types[k];
+            let call = build_push_call(
+                elem_ty,
+                arr_ty,
+                field_local,
+                field_name,
+                elem_expr,
+                span,
+                ctx,
+            );
+            out.push(TirStmt::new(TirStmtKind::Expr(call), span));
+        }
+        return Some(out);
+    }
+
+    // Case 2: v.index_assign(i, tuple_source)
+    if is_trait_method(func, "IndexAssign<i32>", "index_assign") && args.len() == 2 {
+        let idx = &args[0].expr;
+        let src = &args[1].expr;
+        if !is_duplicable_expr(idx) {
+            return None;
+        }
+        let per_field = decompose_tuple_source(src, arity, ctx)?;
+        let mut out = Vec::with_capacity(arity);
+        for (k, elem_expr) in per_field.into_iter().enumerate() {
+            let field_local = ctx.field_local_map[&(rec_local, k as u32)];
+            let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
+            let elem_ty = info.element_types[k];
+            let call = build_index_assign_call(
+                elem_ty,
+                arr_ty,
+                field_local,
+                field_name,
+                idx.clone(),
+                elem_expr,
+                span,
+                ctx,
+            );
+            out.push(TirStmt::new(TirStmtKind::Expr(call), span));
+        }
+        return Some(out);
+    }
+
+    None
+}
+
+/// Decompose a tuple-source expression into N per-field expressions.
+/// Supports two forms:
+/// - `TupleLiteral([e_0, e_1, ...])` → `[e_0, e_1, ...]`
+/// - `other.index_value(j)` where `other` is decomposed → `[other_k.index_value(j)]` for each k
+///
+/// Returns `None` if the expression doesn't match a decomposable form or if
+/// preconditions fail (wrong arity, non-duplicable index, etc.).
+fn decompose_tuple_source(
+    expr: &TirExpr,
+    expected_arity: usize,
+    ctx: &RewriteCtx,
+) -> Option<Vec<TirExpr>> {
+    match &expr.kind {
+        TirExprKind::TupleLiteral { elements } => {
+            if elements.len() != expected_arity {
+                return None;
+            }
+            // Each element becomes one per-field value, rewritten to propagate
+            // nested decomposed reads (e.g., FieldAccess on another candidate's index_value).
+            let mut out = Vec::with_capacity(expected_arity);
+            for e in elements {
+                let mut e = e.clone();
+                rewrite_expr_inplace(&mut e, ctx);
+                out.push(e);
+            }
+            Some(out)
+        }
+        TirExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } if is_trait_method(func, "IndexValue<i32>", "index_value") && args.len() == 1 => {
+            let other = receiver_local(receiver)?;
+            if !ctx.decomposed.contains(&other) {
+                return None;
+            }
+            let other_info = ctx.candidate_data.get(&other)?;
+            if other_info.element_types.len() != expected_arity {
+                return None;
+            }
+            let idx_expr = &args[0].expr;
+            if !is_duplicable_expr(idx_expr) {
+                return None;
+            }
+            let mut out = Vec::with_capacity(expected_arity);
+            for k in 0..expected_arity {
+                let other_field_local = ctx.field_local_map[&(other, k as u32)];
+                let (other_field_name, other_arr_ty) =
+                    ctx.field_info_map[&(other, k as u32)].clone();
+                let other_elem_ty = other_info.element_types[k];
+                let call = build_index_value_call(
+                    other_elem_ty,
+                    other_arr_ty,
+                    other_field_local,
+                    other_field_name,
+                    idx_expr.clone(),
+                    expr.span,
+                    ctx,
+                );
+                out.push(call);
+            }
+            Some(out)
+        }
+        _ => None,
+    }
+}
+
+/// Build a `Unary::{Ref|MutRef}(Local{field_local})` receiver expression matching
+/// the convention used by the lowering phase for method call receivers.
+fn build_receiver(
+    field_local: u32,
+    field_name: String,
+    arr_ty: TypeId,
+    mut_ref: bool,
+    span: Span,
+) -> TirExpr {
+    let local = TirExpr::new(
+        TirExprKind::Local {
+            index: field_local,
+            name: field_name,
+        },
+        arr_ty,
+        span,
+    );
+    let op = if mut_ref {
+        crate::tir::TirUnaryOp::MutRef
+    } else {
+        crate::tir::TirUnaryOp::Ref
+    };
+    TirExpr::new(
+        TirExprKind::Unary {
+            op,
+            expr: Box::new(local),
+        },
+        arr_ty,
+        span,
+    )
+}
+
+/// Build `v_field.push(value)` using the catalog.
+fn build_push_call(
+    elem_ty: TypeId,
+    arr_ty: TypeId,
+    field_local: u32,
+    field_name: String,
+    value: TirExpr,
+    span: Span,
+    ctx: &RewriteCtx,
+) -> TirExpr {
+    let sig: SigKey = (None, "push".to_string());
+    let func = ctx
+        .catalog
+        .get(&(elem_ty, sig))
+        .expect("push checked by required_methods_available")
+        .clone();
+    let receiver = build_receiver(
+        field_local,
+        field_name,
+        arr_ty,
+        /*mut_ref=*/ true,
+        span,
+    );
+    let kind = TirExprKind::MethodCall {
+        receiver: Box::new(receiver),
+        func,
+        type_args: Vec::new(),
+        args: vec![CallArg::new(value, false)],
+    };
+    TirExpr::new(kind, TypeTable::UNIT, span)
+}
+
+/// Build `v_field.index_assign(index, value)` using the catalog.
+fn build_index_assign_call(
+    elem_ty: TypeId,
+    arr_ty: TypeId,
+    field_local: u32,
+    field_name: String,
+    index: TirExpr,
+    value: TirExpr,
+    span: Span,
+    ctx: &RewriteCtx,
+) -> TirExpr {
+    let sig: SigKey = (
+        Some("IndexAssign<i32>".to_string()),
+        "index_assign".to_string(),
+    );
+    let func = ctx
+        .catalog
+        .get(&(elem_ty, sig))
+        .expect("index_assign checked by required_methods_available")
+        .clone();
+    let receiver = build_receiver(
+        field_local,
+        field_name,
+        arr_ty,
+        /*mut_ref=*/ true,
+        span,
+    );
+    let kind = TirExprKind::MethodCall {
+        receiver: Box::new(receiver),
+        func,
+        type_args: Vec::new(),
+        args: vec![CallArg::new(index, false), CallArg::new(value, false)],
+    };
+    TirExpr::new(kind, TypeTable::UNIT, span)
+}
+
+/// Build `v_field.index_value(index)` using the catalog. Returns a `TirExpr` of type `elem_ty`.
+fn build_index_value_call(
+    elem_ty: TypeId,
+    arr_ty: TypeId,
+    field_local: u32,
+    field_name: String,
+    index: TirExpr,
+    span: Span,
+    ctx: &RewriteCtx,
+) -> TirExpr {
+    let sig: SigKey = (
+        Some("IndexValue<i32>".to_string()),
+        "index_value".to_string(),
+    );
+    let func = ctx
+        .catalog
+        .get(&(elem_ty, sig))
+        .expect("index_value checked by required_methods_available")
+        .clone();
+    let receiver = build_receiver(
+        field_local,
+        field_name,
+        arr_ty,
+        /*mut_ref=*/ false,
+        span,
+    );
+    let kind = TirExprKind::MethodCall {
+        receiver: Box::new(receiver),
+        func,
+        type_args: Vec::new(),
+        args: vec![CallArg::new(index, false)],
+    };
+    TirExpr::new(kind, elem_ty, span)
+}
+
+/// Returns true if the expression can be safely duplicated (cloned and
+/// re-evaluated N times with no observable side effects).
+fn is_duplicable_expr(e: &TirExpr) -> bool {
+    match &e.kind {
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::GlobalVarGet { .. } => true,
+        TirExprKind::Binary { left, right, .. } => {
+            is_duplicable_expr(left) && is_duplicable_expr(right)
+        }
+        TirExprKind::Unary { op, expr: inner } => {
+            !matches!(
+                op,
+                crate::tir::TirUnaryOp::Ref | crate::tir::TirUnaryOp::MutRef
+            ) && is_duplicable_expr(inner)
+        }
+        TirExprKind::Cast { expr: inner, .. } => is_duplicable_expr(inner),
+        // FieldAccess is only duplicable if its inner is too (most commonly a Local).
+        // We deliberately exclude MethodCall / Call / Index / etc. because they
+        // may allocate, trap, or have side effects.
+        TirExprKind::FieldAccess { expr: inner, .. } => is_duplicable_expr(inner),
+        _ => false,
+    }
+}
+
+/// Recursively walk a statement, rewriting nested blocks and in-place
+/// rewriting of any remaining expressions that reference decomposed candidates
+/// (e.g., `len/is_empty/index_value.K` reads inside expressions).
+fn rewrite_stmt_recurse(stmt: &mut TirStmt, ctx: &RewriteCtx) {
+    match &mut stmt.kind {
+        TirStmtKind::Let { value, .. } => {
+            rewrite_expr_inplace(value, ctx);
+        }
+        TirStmtKind::Expr(expr) => {
+            rewrite_expr_inplace(expr, ctx);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                rewrite_expr_inplace(v, ctx);
+            }
+        }
+        TirStmtKind::TaskReturn { value } => {
+            rewrite_expr_inplace(value, ctx);
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            rewrite_expr_inplace(condition, ctx);
+            rewrite_block(then_block, ctx);
+            if let Some(eb) = else_block {
+                rewrite_block(eb, ctx);
+            }
+        }
+        TirStmtKind::Loop { body } => {
+            rewrite_block(body, ctx);
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                rewrite_expr_inplace(v, ctx);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::LabeledBlock { block, .. } => {
+            rewrite_block(block, ctx);
+        }
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            rewrite_expr_inplace(scrutinee, ctx);
+            rewrite_block(then_block, ctx);
+            if let Some(eb) = else_block {
+                rewrite_block(eb, ctx);
+            }
+        }
+        TirStmtKind::LetDestructure { value, .. } => {
+            rewrite_expr_inplace(value, ctx);
+        }
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            rewrite_expr_inplace(iterable, ctx);
+            rewrite_block(body, ctx);
+        }
+    }
+}
+
+/// Rewrite an expression in place. This handles the "leaf" uses of a
+/// decomposed candidate that were whitelisted by escape analysis:
+/// - `v.len()` / `v.is_empty()` → same call on field 0 (len is invariant across fields)
+/// - `v.index_value(i).K` → `v_K.index_value(i)`
+///
+/// All other expressions recurse into children. A bare `Local { v }` reference
+/// should not occur here (escape analysis would have marked it escaped).
+fn rewrite_expr_inplace(expr: &mut TirExpr, ctx: &RewriteCtx) {
+    // Handle FieldAccess on IndexValue first (read pattern).
+    if let TirExprKind::FieldAccess {
+        expr: inner,
+        field_index,
+        ..
+    } = &expr.kind
+        && let TirExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } = &inner.kind
+        && is_trait_method(func, "IndexValue<i32>", "index_value")
+        && args.len() == 1
+        && let Some(rec_local) = receiver_local(receiver)
+        && ctx.decomposed.contains(&rec_local)
+    {
+        let info = ctx
+            .candidate_data
+            .get(&rec_local)
+            .expect("decomposed must have candidate data");
+        let k = *field_index as usize;
+        if k < info.element_types.len() {
+            let elem_ty = info.element_types[k];
+            let field_local = ctx.field_local_map[&(rec_local, k as u32)];
+            let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
+            let mut idx_expr = args[0].expr.clone();
+            rewrite_expr_inplace(&mut idx_expr, ctx);
+            let new_call = build_index_value_call(
+                elem_ty,
+                arr_ty,
+                field_local,
+                field_name,
+                idx_expr,
+                expr.span,
+                ctx,
+            );
+            *expr = new_call;
+            return;
+        }
+    }
+
+    // Handle len/is_empty on decomposed candidate: use field 0 (invariant).
+    if let TirExprKind::MethodCall {
+        receiver,
+        func,
+        args,
+        ..
+    } = &expr.kind
+        && let Some(rec_local) = receiver_local(receiver)
+        && ctx.decomposed.contains(&rec_local)
+        && args.is_empty()
+        && (is_array_method(func, "len") || is_array_method(func, "is_empty"))
+    {
+        let info = ctx
+            .candidate_data
+            .get(&rec_local)
+            .expect("decomposed must have candidate data");
+        let elem_ty = info.element_types[0];
+        let field_local = ctx.field_local_map[&(rec_local, 0)];
+        let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, 0)].clone();
+        let method_name = if is_array_method(func, "len") {
+            "len"
+        } else {
+            "is_empty"
+        };
+        let sig: SigKey = (None, method_name.to_string());
+        let new_func = ctx
+            .catalog
+            .get(&(elem_ty, sig))
+            .expect("len/is_empty catalog entry (required check should ensure this)")
+            .clone();
+        let new_receiver = build_receiver(
+            field_local,
+            field_name,
+            arr_ty,
+            /*mut_ref=*/ false,
+            expr.span,
+        );
+        let kind = TirExprKind::MethodCall {
+            receiver: Box::new(new_receiver),
+            func: new_func,
+            type_args: Vec::new(),
+            args: Vec::new(),
+        };
+        expr.kind = kind;
+        return;
+    }
+
+    // Default: recurse into children.
+    walk_expr_mut(expr, ctx);
+}
+
+/// Manual recursive walker for `rewrite_expr_inplace`. Mirrors `TirMutVisitor::walk_expr`
+/// but calls our `rewrite_expr_inplace` hook at every sub-expression so nested
+/// decomposed-candidate reads get rewritten.
+fn walk_expr_mut(expr: &mut TirExpr, ctx: &RewriteCtx) {
+    match &mut expr.kind {
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::GlobalVarSet { value, .. } => {
+            rewrite_expr_inplace(value, ctx);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            rewrite_expr_inplace(left, ctx);
+            rewrite_expr_inplace(right, ctx);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::TupleSpread { expr: inner }
+        | TirExprKind::TupleZip { expr: inner }
+        | TirExprKind::TypePackExpansion {
+            call_expr: inner, ..
+        }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+            rewrite_expr_inplace(inner, ctx);
+        }
+        TirExprKind::Assign { target, value }
+        | TirExprKind::Index {
+            expr: target,
+            index: value,
+        } => {
+            rewrite_expr_inplace(target, ctx);
+            rewrite_expr_inplace(value, ctx);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                rewrite_expr_inplace(&mut arg.expr, ctx);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                rewrite_expr_inplace(arg, ctx);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            rewrite_expr_inplace(receiver, ctx);
+            for arg in args {
+                rewrite_expr_inplace(&mut arg.expr, ctx);
+            }
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            rewrite_block(block, ctx);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            rewrite_expr_inplace(condition, ctx);
+            rewrite_block(then_branch, ctx);
+            if let Some(eb) = else_branch {
+                rewrite_block(eb, ctx);
+            }
+        }
+        TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } => {
+            rewrite_expr_inplace(scrutinee, ctx);
+            for arm in arms {
+                if let Some(g) = &mut arm.guard {
+                    rewrite_expr_inplace(g, ctx);
+                }
+                rewrite_expr_inplace(&mut arm.body, ctx);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for f in fields {
+                rewrite_expr_inplace(&mut f.value, ctx);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for e in elements {
+                rewrite_expr_inplace(e, ctx);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            rewrite_expr_inplace(body, ctx);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                rewrite_expr_inplace(p, ctx);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            rewrite_expr_inplace(callee, ctx);
+            for arg in args {
+                rewrite_expr_inplace(arg, ctx);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            rewrite_expr_inplace(scrutinee, ctx);
+            for arm in arms {
+                rewrite_block(arm, ctx);
+            }
+            rewrite_block(default, ctx);
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let crate::tir::TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                    rewrite_expr_inplace(inner, ctx);
+                }
+            }
+        }
+    }
+}

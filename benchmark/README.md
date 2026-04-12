@@ -2,7 +2,7 @@
 
 Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
-Environment: Wado 2026-04-11, wasmtime 43.0.0, gcc 13.3.0, rustc 1.94.1, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
+Environment: Wado 2026-04-12, wasmtime 43.0.0, gcc 13.3.0, rustc 1.94.1, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
 
 ## Prime Counting
 
@@ -51,9 +51,9 @@ zlib compress/decompress of twitter.json (631 KB) x 10 iterations.
 
 | Implementation        | Compress | Decompress |  Total | vs best |
 | --------------------- | -------: | ---------: | -----: | ------: |
-| zlib-rs (Rust native) |    29 ms |       4 ms |  33 ms |   1.00x |
-| C zlib (Wasm)         |    70 ms |      11 ms |  81 ms |   2.45x |
-| **Wado** core:zlib    |   243 ms |      90 ms | 333 ms |  10.09x |
+| zlib-rs (Rust native) |    60 ms |      10 ms |  70 ms |   1.00x |
+| C zlib (Wasm)         |   110 ms |      16 ms | 126 ms |   1.80x |
+| **Wado** core:zlib    |   407 ms |     141 ms | 549 ms |   7.84x |
 
 ## JSON: twitter
 

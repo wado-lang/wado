@@ -1,0 +1,80 @@
+// Test: Container SROA (P0a) — decomposes Array<Tuple<T1,...,Tn>> locals
+// into N parallel Array<T_k> locals, eliminating struct.new for tuple payloads
+// (AoS → SoA transformation).
+//
+// This targets the zlib insertion-sort pattern where tuples are pushed into
+// an array, indexed by field, and slot-copied between positions.
+use { println, Stdout } from "core:cli";
+
+// The P0a pass requires monomorphized Array<T_k> methods to exist for each
+// tuple element type. This helper exercises every method we rely on so that
+// monomorphization emits them. In zlib, Array<i32>/Array<u16>/... are used
+// organically, but this standalone fixture must force it explicitly.
+#[inline("never")]
+fn _force_array_i32_monomorphization() -> i32 {
+    let mut x: Array<i32> = Array::<i32>::with_capacity(4);
+    x.push(1);
+    x.push(2);
+    x[0] = 10;
+    let first = x[0];
+    let len = x.len();
+    return first + len;
+}
+
+#[inline("never")]
+fn build_and_sum_push() -> i32 {
+    let mut v: Array<[i32, i32]> = [];
+    v.push([1, 10]);
+    v.push([2, 20]);
+    v.push([3, 30]);
+    let mut sum = 0;
+    for let mut i = 0; i < v.len(); i += 1 {
+        sum += v[i].0 + v[i].1;
+    }
+    return sum;
+}
+
+#[inline("never")]
+fn slot_copy_pattern() -> i32 {
+    // Insertion-sort-style slot copy: items[j+1] = items[j]
+    let mut items: Array<[i32, i32]> = [];
+    items.push([1, 100]);
+    items.push([2, 200]);
+    items.push([3, 300]);
+    // Slot copy from index 1 to index 2
+    items[2] = items[1];
+    // Tuple literal assignment
+    items[0] = [9, 900];
+    return items[0].0 + items[0].1 + items[2].0 + items[2].1;
+}
+
+#[inline("never")]
+fn with_capacity_init() -> i32 {
+    let mut v: Array<[i32, i32]> = Array::<[i32, i32]>::with_capacity(4);
+    v.push([1, 10]);
+    v.push([2, 20]);
+    let mut sum = 0;
+    for let mut i = 0; i < v.len(); i += 1 {
+        sum += v[i].0 * v[i].1;
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    assert _force_array_i32_monomorphization() == 12;
+    assert build_and_sum_push() == 66;
+    assert slot_copy_pattern() == 1111;
+    assert with_capacity_init() == 50;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O0": [
+        "struct.new \"tuple//[i32, i32]\""
+    ],
+    "wir_not_expect:O2": [
+        "struct.new \"tuple//[i32, i32]\""
+    ]
+}
