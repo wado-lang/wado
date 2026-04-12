@@ -1301,7 +1301,6 @@ impl Monomorphizer {
                                     name: new_func_name,
                                     monomorph_info: new_monomorph,
                                     method_info: Some(new_info),
-                                    is_cm_binding: false,
                                 };
                             } else {
                                 let monomorph_info = Some(MonomorphInfo {
@@ -1315,7 +1314,6 @@ impl Monomorphizer {
                                     name: new_func_name,
                                     monomorph_info,
                                     method_info: Some(new_info),
-                                    is_cm_binding: false,
                                 };
                             }
                         }
@@ -2258,7 +2256,6 @@ impl Monomorphizer {
                 name: new_func_name,
                 monomorph_info,
                 method_info: Some(new_info),
-                is_cm_binding: false,
             };
         } else {
             // Normal monomorphization (e.g., Array<T>::len → Array<i32>::len)
@@ -2300,7 +2297,6 @@ impl Monomorphizer {
                 name: new_func_name,
                 monomorph_info,
                 method_info: Some(new_info),
-                is_cm_binding: false,
             };
         }
     }
@@ -3725,7 +3721,6 @@ fn try_lower_comparison(
                 name: mangled_name,
                 monomorph_info: None,
                 method_info: Some(method_info),
-                is_cm_binding: false,
             },
             type_args: vec![],
             args: vec![CallArg::new(arg_ref, false)],
@@ -3764,7 +3759,6 @@ fn try_lower_comparison(
                     name: mangled_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
-                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: vec![CallArg::new(arg_ref, false)],

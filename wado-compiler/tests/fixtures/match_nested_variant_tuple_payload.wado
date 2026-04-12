@@ -1,0 +1,31 @@
+// Bug: nested variant patterns inside tuple payload produce zeroed bindings.
+// Branch([Leaf(a), Leaf(b)]) should extract a=10, b=20 but produces 0, 0.
+use { println, Stdout } from "core:cli";
+
+variant Tree {
+    Leaf(i32),
+    Branch([Tree, Tree]),
+    Empty,
+}
+
+export fn run() with Stdout {
+    let tree = Tree::Branch([Tree::Leaf(10), Tree::Leaf(20)]);
+    let result = match tree {
+        Leaf(n) => `leaf:{n}`,
+        Branch([Leaf(a), Leaf(b)]) => `branch:{a},{b}`,
+        Branch(_) => "branch:other",
+        Empty => "empty",
+    };
+    println(result);
+
+    let tree2 = Tree::Branch([Tree::Branch([Tree::Leaf(1), Tree::Empty]), Tree::Leaf(2)]);
+    let result2 = match tree2 {
+        Branch([Branch(_), Leaf(n)]) => `deep-right:{n}`,
+        Branch([Leaf(_), Branch(_)]) => "deep-left",
+        _ => "other",
+    };
+    println(result2);
+}
+
+__DATA__
+{"stdout": "branch:10,20\ndeep-right:2\n"}

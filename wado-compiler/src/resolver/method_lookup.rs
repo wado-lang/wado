@@ -2862,7 +2862,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         Some(index_mut_info.trait_name),
                         "index_mut".to_string(),
                     )),
-                    is_cm_binding: false,
                 },
                 type_args: vec![],
                 args: vec![CallArg::new(index_resolved, false)],
@@ -2916,7 +2915,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         method_trait_name,
                         method_call.method.clone(),
                     )),
-                    is_cm_binding: false,
                 },
                 type_args,
                 args: args

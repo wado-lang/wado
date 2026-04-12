@@ -2,6 +2,21 @@
 
 Gale is a parser generator written in Wado that takes ANTLR4 `.g4` grammar files as input and outputs self-contained Wado parser source files.
 
+## Compatibility Principle
+
+**Gale aims for full compatibility with the ANTLR4 `.g4` grammar syntax.** Any well-formed grammar accepted by the upstream `antlr4` tool should also be accepted by Gale's `parse()`.
+
+The single exception is **action bodies**, which are intentionally skipped:
+
+- `{ ... }` action blocks (rule-level, element-level, named actions like `@header`/`@members`/`@parser::name`)
+- `{ ... }?` semantic predicates
+- `catch [ ... ] { ... }` and `finally { ... }` bodies
+- `@init { ... }` / `@after { ... }` rule prequel actions
+
+These are recognized by the parser (so files containing them parse without error) but their bodies are discarded — they would have to be transpiled from the host language anyway, which is out of scope. Everything _around_ the action — its presence, position, and surrounding constructs — is preserved in the IR.
+
+All other ANTLR4 features (`import`, `options`, `channels`, `tokens`, modes, `returns`/`throws`/`locals`, rule arguments, list labels `+=`, parser-side `~`/`.`, element options `<...>`, qualified IDs, lexer commands including `mode(X)`, etc.) are first-class and preserved.
+
 ## Design Motivation
 
 Existing parser generators couple grammar and runtime in ways that cause maintenance friction:

@@ -1,0 +1,11 @@
+// Tuple pattern cannot be used against Array type in if-let.
+// [a, b] is tuple destructuring, not array destructuring.
+export fn run() {
+    let arr: Array<i32> = [1, 2];
+    if let [a, b] = arr {
+        assert a + b == 3;
+    }
+}
+
+__DATA__
+{"compile_error": "expected 'tuple type'"}
