@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775960313817,
+  "lastUpdate": 1775961840368,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11840,6 +11840,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ad80eedb120a9d3c9e05b9d4ea25bfd61c283c5a"
         },
         "date": 1775960313552,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fedb9c5cdc43cdf4418735f59fa4ef3f3697a26b",
+          "message": "Merge pull request #814 from wado-lang/claude/review-cm-binding-usage-LlY5s\n\nRemove ad-hoc EntryPoint module remapping from optimizer",
+          "timestamp": "2026-04-12T11:40:43+09:00",
+          "tree_id": "4797febd70813f0e23c866fbfd7a4ea64074449c",
+          "url": "https://github.com/wado-lang/wado/commit/fedb9c5cdc43cdf4418735f59fa4ef3f3697a26b"
+        },
+        "date": 1775961840223,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
