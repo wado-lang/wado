@@ -7,11 +7,16 @@
 use crate::flat_package::FlatPackage;
 use crate::wir::WirPackage;
 
+mod calls;
+mod canonical_abi;
 pub mod component_plan;
 mod context;
 mod functions;
+mod pattern_match;
+mod primitive_ops;
 mod translate;
 mod types;
+mod value_copy;
 
 pub use context::DEFINED_FUNC_BASE;
 
