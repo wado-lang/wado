@@ -59,35 +59,48 @@ most of the new fields. "Parsed and stored" is not "used":
   Qualified(Array<String>), Str(String), Int(i64), Action(String) }`
   so consumers can branch without re-parsing the string.
 
-## D. Driver-level verification (gaps from the previous sweep)
+## D. Driver-level verification (remaining gaps)
 
-The previous sweep added unit tests and golden tests for new features,
-but several semantic changes have no runtime verification in the driver
-tests (`package-gale/tests/driver_*_test.wado`). Each of the following
-should grow a dedicated driver assertion:
+The previous sweep added unit tests, golden tests, and driver tests for
+the most critical semantic changes. The following driver coverage was
+added in this branch:
 
-- **HIDDEN channel routing.** `HTMLLexer.g4` declares
-  `TAG_WHITESPACE -> channel(HIDDEN)`. The driver test should tokenize
-  a tag like `<p class="x">`, assert that whitespace tokens do **not**
-  appear in the `tokens` array, and assert that they do appear in the
-  following token's `leading_trivia` with `channel == 1`.
-- **Parser-side `~TOK` / `~(block)`.** Find a driver test whose grammar
-  exercises a parser-level complement and assert the generated parser
-  accepts a representative input and rejects the complemented token.
-- **List labels `+=`.** SQLite and several other grammars collect
-  expression lists with `+=`. A driver test should parse a compound
-  input and assert the resulting `Array<_>` field has the expected
-  length and element values.
-- **`mode(X)` semantics (set_mode).** The Rust lexer uses `mode()`
-  alongside `pushMode` / `popMode`. Driver test should feed input that
-  exercises `mode()`-style transitions and assert the token stream
-  matches expectations.
-- **`more` semantics.** HTMLLexer / TypeScriptLexer use `more` to
-  concatenate multi-part tokens. Driver test should feed input that
-  would split without `more` and assert a single combined token.
-- **`type(X)` override.** Find a grammar that uses `type(X)` to rewrite
-  the emitted kind and assert the driver output reflects the overridden
-  kind, not the source rule name.
+- **HIDDEN channel routing** — `driver_html_test.wado` tokenizes
+  `<p class="x">`, asserts TAG_WHITESPACE is absent from the main token
+  stream, and asserts it appears as leading trivia on the next TAG_NAME
+  with `channel == 1`. An additional end-to-end assertion confirms the
+  parser successfully accepts whitespace-separated attributes.
+- **HIDDEN channel (TypeScript)** — `driver_typescript_test.wado`
+  verifies `WhiteSpaces` routes to trivia with `channel == 1` around
+  `let x`.
+- **User-defined channel routing** — `driver_antlr4_test.wado` exercises
+  `channel(COMMENT)` (the second user channel beyond DEFAULT/HIDDEN),
+  asserting both `//` LINE_COMMENT and `/* */` BLOCK_COMMENT appear as
+  trivia with `channel == 3`.
+- **`type(X)` override** — `driver_typescript_test.wado` tokenizes
+  `` `hi` `` and asserts both backticks emit as `TK_BackTick`, never
+  `TK_BackTickInside`, confirming the type-override rewrite.
+
+Still missing driver-level coverage (deferred because no existing test
+grammar exercises the feature end-to-end):
+
+- **Parser-side `~TOK` / `~(block)`.** No driver-test grammar currently
+  uses a parser-level complement. Either add a minimal new grammar, or
+  extend `sexpression.g4` to exercise `~TOK`.
+- **List labels `+=`.** None of the existing test grammars use list
+  labels in the label sense — all `+=` matches are literal `'+='`
+  operator tokens. Add a minimal new grammar or extend an existing one
+  (a `list : items += item (',' items += item)*` pattern).
+- **`mode(X)` semantics (set_mode).** No existing test grammar uses the
+  bare `mode(X)` command — everything uses `pushMode` / `popMode`. Need
+  a new fixture that actually calls `mode(X)`.
+- **`more` semantics.** `ANTLRv4Lexer.LexerCharSet` mode uses `more`,
+  but that mode is only entered from an action block (which Gale
+  skips), so the rule is never actually triggered end-to-end. Need a
+  fixture that enters a `more`-bearing mode via a lexer-command-only
+  `pushMode`.
+- **Wildcard `.` at parser level.** Only lexer-level `.` is exercised
+  today. A parser rule like `any : . ;` has no driver-level test.
 
 ## E. Negative tests
 

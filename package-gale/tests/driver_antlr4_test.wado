@@ -5,6 +5,7 @@
 /// These tests verify tokenization, basic parsing, and that the generated
 /// parser compiles.
 use antlr4 from "./golden/antlr4.wado";
+use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./golden/antlr4.wado";
 
 test "tokenize grammar declaration" {
     let tokens = antlr4::tokenize(&"grammar Foo;");
@@ -65,4 +66,57 @@ test "parse minimal grammar" {
     // any input with identifiers fails to parse. Verify the error is sensible.
     let result = antlr4::parse(&"grammar Foo;");
     assert result matches { Err(_) }, "expected parse to fail due to missing semantic predicates";
+}
+
+// --- User-defined channel routing ---
+//
+// ANTLRv4Lexer declares `channels { OFF_CHANNEL, COMMENT }`, so DEFAULT=0,
+// HIDDEN=1, OFF_CHANNEL=2, COMMENT=3. DOC/BLOCK/LINE comments route to
+// channel(COMMENT), which is a non-HIDDEN user channel. The generated
+// lexer must: (a) keep those tokens out of the main stream, and (b) emit
+// them as trivia with `channel == 3`, not 0 or 1. This exercises the
+// generic `channel(X)` routing path, not just the HIDDEN shortcut.
+test "user channel: LINE_COMMENT routed to COMMENT channel" {
+    let tokens = antlr4::tokenize(&"// hi\n42");
+    // LINE_COMMENT must not appear in the main stream.
+    for let t of &tokens {
+        assert t.kind != TK_LINE_COMMENT,
+            "LINE_COMMENT leaked into main stream — channel routing dropped";
+    }
+    // The INT `42` must follow, carrying the LINE_COMMENT as trivia on
+    // channel 3 (the COMMENT channel).
+    let mut found = false;
+    for let t of &tokens {
+        if t.kind == TK_INT {
+            for let trivia of &t.leading_trivia {
+                if trivia.kind == TK_LINE_COMMENT {
+                    assert trivia.channel == 3,
+                        `expected COMMENT channel 3, got {trivia.channel}`;
+                    found = true;
+                }
+            }
+        }
+    }
+    assert found, "LINE_COMMENT trivia missing on INT token";
+}
+
+test "user channel: BLOCK_COMMENT routed to COMMENT channel" {
+    let tokens = antlr4::tokenize(&"/* hi */ 42");
+    for let t of &tokens {
+        assert t.kind != TK_BLOCK_COMMENT,
+            "BLOCK_COMMENT leaked into main stream";
+    }
+    let mut found = false;
+    for let t of &tokens {
+        if t.kind == TK_INT {
+            for let trivia of &t.leading_trivia {
+                if trivia.kind == TK_BLOCK_COMMENT {
+                    assert trivia.channel == 3,
+                        `expected COMMENT channel 3, got {trivia.channel}`;
+                    found = true;
+                }
+            }
+        }
+    }
+    assert found, "BLOCK_COMMENT trivia missing on INT token";
 }
