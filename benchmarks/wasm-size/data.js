@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775954825637,
+  "lastUpdate": 1775960313817,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11801,6 +11801,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0aef7437ff8efdb042c530626ae98cb2809bfc86"
         },
         "date": 1775954825369,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad80eedb120a9d3c9e05b9d4ea25bfd61c283c5a",
+          "message": "Merge pull request #813 from wado-lang/claude/struct-string-literal-keys-7k9oc\n\nSupport string literal keys in struct literals for JSON compatibility",
+          "timestamp": "2026-04-12T11:15:19+09:00",
+          "tree_id": "43d7aab9da35be31849bd50e7b88b2acdaae87bd",
+          "url": "https://github.com/wado-lang/wado/commit/ad80eedb120a9d3c9e05b9d4ea25bfd61c283c5a"
+        },
+        "date": 1775960313552,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
