@@ -122,8 +122,6 @@ pub struct PendingFunctionBody {
     pub tir_func: Rc<RefCell<TirFunction>>,
     /// The type table for this function's module
     pub type_table: Rc<RefCell<TypeTable>>,
-    /// The module source this function belongs to
-    pub module_source: ModuleSource,
 }
 
 impl<'a> WirContext<'a> {

@@ -298,11 +298,6 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        // Skip unsupported effects
-        if has_unsupported_effects(&tir_func, ctx.package) {
-            continue;
-        }
-
         register_single_function(
             ctx,
             &tir_func,
@@ -339,11 +334,6 @@ fn register_methods(ctx: &mut WirContext<'_>) {
                 .iter()
                 .any(|p| type_table.contains_type_param(p.type_id))
         {
-            continue;
-        }
-
-        // Skip unsupported effects
-        if has_unsupported_effects(&tir_func, ctx.package) {
             continue;
         }
 
@@ -439,7 +429,6 @@ fn register_single_function(
         wir_func_index,
         tir_func: tir_func_rc,
         type_table: type_table_rc,
-        module_source: module_source.clone(),
     });
 }
 
@@ -624,27 +613,6 @@ fn build_mangled_name(tir_func: &TirFunction, _module_source: &ModuleSource) -> 
     } else {
         tir_func.name.clone()
     }
-}
-
-/// Check if a function has unsupported effects.
-fn has_unsupported_effects(
-    tir_func: &TirFunction,
-    project: &crate::flat_package::FlatPackage,
-) -> bool {
-    if tir_func.effects.is_empty() {
-        return false;
-    }
-    let exit_available = project.has_effect("Exit");
-    tir_func.effects.iter().any(|e| {
-        let effect_name = e.name();
-        if effect_name == "Exit" {
-            return !exit_available;
-        }
-        !matches!(
-            effect_name,
-            "Stdout" | "Stderr" | "MonotonicClock" | "Environment"
-        )
-    })
 }
 
 /// Convert a `wasm_encoder` `ValType` to `WirType`.

@@ -1233,7 +1233,7 @@ fn key_get_byte_as_i32_expr(string_ref: TirExpr, index_expr: TirExpr, span: Span
         TirExprKind::MethodCall {
             receiver: Box::new(string_ref),
             func: FunctionRef {
-                module_source: ModuleSource::prelude(),
+                module_source: ModuleSource::string(),
                 name: get_byte_method.to_mangled_name(),
                 monomorph_info: None,
                 method_info: Some(get_byte_method),
@@ -1769,7 +1769,7 @@ fn generate_enum_deserialize(
             TirExprKind::MethodCall {
                 receiver: Box::new(key_ref),
                 func: FunctionRef {
-                    module_source: ModuleSource::prelude(),
+                    module_source: ModuleSource::string(),
                     name: eq_method.to_mangled_name(),
                     monomorph_info: None,
                     method_info: Some(eq_method),
@@ -2497,7 +2497,7 @@ fn generate_variant_deserialize(
             TirExprKind::MethodCall {
                 receiver: Box::new(key_ref),
                 func: FunctionRef {
-                    module_source: ModuleSource::prelude(),
+                    module_source: ModuleSource::string(),
                     name: eq_method.to_mangled_name(),
                     monomorph_info: None,
                     method_info: Some(eq_method),
@@ -3135,7 +3135,7 @@ fn generate_flags_deserialize(
             TirExprKind::MethodCall {
                 receiver: Box::new(key_ref),
                 func: FunctionRef {
-                    module_source: ModuleSource::prelude(),
+                    module_source: ModuleSource::string(),
                     name: eq_method.to_mangled_name(),
                     monomorph_info: None,
                     method_info: Some(eq_method),

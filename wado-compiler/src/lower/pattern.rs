@@ -1318,7 +1318,7 @@ impl<'a> PatternLowerer<'a> {
             TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
                 func: FunctionRef {
-                    module_source: ModuleSource::prelude(),
+                    module_source: ModuleSource::string(),
                     name: "String^Eq::eq".to_string(),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(

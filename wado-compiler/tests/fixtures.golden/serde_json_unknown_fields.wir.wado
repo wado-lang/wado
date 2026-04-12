@@ -176,87 +176,85 @@ type "functype//core:prelude/primitive.wado/fmt_float_special" = fn(ref "core:pr
 
 type "functype//core:json/utf8_sequence_length" = fn(i32) -> i32;  // TypeId(58)
 
-type "functype//core:prelude/string.wado/String::get_byte" = fn(ref "core:prelude/string.wado//String", i32) -> u8;  // TypeId(59)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(59)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(60)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(60)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(61)
+type "functype//core:prelude/string.wado/String::append_byte_filled" = fn(ref "core:prelude/string.wado//String", u8, i32);  // TypeId(61)
 
-type "functype//core:prelude/string.wado/String::append_byte_filled" = fn(ref "core:prelude/string.wado//String", u8, i32);  // TypeId(62)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(62)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(63)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(63)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(64)
+type "functype//core:json/JsonDeserializer::skip_whitespace" = fn(ref "core:json//JsonDeserializer");  // TypeId(64)
 
-type "functype//core:json/JsonDeserializer::skip_whitespace" = fn(ref "core:json//JsonDeserializer");  // TypeId(65)
+type "functype//core:json/JsonDeserializer::expect_char" = fn(ref "core:json//JsonDeserializer", i32) -> ref null "core:serde//DeserializeError";  // TypeId(65)
 
-type "functype//core:json/JsonDeserializer::expect_char" = fn(ref "core:json//JsonDeserializer", i32) -> ref null "core:serde//DeserializeError";  // TypeId(66)
+type "functype//core:json/JsonDeserializer::expect_literal" = fn(ref "core:json//JsonDeserializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//DeserializeError";  // TypeId(66)
 
-type "functype//core:json/JsonDeserializer::expect_literal" = fn(ref "core:json//JsonDeserializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//DeserializeError";  // TypeId(67)
+type "functype//core:json/JsonDeserializer::skip_number" = fn(ref "core:json//JsonDeserializer");  // TypeId(67)
 
-type "functype//core:json/JsonDeserializer::skip_number" = fn(ref "core:json//JsonDeserializer");  // TypeId(68)
+type "functype//core:json/JsonDeserializer::parse_f64_direct" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<f64,DeserializeError>";  // TypeId(68)
 
-type "functype//core:json/JsonDeserializer::parse_f64_direct" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<f64,DeserializeError>";  // TypeId(69)
+type "functype//core:json/JsonDeserializer::skip_string" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(69)
 
-type "functype//core:json/JsonDeserializer::skip_string" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(70)
+type "functype//core:json/JsonDeserializer::skip_value" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(70)
 
-type "functype//core:json/JsonDeserializer::skip_value" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(71)
+type "functype//core:json/JsonStructAccess^DeserializeStruct::next_field" = fn(ref "core:json//JsonStructAccess") -> ref "core:prelude/types.wado//Result<Option<i32>,DeserializeError>";  // TypeId(71)
 
-type "functype//core:json/JsonStructAccess^DeserializeStruct::next_field" = fn(ref "core:json//JsonStructAccess") -> ref "core:prelude/types.wado//Result<Option<i32>,DeserializeError>";  // TypeId(72)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(72)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(73)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(73)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(74)
+type "functype//core:prelude/format.wado/Formatter::apply_padding" = fn(ref "core:prelude/format.wado//Formatter", i32);  // TypeId(74)
 
-type "functype//core:prelude/format.wado/Formatter::apply_padding" = fn(ref "core:prelude/format.wado//Formatter", i32);  // TypeId(75)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(75)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(76)
+type "functype//core:prelude/array.wado/Array<u64>::push" = fn(ref "core:prelude//Array<u64>", u64);  // TypeId(76)
 
-type "functype//core:prelude/array.wado/Array<u64>::push" = fn(ref "core:prelude//Array<u64>", u64);  // TypeId(77)
+type "functype//core:prelude/array.wado/Array<u64>::grow" = fn(ref "core:prelude//Array<u64>");  // TypeId(77)
 
-type "functype//core:prelude/array.wado/Array<u64>::grow" = fn(ref "core:prelude//Array<u64>");  // TypeId(78)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(78)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(79)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(79)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(80)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(80)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(81)
+type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(81)
 
-type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(82)
+type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(82)
 
-type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(83)
+type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(83)
 
-type "functype//core:prelude/fpfmt.wado/mul_pow10" = fn(i32) -> [u64, u64];  // TypeId(84)
+type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(84)
 
-type "functype//core:prelude/fpfmt.wado/fixed_width_for_prec" = fn(f64, i32) -> [u64, i32];  // TypeId(85)
+type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(85)
 
-type "functype//core:prelude/fpfmt.wado/short" = fn(f64) -> [u64, i32];  // TypeId(86)
+type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(86)
 
-type "functype//core:prelude/fpfmt.wado/trim_zeros" = fn(u64, i32) -> [u64, i32];  // TypeId(87)
+type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(87)
 
-type "functype//core:prelude/fpfmt.wado/check_special" = fn(f64) -> [bool, bool, i32];  // TypeId(88)
+type "functype//core:json/core/json/from_string<Point>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "wado-compiler/tests/fixtures/serde_json_unknown_fields.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(88)
 
-type "functype//core:json/core/json/from_string<Point>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "wado-compiler/tests/fixtures/serde_json_unknown_fields.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(89)
+type "functype//core:prelude/primitive.wado/char::from_u32" = fn(u32) -> [i32, char];  // TypeId(89)
 
-type "functype//core:prelude/primitive.wado/char::from_u32" = fn(u32) -> [i32, char];  // TypeId(90)
+type "functype//core:json/JsonDeserializer::read_json_string" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(90)
 
-type "functype//core:json/JsonDeserializer::read_json_string" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(91)
+type "functype//core:json/JsonDeserializer::read_unicode_escape" = fn(ref "core:json//JsonDeserializer") -> [i32, char, ref null "core:serde//DeserializeError"];  // TypeId(91)
 
-type "functype//core:json/JsonDeserializer::read_unicode_escape" = fn(ref "core:json//JsonDeserializer") -> [i32, char, ref null "core:serde//DeserializeError"];  // TypeId(92)
+type "functype//wado-compiler/tests/fixtures/serde_json_unknown_fields.wado/Point^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "wado-compiler/tests/fixtures/serde_json_unknown_fields.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(92)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_unknown_fields.wado/Point^Deserialize::deserialize<JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "wado-compiler/tests/fixtures/serde_json_unknown_fields.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(93)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(93)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(94)
+type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(94)
 
-type "functype//core:prelude/primitive.wado/f64::inspect_into" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(95)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(95)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(96)
+type "functype//core:prelude/primitive.wado/char^Display::fmt" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(96)
 
-type "functype//core:prelude/primitive.wado/char^Display::fmt" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(97)
+type "functype//core:json/JsonDeserializer^Deserializer::begin_struct" = fn(ref "core:json//JsonDeserializer", ref struct) -> [i32, ref null "core:json//JsonStructAccess", ref null "core:serde//DeserializeError"];  // TypeId(97)
 
-type "functype//core:json/JsonDeserializer^Deserializer::begin_struct" = fn(ref "core:json//JsonDeserializer", ref struct) -> [i32, ref null "core:json//JsonStructAccess", ref null "core:serde//DeserializeError"];  // TypeId(98)
-
-type "functype//wado-compiler/tests/fixtures/serde_json_unknown_fields.wado/__Closure_2::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(99)
+type "functype//wado-compiler/tests/fixtures/serde_json_unknown_fields.wado/__Closure_2::__call" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(98)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -546,16 +544,24 @@ condition: p.y == 2.0
 
 fn "wado-compiler/tests/fixtures/serde_json_unknown_fields.wado/_point_field_lookup"(__input, __start, __end) {
     let __len: i32;
+    let __local_5: i32;
+    let __local_7: i32;
     __len = __end - __start;
     if (if __len == 1 -> i32 {
-        "core:prelude/string.wado/String::get_byte"(__input, __start + 0) == 120;
+        __inline_String__get_byte_0: block -> u8 {
+            __local_5 = __start + 0;
+            break __inline_String__get_byte_0: builtin::array_get_u8(__input.repr, __local_5);
+        } == 120;
     } else {
         0;
     }) {
         return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 0 };
     }
     if (if __len == 1 -> i32 {
-        "core:prelude/string.wado/String::get_byte"(__input, __start + 0) == 121;
+        __inline_String__get_byte_1: block -> u8 {
+            __local_7 = __start + 0;
+            break __inline_String__get_byte_1: builtin::array_get_u8(__input.repr, __local_7);
+        } == 121;
     } else {
         0;
     }) {
@@ -1933,10 +1939,6 @@ fn "core:prelude/primitive.wado/char^Display::fmt"(self, f) {
         "core:prelude/string.wado/String::push"(s, self);
         "core:prelude/format.wado/Formatter::pad"(f, s);
     }
-}
-
-fn "core:prelude/string.wado/String::get_byte"(self, index) {
-    return builtin::array_get_u8(self.repr, index);
 }
 
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
