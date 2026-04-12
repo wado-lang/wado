@@ -21,7 +21,9 @@ pub struct SyntaxDefinition {
 pub struct KeywordCategories {
     /// Control flow keywords: if, else, while, for, loop, break, continue, return, match
     pub control: Vec<&'static str>,
-    /// Declaration keywords: fn, let, struct, enum, impl, type, use, from, pub, import, export
+    // Note: `matches` is exposed via `OperatorCategories::other` since it is a
+    // binary pattern-test operator, not a control-flow construct.
+    /// Declaration keywords: fn, let, global, const, struct, enum, variant, flags, impl, trait, type, use, from, pub, import, export, test
     pub declaration: Vec<&'static str>,
     /// Modifier keywords: as, with, mut, async, move, unique, in, of
     pub modifier: Vec<&'static str>,
@@ -62,12 +64,11 @@ impl SyntaxDefinition {
                 // Control flow
                 control: vec![
                     "if", "else", "while", "for", "loop", "break", "continue", "return", "match",
-                    "matches",
                 ],
                 // Declarations
                 declaration: vec![
-                    "fn", "let", "global", "const", "struct", "enum", "variant", "impl", "trait",
-                    "type", "use", "from", "pub", "import", "export", "test",
+                    "fn", "let", "global", "const", "struct", "enum", "variant", "flags", "impl",
+                    "trait", "type", "use", "from", "pub", "import", "export", "test",
                 ],
                 // Modifiers
                 modifier: vec![
@@ -86,11 +87,41 @@ impl SyntaxDefinition {
                 assignment: vec![
                     "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", "=",
                 ],
-                other: vec!["->", "=>", "::", "?", "..<", "..="],
+                other: vec!["->", "=>", "::", "?", "..<", "..=", "..", "...", "matches"],
             },
             builtin_types: vec![
-                "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char",
-                "String", "Array", "Option", "Result", "Fn",
+                "i8",
+                "i16",
+                "i32",
+                "i64",
+                "i128",
+                "u8",
+                "u16",
+                "u32",
+                "u64",
+                "u128",
+                "f32",
+                "f64",
+                "bool",
+                "char",
+                "String",
+                "Array",
+                "Option",
+                "Result",
+                "Fn",
+                "Eq",
+                "Ord",
+                "Ordering",
+                "Default",
+                "Display",
+                "DisplayAlt",
+                "Inspect",
+                "InspectAlt",
+                "Iterator",
+                "IntoIterator",
+                "Index",
+                "IndexValue",
+                "IndexAssign",
             ],
             constants: vec!["true", "false", "null", "self"],
             comments: CommentStyles {
@@ -137,6 +168,9 @@ mod tests {
         // Contextual keywords: these are in SyntaxDefinition for highlighting
         // but are parsed as identifiers by the lexer and handled specially by the parser
         let contextual_keywords = ["test"];
+        // Keyword-shaped operators: lexer keywords exposed via OperatorCategories
+        // rather than KeywordCategories (e.g. `matches`, the binary pattern-test op)
+        let operator_keywords = ["matches"];
 
         // Verify each keyword is lexed as a keyword token (not an identifier)
         // Skip contextual keywords which are intentionally lexed as identifiers
@@ -158,19 +192,30 @@ mod tests {
         let lexer_keywords = [
             "use", "from", "as", "fn", "with", "let", "mut", "return", "if", "else", "match",
             "matches", "for", "while", "loop", "break", "continue", "in", "of", "pub", "effect",
-            "handler", "reactive", "move", "unique", "struct", "enum", "variant", "type", "impl",
-            "trait", "resource", "world", "async", "import", "export", "assert", "global", "const",
-            "stores",
+            "handler", "reactive", "move", "unique", "struct", "enum", "variant", "flags", "type",
+            "impl", "trait", "resource", "world", "async", "import", "export", "assert", "global",
+            "const", "stores",
         ];
 
-        // Contextual keywords: these are in SyntaxDefinition for highlighting
-        // but are parsed as identifiers by the lexer and handled specially by the parser
-        let contextual_keywords = ["test"];
-
         // Verify SyntaxDefinition covers all lexer keywords
+        // (operator keywords like `matches` live in OperatorCategories instead)
+        let def_operators = &def.operators;
+        let all_op_tokens: Vec<&str> = def_operators
+            .comparison
+            .iter()
+            .chain(def_operators.logical.iter())
+            .chain(def_operators.arithmetic.iter())
+            .chain(def_operators.bitwise.iter())
+            .chain(def_operators.assignment.iter())
+            .chain(def_operators.other.iter())
+            .copied()
+            .collect();
         for keyword in lexer_keywords {
+            let in_keywords = all_keywords.contains(&keyword);
+            let in_operators =
+                operator_keywords.contains(&keyword) && all_op_tokens.contains(&keyword);
             assert!(
-                all_keywords.contains(&keyword),
+                in_keywords || in_operators,
                 "lexer keyword '{keyword}' is missing from SyntaxDefinition"
             );
         }
