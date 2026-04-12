@@ -1,0 +1,23 @@
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    // String literal keys in named struct literal
+    let p = Point { "x": 10, "y": 20 };
+    println(`{p.x}, {p.y}`);
+
+    // String literal keys in anonymous struct literal
+    let q = { "name": "Alice", "age": 30 };
+    println(`{q.name}, {q.age}`);
+
+    // Mixed: some keys as string literals, some as identifiers
+    let r = Point { "x": 1, y: 2 };
+    println(`{r.x}, {r.y}`);
+}
+
+__DATA__
+{"stdout": "10, 20\nAlice, 30\n1, 2\n"}

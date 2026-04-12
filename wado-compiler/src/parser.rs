@@ -138,8 +138,12 @@ impl Parser {
             return true;
         }
 
-        // First token must be a valid field name (identifier or keyword)
-        if after_brace.as_ident_name().is_none() && after_brace.as_keyword_str().is_none() {
+        // First token must be a valid field name (identifier, keyword, or string literal)
+        let is_string_lit = matches!(after_brace, TokenKind::StringLit(_));
+        if after_brace.as_ident_name().is_none()
+            && after_brace.as_keyword_str().is_none()
+            && !is_string_lit
+        {
             return false;
         }
 
@@ -147,8 +151,8 @@ impl Parser {
         match &self.peek_nth(2).kind {
             // `{ field: value }` - but not `{ field:: ... }`
             TokenKind::Colon => !matches!(&self.peek_nth(3).kind, TokenKind::Colon),
-            // `{ field, ... }` or `{ field }` - shorthand
-            TokenKind::Comma | TokenKind::RBrace => true,
+            // `{ field, ... }` or `{ field }` - shorthand (not valid for string literal keys)
+            TokenKind::Comma | TokenKind::RBrace => !is_string_lit,
             _ => false,
         }
     }
@@ -1929,7 +1933,11 @@ impl Parser {
                     }
 
                     let field_span = self.peek().span;
-                    let field_name = if let Some(name) = self.peek_kind().as_ident_name() {
+                    let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
+                        // Allow string literals as field names for JSON compatibility
+                        self.advance();
+                        s
+                    } else if let Some(name) = self.peek_kind().as_ident_name() {
                         let name = name.to_string();
                         self.advance();
                         name
@@ -2827,7 +2835,7 @@ impl Parser {
                 self.advance(); // consume `{`
 
                 // Check if this looks like a struct literal
-                // Pattern: `{ ident :` or `{ ident ,` or `{ ident }`
+                // Pattern: `{ ident :` or `{ ident ,` or `{ ident }` or `{ "string" :`
                 if let TokenKind::Ident(_) = self.peek_kind() {
                     // Peek at the token after the identifier
                     let after_ident = self.peek_nth(1);
@@ -2838,6 +2846,22 @@ impl Parser {
                         // This is an implicit struct literal
                         return self.parse_struct_literal(None, start_span);
                     }
+                }
+
+                // String literal key: `{ "field": value }`
+                if let TokenKind::StringLit(_) = self.peek_kind()
+                    && matches!(self.peek_nth(1).kind, TokenKind::Colon)
+                {
+                    return self.parse_struct_literal(None, start_span);
+                }
+
+                // Literal-value keywords as keys: `{ true: ... }` → route to struct literal for better error
+                if matches!(
+                    self.peek_kind(),
+                    TokenKind::True | TokenKind::False | TokenKind::Null
+                ) && matches!(self.peek_nth(1).kind, TokenKind::Colon)
+                {
+                    return self.parse_struct_literal(None, start_span);
                 }
 
                 // Empty struct literal: `{}`
@@ -4287,8 +4311,13 @@ impl Parser {
         if !self.check(&TokenKind::RBrace) {
             loop {
                 let field_span = self.peek().span;
-                // Allow keywords as field names (unambiguous in context)
-                let field_name = self.consume_field_name()?;
+                // Allow string literals as field names for JSON compatibility
+                let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
+                    self.advance();
+                    s
+                } else {
+                    self.consume_field_name()?
+                };
 
                 let (value, is_shorthand) = if self.check(&TokenKind::Colon) {
                     self.advance();
