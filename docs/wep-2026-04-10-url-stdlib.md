@@ -270,25 +270,25 @@ pub fn format_query(params: TreeMap<String, String>) -> String
 
 ### Complete API Summary
 
-| Function / Method           | Signature                                           | Description               |
-| --------------------------- | --------------------------------------------------- | ------------------------- |
-| `Url::parse`                | `String -> Result<Url, ParseError>`                 | Parse URL string          |
-| `Url::from_parts`           | `String, String, Option<String>, Option<String> -> Url` | Infallible parts ctor |
-| `.query_params()`           | `&self -> TreeMap<String, String>`                  | Parse `query` field       |
-| `.to_string()`              | `&self -> String`                                   | Serialize to string       |
-| `.authority()`              | `&self -> String`                                   | `[user:pass@]host[:port]` |
-| `.origin()`                 | `&self -> String`                                   | `scheme://host[:port]`    |
-| `.path_with_query()`        | `&self -> String`                                   | `/path[?query]`           |
-| `.effective_port()`         | `&self -> u16`                                      | Port or scheme default    |
-| `.resolve(ref)`             | `&self, String -> Result<Url, ParseError>`          | Relative resolution       |
-| `.query_pairs()`            | `&self -> TreeMap<String, String>`                  | Parse query params        |
-| `.query_get(key)`           | `&self, String -> Option<String>`                   | Get param value           |
-| `.query_get_all(key)`       | `&self, String -> Array<String>`                    | Get all values for key    |
-| `.with_query_pairs(params)` | `&self, TreeMap<String, String> -> Url`             | Replace query params      |
-| `percent_encode`            | `String -> String`                                  | Encode for URI component  |
-| `percent_decode`            | `String -> Result<String, ParseError>`              | Decode %XX sequences      |
-| `parse_query`               | `String -> TreeMap<String, String>`                 | Parse query string        |
-| `format_query`              | `TreeMap<String, String> -> String`                 | Format query string       |
+| Function / Method           | Signature                                               | Description               |
+| --------------------------- | ------------------------------------------------------- | ------------------------- |
+| `Url::parse`                | `String -> Result<Url, ParseError>`                     | Parse URL string          |
+| `Url::from_parts`           | `String, String, Option<String>, Option<String> -> Url` | Infallible parts ctor     |
+| `.query_params()`           | `&self -> TreeMap<String, String>`                      | Parse `query` field       |
+| `.to_string()`              | `&self -> String`                                       | Serialize to string       |
+| `.authority()`              | `&self -> String`                                       | `[user:pass@]host[:port]` |
+| `.origin()`                 | `&self -> String`                                       | `scheme://host[:port]`    |
+| `.path_with_query()`        | `&self -> String`                                       | `/path[?query]`           |
+| `.effective_port()`         | `&self -> u16`                                          | Port or scheme default    |
+| `.resolve(ref)`             | `&self, String -> Result<Url, ParseError>`              | Relative resolution       |
+| `.query_pairs()`            | `&self -> TreeMap<String, String>`                      | Parse query params        |
+| `.query_get(key)`           | `&self, String -> Option<String>`                       | Get param value           |
+| `.query_get_all(key)`       | `&self, String -> Array<String>`                        | Get all values for key    |
+| `.with_query_pairs(params)` | `&self, TreeMap<String, String> -> Url`                 | Replace query params      |
+| `percent_encode`            | `String -> String`                                      | Encode for URI component  |
+| `percent_decode`            | `String -> Result<String, ParseError>`                  | Decode %XX sequences      |
+| `parse_query`               | `String -> TreeMap<String, String>`                     | Parse query string        |
+| `format_query`              | `TreeMap<String, String> -> String`                     | Format query string       |
 
 8 pub fields. 13 methods. 4 module functions. 1 error variant. Serde: `Serialize` + `Deserialize` via JSON string.
 
