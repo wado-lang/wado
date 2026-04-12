@@ -2848,39 +2848,32 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
 fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     let __local_1: ref "core:prelude//Array<u8>";
     let result: ref "core:prelude//Array<u8>";
-    let item: u8;
-    let __pattern_temp_0: ref "core:prelude/types.wado//Option<u8>";
-    let __local_9: u8;
-    let _licm_used_10: i32;
-    let _licm_repr_11: ref builtin::array<u8>;
-    let _hfs_index_12: i32;
+    let byte: u8;
+    let _licm_used_11: i32;
+    let _licm_repr_12: ref builtin::array<u8>;
+    let _hfs_index_13: i32;
     result = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __local_1 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
     };
-    _licm_used_10 = self.used;
-    _licm_repr_11 = self.repr;
-    _hfs_index_12 = self.index;
+    _licm_used_11 = self.used;
+    _licm_repr_12 = self.repr;
+    _hfs_index_13 = self.index;
     b217: block {
         l218: loop {
-            __pattern_temp_0 = __inline_StrUtf8ByteIter_Iterator__next_3: block -> ref "core:prelude/types.wado//Option<u8>" {
-                if _hfs_index_12 >= _licm_used_10 {
-                    break __inline_StrUtf8ByteIter_Iterator__next_3: struct.new "core:prelude/types.wado//Option<u8>" { 1 };
+            __fused___inline_StrUtf8ByteIter_Iterator__next_3: block {
+                if _hfs_index_13 >= _licm_used_11 {
+                    break b217;
                 }
-                __local_9 = builtin::array_get_u8(_licm_repr_11, _hfs_index_12);
-                _hfs_index_12 = _hfs_index_12 + 1;
-                break __inline_StrUtf8ByteIter_Iterator__next_3: struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: __local_9 };
+                byte = builtin::array_get_u8(_licm_repr_12, _hfs_index_13);
+                _hfs_index_13 = _hfs_index_13 + 1;
+                "core:prelude/array.wado/Array<u8>::push"(result, byte);
+                break __fused___inline_StrUtf8ByteIter_Iterator__next_3;
             };
-            if ref.test "core:prelude/types.wado//Option<u8>::Some"(__pattern_temp_0) {
-                item = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__pattern_temp_0).payload_0;
-                "core:prelude/array.wado/Array<u8>::push"(result, item);
-            } else {
-                break b217;
-            }
             continue l218;
         };
     };
-    self.index = _hfs_index_12;
+    self.index = _hfs_index_13;
     return result;
 }
 
@@ -2962,13 +2955,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l230: loop {
+            l229: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l230;
+                continue l229;
             };
         };
     };
@@ -3071,8 +3064,8 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
     };
     _licm_buf_33 = f.buf;
-    b249: block {
-        l250: loop {
+    b248: block {
+        l249: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: char;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
@@ -3097,9 +3090,9 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     "core:prelude/string.wado/String::push"(_licm_buf_33, c);
                 }
             } else {
-                break b249;
+                break b248;
             }
-            continue l250;
+            continue l249;
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
@@ -3118,8 +3111,8 @@ fn "core:prelude/string.wado/String::from_utf8<Array<u8>>"(bytes) {
     let b3: u8;
     builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
     iter = struct.new "core:prelude/array.wado//ArrayIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
-    b257: block {
-        l258: loop {
+    b256: block {
+        l257: loop {
             let __sroa___pattern_temp_0_discriminant: i32;
             let __sroa___pattern_temp_0_payload_0: u8;
             multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
@@ -3259,9 +3252,9 @@ fn "core:prelude/string.wado/String::from_utf8<Array<u8>>"(bytes) {
                 }
                 "core:prelude/string.wado/String::push"(builder, code);
             } else {
-                break b257;
+                break b256;
             }
-            continue l258;
+            continue l257;
         };
     };
     return struct.new "core:prelude/types.wado//Result<String,String>::Ok" { discriminant: 0, payload_0: builder };
@@ -3306,13 +3299,13 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l294: loop {
+            l293: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l294;
+                continue l293;
             };
         };
     };

@@ -57,7 +57,12 @@ fn fuse_in_function(func: &mut TirFunction) -> bool {
     };
     // Function body is a statement-level block: any value of the trailing
     // statement is dropped (functions returning a value use explicit `return`).
-    fuse_in_block(body, /* yields_value */ false, &mut func.local_count, &mut func.local_types)
+    fuse_in_block(
+        body,
+        /* yields_value */ false,
+        &mut func.local_count,
+        &mut func.local_types,
+    )
 }
 
 /// `yields_value` is `true` when the value of `block`'s terminal statement is
@@ -204,13 +209,23 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
     match &mut expr.kind {
         TirExprKind::LabeledBlock { block, .. } => {
             // Expression-level labeled block: its terminal value is consumed.
-            let changed = fuse_in_block(block, /* yields_value */ true, local_count, local_types);
+            let changed = fuse_in_block(
+                block,
+                /* yields_value */ true,
+                local_count,
+                local_types,
+            );
             // Then check if this became a trivial single-break block
             try_inline_trivial_labeled_block(expr) || changed
         }
         TirExprKind::Block(block) => {
             // Expression-level block: terminal value is consumed.
-            fuse_in_block(block, /* yields_value */ true, local_count, local_types)
+            fuse_in_block(
+                block,
+                /* yields_value */ true,
+                local_count,
+                local_types,
+            )
         }
         TirExprKind::If {
             condition,
