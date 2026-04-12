@@ -1,0 +1,49 @@
+// Regression test: the expected type annotation on a let binding must flow
+// into tuple literals nested inside if/match branches so that numeric
+// literals get coerced to narrower integer types (e.g., u16, i16, u8).
+
+test "tuple literal in if branch with narrow int" {
+    let flag = true;
+    let t: [u16, String] = if flag {
+        [200, "Hello!"];
+    } else {
+        [404, "NF"];
+    };
+    assert t.0 == 200 as u16;
+    assert t.1 == "Hello!";
+}
+
+test "tuple literal destructuring in if branch with narrow int" {
+    let flag = false;
+    let [status, body]: [u16, String] = if flag {
+        [200, "Hello!"];
+    } else {
+        [404, "NF"];
+    };
+    assert status == 404 as u16;
+    assert body == "NF";
+}
+
+test "tuple literal in match branch with narrow int" {
+    let n = 1;
+    let t: [u8, String] = match n {
+        0 => [0, "zero"],
+        1 => [1, "one"],
+        _ => [255, "other"],
+    };
+    assert t.0 == 1 as u8;
+    assert t.1 == "one";
+}
+
+test "tuple literal via identity function with narrow int" {
+    let t: [i16, String] = if true {
+        [42, "nested"];
+    } else {
+        [0, ""];
+    };
+    assert t.0 == 42 as i16;
+    assert t.1 == "nested";
+}
+
+__DATA__
+{"test": {}}

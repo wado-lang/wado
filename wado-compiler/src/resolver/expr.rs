@@ -67,7 +67,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::StructLiteral(struct_lit) => self.resolve_struct_literal(struct_lit, ctx),
             Expr::CompoundAssign(compound) => self.resolve_compound_assign(compound, ctx),
             Expr::ComparisonChain(chain) => self.resolve_comparison_chain(chain, ctx),
-            Expr::TupleLiteral(tuple_lit) => self.resolve_tuple_literal(tuple_lit, ctx),
+            Expr::TupleLiteral(tuple_lit) => {
+                self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
+            }
             Expr::LabeledBlock(lb) => {
                 ctx.labeled_block_targets.push(LabeledBlockTarget {
                     label: lb.label.clone(),
@@ -2767,13 +2769,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         tuple_lit: &ast::TupleLiteralExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TirExpr {
+        // When the expected type is a concrete tuple of matching arity and the
+        // literal has no spread elements, propagate per-element expected types
+        // so numeric literals and nested tuples are coerced to the target shape.
+        let expected_elem_types: Option<Vec<TypeId>> = expected_type.and_then(|ty| {
+            let has_spread = tuple_lit
+                .elements
+                .iter()
+                .any(|e| matches!(e, Expr::Spread(..)));
+            if has_spread {
+                return None;
+            }
+            let elems = self.type_table.borrow().as_tuple(ty)?;
+            if elems.len() != tuple_lit.elements.len() {
+                return None;
+            }
+            Some(elems)
+        });
+
         // Resolve each element expression, handling spread elements
         let mut elements: Vec<TirExpr> = Vec::new();
         let mut elem_types: Vec<TypeId> = Vec::new();
         // Bindings for non-trivial spread expressions: (local_idx, name, expr, span)
         let mut spread_bindings: Vec<(u32, String, TirExpr, crate::token::Span)> = Vec::new();
-        for elem in &tuple_lit.elements {
+        for (elem_idx, elem) in tuple_lit.elements.iter().enumerate() {
             if let Expr::Spread(inner, _span) = elem {
                 let spread_expr = self.resolve_expr(inner, ctx, None);
                 let contains_pack = self.type_contains_pack(spread_expr.type_id);
@@ -2860,7 +2881,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     elements.push(spread_expr);
                 }
             } else {
-                let resolved = self.resolve_expr(elem, ctx, None);
+                let elem_expected = expected_elem_types.as_ref().map(|v| v[elem_idx]);
+                let resolved = self.resolve_expr(elem, ctx, elem_expected);
                 elem_types.push(resolved.type_id);
                 elements.push(resolved);
             }
