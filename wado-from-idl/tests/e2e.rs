@@ -1,6 +1,6 @@
 //! E2E tests for wado-from-idl
 
-use wado_from_idl::{Transformer, WadoCodeGenerator};
+use wado_from_idl::{Transformer, WadoCodeGenerator, WadoModule};
 use wit_parser::Resolve;
 
 fn parse_wit_and_generate(wit: &str) -> String {
@@ -96,6 +96,45 @@ interface api {
 
     assert!(output.contains("fn get_value(key: String) -> Option<String>;"));
     assert!(output.contains("fn parse(input: String) -> Result<u32, String>;"));
+}
+
+#[test]
+fn test_generated_attribute_header() {
+    // The generator must emit `#![generated(...)]` metadata in the header
+    // (with `by` and `source` key-value args) instead of comments.
+    let wit = r"
+package test:example@0.1.0;
+
+interface greet {
+    hello: func(name: string) -> string;
+}
+";
+
+    let mut resolve = Resolve::default();
+    resolve
+        .push_str("greet.wit", wit)
+        .expect("Failed to parse WIT");
+
+    let transformer = Transformer::new(&resolve);
+    let mut generator = WadoCodeGenerator::new();
+
+    let iface_id = resolve.interfaces.iter().next().expect("no interface").0;
+    let mut module: WadoModule = transformer
+        .transform_interface(iface_id)
+        .expect("Failed to transform interface");
+    module.source_files = vec!["greet.wit".to_string()];
+
+    let output = generator.generate(&module);
+
+    // Must be on the very first line so the Wado parser accepts it as an inner attribute.
+    let first_line = output.lines().next().expect("empty output");
+    assert_eq!(
+        first_line,
+        r#"#![generated(by = "wado-from-idl", source = "greet.wit")]"#
+    );
+    // No legacy comment header
+    assert!(!output.contains("// This file is auto-generated"));
+    assert!(!output.contains("// Source files:"));
 }
 
 #[test]

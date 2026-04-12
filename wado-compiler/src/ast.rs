@@ -17,12 +17,45 @@ pub struct Module {
     include_paths: IndexSet<String>,
 }
 
-/// Inner attribute like `#![no_prelude]` or `#![wasm_module("mem")]`
+/// Inner attribute like `#![no_prelude]`, `#![wasm_module("mem")]`, or
+/// `#![generated(source = "path", by = "tool")]`.
+///
+/// Arguments use the same `AttrArg` representation as outer attributes so that
+/// key-value metadata (e.g. `source = "file.wit"`) survives unparse/reformat.
 #[derive(Debug, Clone)]
 pub struct InnerAttribute {
     pub name: String,
-    pub args: Vec<String>,
+    pub args: Vec<AttrArg>,
     pub span: Span,
+}
+
+impl InnerAttribute {
+    /// Find the first key-value argument with the given key.
+    ///
+    /// For `#![generated(by = "gale")]`, `attr.kv_value("by")` returns `Some("gale")`.
+    pub fn kv_value(&self, key: &str) -> Option<&str> {
+        self.args.iter().find_map(|arg| {
+            if let AttrArg::KeyValue(k, v) = arg {
+                if k == key { Some(v.as_str()) } else { None }
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Return all values from key-value arguments with the given key (preserving order).
+    ///
+    /// Supports repeated keys such as
+    /// `#![generated(source = "a.wit", source = "b.wit")]`.
+    pub fn kv_values<'a>(&'a self, key: &'a str) -> impl Iterator<Item = &'a str> + 'a {
+        self.args.iter().filter_map(move |arg| {
+            if let AttrArg::KeyValue(k, v) = arg {
+                if k == key { Some(v.as_str()) } else { None }
+            } else {
+                None
+            }
+        })
+    }
 }
 
 impl Module {
@@ -82,7 +115,31 @@ impl Module {
             .iter()
             .find(|a| a.name == "wasm_module")
             .and_then(|a| a.args.first())
-            .map(String::as_str)
+            .map(AttrArg::as_str)
+    }
+
+    /// Returns the value of a key-value argument on any `#![generated(...)]`
+    /// inner attribute.
+    ///
+    /// Scans all `#![generated(...)]` attributes and returns the first matching
+    /// `key = "value"` pair. For example, given
+    /// `#![generated(by = "wado-from-idl", source = "a.wit")]`,
+    /// `module.generated_meta("by")` returns `Some("wado-from-idl")`.
+    pub fn generated_meta(&self, key: &str) -> Option<&str> {
+        self.inner_attributes
+            .iter()
+            .filter(|a| a.name == "generated")
+            .find_map(|a| a.kv_value(key))
+    }
+
+    /// Returns all values for a key-value argument across every
+    /// `#![generated(...)]` inner attribute, preserving source order.
+    pub fn generated_meta_all<'a>(&'a self, key: &'a str) -> Vec<&'a str> {
+        self.inner_attributes
+            .iter()
+            .filter(|a| a.name == "generated")
+            .flat_map(|a| a.kv_values(key))
+            .collect()
     }
 
     /// Returns the shebang line, if present.

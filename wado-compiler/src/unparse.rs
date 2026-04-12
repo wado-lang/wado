@@ -104,9 +104,7 @@ impl<'a> Unparser<'a> {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.output.push('"');
-                    self.output.push_str(arg);
-                    self.output.push('"');
+                    self.unparse_attr_arg(arg);
                 }
                 self.output.push(')');
             }
