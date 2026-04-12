@@ -225,15 +225,4 @@ mise run on-task-started   # install project tools
 
 ### When Completing a Task
 
-When you have completed a task, make sure everything is up-to-date and tested:
-
-- Update docs if necessary:
-  - docs/spec.md
-  - docs/cheatsheet.md
-  - docs/compiler.md
-  - docs/optimizer.md
-- Run `time mise run on-task-done`
-  - It performs format, clippy-fix, update / regenerate golden fixtures & artifacts, and tests.
-  - It will take 20+ minutes.
-  - Run it without `| tail` in order not to lose the results.
-  - Commit the entire results of `on-task-done`.
+When you have completed a task, make sure everything is up-to-date and tested by `time mise run on-task-done` (use skill for that).
