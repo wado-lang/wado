@@ -2312,8 +2312,11 @@ impl<'a> Unparser<'a> {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.output.push_str(&field.field_name);
-                    if !matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name) {
+                    let bare_name = is_bare_field_name(&field.field_name);
+                    self.output.push_str(&format_field_name(&field.field_name));
+                    let is_shorthand = bare_name
+                        && matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name);
+                    if !is_shorthand {
                         self.output.push_str(": ");
                         self.unparse_pattern(&field.pattern);
                     }
@@ -2405,8 +2408,11 @@ impl<'a> Unparser<'a> {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.output.push_str(&field.field_name);
-                    if !matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name) {
+                    let bare_name = is_bare_field_name(&field.field_name);
+                    self.output.push_str(&format_field_name(&field.field_name));
+                    let is_shorthand = bare_name
+                        && matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name);
+                    if !is_shorthand {
                         self.output.push_str(": ");
                         self.unparse_let_pattern(&field.pattern);
                     }
@@ -2511,7 +2517,7 @@ impl<'a> Unparser<'a> {
             self.indent_level += 1;
             for field in &s.fields {
                 self.write_indent();
-                self.output.push_str(&field.name);
+                self.output.push_str(&format_field_name(&field.name));
                 if !field.is_shorthand {
                     self.output.push_str(": ");
                     self.unparse_expr(&field.value);
@@ -2531,7 +2537,7 @@ impl<'a> Unparser<'a> {
                 if i > 0 {
                     self.output.push_str(", ");
                 }
-                self.output.push_str(&field.name);
+                self.output.push_str(&format_field_name(&field.name));
                 if !field.is_shorthand {
                     self.output.push_str(": ");
                     self.unparse_expr(&field.value);
@@ -2546,7 +2552,7 @@ impl<'a> Unparser<'a> {
                 self.indent_level += 1;
                 for field in &s.fields {
                     self.write_indent();
-                    self.output.push_str(&field.name);
+                    self.output.push_str(&format_field_name(&field.name));
                     if !field.is_shorthand {
                         self.output.push_str(": ");
                         self.unparse_expr(&field.value);
@@ -2882,6 +2888,28 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
         // must be parenthesized when it appears as the left operand of `<`.
         Expr::Cast(_) if is_left && parent_op == BinaryOp::Lt => true,
         _ => false,
+    }
+}
+
+/// Returns true if `name` can be emitted as a bare identifier or keyword in a
+/// struct-literal / struct-pattern field position. Otherwise the field name
+/// must be rendered as a quoted string literal (for JSON compatibility).
+fn is_bare_field_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Emit a struct-literal / struct-pattern field name, wrapping it in a string
+/// literal if it is not a valid bare identifier.
+fn format_field_name(name: &str) -> String {
+    if is_bare_field_name(name) {
+        name.to_string()
+    } else {
+        format!("\"{}\"", escape_string(name))
     }
 }
 
@@ -3392,8 +3420,11 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
                 if i > 0 {
                     output.push_str(", ");
                 }
-                output.push_str(&field.field_name);
-                if !matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name) {
+                let bare_name = is_bare_field_name(&field.field_name);
+                output.push_str(&format_field_name(&field.field_name));
+                let is_shorthand = bare_name
+                    && matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name);
+                if !is_shorthand {
                     output.push_str(": ");
                     unparse_pattern_into(&field.pattern, output);
                 }

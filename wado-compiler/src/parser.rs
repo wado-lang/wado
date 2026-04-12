@@ -2849,10 +2849,10 @@ impl Parser {
                 }
 
                 // String literal key: `{ "field": value }`
-                if let TokenKind::StringLit(_) = self.peek_kind() {
-                    if matches!(self.peek_nth(1).kind, TokenKind::Colon) {
-                        return self.parse_struct_literal(None, start_span);
-                    }
+                if let TokenKind::StringLit(_) = self.peek_kind()
+                    && matches!(self.peek_nth(1).kind, TokenKind::Colon)
+                {
+                    return self.parse_struct_literal(None, start_span);
                 }
 
                 // Literal-value keywords as keys: `{ true: ... }` → route to struct literal for better error
