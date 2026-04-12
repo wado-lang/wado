@@ -200,13 +200,6 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_br_exit.wado/__test_0_f32_dese
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __local_15: ref "core:prelude/format.wado//Formatter";
-    __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
-        "wado-compiler/tests/fixtures/opt_sroa_variant_br_exit.wado/__initialize_module"();
-        global:__modules_initialized = 1;
-    };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: f32;
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -249,6 +242,13 @@ condition: v == 100.0 as f32
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_variant_br_exit.wado/__cm_export____test_0_f32_deserialize_via_sroa"() {
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "wado-compiler/tests/fixtures/opt_sroa_variant_br_exit.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/opt_sroa_variant_br_exit.wado/__test_0_f32_deserialize_via_sroa"();
     "wasi/task-return"(0);
 }

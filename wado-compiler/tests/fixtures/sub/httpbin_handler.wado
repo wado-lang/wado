@@ -1,0 +1,238 @@
+// Shared httpbin handler logic for test fixtures.
+// Returns [status, content_type, body_str] for the given request.
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers, StatusCode, Method } from "wasi:http";
+use { TreeMap } from "core:collections";
+use { decode } from "core:base64";
+use { Value } from "core:json_value";
+use { to_string } from "core:json";
+
+pub fn method_name(m: Method) -> String {
+    return match m {
+        Get => "GET",
+        Head => "HEAD",
+        Post => "POST",
+        Put => "PUT",
+        Delete => "DELETE",
+        Connect => "CONNECT",
+        Options => "OPTIONS",
+        Trace => "TRACE",
+        Patch => "PATCH",
+        Other(s) => s,
+    };
+}
+
+pub fn split_path_query(full: String) -> [String, String] {
+    if let Some(i) = full.find("?") {
+        let path = full.substr_bytes(0, i);
+        let query = full.substr_bytes(i + 1, full.len());
+        return [path, query];
+    }
+    return [full, ""];
+}
+
+fn parse_query_params(query: String) -> TreeMap<String, Value> {
+    let mut params = TreeMap::<String, Value>::new();
+    if query.is_empty() {
+        return params;
+    }
+    for let pair of query.split("&") {
+        if pair.is_empty() {
+            continue;
+        }
+        if let Some(eq) = pair.find("=") {
+            let key = pair.substr_bytes(0, eq);
+            let val = pair.substr_bytes(eq + 1, pair.len());
+            params[key] = Value::String(val);
+        } else {
+            params[pair] = Value::String("");
+        }
+    }
+    return params;
+}
+
+fn headers_to_json(headers: &Fields) -> Value {
+    let all = headers.copy_all();
+    let mut map = TreeMap::<String, Value>::new();
+    for let entry of all {
+        let [name, value] = entry;
+        map[name] = Value::String(String::from_utf8_lossy(value));
+    }
+    return Value::Object(map);
+}
+
+fn get_header(headers: &Fields, name: String) -> String {
+    let values = headers.get(name as FieldName);
+    if values.is_empty() {
+        return "";
+    }
+    return String::from_utf8_lossy(values[0]);
+}
+
+pub fn read_body_from_request(request: Request) -> String {
+    let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [body_stream, _trailers] = Request::consume_body(request, res_future);
+    let mut body = String::with_capacity(256);
+    loop {
+        let chunk = body_stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        if let Ok(s) = String::from_utf8(chunk) {
+            body.push_str(s);
+        }
+    }
+    body_stream.drop();
+    return body;
+}
+
+fn parse_status_code(s: String) -> Option<u16> {
+    if s.is_empty() {
+        return null;
+    }
+    if let Some(f) = f64::parse(s) {
+        let code = f as i32;
+        if code >= 100 && code <= 599 && f == code as f64 {
+            return Option::<u16>::Some(code as u16);
+        }
+    }
+    return null;
+}
+
+fn build_request_json(method: String, path: String, query: String, headers: &Fields, body: Option<String>) -> String {
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["method"] = Value::String(method);
+    obj["path"] = Value::String(path);
+    obj["args"] = Value::Object(parse_query_params(query));
+    obj["headers"] = headers_to_json(headers);
+    obj["origin"] = Value::String(get_header(headers, "x-forwarded-for"));
+    let url = if query.is_empty() { path } else { path + "?" + query };
+    obj["url"] = Value::String(url);
+    if let Some(data) = body {
+        obj["data"] = Value::String(data);
+    }
+    return to_string(&Value::Object(obj)).unwrap();
+}
+
+fn json_error(msg: String) -> String {
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["error"] = Value::String(msg);
+    return to_string(&Value::Object(obj)).unwrap();
+}
+
+/// Route an HTTP request. Returns [status, content_type, body].
+pub fn route(request: Request, method_str: String, path: String, query: String) -> [i32, String, String] {
+    if path == "/" {
+        return [200, "text/html; charset=utf-8", "<h1>httpbin</h1>\n"];
+    }
+
+    if path == "/get" {
+        if method_str != "GET" {
+            return [405, "application/json", json_error("Method Not Allowed. Use GET.") + "\n"];
+        }
+        let h = request.get_headers();
+        return [200, "application/json", build_request_json(method_str, path, query, &(h as Fields), null) + "\n"];
+    }
+
+    if path == "/post" {
+        if method_str != "POST" {
+            return [405, "application/json", json_error("Method Not Allowed. Use POST.") + "\n"];
+        }
+        let h = request.get_headers();
+        let data = read_body_from_request(request);
+        return [
+            200,
+            "application/json",
+            build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n",
+        ];
+    }
+
+    if path == "/put" {
+        if method_str != "PUT" {
+            return [405, "application/json", json_error("Method Not Allowed. Use PUT.") + "\n"];
+        }
+        let h = request.get_headers();
+        let data = read_body_from_request(request);
+        return [
+            200,
+            "application/json",
+            build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n",
+        ];
+    }
+
+    if path == "/patch" {
+        if method_str != "PATCH" {
+            return [405, "application/json", json_error("Method Not Allowed. Use PATCH.") + "\n"];
+        }
+        let h = request.get_headers();
+        let data = read_body_from_request(request);
+        return [
+            200,
+            "application/json",
+            build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n",
+        ];
+    }
+
+    if path == "/delete" {
+        if method_str != "DELETE" {
+            return [405, "application/json", json_error("Method Not Allowed. Use DELETE.") + "\n"];
+        }
+        let h = request.get_headers();
+        return [200, "application/json", build_request_json(method_str, path, query, &(h as Fields), null) + "\n"];
+    }
+
+    if path == "/headers" {
+        let h = request.get_headers();
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["headers"] = headers_to_json(&(h as Fields));
+        return [200, "application/json", to_string(&Value::Object(obj)).unwrap() + "\n"];
+    }
+
+    if path == "/ip" {
+        let h = request.get_headers();
+        let origin = get_header(&(h as Fields), "x-forwarded-for");
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["origin"] = Value::String(if origin.is_empty() { "unknown" } else { origin });
+        return [200, "application/json", to_string(&Value::Object(obj)).unwrap() + "\n"];
+    }
+
+    if path == "/user-agent" {
+        let h = request.get_headers();
+        let ua = get_header(&(h as Fields), "user-agent");
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["user-agent"] = Value::String(ua);
+        return [200, "application/json", to_string(&Value::Object(obj)).unwrap() + "\n"];
+    }
+
+    if path.starts_with("/status/") {
+        let code_str = path.substr_bytes(8, path.len());
+        if let Some(code) = parse_status_code(code_str) {
+            return [code as i32, "text/plain", ""];
+        }
+        return [400, "application/json", json_error("Invalid status code") + "\n"];
+    }
+
+    if path.starts_with("/base64/") {
+        let encoded = path.substr_bytes(8, path.len());
+        if let Some(decoded_bytes) = decode(encoded) {
+            let text = String::from_utf8_lossy(decoded_bytes);
+            return [200, "text/plain", text];
+        }
+        return [400, "application/json", json_error("Invalid base64") + "\n"];
+    }
+
+    if path == "/anything" || path.starts_with("/anything/") {
+        let h = request.get_headers();
+        if method_str == "POST" || method_str == "PUT" || method_str == "PATCH" {
+            let data = read_body_from_request(request);
+            return [
+                200,
+                "application/json",
+                build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n",
+            ];
+        }
+        return [200, "application/json", build_request_json(method_str, path, query, &(h as Fields), null) + "\n"];
+    }
+
+    return [404, "application/json", json_error("Not Found") + "\n"];
+}

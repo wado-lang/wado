@@ -896,6 +896,7 @@ impl Monomorphizer {
             stores_aliased_locals: generic.stores_aliased_locals.clone(),
             // Scratch local fields - computed by lower phase (after monomorphization)
             is_cm_binding: false,
+            is_cm_export: false,
             inline_hint: generic.inline_hint,
             comp_features: generic.comp_features,
             export_name: generic.export_name.clone(),

@@ -213,6 +213,7 @@ pub(super) fn lower_global_initializers(module: &mut TirModule) {
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
+        is_cm_export: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
@@ -727,6 +728,7 @@ pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
+        is_cm_export: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
@@ -759,8 +761,9 @@ pub(super) fn generate_initialize_modules_flat(flat: &mut FlatPackage) {
         if func.module_source != entry_source {
             continue;
         }
-        let is_entry = func.name == "run" || func.name.starts_with("__test_");
-        if is_entry && let Some(ref mut body) = func.body {
+        if func.is_export
+            && let Some(ref mut body) = func.body
+        {
             body.stmts.insert(0, init_call_stmt.clone());
         }
     }

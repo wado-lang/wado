@@ -2357,6 +2357,7 @@ fn make_binding_function(
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: true,
+        is_cm_export: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,
@@ -4650,7 +4651,11 @@ fn synthesize_result_export_binding(
         local_count,
         local_types,
     );
-    binding.borrow_mut().is_export = true;
+    {
+        let mut b = binding.borrow_mut();
+        b.is_export = true;
+        b.is_cm_export = true;
+    }
     binding
 }
 
@@ -4793,7 +4798,11 @@ fn synthesize_void_export_binding(
 
     let binding = make_binding_function(binding_name, vec![], TypeTable::UNIT, body, 0, vec![]);
     // Mark as export so DCE keeps it as a root
-    binding.borrow_mut().is_export = true;
+    {
+        let mut b = binding.borrow_mut();
+        b.is_export = true;
+        b.is_cm_export = true;
+    }
     binding
 }
 
@@ -5000,7 +5009,11 @@ fn synthesize_general_export_binding(
         local_count,
         local_types,
     );
-    binding.borrow_mut().is_export = true;
+    {
+        let mut b = binding.borrow_mut();
+        b.is_export = true;
+        b.is_cm_export = true;
+    }
     binding
 }
 
@@ -5019,7 +5032,11 @@ fn synthesize_void_stub_adapter(export_name: &str) -> Rc<RefCell<TirFunction>> {
     ))]);
 
     let binding = make_binding_function(binding_name, vec![], TypeTable::UNIT, body, 0, vec![]);
-    binding.borrow_mut().is_export = true;
+    {
+        let mut b = binding.borrow_mut();
+        b.is_export = true;
+        b.is_cm_export = true;
+    }
     binding
 }
 
@@ -5162,7 +5179,11 @@ fn synthesize_async_export_binding(
         local_count,
         local_types,
     );
-    binding.borrow_mut().is_export = true;
+    {
+        let mut b = binding.borrow_mut();
+        b.is_export = true;
+        b.is_cm_export = true;
+    }
     binding
 }
 
@@ -6420,6 +6441,7 @@ fn synthesize_stream_read_func(
         address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: true,
+        is_cm_export: false,
         inline_hint: InlineHint::Auto,
         comp_features: 0,
         export_name: None,

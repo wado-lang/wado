@@ -174,13 +174,6 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_0_spread_append"() {
     let __local_28: ref "core:prelude/format.wado//Formatter";
     let __sroa_a_1: ref "core:prelude/string.wado//String";
     let __sroa_b_1: ref "core:prelude/string.wado//String";
-    __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
-        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
-        global:__modules_initialized = 1;
-    };
     __sroa_a_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     __sroa_b_1 = __sroa_a_1;
     __v0 = __sroa_b_1;
@@ -224,13 +217,6 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_1_spread_prepend"() {
     let __local_39: ref "core:prelude/format.wado//Formatter";
     let __sroa_a_1: ref "core:prelude/string.wado//String";
     let __sroa_c_2: ref "core:prelude/string.wado//String";
-    __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
-        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
-        global:__modules_initialized = 1;
-    };
     __sroa_a_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     __sroa_c_2 = __sroa_a_1;
     __v0 = __sroa_c_2;
@@ -311,16 +297,9 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_2_spread_eval_once"() {
     let __local_96: ref "core:prelude/format.wado//Formatter";
     let __local_102: ref "core:prelude/format.wado//Formatter";
     let __local_107: ref "core:prelude/format.wado//Formatter";
-    __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
-        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
-        global:__modules_initialized = 1;
-    };
-    drop(__inline_make_pair_1: block -> ref "tuple//[i32, i32]" {
+    drop(__inline_make_pair_0: block -> ref "tuple//[i32, i32]" {
         global:call_count = global:call_count + 1;
-        break __inline_make_pair_1: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
+        break __inline_make_pair_0: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
     });
     a = struct.new "tuple//[i32, i32, i32]" { 0: 10, 1: 20, 2: 30 };
     __v0_2 = a.0;
@@ -418,12 +397,12 @@ condition: call_count == 1
         });
         unreachable;
     }
-    drop(__inline_eval_prepend_i32_Tuple_i32_i32___23: block -> ref "tuple//[i32, i32, i32]" {
-        __local_65 = __inline_make_pair_24: block -> ref "tuple//[i32, i32]" {
+    drop(__inline_eval_prepend_i32_Tuple_i32_i32___22: block -> ref "tuple//[i32, i32, i32]" {
+        __local_65 = __inline_make_pair_23: block -> ref "tuple//[i32, i32]" {
             global:call_count = global:call_count + 1;
-            break __inline_make_pair_24: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
+            break __inline_make_pair_23: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 };
         };
-        break __inline_eval_prepend_i32_Tuple_i32_i32___23: struct.new "tuple//[i32, i32, i32]" { 0: 99, 1: 10, 2: 20 };
+        break __inline_eval_prepend_i32_Tuple_i32_i32___22: struct.new "tuple//[i32, i32, i32]" { 0: 99, 1: 10, 2: 20 };
     });
     __v0_9 = 99;
     __cond_10 = __v0_9 == 99;
@@ -562,13 +541,6 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_3_spread_multiple_source
     let __local_33: ref "core:prelude/format.wado//Formatter";
     let __sroa_a_1: ref "core:prelude/string.wado//String";
     let __sroa_c_1: ref "core:prelude/string.wado//String";
-    __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
-        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
-        global:__modules_initialized = 1;
-    };
     __sroa_a_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     __sroa_c_1 = __sroa_a_1;
     __v0 = __sroa_c_1;
@@ -612,13 +584,6 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_4_spread_with_literal_el
     let __local_43: ref "core:prelude/format.wado//Formatter";
     let __sroa_a_1: ref "core:prelude/string.wado//String";
     let __sroa_d_2: ref "core:prelude/string.wado//String";
-    __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
-        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
-        global:__modules_initialized = 1;
-    };
     __sroa_a_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     __sroa_d_2 = __sroa_a_1;
     __v0 = __sroa_d_2;
@@ -671,19 +636,12 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_5_spread_vs_field_access
     let __local_34: i32;
     let __local_35: i32;
     let __local_36: i32;
-    __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
-        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
-        global:__modules_initialized = 1;
-    };
-    drop(__inline_combine_Tuple_i32_i32___1: block -> ref "tuple//[i32, i32, i32]" {
+    drop(__inline_combine_Tuple_i32_i32___0: block -> ref "tuple//[i32, i32, i32]" {
         __local_33 = 10;
         __local_34 = 20;
         __local_35 = 30;
         __local_36 = 40;
-        break __inline_combine_Tuple_i32_i32___1: struct.new "tuple//[i32, i32, i32]" { 0: 10, 1: 30, 2: 40 };
+        break __inline_combine_Tuple_i32_i32___0: struct.new "tuple//[i32, i32, i32]" { 0: 10, 1: 30, 2: 40 };
     });
     __v0_1 = 10;
     __cond_2 = __v0_1 == 10;
@@ -748,13 +706,6 @@ fn "wado-compiler/tests/fixtures/variadic_2.wado/__test_6_for_of_try_op"() {
     let __cond: bool;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    __inline___initialize_modules_0: block {
-        if global:__modules_initialized {
-            break __inline___initialize_modules_0;
-        }
-        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
-        global:__modules_initialized = 1;
-    };
     result = "wado-compiler/tests/fixtures/variadic_2.wado/process_all<Tuple<i32,String,bool>>"(struct.new "tuple//[i32, String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 });
     let __match_scrut_0: ref null "core:prelude/string.wado//String";
     __match_scrut_0 = result;
@@ -786,36 +737,85 @@ condition: result matches { Ok(_) }
 }
 
 fn "wado-compiler/tests/fixtures/variadic_2.wado/__cm_export____test_0_spread_append"() {
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/variadic_2.wado/__test_0_spread_append"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/variadic_2.wado/__cm_export____test_1_spread_prepend"() {
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/variadic_2.wado/__test_1_spread_prepend"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/variadic_2.wado/__cm_export____test_2_spread_eval_once"() {
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/variadic_2.wado/__test_2_spread_eval_once"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/variadic_2.wado/__cm_export____test_3_spread_multiple_sources"() {
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/variadic_2.wado/__test_3_spread_multiple_sources"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/variadic_2.wado/__cm_export____test_4_spread_with_literal_elements_mixed"() {
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/variadic_2.wado/__test_4_spread_with_literal_elements_mixed"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/variadic_2.wado/__cm_export____test_5_spread_vs_field_access"() {
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/variadic_2.wado/__test_5_spread_vs_field_access"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/variadic_2.wado/__cm_export____test_6_for_of_try_op"() {
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "wado-compiler/tests/fixtures/variadic_2.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/variadic_2.wado/__test_6_for_of_try_op"();
     "wasi/task-return"(0);
 }

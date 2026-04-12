@@ -383,6 +383,9 @@ impl<'a> PatternLowerer<'a> {
                         | TirPattern::ConstantValue { .. }
                 )
             }),
+            TirPattern::Variant { bindings, .. } => bindings
+                .iter()
+                .any(|p| matches!(p, TirPattern::Literal(_) | TirPattern::ConstantValue { .. })),
             _ => false,
         }
     }
@@ -440,6 +443,23 @@ impl<'a> PatternLowerer<'a> {
                     self.extract_refutable_sub_pattern(
                         &mut field.pattern,
                         field_type,
+                        span,
+                        type_table,
+                        &mut conditions,
+                        &mut body_prefix_stmts,
+                    );
+                }
+            }
+            TirPattern::Variant {
+                bindings,
+                payload_type,
+                ..
+            } => {
+                let payload_type = *payload_type;
+                for binding in bindings.iter_mut() {
+                    self.extract_refutable_sub_pattern(
+                        binding,
+                        payload_type,
                         span,
                         type_table,
                         &mut conditions,
@@ -1877,6 +1897,7 @@ impl<'a> PatternLowerer<'a> {
                 // Skip when the binding is a wildcard — there is no variable to
                 // extract into, and the VariantPayload WIR translation would emit
                 // a struct.get from the wrong case type in or-patterns.
+                let mut condition = condition;
                 if let Some(binding) = bindings.first()
                     && !matches!(binding, TirPattern::Wildcard)
                 {
@@ -1895,14 +1916,84 @@ impl<'a> PatternLowerer<'a> {
                         span,
                     );
 
-                    self.lower_pattern_to_lets(
-                        binding,
-                        false,
-                        payload_expr,
-                        span,
-                        &mut binding_stmts,
-                        type_table,
-                    );
+                    // When the binding is a refutable pattern (literal, constant,
+                    // range), extract the payload into a temp and AND the equality
+                    // check with the variant-test condition.
+                    if let TirPattern::Literal(lit) = binding {
+                        let temp_index = self.alloc_local(*payload_type);
+                        binding_stmts.push(TirStmt::new(
+                            TirStmtKind::Let {
+                                name: format!("__lit_{temp_index}"),
+                                local_index: temp_index,
+                                is_mut: false,
+                                is_reactive: false,
+                                type_id: *payload_type,
+                                value: payload_expr,
+                                skip_value_copy: false,
+                            },
+                            span,
+                        ));
+                        let lit_cond =
+                            self.literal_eq_condition(temp_index, *payload_type, lit, span);
+                        condition = TirExpr::new(
+                            TirExprKind::Binary {
+                                op: TirBinaryOp::And,
+                                left: Box::new(condition),
+                                right: Box::new(lit_cond),
+                            },
+                            TypeTable::BOOL,
+                            span,
+                        );
+                    } else if let TirPattern::ConstantValue { expr: const_expr } = binding {
+                        let temp_index = self.alloc_local(*payload_type);
+                        let temp_name = format!("__cv_{temp_index}");
+                        binding_stmts.push(TirStmt::new(
+                            TirStmtKind::Let {
+                                name: temp_name.clone(),
+                                local_index: temp_index,
+                                is_mut: false,
+                                is_reactive: false,
+                                type_id: *payload_type,
+                                value: payload_expr,
+                                skip_value_copy: false,
+                            },
+                            span,
+                        ));
+                        let cv_cond = TirExpr::new(
+                            TirExprKind::Binary {
+                                op: TirBinaryOp::Eq,
+                                left: Box::new(TirExpr::new(
+                                    TirExprKind::Local {
+                                        index: temp_index,
+                                        name: temp_name,
+                                    },
+                                    *payload_type,
+                                    span,
+                                )),
+                                right: const_expr.clone(),
+                            },
+                            TypeTable::BOOL,
+                            span,
+                        );
+                        condition = TirExpr::new(
+                            TirExprKind::Binary {
+                                op: TirBinaryOp::And,
+                                left: Box::new(condition),
+                                right: Box::new(cv_cond),
+                            },
+                            TypeTable::BOOL,
+                            span,
+                        );
+                    } else {
+                        self.lower_pattern_to_lets(
+                            binding,
+                            false,
+                            payload_expr,
+                            span,
+                            &mut binding_stmts,
+                            type_table,
+                        );
+                    }
                 }
 
                 (condition, binding_stmts)

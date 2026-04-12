@@ -20,23 +20,21 @@ type "functype//wasi/wasi:cli/Stdin::read_via_stream" = fn(i32);  // TypeId(4)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(5)
 
-type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/run" = fn();  // TypeId(6)
+type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(6)
 
-type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(7)
+type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_export__run" = fn();  // TypeId(7)
 
-type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_export__run" = fn();  // TypeId(8)
+type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(10)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(11)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(12)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(13)
-
-type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdin_read_via_stream" = fn() -> [i32, i32];  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdin_read_via_stream" = fn() -> [i32, i32];  // TypeId(13)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -48,36 +46,6 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
-
-fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/run"() with Stdout, Stdin {
-    let stdin_stream: i32;
-    let subtask: i32;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdin_read_via_stream"();
-    stdin_stream = __sroa___pattern_temp_0_0;
-    subtask = "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdout_write_via_stream"(stdin_stream);
-    drop(let __fr_handle_1: i32; let __fr_ptr_1: i32; let __fr_result_1: i32; __fr_handle_1 = subtask; __fr_ptr_1 = "mem/realloc"(0, 0, 8, 40); __fr_result_1 = "wasi/future-read:transmission-cli"(__fr_handle_1, __fr_ptr_1); if __fr_result_1 == -1 {
-        let __fr_ws_1: i32;
-        let __fr_evtptr_1: i32;
-        __fr_ws_1 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(__fr_handle_1, __fr_ws_1);
-        __fr_evtptr_1 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__fr_ws_1, __fr_evtptr_1));
-        drop("mem/realloc"(__fr_evtptr_1, 8, 4, 0));
-        "wasi/waitable-join"(__fr_handle_1, 0);
-        "wasi/waitable-set-drop"(__fr_ws_1);
-        __fr_result_1 = 0;
-    }; let __fr_opt_2: ref null "core:prelude/types.wado//Result<unit,ErrorCode>"; __fr_opt_2 = (if (__fr_result_1 & 15) == 0 -> ref null "core:prelude/types.wado//Result<unit,ErrorCode>" {
-        ref.as_non_null((if builtin::load_i32(__fr_ptr_1) == 0 -> ref "core:prelude/types.wado//Result<unit,ErrorCode>" {
-            struct.new "core:prelude/types.wado//Result<unit,ErrorCode>" { 0 };
-        } else {
-            unreachable;
-        }));
-    } else {
-        ref.null none;
-    }); drop("mem/realloc"(__fr_ptr_1, 40, 8, 0)); __fr_opt_2);
-}
 
 fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdout_write_via_stream"(data) {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);

@@ -1,0 +1,20 @@
+// Bug: `matches { Some("literal") }` incorrectly matches different strings at O0/O2.
+// e.g. Some("/foo") matches { Some("/") } returns true when it should return false.
+
+test "option string literal match positive" {
+    let opt: Option<String> = Option::<String>::Some("/");
+    assert opt matches { Some("/") };
+}
+
+test "option string literal match negative" {
+    let opt: Option<String> = Option::<String>::Some("/foo");
+    assert !(opt matches { Some("/") });
+}
+
+test "option string literal match none" {
+    let opt: Option<String> = null;
+    assert !(opt matches { Some("/") });
+}
+
+__DATA__
+{"test": {}}

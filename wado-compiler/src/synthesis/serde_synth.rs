@@ -653,6 +653,7 @@ fn generate_struct_serialize(
         name: qualified_name,
         is_pub: true,
         is_export: false,
+        is_cm_export: false,
         is_async: false,
         type_params: vec![TirTypeParam {
             name: "S".to_string(),
@@ -1189,6 +1190,7 @@ fn generate_struct_deserialize(
         name: qualified_name,
         is_pub: true,
         is_export: false,
+        is_cm_export: false,
         is_async: false,
         type_params: vec![TirTypeParam {
             name: "D".to_string(),
@@ -1363,6 +1365,7 @@ fn generate_lookup_function(
         name: fn_name,
         is_pub: false,
         is_export: false,
+        is_cm_export: false,
         is_async: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
@@ -1510,6 +1513,7 @@ fn generate_enum_serialize(
         name: qualified_name,
         is_pub: true,
         is_export: false,
+        is_cm_export: false,
         is_async: false,
         type_params: vec![TirTypeParam {
             name: "S".to_string(),
@@ -1890,6 +1894,7 @@ fn generate_enum_deserialize(
         name: qualified_name,
         is_pub: true,
         is_export: false,
+        is_cm_export: false,
         is_async: false,
         type_params: vec![TirTypeParam {
             name: "D".to_string(),
@@ -2156,6 +2161,7 @@ fn generate_variant_serialize(
         name: qualified_name,
         is_pub: true,
         is_export: false,
+        is_cm_export: false,
         is_async: false,
         type_params: vec![TirTypeParam {
             name: "S".to_string(),
@@ -2696,6 +2702,7 @@ fn generate_variant_deserialize(
         name: qualified_name,
         is_pub: true,
         is_export: false,
+        is_cm_export: false,
         is_async: false,
         type_params: vec![TirTypeParam {
             name: "D".to_string(),
@@ -2952,6 +2959,7 @@ fn generate_flags_serialize(
         name: qualified_name,
         is_pub: true,
         is_export: false,
+        is_cm_export: false,
         is_async: false,
         type_params: vec![TirTypeParam {
             name: "S".to_string(),
@@ -3303,6 +3311,7 @@ fn generate_flags_deserialize(
         name: qualified_name,
         is_pub: true,
         is_export: false,
+        is_cm_export: false,
         is_async: false,
         type_params: vec![TirTypeParam {
             name: "D".to_string(),

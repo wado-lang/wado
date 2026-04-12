@@ -1,0 +1,27 @@
+// Test that a file with both test blocks and an HTTP export handler
+// can compile and run in test world. The HTTP handler should be
+// eliminated by DCE (no CM wrapper in test world), so HTTP-specific
+// codegen (e.g. http-fields-resource) should not be reached.
+//
+// Currently panics with "unknown component type: http-fields-resource"
+// when the HTTP handler is kept alive in test world.
+
+#![TODO]
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+test "coexists with HTTP handler" {
+    assert 1 + 1 == 2;
+}
+
+__DATA__
+{"test": {}}
