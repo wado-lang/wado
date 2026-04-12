@@ -338,6 +338,16 @@ fn fuse_adjacent_pairs(
 
         if let Some(info) = fusion_info {
             let if_stmt = iter.next().unwrap();
+            // Refuse to fuse when the If is the last statement of this block:
+            // its value is then the block's terminal value, but the fused
+            // labeled block produces only Unit (its breaks carry no value),
+            // which would silently change the block's type. See
+            // tests/fixtures/if-let-some-ref-from-fn.wado.
+            if iter.peek().is_none() {
+                new_stmts.push(let_stmt);
+                new_stmts.push(if_stmt);
+                continue;
+            }
             let fused = perform_fusion(let_stmt, if_stmt, info, local_count, local_types);
             new_stmts.extend(fused);
             changed = true;
