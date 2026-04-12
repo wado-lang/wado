@@ -1288,113 +1288,6 @@ fn reconstruct_with_intermediates(expr: &Expr, intermediates: &[(String, String,
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ast::{IdentExpr, LiteralExpr};
-    use crate::token::Span;
-
-    fn dummy_span() -> Span {
-        Span::new(0, 0, 1, 1)
-    }
-
-    #[test]
-    fn test_desugar_compound_assign() {
-        // x += 1
-        let ca = CompoundAssignExpr {
-            target: Expr::Ident(IdentExpr {
-                name: "x".to_string(),
-                span: dummy_span(),
-            }),
-            op: CompoundAssignOp::Add,
-            value: Expr::Literal(LiteralExpr {
-                value: crate::ast::Literal::Number("1".to_string()),
-                span: dummy_span(),
-            }),
-            span: dummy_span(),
-        };
-
-        let desugared = desugar_compound_assign(&ca);
-
-        // Should be x = x + 1
-        match desugared {
-            Expr::Assign(assign) => {
-                match &assign.target {
-                    Expr::Ident(i) => assert_eq!(i.name, "x"),
-                    _ => panic!("expected ident"),
-                }
-                match &assign.value {
-                    Expr::Binary(b) => {
-                        assert_eq!(b.op, BinaryOp::Add);
-                        match &b.left {
-                            Expr::Ident(i) => assert_eq!(i.name, "x"),
-                            _ => panic!("expected ident"),
-                        }
-                    }
-                    _ => panic!("expected binary"),
-                }
-            }
-            _ => panic!("expected assign"),
-        }
-    }
-
-    #[test]
-    fn test_desugar_comparison_chain() {
-        use crate::ast::ChainedComparison;
-
-        // 0 < x < 10
-        let chain = ComparisonChainExpr {
-            first: Expr::Literal(LiteralExpr {
-                value: crate::ast::Literal::Number("0".to_string()),
-                span: dummy_span(),
-            }),
-            comparisons: vec![
-                ChainedComparison {
-                    op: BinaryOp::Lt,
-                    right: Expr::Ident(IdentExpr {
-                        name: "x".to_string(),
-                        span: dummy_span(),
-                    }),
-                    op_span: dummy_span(),
-                },
-                ChainedComparison {
-                    op: BinaryOp::Lt,
-                    right: Expr::Literal(LiteralExpr {
-                        value: crate::ast::Literal::Number("10".to_string()),
-                        span: dummy_span(),
-                    }),
-                    op_span: dummy_span(),
-                },
-            ],
-            span: dummy_span(),
-        };
-
-        let desugared = desugar_comparison_chain(&chain);
-
-        // Should be (0 < x) && (x < 10)
-        match desugared {
-            Expr::Binary(and) => {
-                assert_eq!(and.op, BinaryOp::And);
-                // Left should be 0 < x
-                match &and.left {
-                    Expr::Binary(lt) => {
-                        assert_eq!(lt.op, BinaryOp::Lt);
-                    }
-                    _ => panic!("expected binary"),
-                }
-                // Right should be x < 10
-                match &and.right {
-                    Expr::Binary(lt) => {
-                        assert_eq!(lt.op, BinaryOp::Lt);
-                    }
-                    _ => panic!("expected binary"),
-                }
-            }
-            _ => panic!("expected binary (and)"),
-        }
-    }
-}
-
 fn strip_ns_from_item(item: Item, ctx: &DesugarContext) -> Item {
     match item {
         Item::Function(f) => Item::Function(strip_ns_from_function(f, ctx)),
@@ -1771,5 +1664,112 @@ fn strip_ns_from_expr(expr: Expr, ctx: &DesugarContext) -> Expr {
             Expr::Range(range)
         }
         Expr::Literal(_) | Expr::CompoundAssign(_) | Expr::ComparisonChain(_) => expr,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{IdentExpr, LiteralExpr};
+    use crate::token::Span;
+
+    fn dummy_span() -> Span {
+        Span::new(0, 0, 1, 1)
+    }
+
+    #[test]
+    fn test_desugar_compound_assign() {
+        // x += 1
+        let ca = CompoundAssignExpr {
+            target: Expr::Ident(IdentExpr {
+                name: "x".to_string(),
+                span: dummy_span(),
+            }),
+            op: CompoundAssignOp::Add,
+            value: Expr::Literal(LiteralExpr {
+                value: crate::ast::Literal::Number("1".to_string()),
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        };
+
+        let desugared = desugar_compound_assign(&ca);
+
+        // Should be x = x + 1
+        match desugared {
+            Expr::Assign(assign) => {
+                match &assign.target {
+                    Expr::Ident(i) => assert_eq!(i.name, "x"),
+                    _ => panic!("expected ident"),
+                }
+                match &assign.value {
+                    Expr::Binary(b) => {
+                        assert_eq!(b.op, BinaryOp::Add);
+                        match &b.left {
+                            Expr::Ident(i) => assert_eq!(i.name, "x"),
+                            _ => panic!("expected ident"),
+                        }
+                    }
+                    _ => panic!("expected binary"),
+                }
+            }
+            _ => panic!("expected assign"),
+        }
+    }
+
+    #[test]
+    fn test_desugar_comparison_chain() {
+        use crate::ast::ChainedComparison;
+
+        // 0 < x < 10
+        let chain = ComparisonChainExpr {
+            first: Expr::Literal(LiteralExpr {
+                value: crate::ast::Literal::Number("0".to_string()),
+                span: dummy_span(),
+            }),
+            comparisons: vec![
+                ChainedComparison {
+                    op: BinaryOp::Lt,
+                    right: Expr::Ident(IdentExpr {
+                        name: "x".to_string(),
+                        span: dummy_span(),
+                    }),
+                    op_span: dummy_span(),
+                },
+                ChainedComparison {
+                    op: BinaryOp::Lt,
+                    right: Expr::Literal(LiteralExpr {
+                        value: crate::ast::Literal::Number("10".to_string()),
+                        span: dummy_span(),
+                    }),
+                    op_span: dummy_span(),
+                },
+            ],
+            span: dummy_span(),
+        };
+
+        let desugared = desugar_comparison_chain(&chain);
+
+        // Should be (0 < x) && (x < 10)
+        match desugared {
+            Expr::Binary(and) => {
+                assert_eq!(and.op, BinaryOp::And);
+                // Left should be 0 < x
+                match &and.left {
+                    Expr::Binary(lt) => {
+                        assert_eq!(lt.op, BinaryOp::Lt);
+                    }
+                    _ => panic!("expected binary"),
+                }
+                // Right should be x < 10
+                match &and.right {
+                    Expr::Binary(lt) => {
+                        assert_eq!(lt.op, BinaryOp::Lt);
+                    }
+                    _ => panic!("expected binary"),
+                }
+            }
+            _ => panic!("expected binary (and)"),
+        }
     }
 }

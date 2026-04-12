@@ -23,7 +23,7 @@ use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError,
 };
 
-/// A filesystem-based CompilerHost for tests that need to load files
+/// A filesystem-based `CompilerHost` for tests that need to load files
 pub struct FilesystemHost {
     base_path: PathBuf,
     diagnostics: Mutex<Vec<Diagnostic>>,
@@ -61,7 +61,7 @@ impl CompilerHost for FilesystemHost {
     }
 }
 
-/// An in-memory CompilerHost for tests that don't need file loading
+/// An in-memory `CompilerHost` for tests that don't need file loading
 pub struct InMemoryHost {
     diagnostics: Mutex<Vec<Diagnostic>>,
 }
@@ -285,6 +285,12 @@ pub struct TestHttpCtx {
     pub mocks: indexmap::IndexMap<String, OutgoingMockResponse>,
 }
 
+impl Default for TestHttpCtx {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestHttpCtx {
     pub fn new() -> Self {
         Self {
@@ -346,7 +352,7 @@ impl WasiHttpHooks for TestHttpCtx {
                 let path = request
                     .uri()
                     .path_and_query()
-                    .map(|pq| pq.as_str())
+                    .map(http::uri::PathAndQuery::as_str)
                     .unwrap_or("/");
                 self.mocks.get(path)
             })
@@ -492,7 +498,7 @@ pub fn compile_source_with_opts(
     source: &str,
     opt_level: OptLevel,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
-    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let base_path = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
     let filename = path.to_string_lossy();
 
@@ -526,7 +532,7 @@ pub fn compile_source_with_compiler_options_and_filename(
     options: wado_compiler::CompilerOptions,
     display_filename: Option<&str>,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
-    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let base_path = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
@@ -552,7 +558,7 @@ pub async fn compile_file_async(
         message: e.to_string(),
     })?;
 
-    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let base_path = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
     let filename = path.to_string_lossy();
 

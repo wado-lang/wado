@@ -831,7 +831,7 @@ fn fixture_test_o2(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 }
 
 /// Test function for O1 (development optimization)
-/// Skipped by default locally. Runs in CI or when WADO_FULL_TEST=1 is set.
+/// Skipped by default locally. Runs in CI or when `WADO_FULL_TEST=1` is set.
 fn fixture_test_o1(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
         return Ok(()); // Skip locally by default
@@ -841,7 +841,7 @@ fn fixture_test_o1(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 }
 
 /// Test function for O3 (aggressive optimization)
-/// Skipped by default locally. Runs in CI or when WADO_FULL_TEST=1 is set.
+/// Skipped by default locally. Runs in CI or when `WADO_FULL_TEST=1` is set.
 fn fixture_test_o3(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
         return Ok(()); // Skip locally by default
@@ -851,7 +851,7 @@ fn fixture_test_o3(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 }
 
 /// Test function for Os (size optimization)
-/// Skipped by default locally. Runs in CI or when WADO_FULL_TEST=1 is set.
+/// Skipped by default locally. Runs in CI or when `WADO_FULL_TEST=1` is set.
 fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
         return Ok(()); // Skip locally by default

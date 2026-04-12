@@ -1395,7 +1395,7 @@ mod tests {
         let s3 = StructName::from_path_and_name(&["./other.wado".to_string()], "Point");
 
         let mut set = IndexSet::default();
-        set.insert(s1.clone());
+        set.insert(s1);
         assert!(set.contains(&s2));
         assert!(!set.contains(&s3));
     }

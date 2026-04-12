@@ -118,7 +118,7 @@ mod tests {
         assert!(def.keywords.declaration.contains(&"fn"));
     }
 
-    /// Verify all keywords in SyntaxDefinition are recognized by the lexer
+    /// Verify all keywords in `SyntaxDefinition` are recognized by the lexer
     #[test]
     fn test_syntax_keywords_match_lexer() {
         let def = SyntaxDefinition::wado();
@@ -184,7 +184,7 @@ mod tests {
         }
     }
 
-    /// Verify all constants in SyntaxDefinition are recognized by the lexer
+    /// Verify all constants in `SyntaxDefinition` are recognized by the lexer
     #[test]
     fn test_syntax_constants_match_lexer() {
         let def = SyntaxDefinition::wado();

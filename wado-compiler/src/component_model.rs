@@ -2755,8 +2755,7 @@ mod tests {
         let resolved = registry.resolve("TcpSocket::create");
         assert!(
             resolved.is_some(),
-            "TcpSocket::create should be resolved, got {:?}",
-            resolved
+            "TcpSocket::create should be resolved, got {resolved:?}"
         );
 
         // Check that the sockets types interface is included

@@ -245,11 +245,11 @@ lib = "src/lib.wado"
 "#;
     fs::write(tmp.path().join("wado.toml"), toml).unwrap();
 
-    let source = r#"
+    let source = r"
 export fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
-"#;
+";
     fs::write(src_dir.join("lib.wado"), source).unwrap();
 
     let output_path = tmp.path().join("out.wasm");

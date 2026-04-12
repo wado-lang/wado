@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn test_convert_memory_to_import() {
         let result = convert_memory_to_import(wado_bundled_libm_wasm(), "env", "memory");
-        assert!(result.is_ok(), "Failed to convert: {:?}", result);
+        assert!(result.is_ok(), "Failed to convert: {result:?}");
 
         let converted = result.unwrap();
 
@@ -251,15 +251,12 @@ mod tests {
         for payload in parser.parse_all(&converted) {
             match payload {
                 Ok(Payload::ImportSection(imports)) => {
-                    for imports_group in imports {
-                        if let Ok(group) = imports_group {
-                            for import in group {
-                                if let Ok((_, imp)) = import {
-                                    if matches!(imp.ty, wasmparser::TypeRef::Memory(_)) {
-                                        has_memory_import = true;
-                                    }
+                    for group in imports.into_iter().flatten() {
+                        for import in group {
+                            if let Ok((_, imp)) = import
+                                && matches!(imp.ty, wasmparser::TypeRef::Memory(_)) {
+                                    has_memory_import = true;
                                 }
-                            }
                         }
                     }
                 }

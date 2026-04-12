@@ -50,7 +50,7 @@ fn test_bool_true() {
 
     match lit {
         wado_compiler::ast::Literal::Bool(true) => {}
-        other => panic!("expected Bool(true), got {:?}", other),
+        other => panic!("expected Bool(true), got {other:?}"),
     }
 }
 
@@ -61,7 +61,7 @@ fn test_bool_false() {
 
     match lit {
         wado_compiler::ast::Literal::Bool(false) => {}
-        other => panic!("expected Bool(false), got {:?}", other),
+        other => panic!("expected Bool(false), got {other:?}"),
     }
 }
 
@@ -72,7 +72,7 @@ fn test_integer_zero() {
 
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "0" => {}
-        other => panic!("expected Number(\"0\"), got {:?}", other),
+        other => panic!("expected Number(\"0\"), got {other:?}"),
     }
 }
 
@@ -83,7 +83,7 @@ fn test_integer_positive() {
 
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "42" => {}
-        other => panic!("expected Number(\"42\"), got {:?}", other),
+        other => panic!("expected Number(\"42\"), got {other:?}"),
     }
 }
 
@@ -94,7 +94,7 @@ fn test_integer_large() {
 
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "9223372036854775807" => {}
-        other => panic!("expected Number(\"9223372036854775807\"), got {:?}", other),
+        other => panic!("expected Number(\"9223372036854775807\"), got {other:?}"),
     }
 }
 
@@ -104,7 +104,7 @@ fn test_integer_with_separator() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "1_000_000" => {}
-        other => panic!("expected Number(\"1_000_000\"), got {:?}", other),
+        other => panic!("expected Number(\"1_000_000\"), got {other:?}"),
     }
 }
 
@@ -114,7 +114,7 @@ fn test_integer_hex() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "0xFF" => {}
-        other => panic!("expected Number(\"0xFF\"), got {:?}", other),
+        other => panic!("expected Number(\"0xFF\"), got {other:?}"),
     }
 }
 
@@ -124,7 +124,7 @@ fn test_integer_binary() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "0b1010" => {}
-        other => panic!("expected Number(\"0b1010\"), got {:?}", other),
+        other => panic!("expected Number(\"0b1010\"), got {other:?}"),
     }
 }
 
@@ -134,7 +134,7 @@ fn test_integer_octal() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "0o755" => {}
-        other => panic!("expected Number(\"0o755\"), got {:?}", other),
+        other => panic!("expected Number(\"0o755\"), got {other:?}"),
     }
 }
 
@@ -145,7 +145,7 @@ fn test_float_simple() {
 
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "3.25" => {}
-        other => panic!("expected Number(\"3.25\"), got {:?}", other),
+        other => panic!("expected Number(\"3.25\"), got {other:?}"),
     }
 }
 
@@ -156,7 +156,7 @@ fn test_float_zero() {
 
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "0.0" => {}
-        other => panic!("expected Number(\"0.0\"), got {:?}", other),
+        other => panic!("expected Number(\"0.0\"), got {other:?}"),
     }
 }
 
@@ -167,7 +167,7 @@ fn test_float_leading_zero() {
 
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "0.5" => {}
-        other => panic!("expected Number(\"0.5\"), got {:?}", other),
+        other => panic!("expected Number(\"0.5\"), got {other:?}"),
     }
 }
 
@@ -178,7 +178,7 @@ fn test_float_many_decimals() {
 
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "1.23456789012345" => {}
-        other => panic!("expected Number(\"1.23456789012345\"), got {:?}", other),
+        other => panic!("expected Number(\"1.23456789012345\"), got {other:?}"),
     }
 }
 
@@ -188,7 +188,7 @@ fn test_float_scientific() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "6.022e23" => {}
-        other => panic!("expected Number(\"6.022e23\"), got {:?}", other),
+        other => panic!("expected Number(\"6.022e23\"), got {other:?}"),
     }
 }
 
@@ -198,7 +198,7 @@ fn test_float_with_separator() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::Number(repr) if repr == "1_000_000.5" => {}
-        other => panic!("expected Number(\"1_000_000.5\"), got {:?}", other),
+        other => panic!("expected Number(\"1_000_000.5\"), got {other:?}"),
     }
 }
 
@@ -212,9 +212,9 @@ fn test_string_empty() {
 
     match lit {
         wado_compiler::ast::Literal::String(raw) => {
-            assert_eq!(raw, "", "expected empty raw string, got {:?}", raw);
+            assert_eq!(raw, "", "expected empty raw string, got {raw:?}");
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -225,9 +225,9 @@ fn test_string_simple() {
 
     match lit {
         wado_compiler::ast::Literal::String(raw) => {
-            assert_eq!(raw, "hello", "expected raw \"hello\", got {:?}", raw);
+            assert_eq!(raw, "hello", "expected raw \"hello\", got {raw:?}");
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -240,11 +240,10 @@ fn test_string_with_spaces() {
         wado_compiler::ast::Literal::String(raw) => {
             assert_eq!(
                 raw, "hello world",
-                "expected raw \"hello world\", got {:?}",
-                raw
+                "expected raw \"hello world\", got {raw:?}"
             );
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -258,11 +257,10 @@ fn test_string_escape_newline() {
         wado_compiler::ast::Literal::String(raw) => {
             assert_eq!(
                 raw, r"line1\nline2",
-                "expected raw escape text, got {:?}",
-                raw
+                "expected raw escape text, got {raw:?}"
             );
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -275,11 +273,10 @@ fn test_string_escape_tab() {
         wado_compiler::ast::Literal::String(raw) => {
             assert_eq!(
                 raw, r"col1\tcol2",
-                "expected raw escape text, got {:?}",
-                raw
+                "expected raw escape text, got {raw:?}"
             );
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -290,9 +287,9 @@ fn test_string_escape_carriage_return() {
 
     match lit {
         wado_compiler::ast::Literal::String(raw) => {
-            assert_eq!(raw, r"line\r", "expected raw escape text, got {:?}", raw);
+            assert_eq!(raw, r"line\r", "expected raw escape text, got {raw:?}");
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -306,11 +303,10 @@ fn test_string_escape_backslash() {
             // Raw text between the quotes: path\\to\\file (two escaped backslashes)
             assert_eq!(
                 raw, r"path\\to\\file",
-                "expected raw escape text, got {:?}",
-                raw
+                "expected raw escape text, got {raw:?}"
             );
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -324,11 +320,10 @@ fn test_string_escape_quote() {
             // Raw text: say \"hello\"
             assert_eq!(
                 raw, r#"say \"hello\""#,
-                "expected raw escape text, got {:?}",
-                raw
+                "expected raw escape text, got {raw:?}"
             );
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -341,11 +336,10 @@ fn test_string_multiple_escapes() {
         wado_compiler::ast::Literal::String(raw) => {
             assert_eq!(
                 raw, r"line1\nline2\ttab",
-                "expected raw escape text, got {:?}",
-                raw
+                "expected raw escape text, got {raw:?}"
             );
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -355,9 +349,9 @@ fn test_string_escape_forward_slash() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::String(raw) => {
-            assert_eq!(raw, r"path\/to", "expected raw escape text, got {:?}", raw);
+            assert_eq!(raw, r"path\/to", "expected raw escape text, got {raw:?}");
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -367,9 +361,9 @@ fn test_string_escape_backspace() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::String(raw) => {
-            assert_eq!(raw, r"hello\b", "expected raw escape text, got {:?}", raw);
+            assert_eq!(raw, r"hello\b", "expected raw escape text, got {raw:?}");
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -379,9 +373,9 @@ fn test_string_escape_form_feed() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::String(raw) => {
-            assert_eq!(raw, r"page\f", "expected raw escape text, got {:?}", raw);
+            assert_eq!(raw, r"page\f", "expected raw escape text, got {raw:?}");
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -392,9 +386,9 @@ fn test_string_escape_unicode_bmp() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::String(raw) => {
-            assert_eq!(raw, r"\u0041", "expected raw unicode escape, got {:?}", raw);
+            assert_eq!(raw, r"\u0041", "expected raw unicode escape, got {raw:?}");
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -407,11 +401,10 @@ fn test_string_escape_unicode_full() {
         wado_compiler::ast::Literal::String(raw) => {
             assert_eq!(
                 raw, r"\u{1F600}",
-                "expected raw unicode escape, got {:?}",
-                raw
+                "expected raw unicode escape, got {raw:?}"
             );
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -424,11 +417,10 @@ fn test_string_surrogate_pair() {
         wado_compiler::ast::Literal::String(raw) => {
             assert_eq!(
                 raw, r"\uD83D\uDE00",
-                "expected raw surrogate pair text, got {:?}",
-                raw
+                "expected raw surrogate pair text, got {raw:?}"
             );
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -439,7 +431,7 @@ fn test_unit_literal() {
 
     match lit {
         wado_compiler::ast::Literal::Unit => {}
-        other => panic!("expected Unit, got {:?}", other),
+        other => panic!("expected Unit, got {other:?}"),
     }
 }
 
@@ -462,7 +454,7 @@ fn test_string_unknown_escape_stored_as_raw() {
                 "expected raw text including unknown escape"
             );
         }
-        other => panic!("expected String, got {:?}", other),
+        other => panic!("expected String, got {other:?}"),
     }
 }
 
@@ -474,28 +466,28 @@ fn test_char_simple() {
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::Char(raw) if raw == "A" => {}
-        other => panic!("expected Char(\"A\"), got {:?}", other),
+        other => panic!("expected Char(\"A\"), got {other:?}"),
     }
 }
 
 #[test]
 fn test_char_escape_newline() {
-    let module = parse_expr(r#"'\n'"#).expect("parse failed");
+    let module = parse_expr(r"'\n'").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::Char(raw) if raw == r"\n" => {}
-        other => panic!("expected Char(\"\\n\"), got {:?}", other),
+        other => panic!("expected Char(\"\\n\"), got {other:?}"),
     }
 }
 
 #[test]
 fn test_char_unicode() {
     // '\u0041' — raw text is `\u0041`; the resolver interprets it as 'A'
-    let module = parse_expr(r#"'\u0041'"#).expect("parse failed");
+    let module = parse_expr(r"'\u0041'").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
         wado_compiler::ast::Literal::Char(raw) if raw == r"\u0041" => {}
-        other => panic!("expected Char(\"\\u0041\"), got {:?}", other),
+        other => panic!("expected Char(\"\\u0041\"), got {other:?}"),
     }
 }
 
@@ -506,6 +498,6 @@ fn test_null_literal() {
     // null should be equivalent to None
     match lit {
         wado_compiler::ast::Literal::Null => {}
-        other => panic!("expected Null, got {:?}", other),
+        other => panic!("expected Null, got {other:?}"),
     }
 }

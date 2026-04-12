@@ -1256,9 +1256,9 @@ mod tests {
 
     #[test]
     fn test_data_section_basic() {
-        let source = r#"fn main() { }
+        let source = r"fn main() { }
 __DATA__
-hello world"#;
+hello world";
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
 
@@ -1272,11 +1272,11 @@ hello world"#;
 
     #[test]
     fn test_data_section_multiline() {
-        let source = r#"fn main() { }
+        let source = r"fn main() { }
 __DATA__
 line 1
 line 2
-line 3"#;
+line 3";
         let mut lexer = Lexer::new(source);
         lexer.tokenize().unwrap();
 
@@ -1352,10 +1352,10 @@ __DATA__
 
     #[test]
     fn test_data_section_after_comment() {
-        let source = r#"// some comment
+        let source = r"// some comment
 fn main() { }
 __DATA__
-test data"#;
+test data";
         let mut lexer = Lexer::new(source);
         lexer.tokenize().unwrap();
 

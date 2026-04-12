@@ -158,9 +158,9 @@ deps-hash = "sha256:abc"
 
 #[test]
 fn missing_deps_hash() {
-    let toml = r#"
+    let toml = r"
 version = 1
-"#;
+";
     let err = toml.parse::<LockFile>().unwrap_err();
     assert!(matches!(err, LockFileError::MissingField { .. }));
 }
@@ -201,5 +201,5 @@ fn error_display() {
     };
     let msg = err.to_string();
     assert!(msg.contains("42"));
-    assert!(msg.contains("1"));
+    assert!(msg.contains('1'));
 }
