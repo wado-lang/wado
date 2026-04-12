@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775973485172,
+  "lastUpdate": 1775974077568,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12113,6 +12113,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/221b82d08a988f9fa38a920cc6b7521062a641a4"
         },
         "date": 1775973484893,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3d0295dcb682d09fab116a4e7f789666e18a4345",
+          "message": "Merge pull request #820 from wado-lang/claude/review-tir-optimizer-vuhIv\n\nClean up dead code and consolidate walkers in TIR optimizer",
+          "timestamp": "2026-04-12T15:04:40+09:00",
+          "tree_id": "204cdc22c5836163c3db6b684e48900a29e82613",
+          "url": "https://github.com/wado-lang/wado/commit/3d0295dcb682d09fab116a4e7f789666e18a4345"
+        },
+        "date": 1775974077327,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
