@@ -233,10 +233,11 @@ description = "Install wado-vscode extension for development"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
+cd wado-vscode
+npm install && npm run compile
 if [ -e ~/.vscode/extensions/wado-lang.wado-0.0.1 ]; then
     echo "wado-vscode is already installed"
 else
-    cd wado-vscode && npm install && npm run compile
     ln -s "$PWD" ~/.vscode/extensions/wado-lang.wado-0.0.1
 fi
 """

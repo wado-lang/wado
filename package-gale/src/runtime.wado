@@ -114,20 +114,27 @@ impl Eq for LexerSlice {
 
 /// Token represents a lexed token with its kind, text, and position.
 /// Leading trivia (whitespace, comments) is attached to each token.
+/// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
+/// channels resolve to integer ids declared in the grammar).
 pub struct Token {
     pub kind: i32,
     pub text: LexerSlice,
     pub span: Span,
     pub leading_trivia: Array<Token>,
+    pub channel: i32,
 }
 
 impl Token {
     pub fn new(kind: i32, text: LexerSlice, span: Span) -> Token {
-        return Token { kind, text, span, leading_trivia: [] };
+        return Token { kind, text, span, leading_trivia: [], channel: 0 };
     }
 
     pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
-        return Token { kind, text, span, leading_trivia };
+        return Token { kind, text, span, leading_trivia, channel: 0 };
+    }
+
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>, channel: i32) -> Token {
+        return Token { kind, text, span, leading_trivia, channel };
     }
 }
 

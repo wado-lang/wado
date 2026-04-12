@@ -212,4 +212,120 @@ describe('Tokenization Tests', () => {
             );
         });
     });
+
+    describe('Declaration keywords scope mapping', () => {
+        function findToken(line: string, needle: string): vsctm.IToken | undefined {
+            const { tokens } = tokenizeLine(line);
+            return tokens.find(t => line.slice(t.startIndex, t.endIndex) === needle);
+        }
+
+        const storageTypeKeywords = ['fn', 'let', 'global', 'const', 'struct', 'enum', 'variant', 'flags', 'impl', 'trait', 'type'];
+        for (const kw of storageTypeKeywords) {
+            it(`should dual-scope \`${kw}\` under storage.type AND keyword.control`, () => {
+                const tok = findToken(`${kw} foo`, kw);
+                assert.ok(
+                    tok && tok.scopes.some(s => s.includes('storage.type'))
+                        && tok.scopes.some(s => s.includes('keyword.control')),
+                    `${kw} should have both storage.type and keyword.control scopes: ${JSON.stringify(tok)}`
+                );
+            });
+        }
+
+        const storageModifierKeywords = ['pub', 'mut', 'async'];
+        for (const kw of storageModifierKeywords) {
+            it(`should dual-scope \`${kw}\` under storage.modifier AND keyword.control`, () => {
+                const tok = findToken(`${kw} foo`, kw);
+                assert.ok(
+                    tok && tok.scopes.some(s => s.includes('storage.modifier'))
+                        && tok.scopes.some(s => s.includes('keyword.control')),
+                    `${kw} should have both storage.modifier and keyword.control scopes: ${JSON.stringify(tok)}`
+                );
+            });
+        }
+
+        it('should tokenize `task` as a control keyword', () => {
+            const tok = findToken('task return 42;', 'task');
+            assert.ok(
+                tok && tok.scopes.some(s => s.includes('keyword.control')),
+                `task should be under keyword.control: ${JSON.stringify(tok)}`
+            );
+        });
+
+        it('should tokenize `return` in `task return` as a control keyword', () => {
+            const tok = findToken('task return 42;', 'return');
+            assert.ok(
+                tok && tok.scopes.some(s => s.includes('keyword.control')),
+                `return should be under keyword.control: ${JSON.stringify(tok)}`
+            );
+        });
+    });
+
+    describe('Compile-time literals', () => {
+        const literals = ['#file', '#line', '#function', '#data'];
+        for (const lit of literals) {
+            it(`should tokenize ${lit} as compile-time literal`, () => {
+                const { tokens } = tokenizeLine(`let x = ${lit};`);
+                const hit = tokens.find(t =>
+                    t.scopes.some(s => s.includes('constant.language.compile-time'))
+                );
+                assert.ok(
+                    hit,
+                    `${lit} should have constant.language.compile-time scope: ${JSON.stringify(tokens)}`
+                );
+            });
+        }
+
+        it('should tokenize #include_str(...) as compile-time literal', () => {
+            const { tokens } = tokenizeLine('let x = #include_str("./foo.wado");');
+            const hit = tokens.find(t =>
+                t.scopes.some(s => s.includes('constant.language.compile-time'))
+            );
+            assert.ok(
+                hit,
+                `#include_str should have compile-time scope: ${JSON.stringify(tokens)}`
+            );
+        });
+
+        it('should tokenize #include_bytes(...) as compile-time literal', () => {
+            const { tokens } = tokenizeLine('let x = #include_bytes("./icon.png");');
+            const hit = tokens.find(t =>
+                t.scopes.some(s => s.includes('constant.language.compile-time'))
+            );
+            assert.ok(
+                hit,
+                `#include_bytes should have compile-time scope: ${JSON.stringify(tokens)}`
+            );
+        });
+    });
+
+    describe('Operators from OperatorCategories::other', () => {
+        function findToken(line: string, needle: string): vsctm.IToken | undefined {
+            const { tokens } = tokenizeLine(line);
+            return tokens.find(t => line.slice(t.startIndex, t.endIndex) === needle);
+        }
+
+        it('should tokenize `matches` as an operator', () => {
+            const tok = findToken('if opt matches { Some(_) } { }', 'matches');
+            assert.ok(
+                tok && tok.scopes.some(s => s.includes('keyword.operator')),
+                `matches should have keyword.operator scope: ${JSON.stringify(tok)}`
+            );
+        });
+
+        it('should tokenize `..<` as a single range operator', () => {
+            const tok = findToken('for let i of 0..<10 { }', '..<');
+            assert.ok(
+                tok && tok.scopes.some(s => s.includes('keyword.operator')),
+                `..< should be one token with keyword.operator scope: ${JSON.stringify(tok)}`
+            );
+        });
+
+        it('should tokenize `..=` as a single range operator', () => {
+            const tok = findToken('for let i of 1..=10 { }', '..=');
+            assert.ok(
+                tok && tok.scopes.some(s => s.includes('keyword.operator')),
+                `..= should be one token with keyword.operator scope: ${JSON.stringify(tok)}`
+            );
+        });
+    });
 });

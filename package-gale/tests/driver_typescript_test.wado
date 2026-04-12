@@ -5,6 +5,10 @@
 /// verify tokenization of various TypeScript constructs.
 use ts from "./golden/typescript.wado";
 use { normalize_tree } from "./golden/typescript.wado";
+use {
+    TK_BackTick, TK_BackTickInside, TK_TemplateStringAtom,
+    TK_WhiteSpaces, TK_Let,
+} from "./golden/typescript.wado";
 
 fn assert_tree(input: &String, expected: &String) {
     let root = ts::parse(input).unwrap();
@@ -347,4 +351,62 @@ test "tree: simple ternary" {
             :
             (singleExpression (literal (numericLiteral 3)))))
     ");
+}
+
+// --- Lexer command regression tests ---
+//
+// These exercise code paths that used to be silently dropped by the IR and
+// are now wired through the lexer generator: `type(X)` kind override,
+// `channel(HIDDEN)` routing, and the TEMPLATE-mode `pushMode` / `popMode`
+// that surrounds the type override.
+
+test "type override: BackTickInside rewrites kind to BackTick" {
+    // TypeScriptLexer declares:
+    //   BackTick:       '`' -> pushMode(TEMPLATE);
+    //   BackTickInside: '`' -> type(BackTick), popMode;
+    //
+    // Both the opening and closing backticks must be emitted with kind
+    // BackTick. The raw BackTickInside kind must NEVER appear in the
+    // token stream; if it did, the closing backtick would be classified
+    // as a separate token kind and the parser would see an inconsistent
+    // pair of open/close delimiters.
+    let tokens = ts::tokenize(&"`hi`");
+    let mut backtick_count = 0;
+    for let t of &tokens {
+        assert t.kind != TK_BackTickInside,
+            "BackTickInside leaked into stream — type(BackTick) override dropped";
+        if t.kind == TK_BackTick {
+            backtick_count += 1;
+        }
+    }
+    assert backtick_count == 2,
+        `expected 2 BackTick tokens (open + close), got {backtick_count}`;
+}
+
+test "HIDDEN channel: TypeScript WhiteSpaces routed to trivia" {
+    // TypeScriptLexer routes `WhiteSpaces` through HIDDEN. The token stream
+    // must contain `let` and `x` as adjacent main-channel tokens, with the
+    // space carried as trivia on `x`. The `x` becomes an Identifier token
+    // after keyword classification; we locate it by position (second
+    // non-EOF main-channel token).
+    let tokens = ts::tokenize(&"let x");
+    for let t of &tokens {
+        assert t.kind != TK_WhiteSpaces,
+            "WhiteSpaces leaked into main stream — HIDDEN routing dropped";
+    }
+    // `let` must be the first main-channel token.
+    assert tokens[0].kind == TK_Let,
+        `expected first token = Let, got kind {tokens[0].kind}`;
+    // The second token (the `x` identifier) must carry the HIDDEN
+    // whitespace as leading trivia on channel 1.
+    let mut found_hidden = false;
+    for let trivia of &tokens[1].leading_trivia {
+        if trivia.kind == TK_WhiteSpaces {
+            assert trivia.channel == 1,
+                `expected HIDDEN channel 1, got {trivia.channel}`;
+            found_hidden = true;
+        }
+    }
+    assert found_hidden,
+        "WhiteSpaces trivia missing from token following `let`";
 }

@@ -15,6 +15,9 @@
       "include": "#attributes"
     },
     {
+      "include": "#compile-time-literals"
+    },
+    {
       "include": "#strings"
     },
     {
@@ -118,6 +121,14 @@
         }
       ]
     },
+    "compile-time-literals": {
+      "patterns": [
+        {
+          "match": "#(file|line|function|data|include_str|include_bytes)\\b",
+          "name": "constant.language.compile-time.wado"
+        }
+      ]
+    },
     "data-section": {
       "begin": "^__DATA__\\s*$",
       "beginCaptures": {
@@ -150,7 +161,7 @@
         {
           "captures": {
             "1": {
-              "name": "keyword.declaration.wado"
+              "name": "storage.type.wado"
             },
             "2": {
               "name": "entity.name.function.wado"
@@ -182,19 +193,34 @@
     "keywords": {
       "patterns": [
         {
-          "match": "\\b(if|else|while|for|loop|break|continue|return|match|matches)\\b",
+          "match": "\\b(if|else|while|for|loop|break|continue|return|match|task)\\b",
           "name": "keyword.control.wado"
         },
         {
-          "match": "\\b(fn|let|global|const|struct|enum|variant|impl|trait|type|use|from|pub|import|export|test)\\b",
-          "name": "keyword.declaration.wado"
+          "captures": {
+            "1": {
+              "name": "keyword.control.declaration.wado"
+            }
+          },
+          "match": "\\b(fn|let|global|const|struct|enum|variant|flags|impl|trait|type)\\b",
+          "name": "storage.type.wado"
         },
         {
-          "match": "\\b(as|with|mut|async|move|unique|in|of|stores)\\b",
-          "name": "keyword.other.wado"
+          "captures": {
+            "1": {
+              "name": "keyword.control.modifier.wado"
+            }
+          },
+          "match": "\\b(pub|export|mut|async|move|unique|stores)\\b",
+          "name": "storage.modifier.wado"
         },
         {
-          "match": "\\b(assert|effect|handler|reactive|resource|world)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.other.wado"
+            }
+          },
+          "match": "\\b(use|from|import|test|as|with|in|of|assert|effect|handler|reactive|resource|world)\\b",
           "name": "keyword.other.wado"
         },
         {
@@ -230,6 +256,10 @@
     "operators": {
       "patterns": [
         {
+          "match": "\\bmatches\\b|\\.\\.<|\\.\\.=|\\.\\.\\.|->|=>|::|\\.\\.|\\?",
+          "name": "keyword.operator.other.wado"
+        },
+        {
           "match": "==|!=|<=|>=|<|>",
           "name": "keyword.operator.comparison.wado"
         },
@@ -242,24 +272,12 @@
           "name": "keyword.operator.arithmetic.wado"
         },
         {
-          "match": "&|\\||\\^|~|<<|>>",
+          "match": "<<|>>|&|\\||\\^|~",
           "name": "keyword.operator.bitwise.wado"
         },
         {
-          "match": "\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=|=",
+          "match": "<<=|>>=|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|=",
           "name": "keyword.operator.assignment.wado"
-        },
-        {
-          "match": "->|=>",
-          "name": "keyword.operator.arrow.wado"
-        },
-        {
-          "match": "&(?=\\s*mut\\b)|&",
-          "name": "keyword.operator.reference.wado"
-        },
-        {
-          "match": "\\*(?=[a-zA-Z_])",
-          "name": "keyword.operator.dereference.wado"
         }
       ]
     },

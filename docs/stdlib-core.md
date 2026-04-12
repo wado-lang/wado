@@ -1628,6 +1628,13 @@ Returns an iterator over the UTF-8 bytes of the string.
 
 Returns an iterator over the Unicode scalar values (chars) of the string.
 
+##### `pub fn char_at_byte(&self, byte_index: i32) -> Option<char>`
+
+Decodes the UTF-8 character starting at the given byte index.
+Returns None if `byte_index` is past the end of the string or there
+aren't enough bytes to form a full UTF-8 sequence.
+Assumes `byte_index` is on a character boundary (the string is valid UTF-8).
+
 ##### `pub fn push(&mut self, c: char)`
 
 Appends a Unicode scalar value (char) to this string.

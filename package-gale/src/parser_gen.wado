@@ -1,4 +1,4 @@
-use { Grammar, ParserRule, Alternative, Element, RepeatElement, RepeatKind, LabelElement } from "./ir.wado";
+use { Grammar, ParserRule, Alternative, Element, RepeatElement, RepeatKind, LabelElement, NotElement } from "./ir.wado";
 use {
     to_lower,
     to_snake_case,
@@ -6,6 +6,7 @@ use {
     escape_ident,
     rule_type_name,
     literal_field_name,
+    not_element_field_name,
     strip_suffix,
     escape_string,
     literal_const_name,
@@ -1129,6 +1130,58 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.dedent();
     w.line("));");
     w.end();
+    w.blank();
+
+    // `p.match_any()` — consumes one token of any kind (for `.` wildcard).
+    // Fails at EOF.
+    let mut f9 = FnSpec::new("match_any");
+    f9.set_receiver("&mut self");
+    f9.set_return_type("Result<Token, ParseError>");
+    f9.emit_begin(w);
+    w.begin("if self.tokens[self.pos].kind != TK_EOF");
+    w.line("return Result::<Token, ParseError>::Ok(self.advance());");
+    w.end();
+    w.line("let tok = &self.tokens[self.pos];");
+    w.line("return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.indent();
+    w.line("`expected any token, got \"{tok.text}\"`,");
+    w.line("tok.span,");
+    w.line("[\"any token\"],");
+    w.dedent();
+    w.line("));");
+    w.end();
+    w.blank();
+
+    // `p.match_not(&[TK_A, TK_B, ...])` — consumes one token whose kind is
+    // not in the exclusion set (for parser-side `~ X`). Fails at EOF or when
+    // the current token is in the exclusion set.
+    let mut f10 = FnSpec::new("match_not");
+    f10.set_receiver("&mut self");
+    f10.add_param("excluded", "&Array<i32>");
+    f10.set_return_type("Result<Token, ParseError>");
+    f10.emit_begin(w);
+    w.line("let k = self.tokens[self.pos].kind;");
+    w.begin("if k != TK_EOF");
+    w.line("let mut blocked = false;");
+    w.begin("for let x of excluded");
+    w.begin("if *x == k");
+    w.line("blocked = true;");
+    w.line("break;");
+    w.end();
+    w.end();
+    w.begin("if !blocked");
+    w.line("return Result::<Token, ParseError>::Ok(self.advance());");
+    w.end();
+    w.end();
+    w.line("let tok = &self.tokens[self.pos];");
+    w.line("return Result::<Token, ParseError>::Err(ParseError::new(");
+    w.indent();
+    w.line("`unexpected token \"{tok.text}\"`,");
+    w.line("tok.span,");
+    w.line("[\"set complement\"],");
+    w.dedent();
+    w.line("));");
+    w.end();
 
     w.end();  // impl
     w.blank();
@@ -1283,6 +1336,17 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext) {
         w.line("if pos < 0 { return -1; }");
         return;
     }
+    if let Wildcard = elem {
+        w.line("if pos >= tokens.len() || tokens[pos].kind == TK_EOF { return -1; }");
+        w.line("pos += 1;");
+        return;
+    }
+    if let Not(ne) = elem {
+        let check = not_scan_check(&ne.element);
+        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ return -1; \}`);
+        w.line("pos += 1;");
+        return;
+    }
     if let Repeat(rep) = elem {
         gen_scan_repeat(w, rep, ctx);
         return;
@@ -1316,6 +1380,17 @@ fn gen_scan_element_in_block(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCo
         let fn_name = `scan_{to_snake_case(name)}`;
         w.line(`pos = {fn_name}(tokens, pos);`);
         w.line(`if pos < 0 \{ break {*label}; \}`);
+        return;
+    }
+    if let Wildcard = elem {
+        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF \{ break {*label}; \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let Not(ne) = elem {
+        let check = not_scan_check(&ne.element);
+        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ break {*label}; \}`);
+        w.line("pos += 1;");
         return;
     }
     if let Repeat(rep) = elem {
@@ -1383,6 +1458,15 @@ fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCont
         w.line(`pos = {fn_name}(tokens, pos);`);
         return;
     }
+    if let Wildcard = elem {
+        w.line("if pos >= tokens.len() || tokens[pos].kind == TK_EOF { pos = -1; } else { pos += 1; }");
+        return;
+    }
+    if let Not(ne) = elem {
+        let check = not_scan_check(&ne.element);
+        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
+        return;
+    }
     if let Group(alts) = elem {
         gen_scan_group(w, alts, ctx);
         return;
@@ -1391,6 +1475,36 @@ fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCont
         gen_scan_repeat(w, rep, ctx);
         return;
     }
+}
+
+/// Build a scan-time check expression for `~ X`. Returns "tokens[pos].kind == TK_X"
+/// or "(tokens[pos].kind == TK_A || tokens[pos].kind == TK_B)" for a set.
+fn not_scan_check(inner: &Element) -> String {
+    if let TokenRef(name) = inner {
+        let const_name = `TK_{name}`;
+        return `tokens[pos].kind == {const_name}`;
+    }
+    if let Literal(text) = inner {
+        let const_name = literal_const_name(text);
+        return `tokens[pos].kind == {const_name}`;
+    }
+    if let Group(alts) = inner {
+        let mut kinds: Array<String> = [];
+        if collect_not_set_tokens(alts, &mut kinds) {
+            let mut out = String::with_capacity(64);
+            out.push('(');
+            for let mut i = 0; i < kinds.len(); i += 1 {
+                if i > 0 {
+                    out.push_str(" || ");
+                }
+                out.push_str(`tokens[pos].kind == {kinds[i]}`);
+            }
+            out.push(')');
+            return out;
+        }
+    }
+    panic("not_scan_check: unsupported inner element for parser-side ~");
+    return "";
 }
 
 global mut SCAN_GROUP_COUNTER: i32 = 0;
@@ -1781,6 +1895,17 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         w.line(`let {field_name} = {fn_name}(p)?;`);
         return;
     }
+    if let Wildcard = elem {
+        let field_name = dedup_name(&"wildcard", name_counts);
+        w.line(`let {field_name} = p.match_any()?;`);
+        return;
+    }
+    if let Not(ne) = elem {
+        let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
+        let check = not_match_call(&ne.element);
+        w.line(`let {field_name} = {check}?;`);
+        return;
+    }
     if let Repeat(rep) = elem {
         gen_repeat(w, rep, ctx, name_counts);
         return;
@@ -1800,6 +1925,17 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         return;
     }
     if let Label(lab) = elem {
+        if lab.list {
+            // Bare list label: allocate the array, parse the inner element
+            // once, and push. Repeats wrap this via gen_repeat below.
+            let inner_info = element_field_info(&lab.element, ctx);
+            let lab_name = dedup_name(&escape_ident(&to_snake_case(&lab.name)), name_counts);
+            w.line(`let mut {lab_name}: Array<{inner_info.1}> = [];`);
+            let mut nc: Array<[String, i32]> = [];
+            gen_element(w, &lab.element, ctx, &mut nc);
+            w.line(`{lab_name}.push({inner_info.0});`);
+            return;
+        }
         gen_element(w, &lab.element, ctx, name_counts);
         return;
     }
@@ -1809,6 +1945,42 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
     let inner = &rep.element;
     let mut visiting: Array<String> = [];
     let first = ctx.first_of_element(inner, &mut visiting);
+
+    // `(items+=item)*` / `items+=item+` / `items+=item?` — the list label
+    // already implies Array, so use the label name directly and push the
+    // inner element on each iteration.
+    if is_list_label(inner) {
+        if let Label(lab) = inner {
+            let inner_info = element_field_info(&lab.element, ctx);
+            let lab_name = dedup_name(&escape_ident(&to_snake_case(&lab.name)), name_counts);
+            w.line(`let mut {lab_name}: Array<{inner_info.1}> = [];`);
+            if let Star = rep.kind {
+                w.begin(`while {first_check_str(&first)}`);
+                let mut nc: Array<[String, i32]> = [];
+                gen_element(w, &lab.element, ctx, &mut nc);
+                w.line(`{lab_name}.push({inner_info.0});`);
+                w.end();
+            }
+            if let Plus = rep.kind {
+                let plus_flag = dedup_name(&"_plus_first", name_counts);
+                w.line(`let mut {plus_flag} = true;`);
+                w.begin(`while {plus_flag} || {first_check_str(&first)}`);
+                w.line(`{plus_flag} = false;`);
+                let mut nc: Array<[String, i32]> = [];
+                gen_element(w, &lab.element, ctx, &mut nc);
+                w.line(`{lab_name}.push({inner_info.0});`);
+                w.end();
+            }
+            if let Optional = rep.kind {
+                w.begin(`if {first_check_str(&first)}`);
+                let mut nc: Array<[String, i32]> = [];
+                gen_element(w, &lab.element, ctx, &mut nc);
+                w.line(`{lab_name}.push({inner_info.0});`);
+                w.end();
+            }
+            return;
+        }
+    }
 
     if has_field(inner) {
         // Save counter before element_field_info, which may increment it for
@@ -2355,6 +2527,19 @@ fn gen_element_failable(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext
         w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
         return;
     }
+    if let Wildcard = elem {
+        let r_var = dedup_name(&"opt_r", name_counts);
+        w.line(`let {r_var} = p.match_any();`);
+        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
+        return;
+    }
+    if let Not(ne) = elem {
+        let r_var = dedup_name(&"opt_r", name_counts);
+        let call = not_match_call(&ne.element);
+        w.line(`let {r_var} = {call};`);
+        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
+        return;
+    }
     if let Repeat(rep) = elem {
         gen_repeat(w, rep, ctx, name_counts);
         return;
@@ -2495,6 +2680,12 @@ fn gen_storable_optional_with_lookahead(w: &mut CodeWriter, inner: &Element, ctx
 fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &mut Array<[String, i32]>, ctx: &mut GenContext) {
     if let Repeat(rep) = elem {
         if has_field(&rep.element) {
+            if is_list_label(&rep.element) {
+                let info = element_field_info(&rep.element, ctx);
+                let list_field = dedup_name(&info.0, name_counts);
+                w.line(`let mut {list_field}: {info.1} = [];`);
+                return;
+            }
             let info = element_field_info(&rep.element, ctx);
             if let Optional = rep.kind {
                 let opt_field = dedup_name(&info.0, name_counts);
@@ -2508,6 +2699,12 @@ fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &m
         return;
     }
     if let Label(lab) = elem {
+        if lab.list {
+            let info = element_field_info(elem, ctx);
+            let list_field = dedup_name(&info.0, name_counts);
+            w.line(`let mut {list_field}: {info.1} = [];`);
+            return;
+        }
         gen_absent_optional_field(w, &lab.element, name_counts, ctx);
         return;
     }
@@ -2613,6 +2810,23 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
         w.line(`let {field_name} = {r_var}.unwrap();`);
         return;
     }
+    if let Wildcard = elem {
+        let field_name = dedup_name(&"wildcard", name_counts);
+        let r_var = dedup_name(&"_bt_r", name_counts);
+        w.line(`let {r_var} = p.match_any();`);
+        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
+        w.line(`let {field_name} = {r_var}.unwrap();`);
+        return;
+    }
+    if let Not(ne) = elem {
+        let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
+        let r_var = dedup_name(&"_bt_r", name_counts);
+        let call = not_match_call(&ne.element);
+        w.line(`let {r_var} = {call};`);
+        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved_var}; break {label}; \}`);
+        w.line(`let {field_name} = {r_var}.unwrap();`);
+        return;
+    }
     if let Repeat(rep) = elem {
         gen_repeat(w, rep, ctx, name_counts);
         return;
@@ -2637,6 +2851,53 @@ fn gen_element_failable_named(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
     }
 }
 
+/// Emit the Parser call expression for `~ X` (set complement). Returns a
+/// `Result<Token, ParseError>` at runtime.
+fn not_match_call(inner: &Element) -> String {
+    if let TokenRef(name) = inner {
+        let const_name = `TK_{name}`;
+        return `p.match_not(&[{const_name}])`;
+    }
+    if let Literal(text) = inner {
+        let const_name = literal_const_name(text);
+        return `p.match_not(&[{const_name}])`;
+    }
+    if let Group(alts) = inner {
+        let mut kinds: Array<String> = [];
+        if collect_not_set_tokens(alts, &mut kinds) {
+            let mut list = String::with_capacity(32);
+            for let mut i = 0; i < kinds.len(); i += 1 {
+                if i > 0 {
+                    list.push_str(", ");
+                }
+                list.push_str(kinds[i]);
+            }
+            return `p.match_not(&[{list}])`;
+        }
+    }
+    panic("not_match_call: unsupported inner element for parser-side ~");
+    return "";
+}
+
+/// Collect terminal token constants from a `~ ( ... )` group's alternatives.
+/// Returns false if any alternative is not a simple terminal (unsupported).
+fn collect_not_set_tokens(alts: &Array<Alternative>, out: &mut Array<String>) -> bool {
+    for let alt of alts {
+        if alt.elements.len() != 1 {
+            return false;
+        }
+        let e = &alt.elements[0];
+        if let TokenRef(name) = e {
+            out.push(`TK_{name}`);
+        } else if let Literal(text) = e {
+            out.push(literal_const_name(text));
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
 fn is_group_with_store(elem: &Element) -> bool {
     if let Group(alts) = elem {
         return is_storable_group(alts);
@@ -2648,6 +2909,12 @@ fn has_field(elem: &Element) -> bool {
     if let TokenRef(_) | Literal(_) | RuleRef(_) = elem {
         return true;
     }
+    if let Wildcard = elem {
+        return true;
+    }
+    if let Not(_) = elem {
+        return true;
+    }
     if let Label(lab) = elem {
         return has_field(&lab.element);
     }
@@ -2655,6 +2922,32 @@ fn has_field(elem: &Element) -> bool {
         return is_storable_group(alts);
     }
     return false;
+}
+
+/// Returns true if `elem` is a list-label (`items+=X`). List labels store
+/// matches in an `Array<InnerType>` named by `lab.name`.
+fn is_list_label(elem: &Element) -> bool {
+    if let Label(lab) = elem {
+        return lab.list;
+    }
+    return false;
+}
+
+/// For a list-label element, returns [label_field_name, array_type_str,
+/// inner_type_str, inner_field_name]. Returns null for non-list-labels.
+fn list_label_info(elem: &Element, ctx: &mut GenContext) -> Option<[String, String, String, String]> {
+    if let Label(lab) = elem {
+        if lab.list {
+            let inner = element_field_info(&lab.element, ctx);
+            return Option::<[String, String, String, String]>::Some([
+                escape_ident(&to_snake_case(&lab.name)),
+                `Array<{inner.1}>`,
+                inner.1,
+                inner.0,
+            ]);
+        }
+    }
+    return null;
 }
 
 fn element_field_info(elem: &Element, ctx: &mut GenContext) -> [String, String] {
@@ -2667,7 +2960,17 @@ fn element_field_info(elem: &Element, ctx: &mut GenContext) -> [String, String] 
     if let RuleRef(name) = elem {
         return [escape_ident(&to_snake_case(name)), rule_type_name(name)];
     }
+    if let Wildcard = elem {
+        return ["wildcard", "Token"];
+    }
+    if let Not(ne) = elem {
+        return [not_element_field_name(&ne.element), "Token"];
+    }
     if let Label(lab) = elem {
+        if lab.list {
+            let inner = element_field_info(&lab.element, ctx);
+            return [escape_ident(&to_snake_case(&lab.name)), `Array<{inner.1}>`];
+        }
         return element_field_info(&lab.element, ctx);
     }
     if let Group(alts) = elem {
@@ -2714,8 +3017,26 @@ fn gen_field_assignment(w: &mut CodeWriter, elem: &Element, name_counts: &mut Ar
         w.line(`{field_name},`);
         return;
     }
+    if let Wildcard = elem {
+        let field_name = dedup_name(&"wildcard", name_counts);
+        w.line(`{field_name},`);
+        return;
+    }
+    if let Not(ne) = elem {
+        let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
+        w.line(`{field_name},`);
+        return;
+    }
     if let Repeat(rep) = elem {
         if has_field(&rep.element) {
+            // A list label inside a repeat still uses the label name directly
+            // (no `_list` suffix), because the label IS the array.
+            if is_list_label(&rep.element) {
+                let info = element_field_info(&rep.element, ctx);
+                let field_name = dedup_name(&info.0, name_counts);
+                w.line(`{field_name},`);
+                return;
+            }
             let info = element_field_info(&rep.element, ctx);
             if let Star | Plus = rep.kind {
                 let field_name = dedup_name(&`{info.0}_list`, name_counts);
@@ -2774,8 +3095,21 @@ fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>, 
         dedup_name(&escape_ident(&to_snake_case(name)), name_counts);
         return;
     }
+    if let Wildcard = elem {
+        dedup_name(&"wildcard", name_counts);
+        return;
+    }
+    if let Not(ne) = elem {
+        dedup_name(&not_element_field_name(&ne.element), name_counts);
+        return;
+    }
     if let Repeat(rep) = elem {
         if has_field(&rep.element) {
+            if is_list_label(&rep.element) {
+                let info = element_field_info(&rep.element, ctx);
+                dedup_name(&info.0, name_counts);
+                return;
+            }
             let info = element_field_info(&rep.element, ctx);
             if let Star | Plus = rep.kind {
                 dedup_name(&`{info.0}_list`, name_counts);

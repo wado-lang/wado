@@ -117,20 +117,27 @@ impl Eq for LexerSlice {
 
 /// Token represents a lexed token with its kind, text, and position.
 /// Leading trivia (whitespace, comments) is attached to each token.
+/// `channel` is the ANTLR4 channel id (0 = default, 1 = HIDDEN; named
+/// channels resolve to integer ids declared in the grammar).
 pub struct Token {
     pub kind: i32,
     pub text: LexerSlice,
     pub span: Span,
     pub leading_trivia: Array<Token>,
+    pub channel: i32,
 }
 
 impl Token {
     pub fn new(kind: i32, text: LexerSlice, span: Span) -> Token {
-        return Token { kind, text, span, leading_trivia: [] };
+        return Token { kind, text, span, leading_trivia: [], channel: 0 };
     }
 
     pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
-        return Token { kind, text, span, leading_trivia };
+        return Token { kind, text, span, leading_trivia, channel: 0 };
+    }
+
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>, channel: i32) -> Token {
+        return Token { kind, text, span, leading_trivia, channel };
     }
 }
 
@@ -923,11 +930,12 @@ pub fn tokenize(input: &String) -> Array<Token> {
             trivia = [];
             lexer.pos = start + 1;
         } else {
+            let tok_start = start;
             let is_skip = best_kind matches { TK_WS };
             if is_skip {
-                trivia.push(Token::new(best_kind, lexer.slice(start, best_end), Span::new(start, best_end)));
+                trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));
             } else {
-                let tok = Token::with_trivia(best_kind, lexer.slice(start, best_end), Span::new(start, best_end), trivia);
+                let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);
                 tokens.push(tok);
                 trivia = [];
             }
@@ -1012,6 +1020,40 @@ impl Parser {
             `expected {name}, got "{tok.text}"`,
             tok.span,
             [name],
+        ));
+    }
+
+    fn match_any(&mut self) -> Result<Token, ParseError> {
+        if self.tokens[self.pos].kind != TK_EOF {
+            return Result::<Token, ParseError>::Ok(self.advance());
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `expected any token, got "{tok.text}"`,
+            tok.span,
+            ["any token"],
+        ));
+    }
+
+    fn match_not(&mut self, excluded: &Array<i32>) -> Result<Token, ParseError> {
+        let k = self.tokens[self.pos].kind;
+        if k != TK_EOF {
+            let mut blocked = false;
+            for let x of excluded {
+                if *x == k {
+                    blocked = true;
+                    break;
+                }
+            }
+            if !blocked {
+                return Result::<Token, ParseError>::Ok(self.advance());
+            }
+        }
+        let tok = &self.tokens[self.pos];
+        return Result::<Token, ParseError>::Err(ParseError::new(
+            `unexpected token "{tok.text}"`,
+            tok.span,
+            ["set complement"],
         ));
     }
 }

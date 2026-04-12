@@ -10,102 +10,118 @@ exception). The remaining work is mostly about **propagating** parsed
 information into the IR and **using** it in the code generator so that
 generated parsers are semantically correct, not just syntactically accepted.
 
-## A. Parser accepts but IR drops information
+## A. Remaining IR gaps (partial from the previous sweep)
 
-Constructs the parser recognizes correctly, but whose payload is currently
-discarded so downstream stages cannot see them. Each item should grow an IR
-field plus targeted parser tests.
+The previous TODO cleanup wired grammar-level and rule-level options into
+the IR, but two sub-kinds of the same feature were left unhandled:
 
-- **Grammar / rule / element / block options** (`options { caseInsensitive=true; ... }`,
-  `<assoc=right, fail='msg'>`). Every option block is currently consumed and
-  thrown away. Need at minimum a `Map<String, String>` on `Grammar`,
-  `ParserRule`, `LexerRule`, and on the relevant elements. ANTLR4 spec:
-  `vendor/antlr4/doc/options.md`.
-- **Grammar-level options** like `superClass`, `tokenVocab`, `language`,
-  `caseInsensitive`. Same as above — currently invisible to the rest of
-  the pipeline.
-- **Rule visibility modifiers** (`public`, `private`, `protected`).
-  Accepted by `parse_grammar` but not stored on `ParserRule`.
-- **`channels { ERROR, USER_CHAN }` block.** Names are accepted but
-  discarded, so `channel(USER_CHAN)` cannot be resolved at codegen time.
-  Add `Grammar.channels: Array<String>` and resolve named channel
-  references in `parse_lexer_actions`.
-- **`tokens { VIRTUAL_TOK }` block.** Virtual lexer rules are created,
-  but the fact that a token came from a `tokens{}` block (vs. a real
-  rule) is lost. Tag those entries so generators can emit the right
-  token-id constants.
-- **Named actions** (`@header { ... }`, `@parser::members { ... }`).
-  Action bodies are intentionally skipped per the compatibility
-  principle, **but their _presence_ and _position_ should still be
-  recorded** in the IR. AGENTS.md states this explicitly ("preserve their
-  _presence_ and _position_"); the implementation does not yet match.
+- **Element-level options** (`ID<assoc=right, fail='msg'>`, `'lit'<p=3>`).
+  Currently consumed and dropped by `skip_angle_block`. `assoc=right`
+  affects left-recursion handling semantically, so this cannot stay
+  invisible. Needs a field on `Element` / `LabelElement` / `TokenRef` or a
+  wrapper variant.
+- **Block-level options** (`( options { assoc = right; } : a | b )`).
+  Currently consumed by `skip_block_prequel`. Same story as above —
+  need a dedicated slot on `Element::Group` (or a wrapping struct).
 
-## C. IR has the field but the code generator ignores it
+## B. IR → pipeline wiring (preserve what's stored)
 
-These constructs are parsed and stored on the IR, but the parser /
-lexer code generator never reads them. As a result the parser-level
-"compat" is misleading: the grammar parses, but the generated parser
-behaves incorrectly. **This is the most user-visible gap.**
+The previous sweep populated the IR but the code generator still ignores
+most of the new fields. "Parsed and stored" is not "used":
 
-| IR field                               | Generator status                                                                          |
-| -------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `Element::Wildcard` (`.`)              | Not handled in `parser_gen.wado` / `gen_util.wado`. Likely produces wrong code or panics. |
-| `Element::Not` (parser-side `~`)       | Only `LexerNotElement` (lexer-side) is wired. Parser-side `~ TOK` is unhandled.           |
-| `LabelElement.list` (`+=`)             | Treated identically to single `=`. Should append to an `Array<T>` field.                  |
-| `LexerRule.set_mode` (`mode(X)`)       | Unread. Generated lexer never switches the current mode.                                  |
-| `LexerRule.more`                       | Unread. `more` semantics (collect more text without emitting) is not implemented.         |
-| `LexerRule.type_override` (`type(X)`)  | Unread. Token type rewriting is not applied.                                              |
-| `LexerRule.channel` (integer or named) | Unread. Tokens always go to channel 0 (or are skipped, in the HIDDEN approximation).      |
+- `Grammar.options.caseInsensitive = true` — generated lexer is still
+  case-sensitive. Needs a pass over lexer-gen to fold `tolower` into
+  literal matching (or switch to case-insensitive char comparisons).
+- `Grammar.options.superClass` / `tokenVocab` / `language` — completely
+  ignored. `tokenVocab` in particular is non-trivial: it implies loading
+  another grammar's token ids.
+- `Grammar.named_actions` — stored for presence/position but not
+  surfaced anywhere. At minimum, generated output could include a
+  comment marker so downstream tooling can see where actions used to be.
+- `ParserRule.visibility` / `LexerRule.visibility` — stored but unused.
+  ANTLR4 itself ignores these at codegen, so matching ANTLR4's behavior
+  is fine, but a lint or doc comment in the generated output would make
+  the information observable.
+- `LexerRule.is_virtual` — stored but not emitted differently from real
+  lexer rules. Generated lexers happily produce try_<name> functions for
+  virtual tokens that should never match. Should be gated.
 
-Each row needs:
+## C. Representation quality of stored options
 
-1. A unit test in `lexer_gen_test.wado` / `parser_gen_test.wado` that
-   exercises a minimal grammar using the construct and asserts the
-   generated code does the right thing.
-2. Codegen support in the relevant `*_gen.wado` file.
-3. A driver test under `tests/grammars/` (or extending one of the
-   existing real-world grammars) that proves end-to-end parsing of
-   real input works after the change.
+- **`GrammarOption.value` is a lossy raw String.** Option values in
+  ANTLR4 can be identifier / qualified.name / string literal / integer
+  literal / **action block (`{ ... }`)**. The current implementation
+  stores identifiers and integers verbatim, wraps string literals in
+  single quotes, and collapses action-block values to the placeholder
+  `"{}"`. Round-trip from IR to surface syntax is therefore impossible
+  for action-block values.
+- Consider switching to a `variant OptionValue { Ident(String),
+  Qualified(Array<String>), Str(String), Int(i64), Action(String) }`
+  so consumers can branch without re-parsing the string.
 
-## D. Semantic approximations to revisit
+## D. Driver-level verification (remaining gaps)
 
-- **`channel(HIDDEN)` is treated as `skip`.** ANTLR4 actually emits
-  HIDDEN tokens on a separate channel; they are not discarded. This is
-  a pre-existing approximation that the new lexer-command parser
-  preserves. To remove the approximation, the runtime needs proper
-  channel routing (`Token.channel`, channel-aware parser lookups).
-- **HIDDEN channel id is hard-coded to 1.** Matches ANTLR4
-  (`Token.HIDDEN_CHANNEL = 1`) but the value should come from a named
-  constant once channels become first class.
+The previous sweep added unit tests, golden tests, and driver tests for
+the most critical semantic changes. The following driver coverage was
+added in this branch:
 
-## E. Test density / regression safety
+- **HIDDEN channel routing** — `driver_html_test.wado` tokenizes
+  `<p class="x">`, asserts TAG_WHITESPACE is absent from the main token
+  stream, and asserts it appears as leading trivia on the next TAG_NAME
+  with `channel == 1`. An additional end-to-end assertion confirms the
+  parser successfully accepts whitespace-separated attributes.
+- **HIDDEN channel (TypeScript)** — `driver_typescript_test.wado`
+  verifies `WhiteSpaces` routes to trivia with `channel == 1` around
+  `let x`.
+- **User-defined channel routing** — `driver_antlr4_test.wado` exercises
+  `channel(COMMENT)` (the second user channel beyond DEFAULT/HIDDEN),
+  asserting both `//` LINE_COMMENT and `/* */` BLOCK_COMMENT appear as
+  trivia with `channel == 3`.
+- **`type(X)` override** — `driver_typescript_test.wado` tokenizes
+  `` `hi` `` and asserts both backticks emit as `TK_BackTick`, never
+  `TK_BackTickInside`, confirming the type-override rewrite.
 
-- **Integration tests for most real grammars are loose.** Most tests in
-  `g4/integration_test.wado` only assert `parser_rules.len() > N` and
-  similar shape checks. After Batch 5 the HTMLLexer / TypeScriptLexer
-  / css3Lexer tests verify specific lexer-command fields, but the
-  Rust, SQLite, ANTLRv4, and HTMLParser tests still need similar
-  tightening.
-- **No negative test cases.** No fixtures for malformed `.g4` input
-  (syntax errors, missing rules, duplicate rule names) — robustness
-  regressions are easy to miss.
-- **Golden test timeouts were bumped, not fixed.** `generate_typescript_golden`,
-  `generate_rust_golden`, and `generate_css3_golden` are right at the
-  edge of their (now 120 s) timeouts. The root cause is slow code
-  generation for the largest grammars. Investigate which generator
-  pass is the bottleneck (likely SLL prediction or string building)
-  and fix it instead of widening the timeout further.
+Still missing driver-level coverage (deferred because no existing test
+grammar exercises the feature end-to-end):
 
-## F. Edge cases not yet exercised
+- **Parser-side `~TOK` / `~(block)`.** No driver-test grammar currently
+  uses a parser-level complement. Either add a minimal new grammar, or
+  extend `sexpression.g4` to exercise `~TOK`.
+- **List labels `+=`.** None of the existing test grammars use list
+  labels in the label sense — all `+=` matches are literal `'+='`
+  operator tokens. Add a minimal new grammar or extend an existing one
+  (a `list : items += item (',' items += item)*` pattern).
+- **`mode(X)` semantics (set_mode).** No existing test grammar uses the
+  bare `mode(X)` command — everything uses `pushMode` / `popMode`. Need
+  a new fixture that actually calls `mode(X)`.
+- **`more` semantics.** `ANTLRv4Lexer.LexerCharSet` mode uses `more`,
+  but that mode is only entered from an action block (which Gale
+  skips), so the rule is never actually triggered end-to-end. Need a
+  fixture that enters a `more`-bearing mode via a lexer-command-only
+  `pushMode`.
+- **Wildcard `.` at parser level.** Only lexer-level `.` is exercised
+  today. A parser rule like `any : . ;` has no driver-level test.
 
-These are corners of ANTLR4 syntax that no current test grammar uses, so
-the parser may or may not handle them correctly. Each should get a
-dedicated unit test before the next compatibility-related change.
+## E. Negative tests
 
-- `~` applied to a block, not just a single token: `~( 'a' | 'b' )`.
-- Block label syntax: `lbl=( a | b )` and `lbl+=( a | b )`.
-- ARG_ACTION with only whitespace: `returns []`.
-- ANTLR3-style numbered token assignment: `tokens { A=1, B=2 }`.
+The parser test suite is overwhelmingly positive — it verifies that
+well-formed input parses. There are almost no negative tests that pin
+down the parser's **rejection** behavior. Add fixtures for:
+
+- Duplicate rule names (`foo : ID ; foo : NUM ;`).
+- References to undefined rules.
+- `mode X;` inside a parser grammar (already covered by one test — use
+  it as a template for the rest).
+- Malformed `channels { }` / `tokens { }` blocks (unclosed brace,
+  trailing junk, etc.).
+- `~` applied to something that isn't a set (ANTLR4 rejects
+  `~ruleref`, only tokens / lexer atoms / blocks are allowed).
+- Left-recursion with `assoc` conflicts.
+- Lexer commands with unknown names (`foo : 'x' -> totallymadeup ;`).
+
+Each fixture should assert `parse(input) matches { Err(_) }` with a
+useful error message (not just "unexpected token"). This guards against
+regressions where the parser silently accepts garbage.
 
 ## Performance: sqlite-parse Benchmark
 

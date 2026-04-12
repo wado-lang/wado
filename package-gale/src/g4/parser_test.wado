@@ -12,6 +12,7 @@ use {
     LexerElement,
     CharClass,
     CharRange,
+    Visibility,
 } from "../ir.wado";
 use { parse } from "./parser.wado";
 
@@ -355,6 +356,30 @@ channels { CHAN_A, CHAN_B }
 rule : ID ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 1;
+    assert g.channels.len() == 2;
+    assert g.channels[0] == "CHAN_A";
+    assert g.channels[1] == "CHAN_B";
+}
+
+test "lexer rule with named channel resolves to user channel id" {
+    // ANTLR4 reserves channel 0 (DEFAULT) and 1 (HIDDEN); user channels
+    // declared via `channels { }` start at id 2. The parser should assign
+    // sequential ids based on the declaration order in the preamble.
+    let input = "lexer grammar Test;
+channels { COMMENTS, DOCS }
+COMMENT : '//' -> channel(COMMENTS) ;
+DOC : '///' -> channel(DOCS) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    // COMMENTS -> 2, DOCS -> 3
+    for let r of &g.lexer_rules {
+        if r.name == "COMMENT" {
+            assert r.channel == 2, `COMMENT channel {r.channel}`;
+        }
+        if r.name == "DOC" {
+            assert r.channel == 3, `DOC channel {r.channel}`;
+        }
+    }
 }
 
 test "grammar with tokens block declares virtual tokens" {
@@ -363,19 +388,37 @@ tokens { VIRTUAL_A, VIRTUAL_B }
 rule : ID ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 1;
-    // Both virtual tokens become entries in lexer_rules with empty body.
+    // Both virtual tokens become entries in lexer_rules with empty body and
+    // are flagged with `is_virtual` so generators can distinguish them from
+    // real lexer rules.
     let mut found_a = false;
     let mut found_b = false;
     for let r of &g.lexer_rules {
         if r.name == "VIRTUAL_A" {
             found_a = true;
+            assert r.is_virtual, "VIRTUAL_A must be tagged as virtual";
+            assert r.body.is_empty();
         }
         if r.name == "VIRTUAL_B" {
             found_b = true;
+            assert r.is_virtual, "VIRTUAL_B must be tagged as virtual";
         }
     }
     assert found_a, "VIRTUAL_A must be declared";
     assert found_b, "VIRTUAL_B must be declared";
+}
+
+test "tokens block does not flag existing lexer rule as virtual" {
+    // If both `tokens { X }` and `X : ... ;` are present, X must NOT be
+    // treated as virtual — the real body wins. ANTLR4 accepts this shape
+    // and uses the explicit rule.
+    let input = "lexer grammar Test;
+tokens { ID }
+ID : [a-z]+ ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    assert g.lexer_rules[0].name == "ID";
+    assert !g.lexer_rules[0].is_virtual;
 }
 
 test "grammar with prequel any order" {
@@ -475,9 +518,128 @@ test "private rule modifier" {
     let input = "grammar Test;
 public expr : ID ;
 private nested : ID ;
-protected helper : ID ;";
+protected helper : ID ;
+plain : ID ;";
     let g = parse(input).unwrap();
-    assert g.parser_rules.len() == 3;
+    assert g.parser_rules.len() == 4;
+    // Visibility should be preserved on the rule.
+    assert g.parser_rules[0].name == "expr";
+    if let Public = g.parser_rules[0].visibility {
+        // ok
+    } else {
+        panic("expected Public visibility on expr");
+    }
+    assert g.parser_rules[1].name == "nested";
+    if let Private = g.parser_rules[1].visibility {
+        // ok
+    } else {
+        panic("expected Private visibility on nested");
+    }
+    assert g.parser_rules[2].name == "helper";
+    if let Protected = g.parser_rules[2].visibility {
+        // ok
+    } else {
+        panic("expected Protected visibility on helper");
+    }
+    assert g.parser_rules[3].name == "plain";
+    if let Default = g.parser_rules[3].visibility {
+        // ok
+    } else {
+        panic("expected Default visibility on plain");
+    }
+}
+
+test "grammar-level options block stored in ir" {
+    let input = "grammar Test;
+options {
+    caseInsensitive = true;
+    language = Python;
+    superClass = my.pkg.BaseParser;
+}
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.options.len() == 3, `got {g.options.len()} options`;
+    assert g.options[0].name == "caseInsensitive";
+    assert g.options[0].value == "true";
+    assert g.options[1].name == "language";
+    assert g.options[1].value == "Python";
+    assert g.options[2].name == "superClass";
+    assert g.options[2].value == "my.pkg.BaseParser";
+}
+
+test "grammar options with string literal value" {
+    let input = "grammar Test;
+options { tokenVocab = 'foo.g4'; }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.options.len() == 1;
+    assert g.options[0].name == "tokenVocab";
+    assert g.options[0].value == "'foo.g4'";
+}
+
+test "parser rule options block stored in ir" {
+    let input = "grammar Test;
+rule options { foo = bar; } : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].options.len() == 1;
+    assert g.parser_rules[0].options[0].name == "foo";
+    assert g.parser_rules[0].options[0].value == "bar";
+}
+
+test "lexer rule options block stored in ir" {
+    let input = "lexer grammar Test;
+ID options { caseInsensitive = false; } : [a-z]+ ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    assert g.lexer_rules[0].options.len() == 1;
+    assert g.lexer_rules[0].options[0].name == "caseInsensitive";
+    assert g.lexer_rules[0].options[0].value == "false";
+}
+
+test "grammar level named actions recorded" {
+    let input = "grammar Test;
+@header { package foo; }
+@members { private int x; }
+@parser::members { /* parser-specific */ }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.named_actions.len() == 3, `got {g.named_actions.len()} actions`;
+    // @header has no scope.
+    assert g.named_actions[0].name == "header";
+    if let Some(_) = g.named_actions[0].scope {
+        panic("@header should have no scope");
+    }
+    // @members has no scope.
+    assert g.named_actions[1].name == "members";
+    if let Some(_) = g.named_actions[1].scope {
+        panic("@members should have no scope");
+    }
+    // @parser::members has scope "parser".
+    assert g.named_actions[2].name == "members";
+    if let Some(scope) = g.named_actions[2].scope {
+        assert scope == "parser";
+    } else {
+        panic("expected scope 'parser'");
+    }
+}
+
+test "lexer rule visibility modifiers" {
+    let input = "lexer grammar Test;
+public ID : [a-z]+ ;
+private HELPER : [A-Z]+ ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    if let Public = g.lexer_rules[0].visibility {
+        // ok
+    } else {
+        panic("expected Public visibility on ID");
+    }
+    if let Private = g.lexer_rules[1].visibility {
+        // ok
+    } else {
+        panic("expected Private visibility on HELPER");
+    }
 }
 
 test "parser rule with plus_assign list label" {
@@ -632,8 +794,11 @@ test "lexer command channel with HIDDEN" {
 WS : [ \\t]+ -> channel(HIDDEN) ;";
     let g = parse(input).unwrap();
     assert g.lexer_rules.len() == 1;
-    // HIDDEN is the predefined channel id 1.
+    // HIDDEN is the predefined channel id 1. ANTLR4 emits HIDDEN tokens on
+    // a separate channel — they are NOT discarded, so `skip` must remain
+    // false.
     assert g.lexer_rules[0].channel == 1;
+    assert g.lexer_rules[0].skip == false;
 }
 
 test "lexer command type override" {
@@ -769,4 +934,136 @@ mode FOO;
 expr : ID ;";
     let result = parse(input);
     assert result matches { Err(_) }, "expected mode in parser grammar to be rejected";
+}
+
+test "parser rule tilde applied to block" {
+    // ANTLR4 allows `~` on a set expressed as a block of alternatives, not
+    // just a single token reference: `~( 'a' | 'b' | 'c' )`.
+    // Spec: vendor/antlr4/doc/parser-rules.md (set complement).
+    let input = "grammar Test;
+noise : ~( 'a' | 'b' | 'c' ) ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Not(n) = &elems[0] {
+        if let Group(alts) = &n.element {
+            assert alts.len() == 3;
+        } else {
+            panic("expected Group inside Not");
+        }
+    } else {
+        panic("expected Not element");
+    }
+}
+
+test "lexer rule tilde applied to block" {
+    // Same as the parser case, but for lexer rules where `~` may wrap a set
+    // of char classes / literals: `~( 'a' | [0-9] )`.
+    let input = "lexer grammar Test;
+NON_AB : ~( 'a' | 'b' ) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    let rule = &g.lexer_rules[0];
+    let elems = &rule.body[0].elements;
+    assert elems.len() == 1;
+    if let Not(n) = &elems[0] {
+        if let Group(_) = &n.element {
+            // ok
+        } else {
+            panic("expected Group inside LexerElement::Not");
+        }
+    } else {
+        panic("expected LexerElement::Not");
+    }
+}
+
+test "block label single-value" {
+    // ANTLR4 allows labels on blocks, not just single atoms:
+    //   lbl = ( 'a' | 'b' )
+    let input = "grammar Test;
+expr : op = ( '+' | '-' ) ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Label(l) = &elems[0] {
+        assert l.name == "op";
+        assert l.list == false;
+        if let Group(_) = &l.element {
+            // ok
+        } else {
+            panic("expected Group inside Label");
+        }
+    } else {
+        panic("expected Label element");
+    }
+}
+
+test "block label list" {
+    // `+=` form of block label: collect each match into an Array.
+    let input = "grammar Test;
+expr : ops += ( '+' | '-' )* ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    // The top-level element is a Repeat (because of the `*`) whose inner
+    // element is the Label.
+    if let Repeat(r) = &elems[0] {
+        if let Label(l) = &r.element {
+            assert l.name == "ops";
+            assert l.list == true;
+            if let Group(_) = &l.element {
+                // ok
+            } else {
+                panic("expected Group inside Label");
+            }
+        } else {
+            panic("expected Label inside Repeat");
+        }
+    } else {
+        panic("expected Repeat at top level");
+    }
+}
+
+test "arg action with only whitespace" {
+    // ANTLR4 accepts an empty/whitespace-only ARG_ACTION: `returns [ ]`.
+    // Gale discards the body, but the surrounding structure must still
+    // parse.
+    let input = "grammar Test;
+expr returns [ ] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "empty arg action on rule arguments" {
+    // Same for bare rule arguments: `rule[] : ...`.
+    let input = "grammar Test;
+expr [ ] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "tokens block with numbered assignments" {
+    // ANTLR3 allowed `tokens { NAME = 1, OTHER = 2 }`. ANTLR4's grammar
+    // rejects the assignment syntax, but real-world `.g4` files that were
+    // ported without cleanup still contain it. Gale's compatibility
+    // principle is lenient — we accept (and ignore) the `= INT` suffix so
+    // the rest of the grammar still parses, rather than erroring out.
+    let input = "grammar Test;
+tokens { FOO = 1, BAR = 2 }
+expr : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    // Both virtual tokens must still be registered on the lexer side, with
+    // their original names.
+    let mut saw_foo = false;
+    let mut saw_bar = false;
+    for let r of &g.lexer_rules {
+        if r.name == "FOO" && r.is_virtual { saw_foo = true; }
+        if r.name == "BAR" && r.is_virtual { saw_bar = true; }
+    }
+    assert saw_foo, "tokens{} block must still register FOO as virtual token";
+    assert saw_bar, "tokens{} block must still register BAR as virtual token";
 }

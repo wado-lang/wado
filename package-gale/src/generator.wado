@@ -1,4 +1,4 @@
-use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind, LexerRule } from "./ir.wado";
+use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, NotElement, RepeatKind, LexerRule } from "./ir.wado";
 use {
     to_pascal_case,
     to_snake_case,
@@ -6,6 +6,7 @@ use {
     escape_ident,
     rule_type_name,
     literal_field_name,
+    not_element_field_name,
     strip_suffix,
     case_names_for_rule,
     is_simple_cst_group,
@@ -362,7 +363,27 @@ fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32)
             type_str: "Token",
         });
     }
+    if let Wildcard = elem {
+        return Option::<Field>::Some(Field {
+            name: "wildcard",
+            type_str: "Token",
+        });
+    }
+    if let Not(ne) = elem {
+        return Option::<Field>::Some(Field {
+            name: not_element_field_name(&ne.element),
+            type_str: "Token",
+        });
+    }
     if let Repeat(rep) = elem {
+        // List labels are already Array-typed — return them as-is without
+        // re-wrapping. `(items+=item)*` and `items+=item*` both produce a
+        // single `items: Array<ItemNode>` field.
+        if let Label(lab) = &rep.element {
+            if lab.list {
+                return element_to_field(&rep.element, rule_name, group_counter);
+            }
+        }
         let inner_field = repeat_inner_field(&rep.element, rule_name, group_counter);
         if let Some(inner) = inner_field {
             let field = match rep.kind {
@@ -381,6 +402,14 @@ fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32)
     }
     if let Label(lab) = elem {
         if let Some(inner) = element_to_field(&lab.element, rule_name, group_counter) {
+            if lab.list {
+                // `items+=item` — the field is an Array<ItemNode>, regardless
+                // of whether this Label is wrapped in a Repeat.
+                return Option::<Field>::Some(Field {
+                    name: escape_ident(&to_snake_case(&lab.name)),
+                    type_str: `Array<{inner.type_str}>`,
+                });
+            }
             return Option::<Field>::Some(Field {
                 name: escape_ident(&to_snake_case(&lab.name)),
                 type_str: inner.type_str,

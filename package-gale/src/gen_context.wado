@@ -102,7 +102,13 @@ impl GenContext {
             },
             Repeat(rep) => self.first_of_element(&rep.element, visiting),
             Label(lab) => self.first_of_element(&lab.element, visiting),
-            _ => [],
+            // Wildcard and Not match an open-ended set of tokens; we cannot
+            // enumerate FIRST statically. Returning [] disables static prediction
+            // for alternatives starting with them — such alternatives must either
+            // be in a single-alt rule, used as a fallback, or be distinguished
+            // from their siblings by later elements.
+            Wildcard => [],
+            Not(_) => [],
         };
     }
 
@@ -292,6 +298,12 @@ impl GenContext {
                 }
                 return true;
             },
+            // Wildcard advances by exactly one token (unless at EOF).
+            Wildcard => true,
+            // `~ X` advances by one token when the current token is not in
+            // the complement set. The inner element is required to be a
+            // terminal or a simple terminal set, both of which are scannable.
+            Not(_) => true,
         };
     }
 
