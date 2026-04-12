@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775954088652,
+  "lastUpdate": 1775954825637,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11777,6 +11777,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 18708,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0aef7437ff8efdb042c530626ae98cb2809bfc86",
+          "message": "Merge pull request #810 from wado-lang/claude/simplify-http-server-OcFST\n\nFix compiler bugs, simplify http-server, refactor DCE/init with is_cm_export",
+          "timestamp": "2026-04-12T09:43:49+09:00",
+          "tree_id": "557371025b16ff7e14d22b3534654ce109a4bf59",
+          "url": "https://github.com/wado-lang/wado/commit/0aef7437ff8efdb042c530626ae98cb2809bfc86"
+        },
+        "date": 1775954825369,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
             "unit": "bytes"
           }
         ]
