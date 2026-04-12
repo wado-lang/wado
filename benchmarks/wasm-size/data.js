@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776001898693,
+  "lastUpdate": 1776030219964,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12464,6 +12464,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2871a113adccaa524084cbc63da8435f134bd1ba"
         },
         "date": 1776001898422,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7953c65f9ec2bd8af501b10ebce3e46cdf8a6dc1",
+          "message": "Merge pull request #830 from wado-lang/claude/optimize-zlib-benchmark-pwULj\n\noptimize: add Container SROA pass for Array<Tuple<...>>",
+          "timestamp": "2026-04-13T06:40:30+09:00",
+          "tree_id": "c0af9a485452206cd543566d79782655a151e37c",
+          "url": "https://github.com/wado-lang/wado/commit/7953c65f9ec2bd8af501b10ebce3e46cdf8a6dc1"
+        },
+        "date": 1776030219689,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
