@@ -4235,14 +4235,19 @@ test "not yet implemented" {
 
 Module-level inner attribute. Indicates that the module contains machine-generated code (e.g. from `wado-from-idl` or `gale`). Stored in the AST but not carried into TIR or later compilation stages. Reserved for future tooling use: language services may prohibit editing generated modules, and coverage tools may exclude them.
 
-The attribute accepts optional `key = "value"` metadata, so that generators can attach provenance information directly to the attribute instead of as free-form comments. Conventional keys are `by` (the tool that produced the file) and `source` (a source path it was generated from); `source` may appear multiple times when several inputs contribute to the same output. Unknown keys are tolerated, so generators can introduce additional keys without requiring a spec change.
+The attribute accepts optional metadata so that generators can attach provenance information directly to the attribute instead of as free-form comments. Two argument shapes are supported inside the parentheses:
+
+- Scalar `key = "value"` pairs (e.g. `by = "wado-from-idl"`).
+- Array `key = ["v1", "v2", ...]` pairs whose values are a comma-separated list of string literals (e.g. `sources = ["a.wit", "b.wit"]`).
+
+Conventional keys are `by` (the tool that produced the file) and `sources` (the list of source paths it was generated from). Unknown keys are tolerated, so generators can introduce additional metadata without requiring a spec change.
 
 ```wado
 #![generated]
 
-#![generated(by = "wado-from-idl", source = "deps/random.wit")]
+#![generated(by = "wado-from-idl", sources = ["deps/random.wit"])]
 
-#![generated(by = "wado-from-idl", source = "cli.wit", source = "clocks.wit")]
+#![generated(by = "wado-from-idl", sources = ["cli.wit", "clocks.wit"])]
 ```
 
 #### `#![wasm_module("name")]`

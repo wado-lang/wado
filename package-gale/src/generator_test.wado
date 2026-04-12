@@ -27,10 +27,31 @@ test "generate header" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert output.len() > 0;
-    let header = `#![generated(by = "gale", source = "Test.g4")]`;
+    // Grammar was constructed with no source_files, so gen_header falls back
+    // to `{name}.g4`.
+    let header = `#![generated(by = "gale", sources = ["Test.g4"])]`;
+    for let mut i = 0; i < header.len(); i += 1 {
+        assert output.get_byte(i) == header.get_byte(i);
+    }
+}
+
+test "generate header with multiple source files" {
+    let grammar = Grammar {
+        name: "Html",
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+        source_files: ["HtmlLexer.g4", "HtmlParser.g4"],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    let header = `#![generated(by = "gale", sources = ["HtmlLexer.g4", "HtmlParser.g4"])]`;
     for let mut i = 0; i < header.len(); i += 1 {
         assert output.get_byte(i) == header.get_byte(i);
     }
@@ -49,6 +70,7 @@ test "generate token kind" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub enum TokenKind {");
@@ -80,6 +102,7 @@ test "generate single-alt struct" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub struct JsonNode {");
@@ -113,6 +136,7 @@ test "generate multi-alt variant with labels" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant ExprNode {");
@@ -150,6 +174,7 @@ test "generate multi-alt variant without labels" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant ItemNode {");
@@ -191,6 +216,7 @@ test "generate repeat fields" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "    pub item_list: Array<ItemNode>,");
@@ -218,6 +244,7 @@ test "generate duplicate field names" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "    pub item: ItemNode,");
@@ -255,6 +282,7 @@ test "generate group variant type for repeated group" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant StmtOrErrorGroup {");
@@ -284,6 +312,7 @@ test "generate wildcard element" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub struct AnyNode {");
@@ -315,6 +344,7 @@ test "generate parser not element" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub struct ExceptCommaNode {");
@@ -354,6 +384,7 @@ test "generate list label field" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "    pub items: Array<ItemNode>,");
@@ -386,6 +417,7 @@ test "generate standalone group as optional field" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant FooOrBarGroup {");
@@ -436,6 +468,7 @@ test "generate lexer set_mode" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "best_set_mode");
@@ -469,6 +502,7 @@ test "generate lexer more" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "best_more");
@@ -518,6 +552,7 @@ test "generate lexer type_override" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     // IF rule should produce tokens tagged as TK_ID (not TK_IF).
@@ -553,6 +588,7 @@ test "generate lexer channel" {
         channels: [],
         options: [],
         named_actions: [],
+        source_files: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "best_channel");
@@ -570,7 +606,7 @@ test "generate lexer hidden channel routes to trivia" {
     let input = "lexer grammar Test;
 WS : [ \\t]+ -> channel(HIDDEN) ;
 ID : [a-z]+ ;";
-    let grammar = parse_grammar(input);
+    let grammar = parse_grammar(input, "test.g4");
     // Parser-side contract: HIDDEN channel must not degrade to skip.
     for let r of &grammar.lexer_rules {
         if r.name == "WS" {
@@ -586,15 +622,23 @@ ID : [a-z]+ ;";
     assert str_contains(&output, "trivia.push(Token::with_channel(");
 }
 
-fn parse_grammar(input: String) -> Grammar {
-    return parse(input).unwrap();
+fn parse_grammar(input: String, path: String) -> Grammar {
+    let mut g = parse(input).unwrap();
+    g.source_files.push(path);
+    return g;
 }
 
 
 #[timeout_ms(30000)]
 test "generate html golden" {
-    let lexer_g = parse_grammar(#include_str("../tests/grammars/HTMLLexer.g4"));
-    let parser_g = parse_grammar(#include_str("../tests/grammars/HTMLParser.g4"));
+    let lexer_g = parse_grammar(
+        #include_str("../tests/grammars/HTMLLexer.g4"),
+        "package-gale/tests/grammars/HTMLLexer.g4",
+    );
+    let parser_g = parse_grammar(
+        #include_str("../tests/grammars/HTMLParser.g4"),
+        "package-gale/tests/grammars/HTMLParser.g4",
+    );
     let grammar = merge_grammars([lexer_g, parser_g]);
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     let expected = #include_str("../tests/golden/html.wado");
@@ -604,8 +648,14 @@ test "generate html golden" {
 
 #[timeout_ms(120000)]
 test "generate css3 golden" {
-    let lexer_g = parse_grammar(#include_str("../tests/grammars/css3Lexer.g4"));
-    let parser_g = parse_grammar(#include_str("../tests/grammars/css3Parser.g4"));
+    let lexer_g = parse_grammar(
+        #include_str("../tests/grammars/css3Lexer.g4"),
+        "package-gale/tests/grammars/css3Lexer.g4",
+    );
+    let parser_g = parse_grammar(
+        #include_str("../tests/grammars/css3Parser.g4"),
+        "package-gale/tests/grammars/css3Parser.g4",
+    );
     let grammar = merge_grammars([lexer_g, parser_g]);
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     let expected = #include_str("../tests/golden/css3.wado");
@@ -615,8 +665,14 @@ test "generate css3 golden" {
 
 #[timeout_ms(60000)]
 test "generate antlr4 golden" {
-    let lexer_g = parse_grammar(#include_str("../tests/grammars/ANTLRv4Lexer.g4"));
-    let parser_g = parse_grammar(#include_str("../tests/grammars/ANTLRv4Parser.g4"));
+    let lexer_g = parse_grammar(
+        #include_str("../tests/grammars/ANTLRv4Lexer.g4"),
+        "package-gale/tests/grammars/ANTLRv4Lexer.g4",
+    );
+    let parser_g = parse_grammar(
+        #include_str("../tests/grammars/ANTLRv4Parser.g4"),
+        "package-gale/tests/grammars/ANTLRv4Parser.g4",
+    );
     let grammar = merge_grammars([lexer_g, parser_g]);
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     let expected = #include_str("../tests/golden/antlr4.wado");
@@ -626,8 +682,14 @@ test "generate antlr4 golden" {
 
 #[timeout_ms(120000)]
 test "generate typescript golden" {
-    let lexer_g = parse_grammar(#include_str("../tests/grammars/TypeScriptLexer.g4"));
-    let parser_g = parse_grammar(#include_str("../tests/grammars/TypeScriptParser.g4"));
+    let lexer_g = parse_grammar(
+        #include_str("../tests/grammars/TypeScriptLexer.g4"),
+        "package-gale/tests/grammars/TypeScriptLexer.g4",
+    );
+    let parser_g = parse_grammar(
+        #include_str("../tests/grammars/TypeScriptParser.g4"),
+        "package-gale/tests/grammars/TypeScriptParser.g4",
+    );
     let grammar = merge_grammars([lexer_g, parser_g]);
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     let expected = #include_str("../tests/golden/typescript.wado");
@@ -637,8 +699,14 @@ test "generate typescript golden" {
 
 #[timeout_ms(120000)]
 test "generate rust golden" {
-    let lexer_g = parse_grammar(#include_str("../tests/grammars/RustLexer.g4"));
-    let parser_g = parse_grammar(#include_str("../tests/grammars/RustParser.g4"));
+    let lexer_g = parse_grammar(
+        #include_str("../tests/grammars/RustLexer.g4"),
+        "package-gale/tests/grammars/RustLexer.g4",
+    );
+    let parser_g = parse_grammar(
+        #include_str("../tests/grammars/RustParser.g4"),
+        "package-gale/tests/grammars/RustParser.g4",
+    );
     let grammar = merge_grammars([lexer_g, parser_g]);
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     let expected = #include_str("../tests/golden/rust.wado");

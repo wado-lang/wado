@@ -56,11 +56,16 @@ impl WadoCodeGenerator {
 
     fn write_header(&mut self, module: &WadoModule) {
         // Emit `#![generated(...)]` with key-value metadata so that
-        // `source` / `by` survive formatting and can be consumed by tooling.
+        // `sources` / `by` survive formatting and can be consumed by tooling.
         // `#![generated]` itself marks the module as machine-generated.
         let mut parts = vec![String::from("by = \"wado-from-idl\"")];
-        for source in &module.source_files {
-            parts.push(format!("source = \"{source}\""));
+        if !module.source_files.is_empty() {
+            let quoted: Vec<String> = module
+                .source_files
+                .iter()
+                .map(|s| format!("\"{s}\""))
+                .collect();
+            parts.push(format!("sources = [{}]", quoted.join(", ")));
         }
         self.writeln(&format!("#![generated({})]", parts.join(", ")));
         self.writeln("");

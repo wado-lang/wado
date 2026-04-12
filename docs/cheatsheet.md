@@ -1122,7 +1122,7 @@ Paths in `#include_str` and `#include_bytes` are resolved relative to the source
 #![no_prelude]             // disable auto-import of core:prelude
 #![TODO]                   // all tests must fail or not compile
 #![generated]              // marks machine-generated code for tools
-#![generated(by = "wado-from-idl", source = "deps/random.wit")]  // with metadata
+#![generated(by = "wado-from-idl", sources = ["deps/random.wit"])]  // with metadata
 
 struct Foo {
     #[hidden]
