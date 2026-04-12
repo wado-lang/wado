@@ -618,11 +618,7 @@ fn analyze_expr(
                         base_name,
                     ))
                 } else {
-                    let callee_module = if original_callee_module.is_entry_point() {
-                        current_module.clone()
-                    } else {
-                        original_callee_module
-                    };
+                    let callee_module = original_callee_module;
                     if let Some(sep_pos) = func_name.find("::") {
                         let prefix = &func_name[..sep_pos];
                         let method_name = &func_name[sep_pos + 2..];
@@ -666,12 +662,7 @@ fn analyze_expr(
                     "TirExprKind::Call should not have method-style names: {func_name}"
                 );
 
-                let callee_module =
-                    if original_callee_module.is_entry_point() && !func.is_cm_binding {
-                        current_module.clone()
-                    } else {
-                        original_callee_module.clone()
-                    };
+                let callee_module = original_callee_module.clone();
                 let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
                     &callee_module,
                     &func_name,

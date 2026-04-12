@@ -11,8 +11,8 @@ use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionRef, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::block_has_break_to;
 
@@ -1155,7 +1155,6 @@ fn try_inline_call_expr(
         param_offset,
         callee_param_count,
         &label,
-        &inlined_key.0,
     );
 
     block_stmts.extend(remapped_stmts);
@@ -1320,7 +1319,6 @@ fn try_inline_method_call_expr(
         param_offset,
         callee_param_count,
         &label,
-        &inlined_key.0,
     );
 
     block_stmts.extend(remapped_stmts);
@@ -1353,7 +1351,6 @@ fn remap_and_convert_returns(
     local_offset: u32,
     param_count: u32,
     label: &str,
-    source_module: &ModuleSource,
 ) -> Vec<TirStmt> {
     let mut stmts = Vec::new();
 
@@ -1365,14 +1362,7 @@ fn remap_and_convert_returns(
                 // may itself contain nested blocks with return statements
                 // (e.g., try-op expansions inside tuple/struct literals).
                 let break_value = value.as_ref().map(|v| {
-                    remap_expr_inner(
-                        v,
-                        param_to_local,
-                        local_offset,
-                        param_count,
-                        Some(label),
-                        source_module,
-                    )
+                    remap_expr_inner(v, param_to_local, local_offset, param_count, Some(label))
                 });
                 stmts.push(TirStmt::new(
                     TirStmtKind::Break {
@@ -1394,7 +1384,6 @@ fn remap_and_convert_returns(
                     local_offset,
                     param_count,
                     label,
-                    source_module,
                 );
                 stmts.extend(inner);
             }
@@ -1405,7 +1394,6 @@ fn remap_and_convert_returns(
                     local_offset,
                     param_count,
                     label,
-                    source_module,
                 ));
             }
         }
@@ -1420,16 +1408,8 @@ fn remap_stmt_with_label(
     local_offset: u32,
     param_count: u32,
     label: &str,
-    source_module: &ModuleSource,
 ) -> TirStmt {
-    remap_stmt_inner(
-        stmt,
-        param_to_local,
-        local_offset,
-        param_count,
-        Some(label),
-        source_module,
-    )
+    remap_stmt_inner(stmt, param_to_local, local_offset, param_count, Some(label))
 }
 
 /// Remap local indices in a pattern
@@ -1543,16 +1523,8 @@ fn remap_expr(
     param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
-    source_module: &ModuleSource,
 ) -> TirExpr {
-    remap_expr_inner(
-        expr,
-        param_to_local,
-        local_offset,
-        param_count,
-        None,
-        source_module,
-    )
+    remap_expr_inner(expr, param_to_local, local_offset, param_count, None)
 }
 
 /// Remap local indices in an expression, optionally converting `return` to `break`.
@@ -1567,29 +1539,10 @@ fn remap_expr_inner(
     local_offset: u32,
     param_count: u32,
     label: Option<&str>,
-    source_module: &ModuleSource,
 ) -> TirExpr {
-    let re = |e: &TirExpr| {
-        remap_expr_inner(
-            e,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            source_module,
-        )
-    };
+    let re = |e: &TirExpr| remap_expr_inner(e, param_to_local, local_offset, param_count, label);
     let re_box = |e: &TirExpr| Box::new(re(e));
-    let rb = |b: &TirBlock| {
-        remap_block_inner(
-            b,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            source_module,
-        )
-    };
+    let rb = |b: &TirBlock| remap_block_inner(b, param_to_local, local_offset, param_count, label);
 
     let kind = match &expr.kind {
         TirExprKind::Local { index, name } => {
@@ -1623,34 +1576,28 @@ fn remap_expr_inner(
             func,
             type_args,
             args,
-        } => {
-            let remapped_func = remap_function_ref(func, source_module);
-            TirExprKind::Call {
-                func: remapped_func,
-                type_args: type_args.clone(),
-                args: args
-                    .iter()
-                    .map(|a| CallArg::new(re(&a.expr), a.is_mut))
-                    .collect(),
-            }
-        }
+        } => TirExprKind::Call {
+            func: func.clone(),
+            type_args: type_args.clone(),
+            args: args
+                .iter()
+                .map(|a| CallArg::new(re(&a.expr), a.is_mut))
+                .collect(),
+        },
         TirExprKind::MethodCall {
             receiver,
             func,
             type_args,
             args,
-        } => {
-            let remapped_func = remap_function_ref(func, source_module);
-            TirExprKind::MethodCall {
-                receiver: re_box(receiver),
-                func: remapped_func,
-                type_args: type_args.clone(),
-                args: args
-                    .iter()
-                    .map(|a| CallArg::new(re(&a.expr), a.is_mut))
-                    .collect(),
-            }
-        }
+        } => TirExprKind::MethodCall {
+            receiver: re_box(receiver),
+            func: func.clone(),
+            type_args: type_args.clone(),
+            args: args
+                .iter()
+                .map(|a| CallArg::new(re(&a.expr), a.is_mut))
+                .collect(),
+        },
         TirExprKind::CmRawCall { local_name, args } => TirExprKind::CmRawCall {
             local_name: local_name.clone(),
             args: args.iter().map(&re).collect(),
@@ -1731,13 +1678,7 @@ fn remap_expr_inner(
         } => TirExprKind::Closure {
             params: params.clone(),
             // Closures have their own return scope — don't propagate label
-            body: Box::new(remap_expr(
-                body,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
+            body: Box::new(remap_expr(body, param_to_local, local_offset, param_count)),
             captures: captures.clone(),
             functor_id: *functor_id,
             source_text: source_text.clone(),
@@ -1837,50 +1778,12 @@ fn remap_expr_inner(
     TirExpr::new(kind, expr.type_id, expr.span)
 }
 
-/// Remap a function reference to use the source module for local calls.
-/// When inlining from module A into module B, local calls (entry-point module)
-/// need to be converted to use module A's source.
-fn remap_function_ref(func: &FunctionRef, source_module: &ModuleSource) -> FunctionRef {
-    // Skip if the source module is the entry point (no remapping needed)
-    if source_module.is_entry_point() {
-        return func.clone();
-    }
-
-    // Never remap builtin functions - they must keep their special path
-    // Check both non-monomorphized and monomorphized builtins
-    if func.builtin_name().is_some() || func.monomorphized_builtin_name().is_some() {
-        return func.clone();
-    }
-
-    // Never remap CM binding functions - they always live in the entry-point module
-    if func.is_cm_binding {
-        return func.clone();
-    }
-
-    // Only remap if the func has an entry-point module source (local call).
-    // Never remap monomorphized function references — they carry the correct
-    // module_source from monomorphization and must keep it for DCE to match.
-    if func.module_source.clone().is_entry_point() && func.monomorph_info.is_none() {
-        // Convert to External with the source module
-        FunctionRef {
-            module_source: source_module.clone(),
-            name: func.name.clone(),
-            monomorph_info: None,
-            method_info: func.method_info.clone(),
-            is_cm_binding: false,
-        }
-    } else {
-        func.clone()
-    }
-}
-
 fn remap_block_inner(
     block: &TirBlock,
     param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
     label: Option<&str>,
-    source_module: &ModuleSource,
 ) -> TirBlock {
     let mut stmts = Vec::new();
     for stmt in &block.stmts {
@@ -1897,7 +1800,6 @@ fn remap_block_inner(
                         local_offset,
                         param_count,
                         label,
-                        source_module,
                     );
                     stmts.extend(inner);
                     continue;
@@ -1911,7 +1813,6 @@ fn remap_block_inner(
             local_offset,
             param_count,
             label,
-            source_module,
         ));
     }
     TirBlock::new(stmts, block.span)
@@ -1923,28 +1824,9 @@ fn remap_stmt_inner(
     local_offset: u32,
     param_count: u32,
     label: Option<&str>,
-    source_module: &ModuleSource,
 ) -> TirStmt {
-    let re = |e: &TirExpr| {
-        remap_expr_inner(
-            e,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            source_module,
-        )
-    };
-    let rb = |b: &TirBlock| {
-        remap_block_inner(
-            b,
-            param_to_local,
-            local_offset,
-            param_count,
-            label,
-            source_module,
-        )
-    };
+    let re = |e: &TirExpr| remap_expr_inner(e, param_to_local, local_offset, param_count, label);
+    let rb = |b: &TirBlock| remap_block_inner(b, param_to_local, local_offset, param_count, label);
 
     let kind = match &stmt.kind {
         TirStmtKind::Let {
