@@ -1066,10 +1066,11 @@ fn test_format_idempotent_all_fixtures() {
         }
     }
 
-    assert!(failures.is_empty(), 
+    assert!(
+        failures.is_empty(),
         "Format idempotency failures:\n{}",
         failures.join("\n\n---\n\n")
-    )
+    );
 }
 
 #[test]
@@ -1661,11 +1662,12 @@ fn test_roundtrip_ast_all_fixtures() {
         }
     }
 
-    assert!(failures.is_empty(), 
+    assert!(
+        failures.is_empty(),
         "Round-trip AST equivalence failures ({} files):\n{}",
         failures.len(),
         failures.join("\n")
-    )
+    );
 }
 
 /// Regression test: the formatter must preserve parentheses in `if let ... && (expr)`
@@ -1780,11 +1782,12 @@ fn test_roundtrip_ast_all_stdlib() {
 
     visit_dir(&lib_dir, &mut failures);
 
-    assert!(failures.is_empty(), 
+    assert!(
+        failures.is_empty(),
         "Round-trip AST equivalence failures in stdlib ({} files):\n{}",
         failures.len(),
         failures.join("\n")
-    )
+    );
 }
 
 #[test]

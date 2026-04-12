@@ -767,7 +767,7 @@ mod tests {
 
     #[test]
     fn test_float_format() {
-        assert_eq!(format_float(3.14), "3.14");
+        assert_eq!(format_float(3.25), "3.25");
         assert_eq!(format_float(0.0), "0.0");
         assert_eq!(format_float(4.0), "4.0");
         assert_eq!(format_float(f64::INFINITY), "Infinity");

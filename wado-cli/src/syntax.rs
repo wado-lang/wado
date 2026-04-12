@@ -639,10 +639,11 @@ mod tests {
             .map(|e| e.to_string())
             .collect();
 
-        assert!(errors.is_empty(), 
+        assert!(
+            errors.is_empty(),
             "TextMate grammar failed schema validation:\n{}",
             errors.join("\n")
-        )
+        );
     }
 
     #[test]
@@ -657,9 +658,10 @@ mod tests {
             .map(|e| e.to_string())
             .collect();
 
-        assert!(errors.is_empty(), 
+        assert!(
+            errors.is_empty(),
             "Language configuration failed schema validation:\n{}",
             errors.join("\n")
-        )
+        );
     }
 }

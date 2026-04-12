@@ -572,10 +572,8 @@ pub fn extract_data_section(source: &str) -> Option<&str> {
     let marker = "\n__DATA__\n";
     if let Some(pos) = source.find(marker) {
         Some(&source[pos + marker.len()..])
-    } else if source.starts_with("__DATA__\n") {
-        Some(&source["__DATA__\n".len()..])
     } else {
-        None
+        source.strip_prefix("__DATA__\n")
     }
 }
 

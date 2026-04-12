@@ -87,7 +87,8 @@ fn test_tuple_elision_multivalue() {
             // Check the next few lines for struct.new - it should NOT be present
             if i + 1 < lines.len() {
                 let next_line = lines[i + 1].trim();
-                assert!(!next_line.contains("struct.new"), 
+                assert!(
+                    !next_line.contains("struct.new"),
                     "Tuple elision optimization not applied! Found struct.new after multi-value instruction.\n\
                      Line {}: {}\n\
                      Line {}: {}",
@@ -95,7 +96,7 @@ fn test_tuple_elision_multivalue() {
                     line,
                     i + 2,
                     next_line
-                )
+                );
             }
         }
 
@@ -103,7 +104,8 @@ fn test_tuple_elision_multivalue() {
         if (line.contains("i64.mul_wide_u") || line.contains("i64.mul_wide_s"))
             && i + 1 < lines.len() {
                 let next_line = lines[i + 1].trim();
-                assert!(!next_line.contains("struct.new"), 
+                assert!(
+                    !next_line.contains("struct.new"),
                     "Tuple elision optimization not applied! Found struct.new after multi-value instruction.\n\
                      Line {}: {}\n\
                      Line {}: {}",
@@ -111,7 +113,7 @@ fn test_tuple_elision_multivalue() {
                     line,
                     i + 2,
                     next_line
-                )
+                );
             }
     }
 
