@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775983431398,
+  "lastUpdate": 1775986501777,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12308,6 +12308,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8d0fc91f8d2ee31d332a703601f9de3005b6f65c"
         },
         "date": 1775983431241,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "58336d2d12d8b2381ca800940f096d544cd1e24b",
+          "message": "Merge pull request #826 from wado-lang/claude/audit-wir-build-gNxxn\n\nAudit wir_build: fix cross-module method resolution bug and clean up dead code",
+          "timestamp": "2026-04-12T18:31:44+09:00",
+          "tree_id": "1fa90ba03cea774ed34b6da1b1cf5a12d7e8dfc5",
+          "url": "https://github.com/wado-lang/wado/commit/58336d2d12d8b2381ca800940f096d544cd1e24b"
+        },
+        "date": 1775986501494,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
