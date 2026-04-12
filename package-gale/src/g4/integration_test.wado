@@ -83,6 +83,16 @@ test "parse css3Lexer.g4" {
     // First rule: OpenBracket
     assert g.lexer_rules[0].name == "OpenBracket";
     assert g.lexer_rules[0].mode == 0;
+    // UnexpectedCharacter has `-> channel(ERROR)` referencing the
+    // user-defined channel from the channels{} block. The parser must
+    // accept the named-channel form without error.
+    let mut found_unexpected = false;
+    for let rule of g.lexer_rules {
+        if rule.name == "UnexpectedCharacter" {
+            found_unexpected = true;
+        }
+    }
+    assert found_unexpected;
 }
 
 test "parse css3Parser.g4" {
@@ -115,6 +125,7 @@ test "parse HTMLLexer.g4" {
     assert g.mode_names[0] == "DEFAULT_MODE";
     // TAG_CLOSE is in TAG mode
     let mut found_tag_close = false;
+    let mut found_tag_whitespace = false;
     for let rule of g.lexer_rules {
         if rule.name == "TAG_CLOSE" {
             assert g.mode_names[rule.mode] == "TAG";
@@ -130,8 +141,15 @@ test "parse HTMLLexer.g4" {
             assert g.mode_names[rule.mode] == "SCRIPT";
             assert rule.pop_mode == true;
         }
+        if rule.name == "TAG_WHITESPACE" {
+            // -> channel(HIDDEN) sets channel to 1 (HIDDEN's predefined id).
+            assert rule.channel == 1;
+            assert rule.skip == true;
+            found_tag_whitespace = true;
+        }
     }
     assert found_tag_close;
+    assert found_tag_whitespace;
 }
 
 test "parse HTMLParser.g4" {
@@ -223,6 +241,21 @@ test "parse TypeScriptLexer.g4" {
     assert g.name == "TypeScriptLexer";
     assert g.parser_rules.is_empty();
     assert g.lexer_rules.len() > 20;
+    // BackTickInside has `-> type(BackTick), popMode` — verify the type
+    // override and popMode are both extracted from the lexer command list.
+    let mut found_back_tick_inside = false;
+    for let rule of g.lexer_rules {
+        if rule.name == "BackTickInside" {
+            if let Some(t) = &rule.type_override {
+                assert *t == "BackTick", `expected type_override BackTick, got {*t}`;
+            } else {
+                panic("BackTickInside should have type_override");
+            }
+            assert rule.pop_mode == true;
+            found_back_tick_inside = true;
+        }
+    }
+    assert found_back_tick_inside;
 }
 
 test "parse TypeScriptParser.g4" {

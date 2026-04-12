@@ -6,6 +6,7 @@ use {
     Element,
     RepeatElement,
     LabelElement,
+    NotElement,
     RepeatKind,
     LexerRule,
     LexerAlt,
@@ -23,6 +24,32 @@ use { tokenize } from "./lexer.wado";
 pub struct G4Parser {
     tokens: Array<Token>,
     pos: i32,
+}
+
+/// Accumulator for lexer commands parsed from `-> cmd, cmd, ...`.
+/// See ANTLR4 lexer-rules.md for the canonical command set.
+struct LexerActions {
+    skip: bool,
+    more: bool,
+    type_override: Option<String>,
+    channel: i32,
+    set_mode: i32,
+    push_mode: i32,
+    pop_mode: bool,
+}
+
+impl LexerActions {
+    fn empty() -> LexerActions {
+        return LexerActions {
+            skip: false,
+            more: false,
+            type_override: null,
+            channel: 0,
+            set_mode: NO_MODE,
+            push_mode: NO_MODE,
+            pop_mode: false,
+        };
+    }
 }
 
 fn first_char(s: &String) -> Option<char> {
@@ -114,9 +141,26 @@ impl G4Parser {
                 continue;
             }
 
-            let is_frag = self.is_kind(G4Token::Fragment);
-            if is_frag {
-                self.advance();
+            // Optional rule modifiers: `public`, `private`, `protected`, `fragment`.
+            // ANTLR4 allows multiple modifiers; we just consume and discard the
+            // visibility modifiers and remember `fragment` for the lexer-rule branch.
+            let mut is_frag = false;
+            loop {
+                if self.is_kind(G4Token::Fragment) {
+                    is_frag = true;
+                    self.advance();
+                    continue;
+                }
+                if self.is_kind(G4Token::Identifier) {
+                    let text = &self.peek().text;
+                    if LexerSlice::eq_str(&"public", text)
+                        || LexerSlice::eq_str(&"private", text)
+                        || LexerSlice::eq_str(&"protected", text) {
+                        self.advance();
+                        continue;
+                    }
+                }
+                break;
             }
 
             let rule_name_tok = self.expect(G4Token::Identifier)?;
@@ -129,6 +173,10 @@ impl G4Parser {
                 let rule = self.parse_parser_rule(rule_name)?;
                 parser_rules.push(rule);
             }
+            // Optional exception group: catch* finally? (parser rules only,
+            // but ANTLR4 accepts the syntax in lexer rules too — we just
+            // skip it uniformly).
+            self.skip_exception_group();
         }
 
         // Add virtual tokens from `tokens { }` blocks that don't have real lexer rules
@@ -148,6 +196,12 @@ impl G4Parser {
     }
 
     fn skip_preamble_blocks(&mut self, virtual_tokens: &mut Array<String>) {
+        // ANTLR4 grammar prequel constructs (any order, repeatable):
+        //   optionsSpec      : 'options'  '{' ... '}'
+        //   delegateGrammars : 'import' id ('=' id)? (',' id ('=' id)?)* ';'
+        //   tokensSpec       : 'tokens'   '{' id (',' id)* '}'
+        //   channelsSpec     : 'channels' '{' id (',' id)* '}'
+        //   action           : '@' (id '::')? id '{' ... '}'
         loop {
             if self.is_kind(G4Token::Identifier) {
                 let text = &self.peek().text;
@@ -161,18 +215,60 @@ impl G4Parser {
                     self.skip_braced_block();
                     continue;
                 }
+                if LexerSlice::eq_str(&"import", text) {
+                    self.advance();
+                    self.parse_delegate_grammars();
+                    continue;
+                }
             }
             if self.is_kind(G4Token::At) {
+                self.parse_named_action();
+                continue;
+            }
+            break;
+        }
+    }
+
+    /// Parse `import id ('=' id)? (',' id ('=' id)?)* ';'`. We discard the
+    /// imports — the IR has no representation for delegate grammars yet.
+    fn parse_delegate_grammars(&mut self) {
+        loop {
+            if !self.is_kind(G4Token::Identifier) {
+                break;
+            }
+            self.advance();
+            if self.is_kind(G4Token::Assign) {
                 self.advance();
                 if self.is_kind(G4Token::Identifier) {
                     self.advance();
                 }
-                if self.is_kind(G4Token::LBrace) {
-                    self.skip_braced_block();
-                }
+            }
+            if self.is_kind(G4Token::Comma) {
+                self.advance();
                 continue;
             }
             break;
+        }
+        if self.is_kind(G4Token::Semicolon) {
+            self.advance();
+        }
+    }
+
+    /// Parse `@ id ('::' id)? '{' ... '}'`. The action body is discarded —
+    /// it would be host-language code that Gale cannot transpile.
+    fn parse_named_action(&mut self) {
+        self.expect(G4Token::At).unwrap();
+        if self.is_kind(G4Token::Identifier) {
+            self.advance();
+        }
+        if self.is_kind(G4Token::ColonColon) {
+            self.advance();
+            if self.is_kind(G4Token::Identifier) {
+                self.advance();
+            }
+        }
+        if self.is_kind(G4Token::LBrace) {
+            self.skip_braced_block();
         }
     }
 
@@ -224,10 +320,103 @@ impl G4Parser {
     }
 
     fn parse_parser_rule(&mut self, name: String) -> Result<ParserRule, ParseError> {
+        self.skip_rule_prequel();
         self.expect(G4Token::Colon)?;
         let alternatives = self.parse_alternatives()?;
         self.expect(G4Token::Semicolon)?;
         return Result::<ParserRule, ParseError>::Ok(ParserRule { name, alternatives });
+    }
+
+    /// Consume the optional rule prequel:
+    ///   ARG_ACTION? ('returns' ARG_ACTION)? ('throws' qid (',' qid)*)?
+    ///   ('locals' ARG_ACTION)? rulePrequel*
+    /// where rulePrequel is `optionsSpec` or `'@' id ACTION` (e.g. `@init`,
+    /// `@after`). ANTLR4 fixes the order of args/returns/throws/locals before
+    /// the repeated `options{}`/`@id{}` block, but we accept any order here
+    /// for resilience.
+    fn skip_rule_prequel(&mut self) {
+        loop {
+            if self.is_kind(G4Token::CharClass) {
+                // Bare ARG_ACTION right after the rule name → rule arguments.
+                self.advance();
+                continue;
+            }
+            if self.is_kind(G4Token::Identifier) {
+                let text = &self.peek().text;
+                if LexerSlice::eq_str(&"returns", text) || LexerSlice::eq_str(&"locals", text) {
+                    self.advance();
+                    if self.is_kind(G4Token::CharClass) {
+                        self.advance();
+                    }
+                    continue;
+                }
+                if LexerSlice::eq_str(&"throws", text) {
+                    self.advance();
+                    self.skip_qualified_id_list();
+                    continue;
+                }
+                if LexerSlice::eq_str(&"options", text) {
+                    self.advance();
+                    if self.is_kind(G4Token::LBrace) {
+                        self.skip_braced_block();
+                    }
+                    continue;
+                }
+            }
+            if self.is_kind(G4Token::At) {
+                self.parse_named_action();
+                continue;
+            }
+            break;
+        }
+    }
+
+    fn skip_qualified_id_list(&mut self) {
+        loop {
+            if !self.is_kind(G4Token::Identifier) {
+                break;
+            }
+            self.advance();
+            // Allow dotted qualified ids: `foo.bar.Baz`
+            while self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32 {
+                self.advance();
+                self.advance();
+            }
+            if self.is_kind(G4Token::Comma) {
+                self.advance();
+                continue;
+            }
+            break;
+        }
+    }
+
+    /// Consume `(catch ARG_ACTION ACTION)* (finally ACTION)?`. Discards the
+    /// host-language code in the action bodies.
+    fn skip_exception_group(&mut self) {
+        loop {
+            if !self.is_kind(G4Token::Identifier) {
+                break;
+            }
+            let text = &self.peek().text;
+            if LexerSlice::eq_str(&"catch", text) {
+                self.advance();
+                if self.is_kind(G4Token::CharClass) {
+                    self.advance();
+                }
+                if self.is_kind(G4Token::LBrace) {
+                    self.skip_braced_block();
+                }
+                continue;
+            }
+            if LexerSlice::eq_str(&"finally", text) {
+                self.advance();
+                if self.is_kind(G4Token::LBrace) {
+                    self.skip_braced_block();
+                }
+                break;
+            }
+            break;
+        }
     }
 
     fn parse_alternatives(&mut self) -> Result<Array<Alternative>, ParseError> {
@@ -292,12 +481,22 @@ impl G4Parser {
         if self.is_kind(G4Token::Identifier) {
             let tok = self.advance();
             let name = tok.text.to_string();
-            if self.is_kind(G4Token::Assign) {
+            if self.is_kind(G4Token::Assign) || self.is_kind(G4Token::PlusAssign) {
+                let list = self.is_kind(G4Token::PlusAssign);
                 self.advance();
                 let inner = self.parse_atom()?;
                 return Result::<Element, ParseError>::Ok(
-                    Element::Label(LabelElement { name, element: inner }),
+                    Element::Label(LabelElement { name, list, element: inner }),
                 );
+            }
+            // Optional rule arguments: `ruleref[arg, arg]`. The CharClass
+            // token at this position is an ARG_ACTION; we discard its body.
+            if self.is_kind(G4Token::CharClass) {
+                self.advance();
+            }
+            // Optional element options: `ID<assoc=right>`.
+            if self.is_kind(G4Token::LAngle) {
+                self.skip_angle_block();
             }
             if is_lexer_rule_name(&name) || name == "EOF" {
                 return Result::<Element, ParseError>::Ok(Element::TokenRef(name));
@@ -306,19 +505,72 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::StringLit) {
             let tok = self.advance();
-            return Result::<Element, ParseError>::Ok(Element::Literal(tok.text.to_string()));
+            let text = tok.text.to_string();
+            // Optional element options: `'foo'<...>`.
+            if self.is_kind(G4Token::LAngle) {
+                self.skip_angle_block();
+            }
+            return Result::<Element, ParseError>::Ok(Element::Literal(text));
         }
         if self.is_kind(G4Token::LParen) {
             self.advance();
+            // Optional block-level options/actions:
+            //   ( options { ... } : alt | alt )
+            //   ( @init { ... } : alt | alt )
+            self.skip_block_prequel();
             let alts = self.parse_alternatives()?;
             self.expect(G4Token::RParen)?;
             return Result::<Element, ParseError>::Ok(Element::Group(alts));
         }
+        if self.is_kind(G4Token::Dot) {
+            self.advance();
+            // Optional element options on wildcard: `.<...>`
+            if self.is_kind(G4Token::LAngle) {
+                self.skip_angle_block();
+            }
+            return Result::<Element, ParseError>::Ok(Element::Wildcard);
+        }
+        if self.is_kind(G4Token::Tilde) {
+            self.advance();
+            let inner = self.parse_atom()?;
+            return Result::<Element, ParseError>::Ok(
+                Element::Not(NotElement { element: inner }),
+            );
+        }
         let tok = self.peek();
-        let expected: Array<String> = ["identifier", "string", "("];
+        let expected: Array<String> = ["identifier", "string", "(", ".", "~"];
         return Result::<Element, ParseError>::Err(
             ParseError::new(`unexpected token "{tok.text}"`, tok.span, expected),
         );
+    }
+
+    /// Inside a `( ... )` group, ANTLR4 allows an optional `options { ... }`
+    /// block followed by `:`, or `@id { ... }` actions, before the actual
+    /// alternative list. We discard the option/action bodies.
+    fn skip_block_prequel(&mut self) {
+        let mut consumed = false;
+        loop {
+            if self.is_kind(G4Token::Identifier)
+                && LexerSlice::eq_str(&"options", &self.peek().text) {
+                self.advance();
+                if self.is_kind(G4Token::LBrace) {
+                    self.skip_braced_block();
+                }
+                consumed = true;
+                continue;
+            }
+            if self.is_kind(G4Token::At) {
+                self.parse_named_action();
+                consumed = true;
+                continue;
+            }
+            break;
+        }
+        // After block prequel, ANTLR4 requires a `:` separator before the
+        // alt list. Consume it if present.
+        if consumed && self.is_kind(G4Token::Colon) {
+            self.advance();
+        }
     }
 
     fn parse_postfix(&mut self, elem: Element) -> Result<Element, ParseError> {
@@ -356,49 +608,82 @@ impl G4Parser {
     }
 
     fn parse_lexer_rule(&mut self, name: String, is_fragment: bool, mode: i32, mode_names: &mut Array<String>) -> Result<LexerRule, ParseError> {
+        // Lexer rules in ANTLR4 also accept the rule prequel (rare but legal,
+        // most commonly `locals [int n]`).
+        self.skip_rule_prequel();
         self.expect(G4Token::Colon)?;
         let body = self.parse_lexer_alternatives()?;
 
-        let mut skip = false;
-        let mut push_mode: i32 = NO_MODE;
-        let mut pop_mode = false;
+        let mut actions = LexerActions::empty();
         if self.is_kind(G4Token::Arrow) {
             self.advance();
-            self.parse_lexer_actions(&mut skip, &mut push_mode, &mut pop_mode, mode_names);
+            self.parse_lexer_actions(&mut actions, mode_names);
         }
 
         self.expect(G4Token::Semicolon)?;
         return Result::<LexerRule, ParseError>::Ok(
-            LexerRule { name, is_fragment, skip, mode, push_mode, pop_mode, body },
+            LexerRule {
+                name,
+                is_fragment,
+                skip: actions.skip,
+                more: actions.more,
+                type_override: actions.type_override,
+                channel: actions.channel,
+                mode,
+                set_mode: actions.set_mode,
+                push_mode: actions.push_mode,
+                pop_mode: actions.pop_mode,
+                body,
+            },
         );
     }
 
-    fn parse_lexer_actions(&mut self, skip: &mut bool, push_mode: &mut i32, pop_mode: &mut bool, mode_names: &mut Array<String>) {
+    fn parse_lexer_actions(&mut self, actions: &mut LexerActions, mode_names: &mut Array<String>) {
         loop {
             let action_tok = self.advance();
             let action_text = &action_tok.text;
             if LexerSlice::eq_str(&"skip", action_text) {
-                *skip = true;
+                actions.skip = true;
             } else if LexerSlice::eq_str(&"pushMode", action_text) {
                 self.expect(G4Token::LParen).unwrap();
                 let mode_name = self.advance();
                 self.expect(G4Token::RParen).unwrap();
-                *push_mode = intern_mode(mode_names, &mode_name.text.to_string());
+                actions.push_mode = intern_mode(mode_names, &mode_name.text.to_string());
             } else if LexerSlice::eq_str(&"popMode", action_text) {
-                *pop_mode = true;
-            } else if LexerSlice::eq_str(&"channel", action_text) {
+                actions.pop_mode = true;
+            } else if LexerSlice::eq_str(&"mode", action_text) {
+                // `mode(X)` switches the current mode (top of stack), unlike pushMode.
                 self.expect(G4Token::LParen).unwrap();
-                let channel_name = self.advance();
+                let mode_name = self.advance();
                 self.expect(G4Token::RParen).unwrap();
-                if LexerSlice::eq_str(&"HIDDEN", &channel_name.text) {
-                    *skip = true;
+                actions.set_mode = intern_mode(mode_names, &mode_name.text.to_string());
+            } else if LexerSlice::eq_str(&"channel", action_text) {
+                // `channel(X)` accepts an integer literal, the predefined name
+                // HIDDEN, or a user-defined channel name from `channels { }`.
+                self.expect(G4Token::LParen).unwrap();
+                let arg = self.advance();
+                self.expect(G4Token::RParen).unwrap();
+                if LexerSlice::eq_str(&"HIDDEN", &arg.text) {
+                    // HIDDEN is the predefined hidden channel (id 1).
+                    actions.channel = 1;
+                    // Treat HIDDEN as effectively skipped for codegen until
+                    // proper channel routing is implemented.
+                    actions.skip = true;
+                } else if arg.kind == G4Token::IntLit as i32 {
+                    actions.channel = parse_int_literal(&arg.text.to_string());
+                } else {
+                    // User-defined channel name. Resolution against the
+                    // grammar's channels{} block is left to the code
+                    // generator; the parser only records the presence.
+                    actions.channel = 0;
                 }
             } else if LexerSlice::eq_str(&"type", action_text) {
                 self.expect(G4Token::LParen).unwrap();
-                self.advance();
+                let target = self.advance();
                 self.expect(G4Token::RParen).unwrap();
+                actions.type_override = Option::<String>::Some(target.text.to_string());
             } else if LexerSlice::eq_str(&"more", action_text) {
-                // skip
+                actions.more = true;
             }
             if !self.is_kind(G4Token::Comma) {
                 break;
@@ -711,6 +996,17 @@ fn intern_mode(mode_names: &mut Array<String>, name: &String) -> i32 {
     }
     mode_names.push(*name);
     return mode_names.len() - 1;
+}
+
+/// Parse a decimal integer literal token (e.g. "42", "0", "9999"). The lexer
+/// guarantees the text is non-empty and contains only ASCII digits.
+fn parse_int_literal(text: &String) -> i32 {
+    let mut value: i32 = 0;
+    for let c of text.chars() {
+        let digit = (c as i32) - ('0' as i32);
+        value = value * 10 + digit;
+    }
+    return value;
 }
 
 pub fn parse(input: String) -> Result<Grammar, ParseError> {

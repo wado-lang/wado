@@ -5,6 +5,7 @@ use {
     Element,
     RepeatElement,
     LabelElement,
+    NotElement,
     RepeatKind,
     LexerRule,
     LexerAlt,
@@ -295,6 +296,287 @@ ESC : '\\\\' . ;";
     }
 }
 
+test "grammar with import single" {
+    let input = "grammar Test;
+import Common;
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.name == "Test";
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "rule";
+}
+
+test "grammar with import multiple" {
+    let input = "grammar Test;
+import Common, Helpers, Util;
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "grammar with import and alias" {
+    // ANTLR4 supports `import Foo = Bar;` aliasing.
+    let input = "grammar Test;
+import Foo = Bar, Baz;
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "grammar with at_header named action" {
+    let input = "grammar Test;
+@header { /* code */ }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "grammar with scoped named action" {
+    // @parser::header — uses :: scope separator
+    let input = "grammar Test;
+@parser::header { /* code */ }
+@lexer::members { /* code */ }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "grammar with options block" {
+    let input = "grammar Test;
+options { tokenVocab = TestLexer; superClass = Foo; }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "grammar with channels block" {
+    let input = "grammar Test;
+channels { CHAN_A, CHAN_B }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "grammar with tokens block declares virtual tokens" {
+    let input = "grammar Test;
+tokens { VIRTUAL_A, VIRTUAL_B }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    // Both virtual tokens become entries in lexer_rules with empty body.
+    let mut found_a = false;
+    let mut found_b = false;
+    for let r of &g.lexer_rules {
+        if r.name == "VIRTUAL_A" { found_a = true; }
+        if r.name == "VIRTUAL_B" { found_b = true; }
+    }
+    assert found_a, "VIRTUAL_A must be declared";
+    assert found_b, "VIRTUAL_B must be declared";
+}
+
+test "grammar with prequel any order" {
+    // ANTLR4 allows multiple prequel blocks in any order.
+    let input = "grammar Test;
+options { tokenVocab = TestLexer; }
+import Foo;
+tokens { VT }
+@parser::header { /* code */ }
+channels { CHAN }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with arguments" {
+    let input = "grammar Test;
+expr[int _p] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "parser rule with returns" {
+    let input = "grammar Test;
+expr returns [int v] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with throws" {
+    let input = "grammar Test;
+expr throws RecognitionException, IOException : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with locals" {
+    let input = "grammar Test;
+expr locals [int i, int j] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with full prequel" {
+    let input = "grammar Test;
+expr[int _p] returns [int v] throws E1 locals [int i] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with at_init and at_after" {
+    let input = "grammar Test;
+expr @init { x = 0; } @after { print(x); } : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with options block" {
+    let input = "grammar Test;
+expr options { tokenVocab = X; } : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with catch clause" {
+    let input = "grammar Test;
+expr : ID ; catch [Exception e] { handle(e); }";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with finally clause" {
+    let input = "grammar Test;
+expr : ID ; finally { cleanup(); }";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with catch and finally" {
+    let input = "grammar Test;
+expr : ID ; catch [E1 e] { h1(e); } catch [E2 e] { h2(e); } finally { done(); }";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "lexer rule with locals" {
+    let input = "grammar Test;
+INT locals [int n] : [0-9]+ ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    assert g.lexer_rules[0].name == "INT";
+}
+
+test "private rule modifier" {
+    // ANTLR4 supports `public`, `private`, `protected`, `fragment` rule modifiers.
+    let input = "grammar Test;
+public expr : ID ;
+private nested : ID ;
+protected helper : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 3;
+}
+
+test "parser rule with plus_assign list label" {
+    let input = "grammar Test;
+expr : ids += ID (',' ids += ID)* ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Label(lbl) = elems[0] {
+        assert lbl.name == "ids";
+    } else {
+        panic("expected Label element for plus_assign");
+    }
+}
+
+test "parser rule with dot wildcard" {
+    let input = "grammar Test;
+any : . ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Wildcard = elems[0] {
+        // ok
+    } else {
+        panic("expected Wildcard element");
+    }
+}
+
+test "parser rule with not set" {
+    let input = "grammar Test;
+expr : ~ID ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Not(_) = elems[0] {
+        // ok
+    } else {
+        panic("expected Not element");
+    }
+}
+
+test "parser rule with not block" {
+    let input = "grammar Test;
+expr : ~(STRING | NUMBER) ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Not(_) = elems[0] {
+        // ok
+    } else {
+        panic("expected Not element");
+    }
+}
+
+test "parser rule with rule ref args" {
+    let input = "grammar Test;
+expr : sub[1, 2] ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let RuleRef(name) = elems[0] {
+        assert name == "sub";
+    } else {
+        panic("expected RuleRef sub");
+    }
+}
+
+test "parser rule with rule ref args and repetition" {
+    let input = "grammar Test;
+expr : sub[1, 2]+ ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Repeat(_) = elems[0] {
+        // ok
+    } else {
+        panic("expected Repeat element");
+    }
+}
+
+test "parser rule with element options" {
+    let input = "grammar Test;
+expr : ID<assoc=right> ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules[0].alternatives[0].elements.len() == 1;
+}
+
+test "parser rule with block options" {
+    // ANTLR4 allows `options{}` inside a parenthesized block.
+    let input = "grammar Test;
+expr : ( options { greedy = false; } : ID | NUM ) ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with epsilon alternative" {
+    // Empty alternative — ANTLR4 allows `| /* nothing */`.
+    let input = "grammar Test;
+opt : ID | ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules[0].alternatives.len() == 2;
+    assert g.parser_rules[0].alternatives[1].elements.is_empty();
+}
+
 test "mixed parser and lexer rules" {
     let input = "grammar JSON;
 json : value EOF ;
@@ -308,4 +590,87 @@ WS : [ \\t\\n\\r]+ -> skip ;";
     assert g.lexer_rules.len() == 3;
     assert g.lexer_rules[1].is_fragment == true;
     assert g.lexer_rules[2].skip == true;
+}
+
+test "lexer command mode switches current mode" {
+    // `mode(X)` switches the current mode (top of stack), unlike pushMode.
+    // Spec: vendor/antlr4/doc/lexer-rules.md "mode(), pushMode(), popMode, and more".
+    let input = "lexer grammar Test;
+LQUOTE : '\"' -> more, mode(STR) ;
+mode STR;
+STRING : '\"' -> mode(DEFAULT_MODE) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    // First rule lives in default mode and switches to STR
+    assert g.lexer_rules[0].name == "LQUOTE";
+    assert g.lexer_rules[0].mode == 0;
+    assert g.lexer_rules[0].set_mode != -1;
+    assert g.mode_names[g.lexer_rules[0].set_mode as i32] == "STR";
+    assert g.lexer_rules[0].more == true;
+    // Second rule lives in STR mode and switches back to DEFAULT_MODE
+    assert g.lexer_rules[1].name == "STRING";
+    assert g.lexer_rules[1].mode == 1;
+    assert g.mode_names[g.lexer_rules[1].mode as i32] == "STR";
+    assert g.lexer_rules[1].set_mode == 0;
+}
+
+test "lexer command channel with integer literal" {
+    // ANTLR4 allows `channel(N)` with an integer literal, e.g. `channel(2)`.
+    let input = "lexer grammar Test;
+COMMENT : '#' ~[\\r\\n]* -> channel(2) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    assert g.lexer_rules[0].channel == 2;
+}
+
+test "lexer command channel with HIDDEN" {
+    let input = "lexer grammar Test;
+WS : [ \\t]+ -> channel(HIDDEN) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    // HIDDEN is the predefined channel id 1.
+    assert g.lexer_rules[0].channel == 1;
+}
+
+test "lexer command type override" {
+    // `type(X)` rewrites the emitted token type. Useful for unifying alts.
+    let input = "lexer grammar SetType;
+DOUBLE : '\"' .*? '\"' -> type(STRING) ;
+SINGLE : '\\'' .*? '\\'' -> type(STRING) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    if let Some(t) = &g.lexer_rules[0].type_override {
+        assert *t == "STRING";
+    } else {
+        panic("expected type_override on DOUBLE");
+    }
+    if let Some(t) = &g.lexer_rules[1].type_override {
+        assert *t == "STRING";
+    } else {
+        panic("expected type_override on SINGLE");
+    }
+}
+
+test "lexer command more sets more flag" {
+    let input = "lexer grammar Test;
+TEXT : . -> more ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    assert g.lexer_rules[0].more == true;
+    assert g.lexer_rules[0].skip == false;
+}
+
+test "lexer command combo with mode and more" {
+    // ANTLR4 allows multiple commands separated by commas.
+    let input = "lexer grammar Test;
+SPECIAL_OPEN : '<?' -> more, pushMode(PROC) ;
+mode PROC;
+INSIDE : 'x' -> more ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    assert g.lexer_rules[0].more == true;
+    assert g.lexer_rules[0].push_mode != -1;
+    assert g.mode_names[g.lexer_rules[0].push_mode as i32] == "PROC";
+    assert g.lexer_rules[1].more == true;
+    assert g.lexer_rules[1].mode == 1;
 }

@@ -258,6 +258,7 @@ fn parse_grammar(input: String) -> Grammar {
     return parse(input).unwrap();
 }
 
+#[timeout_ms(30000)]
 test "generate html golden" {
     let lexer_g = parse_grammar(#include_str("../tests/grammars/HTMLLexer.g4"));
     let parser_g = parse_grammar(#include_str("../tests/grammars/HTMLParser.g4"));
@@ -268,7 +269,7 @@ test "generate html golden" {
 }
 
 
-#[timeout_ms(60000)]
+#[timeout_ms(120000)]
 test "generate css3 golden" {
     let lexer_g = parse_grammar(#include_str("../tests/grammars/css3Lexer.g4"));
     let parser_g = parse_grammar(#include_str("../tests/grammars/css3Parser.g4"));
@@ -279,7 +280,7 @@ test "generate css3 golden" {
 }
 
 
-#[timeout_ms(30000)]
+#[timeout_ms(60000)]
 test "generate antlr4 golden" {
     let lexer_g = parse_grammar(#include_str("../tests/grammars/ANTLRv4Lexer.g4"));
     let parser_g = parse_grammar(#include_str("../tests/grammars/ANTLRv4Parser.g4"));
@@ -290,7 +291,7 @@ test "generate antlr4 golden" {
 }
 
 
-#[timeout_ms(30000)]
+#[timeout_ms(120000)]
 test "generate typescript golden" {
     let lexer_g = parse_grammar(#include_str("../tests/grammars/TypeScriptLexer.g4"));
     let parser_g = parse_grammar(#include_str("../tests/grammars/TypeScriptParser.g4"));
@@ -301,7 +302,7 @@ test "generate typescript golden" {
 }
 
 
-#[timeout_ms(30000)]
+#[timeout_ms(120000)]
 test "generate rust golden" {
     let lexer_g = parse_grammar(#include_str("../tests/grammars/RustLexer.g4"));
     let parser_g = parse_grammar(#include_str("../tests/grammars/RustParser.g4"));

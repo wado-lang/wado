@@ -4,6 +4,25 @@
 
 Gale is a Wado-native parser generator. See [README.md](./README.md) and [WEP: Gale](../docs/wep-2026-03-02-gale.md) for design context.
 
+## Compatibility Principle
+
+**Gale aims for full compatibility with the ANTLR4 `.g4` grammar syntax.** The g4 parser must accept any well-formed grammar that the upstream `antlr4` tool accepts. Treat this as a hard contract: if you find a real-world `.g4` file that ANTLR4 accepts but Gale rejects, that is a bug in Gale.
+
+The single intentional exception is **action bodies**, whose contents are skipped:
+
+- `{ ... }` action blocks (rule-level, element-level, named actions like `@header`/`@members`/`@parser::name`)
+- `{ ... }?` semantic predicates
+- `catch [ ... ] { ... }` and `finally { ... }` exception handlers
+- `@init { ... }` / `@after { ... }` rule prequel actions
+
+The parser must still **recognize** these constructs (so files containing them parse without error) and preserve their *presence* and *position* in the surrounding IR — only the host-language code inside the braces is discarded. Everything else (`import`, `options`, `channels`, `tokens`, `mode`, `returns`/`throws`/`locals`, rule arguments, list labels `+=`, parser-side `~`/`.`, element options `<...>`, qualified IDs, `mode(X)` lexer command, integer channel arguments, etc.) is first-class.
+
+When fixing or extending the g4 frontend:
+
+- Cross-check the canonical semantics against `vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g` and the curated doc index below.
+- Drive every change with a unit test in `src/g4/{lexer,parser}_test.wado` (TDD: failing test first, then implementation).
+- If an existing test encodes a wrong expectation that diverges from ANTLR4, fix the test — the spec wins.
+
 ## ANTLR4 Reference
 
 The upstream ANTLR4 source — including its full documentation and the `LICENSE.txt` (BSD 3-Clause) — is vendored as a shallow git submodule at `vendor/antlr4/`. Read it directly when you need the canonical semantics of a `.g4` construct; do not duplicate the docs into this repo.
