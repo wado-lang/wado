@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775972291839,
+  "lastUpdate": 1775973485172,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12074,6 +12074,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3bd27e4f3d7420b1aa8b58320d02288660bbc6b7"
         },
         "date": 1775972291571,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "221b82d08a988f9fa38a920cc6b7521062a641a4",
+          "message": "Merge pull request #821 from wado-lang/gfx/skill-on-task-done\n\nchore: add a skill `on-task-done`",
+          "timestamp": "2026-04-12T14:54:43+09:00",
+          "tree_id": "c21603f371d6ba4ab91426e4342de2182a0073d0",
+          "url": "https://github.com/wado-lang/wado/commit/221b82d08a988f9fa38a920cc6b7521062a641a4"
+        },
+        "date": 1775973484893,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
