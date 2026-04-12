@@ -7,9 +7,9 @@
 use crate::flat_package::FlatPackage;
 use crate::wir::WirPackage;
 
-pub mod component_plan;
 mod calls;
 mod canonical_abi;
+pub mod component_plan;
 mod context;
 mod functions;
 mod pattern_match;

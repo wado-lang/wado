@@ -398,7 +398,6 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-
     /// Build the qualified global name.
     fn make_global_name(&self, module_source: &crate::name::ModuleSource, name: &str) -> String {
         if module_source.is_entry_point() {

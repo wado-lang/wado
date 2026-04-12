@@ -36,76 +36,77 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 
 ### Modules
 
-| Module          | File                                 | Description                                                                      |
-| --------------- | ------------------------------------ | -------------------------------------------------------------------------------- |
-| Lexer           | `lexer.rs`                           | Tokenizes source code, extracts `__DATA__` section                               |
-| Parser          | `parser.rs`                          | Recursive descent parser, builds AST                                             |
-| AST             | `ast.rs`                             | AST node definitions, `Module::data_section()` API                               |
-| Token           | `token.rs`                           | Token types and spans                                                            |
-| Syntax          | `syntax.rs`                          | Syntax definitions (keywords, operators)                                         |
-| Comment         | `comment.rs`                         | Comment collection and CommentMap for formatting                                 |
-| Bind            | `bind.rs`                            | Local name binding, scope analysis, mutability check                             |
-| Loader          | `loader.rs`                          | Module loading, dependency resolution                                            |
-| Desugar         | `desugar.rs`                         | AST transformations (compound assign, etc.)                                      |
-| EffectCheck     | `effect_check.rs`                    | Validates effect requirements and stores declarations                            |
-| Unparser        | `unparse.rs`                         | Converts AST/TIR back to source code                                             |
-| Analyzer        | `analyze.rs`                         | Semantic analysis, symbol table construction                                     |
-| Symbol          | `symbol.rs`                          | Symbol table data structures                                                     |
-| Name            | `name.rs`                            | Name mangling utilities for methods and symbols                                  |
-| Resolver        | `resolver.rs`                        | Type resolution, AST to TIR, produces Package (`resolver/`)                      |
-| TIR             | `tir.rs`                             | Typed Intermediate Representation                                                |
-| Synthesis       | `synthesis.rs`                       | Unified synthesis phase (`synthesis/`)                                           |
-| SynthCommon     | `synthesis/common.rs`                | Shared TIR builders for synthesis phases                                         |
-| SynthSerde      | `synthesis/serde_synth.rs`           | Synthesized Serialize/Deserialize for structs                                    |
-| SynthTraits     | `synthesis/traits.rs`                | Auto-derived Eq/Ord/Display/Inspect for types                                    |
-| SynthTemplate   | `synthesis/template.rs`              | Template string expansion                                                        |
-| SynthFrom       | `synthesis/from_synth.rs`            | From trait synthesis                                                             |
-| SynthCmBinding  | `synthesis/cm_binding.rs`            | CM boundary adapter synthesis (TIR functions)                                    |
-| CmAbi           | `cm_abi.rs`                          | Canonical ABI layout computation                                                 |
-| Monomorphize    | `monomorphize.rs`                    | Generic type/function instantiation (FlatPackage→FlatPackage)                    |
-| Lower           | `lower.rs`                           | Lowering coordinator (`lower/`)                                                  |
-| LowerWideInt    | `lower/wide_int.rs`                  | i128/u128 match pattern → if-else chains                                         |
-| LowerPattern    | `lower/pattern.rs`                   | LetPattern/IfPattern → explicit statements + switch                              |
-| LowerGlobals    | `lower/globals.rs`                   | Global initializer extraction + `__initialize_modules`                           |
-| LowerBoxing     | `lower/boxing.rs`                    | `&primitive` → `Box<T>` struct lowering                                          |
-| LowerClosure    | `lower/closure.rs`                   | Closure → functor struct with `__call` methods                                   |
-| LowerString     | `lower/string.rs`                    | String/bytes literal collection for data section                                 |
-| Package         | `package.rs`                         | Package: per-module compilation context (resolve → lower)                        |
-| FlatPackage     | `flat_package.rs`                    | FlatPackage: flat compilation context (link → codegen)                           |
-| Link            | `link.rs`                            | Merges per-module Package into flat FlatPackage                                  |
-| Optimize        | `optimize.rs`                        | Optimization coordinator (`optimize/`)                                           |
-| ConstFolding    | `optimize/const_folding.rs`          | Constant folding for integer/float arithmetic                                    |
-| ConstProp       | `optimize/const_propagation.rs`      | Constant propagation for immutable globals                                       |
-| ConstGlobal     | `optimize/const_global_promotion.rs` | Promote runtime globals to compile-time constants                                |
-| ConstBranch     | `optimize/const_branch_prune.rs`     | Dead branch elimination for known-false conditions                               |
-| DCE             | `optimize/dce.rs`                    | Dead code elimination via reachability analysis                                  |
-| Inline          | `optimize/inline.rs`                 | Function inlining for small, pure functions                                      |
-| RefElim         | `optimize/ref_elim.rs`               | Reference elimination after inlining                                             |
-| CopyProp        | `optimize/copy_prop.rs`              | Copy propagation for trivial bindings                                            |
-| SROA            | `optimize/sroa.rs`                   | Scalar replacement of aggregates (struct/tuple elim)                             |
-| LICM            | `optimize/licm.rs`                   | Loop-invariant code motion                                                       |
-| SelectLower     | `optimize/select_lowering.rs`        | if/else → Wasm `select` instruction                                              |
-| FieldScalarize  | `optimize/field_scalarize.rs`        | Hot field scalarization from GC structs                                          |
-| BlockFusion     | `optimize/labeled_block_fusion.rs`   | Labeled block fusion                                                             |
-| StoreLoadFwd    | `optimize/store_load_forward.rs`     | Store-load forwarding for literal values                                         |
-| CondImplication | `optimize/condition_implication.rs`  | Condition implication from dominating guards                                     |
-| TmplHoist       | `optimize/tmpl_hoist.rs`             | Template buffer hoisting out of loops                                            |
-| ComponentPlan   | `wir_build/component_plan.rs`        | `ComponentPlan` types and `build_component_plan`                                 |
-| Stdlib          | `stdlib.rs`                          | Embedded core library sources                                                    |
-| CompilerHost    | `compiler_host.rs`                   | I/O abstraction for the compiler                                                 |
-| Logger          | `logger.rs`                          | Diagnostic logging with timestamps                                               |
-| ComponentModel  | `component_model.rs`                 | WASI import registry and CM ABI type support                                     |
-| BuiltinRegistry | `builtin_registry.rs`                | Builtin function registry from `core:builtin`                                    |
-| Doc             | `doc.rs`                             | Documentation generation from AST                                                |
-| HashMap         | `hashmap.rs`                         | Deterministic `IndexMap`/`IndexSet` type aliases                                 |
-| TirVisitor      | `tir_visitor.rs`                     | TIR visitor traits (`TirMutVisitor`/`TirRefVisitor`/`TirOptVisitor`) + utilities |
-| WorldRegistry   | `world_registry.rs`                  | World definitions registry for export signatures                                 |
-| WIR             | `wir.rs`                             | Wasm IR data structures                                                          |
-| WIR Unparse     | `wir_unparse.rs`                     | WIR → pseudo-Wado source code for debugging                                      |
-| WIR Build       | `wir_build.rs`                       | Planning + TIR→WIR translation (`wir_build/`)                                    |
-| WIR Optimize    | `wir_optimize.rs`                    | WIR-level optimizations (multi-value SROA, etc.)                                 |
-| Codegen         | `codegen.rs`                         | WIR→Wasm emission + Component Model wrapping (`codegen/`)                        |
-| Bundled         | `bundled.rs`                         | Loads pre-compiled Wasm builtins (wado-bundled-libm)                             |
+| Module          | File                                 | Description                                                                                              |
+| --------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Lexer           | `lexer.rs`                           | Tokenizes source code, extracts `__DATA__` section                                                       |
+| Parser          | `parser.rs`                          | Recursive descent parser, builds AST                                                                     |
+| AST             | `ast.rs`                             | AST node definitions, `Module::data_section()` API                                                       |
+| Token           | `token.rs`                           | Token types and spans                                                                                    |
+| Syntax          | `syntax.rs`                          | Syntax definitions (keywords, operators)                                                                 |
+| Comment         | `comment.rs`                         | Comment collection and CommentMap for formatting                                                         |
+| Bind            | `bind.rs`                            | Local name binding, scope analysis, mutability check                                                     |
+| Loader          | `loader.rs`                          | Module loading, dependency resolution                                                                    |
+| Desugar         | `desugar.rs`                         | AST transformations (compound assign, etc.)                                                              |
+| EffectCheck     | `effect_check.rs`                    | Validates effect requirements and stores declarations                                                    |
+| Unparser        | `unparse.rs`                         | Converts AST/TIR back to source code                                                                     |
+| Analyzer        | `analyze.rs`                         | Semantic analysis, symbol table construction                                                             |
+| Symbol          | `symbol.rs`                          | Symbol table data structures                                                                             |
+| Name            | `name.rs`                            | Name mangling utilities for methods and symbols                                                          |
+| Resolver        | `resolver.rs`                        | Type resolution, AST to TIR, produces Package (`resolver/`)                                              |
+| TIR             | `tir.rs`                             | Typed Intermediate Representation                                                                        |
+| Synthesis       | `synthesis.rs`                       | Unified synthesis phase (`synthesis/`)                                                                   |
+| SynthCommon     | `synthesis/common.rs`                | Shared TIR builders for synthesis phases                                                                 |
+| SynthSerde      | `synthesis/serde_synth.rs`           | Synthesized Serialize/Deserialize for structs                                                            |
+| SynthTraits     | `synthesis/traits.rs`                | Auto-derived Eq/Ord/Display/Inspect for types                                                            |
+| SynthTemplate   | `synthesis/template.rs`              | Template string expansion                                                                                |
+| SynthFrom       | `synthesis/from_synth.rs`            | From trait synthesis                                                                                     |
+| SynthCmBinding  | `synthesis/cm_binding.rs`            | CM boundary adapter synthesis (TIR functions)                                                            |
+| CmAbi           | `cm_abi.rs`                          | Canonical ABI layout computation                                                                         |
+| Monomorphize    | `monomorphize.rs`                    | Generic type/function instantiation (FlatPackage→FlatPackage)                                            |
+| Lower           | `lower.rs`                           | Lowering coordinator (`lower/`)                                                                          |
+| LowerWideInt    | `lower/wide_int.rs`                  | i128/u128 match pattern → if-else chains                                                                 |
+| LowerPattern    | `lower/pattern.rs`                   | LetPattern/IfPattern → explicit statements + switch                                                      |
+| LowerGlobals    | `lower/globals.rs`                   | Global initializer extraction + `__initialize_modules`                                                   |
+| LowerBoxing     | `lower/boxing.rs`                    | `&primitive` → `Box<T>` struct lowering                                                                  |
+| LowerClosure    | `lower/closure.rs`                   | Closure → functor struct with `__call` methods                                                           |
+| LowerString     | `lower/string.rs`                    | String/bytes literal collection for data section                                                         |
+| Package         | `package.rs`                         | Package: per-module compilation context (resolve → lower)                                                |
+| FlatPackage     | `flat_package.rs`                    | FlatPackage: flat compilation context (link → codegen)                                                   |
+| Link            | `link.rs`                            | Merges per-module Package into flat FlatPackage                                                          |
+| Optimize        | `optimize.rs`                        | Optimization coordinator (`optimize/`)                                                                   |
+| ConstFolding    | `optimize/const_folding.rs`          | Constant folding for integer/float arithmetic                                                            |
+| ConstProp       | `optimize/const_propagation.rs`      | Constant propagation for immutable globals                                                               |
+| ConstGlobal     | `optimize/const_global_promotion.rs` | Promote runtime globals to compile-time constants                                                        |
+| ConstBranch     | `optimize/const_branch_prune.rs`     | Dead branch elimination for known-false conditions                                                       |
+| DCE             | `optimize/dce.rs`                    | Dead code elimination via reachability analysis                                                          |
+| Inline          | `optimize/inline.rs`                 | Function inlining for small, pure functions                                                              |
+| RefElim         | `optimize/ref_elim.rs`               | Reference elimination after inlining                                                                     |
+| CopyProp        | `optimize/copy_prop.rs`              | Copy propagation for trivial bindings                                                                    |
+| SROA            | `optimize/sroa.rs`                   | Scalar replacement of aggregates (struct/tuple elim)                                                     |
+| LICM            | `optimize/licm.rs`                   | Loop-invariant code motion                                                                               |
+| SelectLower     | `optimize/select_lowering.rs`        | if/else → Wasm `select` instruction                                                                      |
+| FieldScalarize  | `optimize/field_scalarize.rs`        | Hot field scalarization from GC structs                                                                  |
+| BlockFusion     | `optimize/labeled_block_fusion.rs`   | Labeled block fusion                                                                                     |
+| StoreLoadFwd    | `optimize/store_load_forward.rs`     | Store-load forwarding for literal values                                                                 |
+| CondImplication | `optimize/condition_implication.rs`  | Condition implication from dominating guards                                                             |
+| TmplHoist       | `optimize/tmpl_hoist.rs`             | Template buffer hoisting out of loops                                                                    |
+| ComponentPlan   | `wir_build/component_plan.rs`        | `ComponentPlan` types and `build_component_plan`                                                         |
+| WIR Translate   | `wir_build/translate.rs` + siblings  | Function-body TIR→WIR: driver + helpers (value_copy, primitive_ops, calls, canonical_abi, pattern_match) |
+| Stdlib          | `stdlib.rs`                          | Embedded core library sources                                                                            |
+| CompilerHost    | `compiler_host.rs`                   | I/O abstraction for the compiler                                                                         |
+| Logger          | `logger.rs`                          | Diagnostic logging with timestamps                                                                       |
+| ComponentModel  | `component_model.rs`                 | WASI import registry and CM ABI type support                                                             |
+| BuiltinRegistry | `builtin_registry.rs`                | Builtin function registry from `core:builtin`                                                            |
+| Doc             | `doc.rs`                             | Documentation generation from AST                                                                        |
+| HashMap         | `hashmap.rs`                         | Deterministic `IndexMap`/`IndexSet` type aliases                                                         |
+| TirVisitor      | `tir_visitor.rs`                     | TIR visitor traits (`TirMutVisitor`/`TirRefVisitor`/`TirOptVisitor`) + utilities                         |
+| WorldRegistry   | `world_registry.rs`                  | World definitions registry for export signatures                                                         |
+| WIR             | `wir.rs`                             | Wasm IR data structures                                                                                  |
+| WIR Unparse     | `wir_unparse.rs`                     | WIR → pseudo-Wado source code for debugging                                                              |
+| WIR Build       | `wir_build.rs`                       | Planning + TIR→WIR translation (`wir_build/`)                                                            |
+| WIR Optimize    | `wir_optimize.rs`                    | WIR-level optimizations (multi-value SROA, etc.)                                                         |
+| Codegen         | `codegen.rs`                         | WIR→Wasm emission + Component Model wrapping (`codegen/`)                                                |
+| Bundled         | `bundled.rs`                         | Loads pre-compiled Wasm builtins (wado-bundled-libm)                                                     |
 
 ---
 
@@ -205,6 +206,25 @@ Container::transform::<i32, i64> → Container::transform$1
 **Variadic Type Packs:**
 
 During monomorphization, `TirExprKind::TupleSpread` nodes (generated by the resolver for `[..expr]` inside variadic functions) are expanded into individual `FieldAccess` elements. The tuple literal's type is rebuilt from the expanded element types. Non-variadic spread expressions (concrete tuples) are expanded at resolve time; the resolver introduces temporary let-bindings for non-trivial expressions to ensure single evaluation.
+
+### WIR Build
+
+The `wir_build/` directory translates a linked `FlatPackage` into a `WirPackage`. The pass runs in three steps driven from `wir_build.rs`: register types, collect function signatures, then translate each function body. Function-body translation is implemented as a `FunctionTranslator` whose `impl` blocks are split across sibling files by concern:
+
+| File                          | Concern                                                                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `wir_build/context.rs`        | `WirContext` — accumulates types, functions, and tables during the pass                                                |
+| `wir_build/types.rs`          | Register TIR types as WIR type definitions                                                                             |
+| `wir_build/functions.rs`      | Collect and register function signatures                                                                               |
+| `wir_build/component_plan.rs` | `ComponentPlan` types and `build_component_plan`                                                                       |
+| `wir_build/translate.rs`      | Driver: `FunctionTranslator` struct, main dispatch (`translate_expr`/`translate_stmt`/`translate_block`), core helpers |
+| `wir_build/value_copy.rs`     | Value-copy semantics: when to emit defensive deep-copies, freshness / aliasing analysis                                |
+| `wir_build/primitive_ops.rs`  | Primitive-level operations: literals, binary / unary operators, casts, array indexing                                  |
+| `wir_build/calls.rs`          | Call sites: function-ref resolution, builtin intrinsics, indirect calls, closure-to-canonical                          |
+| `wir_build/canonical_abi.rs`  | Component Model canonical ABI: future / stream creation, read / write lowering, result lifting                         |
+| `wir_build/pattern_match.rs`  | `match` / `if let` / `switch` lowering, pattern conditions and bindings, variant construct / test / payload            |
+
+Cross-module access uses `pub(super)` on shared fields and methods. `translate.rs` owns the struct and the top-level dispatch; each helper module handles one class of TIR expression and calls back into `translate.rs` for sub-expression translation.
 
 ### Optimizer
 

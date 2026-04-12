@@ -6,7 +6,10 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::hashmap::IndexSet;
-use crate::tir::{ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable};
+use crate::tir::{
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable,
+};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
