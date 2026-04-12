@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775951699593,
+  "lastUpdate": 1775954088652,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -11723,6 +11723,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ff6b6b016af4c44b7d0099842d5571bc6f899777"
         },
         "date": 1775951699331,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1795,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8927,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18708,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "20e16d314d833ed027f1df0d5176b85f920c0768",
+          "message": "Merge pull request #812 from wado-lang/claude/effect-handler-implementation-H0Uhm\n\nAdd implementation notes to effect handler WEP",
+          "timestamp": "2026-04-12T09:31:32+09:00",
+          "tree_id": "79a162f7d9c139f367a7ad0ebe7bc64072aca31f",
+          "url": "https://github.com/wado-lang/wado/commit/20e16d314d833ed027f1df0d5176b85f920c0768"
+        },
+        "date": 1775954088382,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
