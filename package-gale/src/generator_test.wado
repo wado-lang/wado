@@ -5,9 +5,12 @@ use {
     Element,
     RepeatElement,
     LabelElement,
+    NotElement,
     RepeatKind,
     LexerRule,
     LexerAlt,
+    LexerElement,
+    Visibility,
     merge_grammars,
 } from "./ir.wado";
 use { generate, GenerateOptions } from "./generator.wado";
@@ -21,6 +24,9 @@ test "generate header" {
         parser_rules: [],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert output.len() > 0;
@@ -40,6 +46,9 @@ test "generate token kind" {
             LexerRule::new("WS", false, true, []),
         ],
         mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub enum TokenKind {");
@@ -56,6 +65,8 @@ test "generate single-alt struct" {
         parser_rules: [
             ParserRule {
                 name: "json",
+                visibility: Visibility::Default,
+                options: [],
                 alternatives: [
                     Alternative {
                         label: null,
@@ -66,6 +77,9 @@ test "generate single-alt struct" {
         ],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub struct JsonNode {");
@@ -80,6 +94,8 @@ test "generate multi-alt variant with labels" {
         parser_rules: [
             ParserRule {
                 name: "expr",
+                visibility: Visibility::Default,
+                options: [],
                 alternatives: [
                     Alternative {
                         label: Option::<String>::Some("BinOp"),
@@ -94,6 +110,9 @@ test "generate multi-alt variant with labels" {
         ],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant ExprNode {");
@@ -112,6 +131,8 @@ test "generate multi-alt variant without labels" {
         parser_rules: [
             ParserRule {
                 name: "item",
+                visibility: Visibility::Default,
+                options: [],
                 alternatives: [
                     Alternative {
                         label: null,
@@ -126,6 +147,9 @@ test "generate multi-alt variant without labels" {
         ],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant ItemNode {");
@@ -141,6 +165,8 @@ test "generate repeat fields" {
         parser_rules: [
             ParserRule {
                 name: "list",
+                visibility: Visibility::Default,
+                options: [],
                 alternatives: [
                     Alternative {
                         label: null,
@@ -162,6 +188,9 @@ test "generate repeat fields" {
         ],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "    pub item_list: Array<ItemNode>,");
@@ -174,6 +203,8 @@ test "generate duplicate field names" {
         parser_rules: [
             ParserRule {
                 name: "pair",
+                visibility: Visibility::Default,
+                options: [],
                 alternatives: [
                     Alternative {
                         label: null,
@@ -184,6 +215,9 @@ test "generate duplicate field names" {
         ],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "    pub item: ItemNode,");
@@ -196,6 +230,8 @@ test "generate group variant type for repeated group" {
         parser_rules: [
             ParserRule {
                 name: "parse",
+                visibility: Visibility::Default,
+                options: [],
                 alternatives: [
                     Alternative {
                         label: null,
@@ -216,6 +252,9 @@ test "generate group variant type for repeated group" {
         ],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant StmtOrErrorGroup {");
@@ -224,12 +263,110 @@ test "generate group variant type for repeated group" {
     assert str_contains(&output, "    pub stmt_or_error_list: Array<StmtOrErrorGroup>,");
 }
 
+test "generate wildcard element" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [
+            ParserRule {
+                name: "any",
+                visibility: Visibility::Default,
+                options: [],
+                alternatives: [
+                    Alternative {
+                        label: null,
+                        elements: [Element::Wildcard, Element::TokenRef("EOF")],
+                    },
+                ],
+            },
+        ],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "pub struct AnyNode {");
+    assert str_contains(&output, "    pub wildcard: Token,");
+    assert str_contains(&output, "let wildcard = p.match_any()?;");
+}
+
+test "generate parser not element" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [
+            ParserRule {
+                name: "except_comma",
+                visibility: Visibility::Default,
+                options: [],
+                alternatives: [
+                    Alternative {
+                        label: null,
+                        elements: [
+                            Element::Not(NotElement { element: Element::TokenRef("COMMA") }),
+                            Element::TokenRef("EOF"),
+                        ],
+                    },
+                ],
+            },
+        ],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "pub struct ExceptCommaNode {");
+    assert str_contains(&output, "    pub not_comma: Token,");
+    assert str_contains(&output, "let not_comma = p.match_not(&[TK_COMMA])?;");
+}
+
+test "generate list label field" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [
+            ParserRule {
+                name: "list",
+                visibility: Visibility::Default,
+                options: [],
+                alternatives: [
+                    Alternative {
+                        label: null,
+                        elements: [
+                            Element::Repeat(RepeatElement {
+                                kind: RepeatKind::Star,
+                                element: Element::Label(LabelElement {
+                                    name: "items",
+                                    list: true,
+                                    element: Element::RuleRef("item"),
+                                }),
+                                non_greedy: false,
+                            }),
+                            Element::TokenRef("EOF"),
+                        ],
+                    },
+                ],
+            },
+        ],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "    pub items: Array<ItemNode>,");
+}
+
 test "generate standalone group as optional field" {
     let grammar = Grammar {
         name: "Test",
         parser_rules: [
             ParserRule {
                 name: "cmd",
+                visibility: Visibility::Default,
+                options: [],
                 alternatives: [
                     Alternative {
                         label: null,
@@ -246,12 +383,207 @@ test "generate standalone group as optional field" {
         ],
         lexer_rules: [],
         mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
     };
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "pub variant FooOrBarGroup {");
     assert str_contains(&output, "    Foo(FooNode),");
     assert str_contains(&output, "    Bar(BarNode),");
     assert str_contains(&output, "    pub foo_or_bar: Option<FooOrBarGroup>,");
+}
+
+test "generate lexer set_mode" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [],
+        lexer_rules: [
+            LexerRule {
+                name: "OPEN_TAG",
+                visibility: Visibility::Default,
+                is_fragment: false,
+                skip: false,
+                more: false,
+                type_override: null,
+                channel: 0,
+                mode: 0,
+                set_mode: 1,
+                push_mode: -1,
+                pop_mode: false,
+                is_virtual: false,
+                options: [],
+                body: [LexerAlt { elements: [LexerElement::Literal("<")] }],
+            },
+            LexerRule {
+                name: "TAG_NAME",
+                visibility: Visibility::Default,
+                is_fragment: false,
+                skip: false,
+                more: false,
+                type_override: null,
+                channel: 0,
+                mode: 1,
+                set_mode: -1,
+                push_mode: -1,
+                pop_mode: false,
+                is_virtual: false,
+                options: [],
+                body: [LexerAlt { elements: [LexerElement::Literal("a")] }],
+            },
+        ],
+        mode_names: ["DEFAULT_MODE", "TAG_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "best_set_mode");
+    assert str_contains(&output, "best_set_mode = 1");
+    assert str_contains(&output, "current_mode = best_set_mode");
+}
+
+test "generate lexer more" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [],
+        lexer_rules: [
+            LexerRule {
+                name: "STRING_PART",
+                visibility: Visibility::Default,
+                is_fragment: false,
+                skip: false,
+                more: true,
+                type_override: null,
+                channel: 0,
+                mode: 0,
+                set_mode: -1,
+                push_mode: -1,
+                pop_mode: false,
+                is_virtual: false,
+                options: [],
+                body: [LexerAlt { elements: [LexerElement::Literal("a")] }],
+            },
+        ],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "best_more");
+    assert str_contains(&output, "more_start");
+    assert str_contains(&output, "best_more = true");
+}
+
+test "generate lexer type_override" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [],
+        lexer_rules: [
+            LexerRule {
+                name: "ID",
+                visibility: Visibility::Default,
+                is_fragment: false,
+                skip: false,
+                more: false,
+                type_override: null,
+                channel: 0,
+                mode: 0,
+                set_mode: -1,
+                push_mode: -1,
+                pop_mode: false,
+                is_virtual: false,
+                options: [],
+                body: [LexerAlt { elements: [LexerElement::Literal("x")] }],
+            },
+            LexerRule {
+                name: "IF",
+                visibility: Visibility::Default,
+                is_fragment: false,
+                skip: false,
+                more: false,
+                type_override: Option::<String>::Some("ID"),
+                channel: 0,
+                mode: 0,
+                set_mode: -1,
+                push_mode: -1,
+                pop_mode: false,
+                is_virtual: false,
+                options: [],
+                body: [LexerAlt { elements: [LexerElement::Literal("if")] }],
+            },
+        ],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    // IF rule should produce tokens tagged as TK_ID (not TK_IF).
+    assert str_contains(&output, "best_kind = TK_ID");
+    // TK_IF should still exist as a token kind (not renamed), because
+    // type_override only rewrites emission, not the rule identifier.
+    assert str_contains(&output, "    IF,");
+}
+
+test "generate lexer channel" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [],
+        lexer_rules: [
+            LexerRule {
+                name: "COMMENT",
+                visibility: Visibility::Default,
+                is_fragment: false,
+                skip: false,
+                more: false,
+                type_override: null,
+                channel: 2,
+                mode: 0,
+                set_mode: -1,
+                push_mode: -1,
+                pop_mode: false,
+                is_virtual: false,
+                options: [],
+                body: [LexerAlt { elements: [LexerElement::Literal("#")] }],
+            },
+        ],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "best_channel");
+    assert str_contains(&output, "best_channel = 2");
+    // Non-default channels must be routed to trivia, not tokens — ANTLR4
+    // hides channels other than DEFAULT from parser rules.
+    assert str_contains(&output, "else if best_channel != 0");
+    assert str_contains(&output, "Token::with_channel");
+}
+
+test "generate lexer hidden channel routes to trivia" {
+    // `channel(HIDDEN)` must not set `skip`, and tokens matching the rule
+    // must be routed to trivia (not the tokens stream) so the parser does
+    // not see them.
+    let input = "lexer grammar Test;
+WS : [ \\t]+ -> channel(HIDDEN) ;
+ID : [a-z]+ ;";
+    let grammar = parse_grammar(input);
+    // Parser-side contract: HIDDEN channel must not degrade to skip.
+    for let r of &grammar.lexer_rules {
+        if r.name == "WS" {
+            assert r.skip == false, "HIDDEN must not collapse to skip";
+            assert r.channel == 1, "HIDDEN must resolve to channel id 1";
+        }
+    }
+    // Generator-side contract: the emitted dispatch must route `best_channel
+    // != 0` matches to trivia via `Token::with_channel`, not to the tokens
+    // stream.
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "else if best_channel != 0");
+    assert str_contains(&output, "trivia.push(Token::with_channel(");
 }
 
 fn parse_grammar(input: String) -> Grammar {

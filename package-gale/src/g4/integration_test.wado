@@ -143,8 +143,10 @@ test "parse HTMLLexer.g4" {
         }
         if rule.name == "TAG_WHITESPACE" {
             // -> channel(HIDDEN) sets channel to 1 (HIDDEN's predefined id).
+            // ANTLR4 routes HIDDEN tokens to a separate channel without
+            // discarding them, so `skip` must remain false.
             assert rule.channel == 1;
-            assert rule.skip == true;
+            assert rule.skip == false;
             found_tag_whitespace = true;
         }
     }
