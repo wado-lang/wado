@@ -557,26 +557,92 @@ test "not eq different paths" {
     }
 }
 
-// --- from_http_parts ---
+// --- Url::from_parts ---
 
-test "from_http_parts simple" {
-    if let Ok(url) = Url::from_http_parts("https", "example.com", "/path?q=1") {
-        assert url.scheme == "https";
-        assert url.host == "example.com";
-        assert url.path == "/path";
-        assert url.query matches { Some("q=1") };
-    } else {
-        panic("from_http_parts failed");
-    }
+test "from_parts simple" {
+    let url = Url::from_parts("https", "example.com", Option::Some("/path?q=1"), null);
+    assert url.scheme == "https";
+    assert url.host == "example.com";
+    assert url.path == "/path";
+    assert url.query matches { Some("q=1") };
+    assert url.fragment matches { None };
+    assert url.to_string() == "https://example.com/path?q=1";
 }
 
-test "from_http_parts with port" {
-    if let Ok(url) = Url::from_http_parts("http", "example.com:8080", "/") {
-        assert url.host == "example.com";
-        assert url.port matches { Some(8080) };
-    } else {
-        panic("from_http_parts failed");
-    }
+test "from_parts with port" {
+    let url = Url::from_parts("http", "example.com:8080", Option::Some("/"), null);
+    assert url.host == "example.com";
+    assert url.port matches { Some(8080) };
+    assert url.to_string() == "http://example.com:8080/";
+}
+
+test "from_parts null path defaults to slash" {
+    let url = Url::from_parts("http", "example.com", null, null);
+    assert url.path == "/";
+    assert url.to_string() == "http://example.com/";
+}
+
+test "from_parts empty path defaults to slash" {
+    let url = Url::from_parts("http", "example.com", Option::Some(""), null);
+    assert url.path == "/";
+    assert url.to_string() == "http://example.com/";
+}
+
+test "from_parts adds missing leading slash" {
+    let url = Url::from_parts("http", "example.com", Option::Some("foo"), null);
+    assert url.path == "/foo";
+    assert url.to_string() == "http://example.com/foo";
+}
+
+test "from_parts with userinfo in authority" {
+    let url = Url::from_parts("https", "user:pass@example.com", Option::Some("/"), null);
+    assert url.username == "user";
+    assert url.password == "pass";
+    assert url.host == "example.com";
+}
+
+test "from_parts with fragment" {
+    let url = Url::from_parts("https", "example.com", Option::Some("/foo"), Option::Some("section-1"));
+    assert url.fragment matches { Some("section-1") };
+    assert url.to_string() == "https://example.com/foo#section-1";
+}
+
+test "from_parts accepts non-special scheme" {
+    let url = Url::from_parts("ftp", "example.com", Option::Some("/file"), null);
+    assert url.scheme == "ftp";
+    assert url.host == "example.com";
+    assert url.to_string() == "ftp://example.com/file";
+}
+
+test "from_parts lowercases scheme" {
+    let url = Url::from_parts("HTTPS", "example.com", Option::Some("/"), null);
+    assert url.scheme == "https";
+}
+
+test "from_parts trailing question mark keeps empty query" {
+    let url = Url::from_parts("http", "example.com", Option::Some("/foo?"), null);
+    assert url.path == "/foo";
+    assert url.query matches { Some("") };
+}
+
+// --- query_params ---
+
+test "query_params returns parsed map" {
+    let url = Url::from_parts("http", "example.com", Option::Some("/foo?a=1&b=2"), null);
+    let params = url.query_params();
+    assert params.len() == 2;
+    assert params.get("a") matches { Some("1") };
+    assert params.get("b") matches { Some("2") };
+}
+
+test "query_params empty when no query" {
+    let url = Url::from_parts("http", "example.com", Option::Some("/foo"), null);
+    assert url.query_params().len() == 0;
+}
+
+test "query_params decodes percent encoding" {
+    let url = Url::from_parts("http", "example.com", Option::Some("/search?q=hello%20world"), null);
+    assert url.query_params().get("q") matches { Some("hello world") };
 }
 
 // --- percent_encode / percent_decode ---

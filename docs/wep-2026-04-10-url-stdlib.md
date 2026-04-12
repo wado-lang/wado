@@ -162,19 +162,22 @@ impl Url {
 
 ### `wasi:http` Integration
 
-`core:url` does not depend on `wasi:http`. Integration is done through string-based methods and a dedicated constructor:
+`core:url` does not depend on `wasi:http`. Integration is done through an infallible constructor that accepts the parts produced by `wasi:http` `Request`:
 
 ```wado
 impl Url {
-    /// Constructs a Url from the three parts used by wasi:http Request.
-    /// - scheme: "http", "https", etc.
-    /// - authority: "host[:port]" or "user:pass@host[:port]"
-    /// - path_with_query: "/path[?query]"
-    pub fn from_http_parts(
+    /// Constructs a Url from its scheme, authority, path-with-query, and
+    /// fragment. Infallible: any scheme is accepted, malformed authorities
+    /// are stored as-is in `host`, and missing or empty paths default to "/".
+    pub fn from_parts(
         scheme: String,
         authority: String,
-        path_with_query: String,
-    ) -> Result<Url, ParseError>
+        path_with_query: Option<String>,
+        fragment: Option<String>,
+    ) -> Url
+
+    /// Returns the query parameters as a TreeMap (percent-decoded).
+    pub fn query_params(&self) -> TreeMap<String, String>
 }
 ```
 
@@ -185,8 +188,7 @@ use { Url } from "core:url";
 use { Request, Scheme } from "wasi:http";
 
 // Construct URL for outgoing request
-let url = Url::parse("https://api.example.com/v1/users?page=2");
-if let Ok(url) = url {
+if let Ok(url) = Url::parse("https://api.example.com/v1/users?page=2") {
     let req = Request::new();
     let scheme = if url.scheme == "https" { Scheme::Https } else { Scheme::Http };
     req.set_scheme(Option::Some(scheme));
@@ -202,10 +204,9 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         Some(Other(s)) => s,
         None => "http",
     };
-    let authority = request.get_authority().unwrap_or("");
-    let path_with_query = request.get_path_with_query().unwrap_or("/");
-    let url = Url::from_http_parts(scheme, authority, path_with_query);
-    // ...
+    let authority = if let Some(a) = request.get_authority() { a } else { "" };
+    let url = Url::from_parts(scheme, authority, request.get_path_with_query(), null);
+    // url.path, url.query_params(), url.to_string(), ...
 }
 ```
 
@@ -272,7 +273,8 @@ pub fn format_query(params: TreeMap<String, String>) -> String
 | Function / Method           | Signature                                           | Description               |
 | --------------------------- | --------------------------------------------------- | ------------------------- |
 | `Url::parse`                | `String -> Result<Url, ParseError>`                 | Parse URL string          |
-| `Url::from_http_parts`      | `String, String, String -> Result<Url, ParseError>` | From wasi:http parts      |
+| `Url::from_parts`           | `String, String, Option<String>, Option<String> -> Url` | Infallible parts ctor |
+| `.query_params()`           | `&self -> TreeMap<String, String>`                  | Parse `query` field       |
 | `.to_string()`              | `&self -> String`                                   | Serialize to string       |
 | `.authority()`              | `&self -> String`                                   | `[user:pass@]host[:port]` |
 | `.origin()`                 | `&self -> String`                                   | `scheme://host[:port]`    |
@@ -386,7 +388,7 @@ Key implementation details:
 ### Positive
 
 - **Option-light API**: Only 3 of 8 fields are optional, compared to 6 of 7 in a RFC 3986 URI type — less unwrapping at every use site
-- **`wasi:http` ready**: `authority()`, `path_with_query()`, and `from_http_parts()` map directly to the wasi:http Request API
+- **`wasi:http` ready**: `authority()`, `path_with_query()`, and `from_parts()` map directly to the wasi:http Request API
 - **Practical scope**: Special schemes cover the vast majority of Wado use cases (HTTP clients, servers, WebSocket endpoints)
 - **No effects**: Pure functions, usable in any world
 - **Familiar model**: Developers who know JavaScript's `URL` or Rust's `url` crate will find the API unsurprising

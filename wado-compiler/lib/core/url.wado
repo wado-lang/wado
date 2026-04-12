@@ -434,17 +434,64 @@ impl Url {
         return Result::Ok(url);
     }
 
-    /// Constructs a Url from the three parts used by wasi:http Request.
-    pub fn from_http_parts(scheme: String, authority: String, path_with_query: String) -> Result<Url, ParseError> {
-        let mut buf = String::with_capacity(scheme.len() + 3 + authority.len() + path_with_query.len());
-        buf.push_str(scheme);
-        buf.push_str("://");
-        buf.push_str(authority);
-        if !path_with_query.is_empty() && !path_with_query.starts_with("/") {
-            buf.push('/');
+    /// Constructs a Url from its scheme, authority, path-with-query, and
+    /// fragment. This constructor is infallible: any scheme is accepted,
+    /// a malformed authority is stored as-is in `host`, and missing or
+    /// empty paths default to "/".
+    ///
+    /// Use `to_string()` to obtain the serialized URL.
+    pub fn from_parts(
+        scheme: String,
+        authority: String,
+        path_with_query: Option<String>,
+        fragment: Option<String>,
+    ) -> Url {
+        let mut url = Url {
+            scheme: scheme.to_ascii_lowercase(),
+            username: "",
+            password: "",
+            host: "",
+            port: null,
+            path: "/",
+            query: null,
+            fragment: fragment,
+        };
+        if !authority.is_empty() {
+            if let Err(_) = parse_authority(&authority, &mut url) {
+                url.host = authority;
+            }
         }
-        buf.push_str(path_with_query);
-        return Url::parse(buf);
+        let pwq = if let Some(p) = path_with_query && !p.is_empty() {
+            p;
+        } else {
+            "/";
+        };
+        let mut path_part = pwq;
+        if let Some(q_pos) = pwq.find("?") {
+            path_part = pwq.substr_bytes(0, q_pos);
+            url.query = Option::Some(pwq.substr_bytes(q_pos + 1, pwq.len()));
+        }
+        if path_part.is_empty() {
+            url.path = "/";
+        } else if !path_part.starts_with("/") {
+            let mut p = String::with_capacity(path_part.len() + 1);
+            p.push('/');
+            p.push_str(path_part);
+            url.path = p;
+        } else {
+            url.path = path_part;
+        }
+        return url;
+    }
+
+    /// Returns the query parameters as a `TreeMap`. Percent-encoded values
+    /// are decoded; "+" becomes " ". Returns an empty map if there is no
+    /// query component.
+    pub fn query_params(&self) -> TreeMap<String, String> {
+        if let Some(q) = self.query {
+            return parse_query(q);
+        }
+        return TreeMap::<String, String>::new();
     }
 
     /// Serializes the URL back to a string.
@@ -452,29 +499,8 @@ impl Url {
         let mut out = String::with_capacity(64);
         out.push_str(self.scheme);
         out.push_str("://");
-        if !self.username.is_empty() {
-            out.push_str(self.username);
-            if !self.password.is_empty() {
-                out.push(':');
-                out.push_str(self.password);
-            }
-            out.push('@');
-        }
-        if self.host.contains(":") {
-            out.push('[');
-            out.push_str(self.host);
-            out.push(']');
-        } else {
-            out.push_str(self.host);
-        }
-        if let Some(p) = self.port {
-            out.push_str(`:{p}`);
-        }
-        out.push_str(self.path);
-        if let Some(q) = self.query {
-            out.push('?');
-            out.push_str(q);
-        }
+        out.push_str(self.authority());
+        out.push_str(self.path_with_query());
         if let Some(f) = self.fragment {
             out.push('#');
             out.push_str(f);
@@ -721,19 +747,6 @@ fn normalize_percent_encoding(input: &String) -> String {
         i += 1;
     }
     return out;
-}
-
-impl Eq for Url {
-    fn eq(&self, other: &Self) -> bool {
-        return self.scheme == other.scheme
-            && self.username == other.username
-            && self.password == other.password
-            && self.host == other.host
-            && self.port == other.port
-            && self.path == other.path
-            && self.query == other.query
-            && self.fragment == other.fragment;
-    }
 }
 
 impl Display for Url {
