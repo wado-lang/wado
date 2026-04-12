@@ -4311,19 +4311,6 @@ impl Parser {
         if !self.check(&TokenKind::RBrace) {
             loop {
                 let field_span = self.peek().span;
-                // Reject literal-value keywords as field names
-                if matches!(
-                    self.peek_kind(),
-                    TokenKind::True | TokenKind::False | TokenKind::Null
-                ) {
-                    let kw = self.peek_kind().as_keyword_str().unwrap();
-                    return Err(ParseError {
-                        message: format!(
-                            "cannot use `{kw}` as a field name; use a string literal key `\"{kw}\"` instead"
-                        ),
-                        span: field_span,
-                    });
-                }
                 // Allow string literals as field names for JSON compatibility
                 let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
                     self.advance();

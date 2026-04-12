@@ -1,0 +1,16 @@
+// Using true/false/null as struct literal keys is allowed (treated as keyword field names)
+use { println } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let m: TreeMap<String, i32> = { true: 1, false: 0, null: -1 };
+
+    assert m["true"] == 1;
+    assert m["false"] == 0;
+    assert m["null"] == -1;
+
+    println("bool/null keys: ok");
+}
+
+__DATA__
+{"stdout": "bool/null keys: ok\n"}
