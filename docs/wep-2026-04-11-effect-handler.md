@@ -577,6 +577,94 @@ test "timing middleware records elapsed time" {
 
 Handler nesting: inner `TimingMiddleware` intercepts `Handler::handle`, delegates to the outer `MockHandler` via effect forwarding, and records timing in post-resume.
 
+## Implementation Notes
+
+### Dispatch Mechanism: funcref vtable + Wasm Global
+
+Each effect gets a Wasm global holding a nullable reference to a dispatch record. The dispatch record is a Wasm GC struct containing a funcref per operation, a reference to the handler instance, and a reference to the outer (previous) dispatch record.
+
+```wat
+;; One dispatch record type per effect
+(type $Dispatch_Stdout (struct
+  (field $outer   (ref null $Dispatch_Stdout))   ;; previous handler
+  (field $handler (ref any))                      ;; handler instance
+  (field $op_write_via_stream (ref $sig_wvs))     ;; funcref per operation
+))
+
+;; One global per effect
+(global $__effect_Stdout (mut (ref null $Dispatch_Stdout)) (ref.null $Dispatch_Stdout))
+```
+
+When no handler is installed (the common production path), the global is null and effect operations call the CM adapter directly. The null check is branch-predictor-friendly and adds negligible overhead relative to the CM boundary crossing.
+
+### Dispatch Function
+
+One dispatch function is generated per effect operation. It checks the global, and either calls the CM adapter (default) or calls through the dispatch record's funcref:
+
+```wat
+;; __dispatch_Stdout_write_via_stream
+(func $dispatch_stdout_wvs (param ...) (result ...)
+  (local $dispatch (ref null $Dispatch_Stdout))
+  (local.set $dispatch (global.get $__effect_Stdout))
+  (if (ref.is_null (local.get $dispatch))
+    (then
+      ;; Default: call existing CM adapter
+      (return (call $__cm_adapter_stdout_wvs ...)))
+    (else
+      ;; Handler: restore outer scope, call handler, re-install
+      (global.set $__effect_Stdout
+        (struct.get $Dispatch_Stdout $outer (local.get $dispatch)))
+      (local.set $result
+        (call_ref $sig_wvs
+          (struct.get $Dispatch_Stdout $handler (local.get $dispatch))
+          ...
+          (struct.get $Dispatch_Stdout $op_write_via_stream (local.get $dispatch))))
+      (global.set $__effect_Stdout (local.get $dispatch))
+      (return (local.get $result)))))
+```
+
+The outer-scope restoration before `call_ref` ensures that handler method bodies execute in the outer effect scope. This makes effect forwarding and self-delegation (e.g., `CachingClient` calling `Client::send` to reach the real implementation) work correctly without infinite recursion.
+
+### Compilation of `with ... do`
+
+```wado
+with Stdout = &mut mock do { body }
+```
+
+Compiles to:
+
+1. Construct a dispatch record: `struct.new $Dispatch_Stdout (global.get $__effect_Stdout, mock_ref, funcref_for_each_op)`
+2. `global.set $__effect_Stdout` with the new dispatch record
+3. Execute body
+4. `global.set $__effect_Stdout` with the dispatch record's `outer` field (restore)
+
+Nesting composes naturally — each `with` block links to the previous dispatch record via `outer`.
+
+### Compilation of `resume`
+
+In the MVP, only `resume` without post-resume code is supported. `resume value` compiles to `return value`. The handler method is a normal function; the dispatch function receives and propagates the return value. Post-resume (e.g., cleanup after the `do` block) requires Wasm Stack Switching and is deferred.
+
+### Wildcard `..`
+
+Unimplemented operations get a trap stub funcref in the dispatch record: `(func $trap (...) (unreachable))`.
+
+### Binary Size
+
+| Element          | Cost                               |
+| ---------------- | ---------------------------------- |
+| Per effect       | 1 global + 1 GC struct type        |
+| Per operation    | 1 dispatch function (10-20 instr)  |
+| Per `with` block | 1 struct.new + global save/restore |
+| Per handler impl | 1 wrapper per implemented op       |
+
+Growth is O(operations), independent of the number of call sites or handler types. Function signatures are unchanged — no hidden parameters.
+
+### Design Alternatives Considered
+
+- Hidden parameter threading: passes dispatch record as an extra function parameter. Enables static devirtualization at `with` sites, but changes every function signature in the effect chain and increases binary size proportional to call-chain depth times number of effects. Could be added later as an optimization pass on top of the global-based mechanism.
+- Flat globals (one funcref global per operation, no struct): avoids GC allocation but requires O(operations) save/restore per nesting level and cannot represent the outer chain cleanly.
+- Switch/br_table with integer discriminant: enables direct calls but duplicates dispatch code at every call site, growing O(call_sites × handler_types).
+
 ## Consequences
 
 - Effects are traits: any type implementing `impl Effect for Type` can serve as a handler
