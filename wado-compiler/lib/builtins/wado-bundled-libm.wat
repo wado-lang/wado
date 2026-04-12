@@ -150,7 +150,7 @@
                                   (f64.const -0x1.33a271c8a2d4bp+1 (;=-2.403394911734414;))))
                               (f64.const 0x1p+0 (;=1;))))
                           (local.tee 3
-                            (call $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E
+                            (call $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E
                               (local.get 0))))
                         (f64.div
                           (f64.sub
@@ -175,7 +175,7 @@
                     (f64.const 0x1.921fb54442d18p+0 (;=1.5707963267948966;))
                     (f64.add
                       (local.tee 4
-                        (call $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E
+                        (call $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E
                           (local.tee 0
                             (f64.mul
                               (f64.add
@@ -310,7 +310,7 @@
         (local.get 1)
         (i64.const -1)))
   )
-  (func $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E (;1;) (type 0) (param f64) (result f64)
+  (func $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E (;1;) (type 0) (param f64) (result f64)
     (local i32 i64 i32 f64 i64 i32 i32 i32 i32 i64 i64)
     (global.set $__stack_pointer
       (local.tee 1
@@ -598,7 +598,7 @@
                                 (f32.const -0x1.69cb5cp-1 (;=-0.70662963;)))
                               (f32.const 0x1p+0 (;=1;))))
                           (local.tee 3
-                            (call $_ZN4libm4math4sqrt5sqrtf17hc46cf0663625308aE
+                            (call $_ZN4libm4math4sqrt5sqrtf17h8c1b66187740c44bE
                               (local.get 0))))
                         (f32.div
                           (f32.sub
@@ -623,7 +623,7 @@
                     (f32.const 0x1.921fb4p+0 (;=1.5707963;))
                     (f32.add
                       (local.tee 4
-                        (call $_ZN4libm4math4sqrt5sqrtf17hc46cf0663625308aE
+                        (call $_ZN4libm4math4sqrt5sqrtf17h8c1b66187740c44bE
                           (local.tee 0
                             (f32.mul
                               (f32.add
@@ -706,7 +706,7 @@
         (local.get 1)
         (i32.const -1)))
   )
-  (func $_ZN4libm4math4sqrt5sqrtf17hc46cf0663625308aE (;3;) (type 1) (param f32) (result f32)
+  (func $_ZN4libm4math4sqrt5sqrtf17h8c1b66187740c44bE (;3;) (type 1) (param f32) (result f32)
     (local i32 f32 i32 i32 i32 i32 i32 i64)
     (block ;; label = @1
       (block ;; label = @2
@@ -883,11 +883,11 @@
             (i32.const 1049)))
         (return
           (f64.add
-            (call $_ZN4libm4math3log3log17h0bf4cb6931207382E
+            (call $_ZN4libm4math3log3log17h781c40c93ff4fcfcE
               (local.get 0))
             (f64.const 0x1.62e42fefa39efp-1 (;=0.6931471805599453;)))))
       (return
-        (call $_ZN4libm4math3log3log17h0bf4cb6931207382E
+        (call $_ZN4libm4math3log3log17h781c40c93ff4fcfcE
           (f64.add
             (f64.add
               (local.get 0)
@@ -896,7 +896,7 @@
               (f64.const -0x1p+0 (;=-1;))
               (f64.add
                 (local.get 0)
-                (call $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E
+                (call $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E
                   (f64.add
                     (f64.mul
                       (local.get 0)
@@ -906,10 +906,10 @@
       (f64.add
         (local.get 0)
         (f64.const -0x1p+0 (;=-1;))))
-    (call $_ZN4libm4math5log1p5log1p17h14ebf8985b583205E
+    (call $_ZN4libm4math5log1p5log1p17h5d4b372f78bb46e9E
       (f64.add
         (local.get 0)
-        (call $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E
+        (call $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E
           (f64.add
             (f64.mul
               (local.get 0)
@@ -918,7 +918,7 @@
               (local.get 0)
               (local.get 0))))))
   )
-  (func $_ZN4libm4math3log3log17h0bf4cb6931207382E (;5;) (type 0) (param f64) (result f64)
+  (func $_ZN4libm4math3log3log17h781c40c93ff4fcfcE (;5;) (type 0) (param f64) (result f64)
     (local i64 i32 i64 i32 f64 f64)
     (block ;; label = @1
       (block ;; label = @2
@@ -1073,7 +1073,7 @@
           (f64.const 0x0p+0 (;=0;)))))
     (local.get 0)
   )
-  (func $_ZN4libm4math5log1p5log1p17h14ebf8985b583205E (;6;) (type 0) (param f64) (result f64)
+  (func $_ZN4libm4math5log1p5log1p17h5d4b372f78bb46e9E (;6;) (type 0) (param f64) (result f64)
     (local i32 i64 i32 f64 f64 f64)
     (local.set 1
       (i32.sub
@@ -1288,11 +1288,11 @@
             (i32.const 1166016512)))
         (return
           (f32.add
-            (call $_ZN4libm4math4logf4logf17h8223ed384b9d4052E
+            (call $_ZN4libm4math4logf4logf17h7b88872ed73a994aE
               (local.get 0))
             (f32.const 0x1.62e43p-1 (;=0.6931472;)))))
       (return
-        (call $_ZN4libm4math4logf4logf17h8223ed384b9d4052E
+        (call $_ZN4libm4math4logf4logf17h7b88872ed73a994aE
           (f32.add
             (f32.add
               (local.get 0)
@@ -1301,7 +1301,7 @@
               (f32.const -0x1p+0 (;=-1;))
               (f32.add
                 (local.get 0)
-                (call $_ZN4libm4math4sqrt5sqrtf17hc46cf0663625308aE
+                (call $_ZN4libm4math4sqrt5sqrtf17h8c1b66187740c44bE
                   (f32.add
                     (f32.mul
                       (local.get 0)
@@ -1311,10 +1311,10 @@
       (f32.add
         (local.get 0)
         (f32.const -0x1p+0 (;=-1;))))
-    (call $_ZN4libm4math6log1pf6log1pf17h0844558dee5d2335E
+    (call $_ZN4libm4math6log1pf6log1pf17h4c967d18f426e9e4E
       (f32.add
         (local.get 0)
-        (call $_ZN4libm4math4sqrt5sqrtf17hc46cf0663625308aE
+        (call $_ZN4libm4math4sqrt5sqrtf17h8c1b66187740c44bE
           (f32.add
             (f32.mul
               (local.get 0)
@@ -1323,7 +1323,7 @@
               (local.get 0)
               (local.get 0))))))
   )
-  (func $_ZN4libm4math4logf4logf17h8223ed384b9d4052E (;8;) (type 1) (param f32) (result f32)
+  (func $_ZN4libm4math4logf4logf17h7b88872ed73a994aE (;8;) (type 1) (param f32) (result f32)
     (local i32 i32 f32 f32)
     (block ;; label = @1
       (block ;; label = @2
@@ -1444,7 +1444,7 @@
                       (f32.const 0x1.999c26p-2 (;=0.40000972;))))))))
           (local.get 4))))
   )
-  (func $_ZN4libm4math6log1pf6log1pf17h0844558dee5d2335E (;9;) (type 1) (param f32) (result f32)
+  (func $_ZN4libm4math6log1pf6log1pf17h4c967d18f426e9e4E (;9;) (type 1) (param f32) (result f32)
     (local i32 i32 f32 f32)
     (local.set 1
       (i32.sub
@@ -1689,7 +1689,7 @@
                           (f64.const -0x1.33a271c8a2d4bp+1 (;=-2.403394911734414;))))
                       (f64.const 0x1p+0 (;=1;)))))
                 (local.set 4
-                  (call $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E
+                  (call $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E
                     (local.get 0)))
                 (br_if 1 (;@5;)
                   (i32.gt_u
@@ -1857,7 +1857,7 @@
                           (local.tee 3
                             (f64.add
                               (local.tee 3
-                                (call $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E
+                                (call $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E
                                   (f64.promote_f32
                                     (local.tee 1
                                       (f32.mul
@@ -1990,13 +1990,13 @@
               (local.get 0)
               (local.get 0)))
           (local.set 2
-            (call $_ZN4libm4math5log1p5log1p17h14ebf8985b583205E
+            (call $_ZN4libm4math5log1p5log1p17h5d4b372f78bb46e9E
               (f64.add
                 (local.get 2)
                 (f64.div
                   (local.get 0)
                   (f64.add
-                    (call $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E
+                    (call $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E
                       (f64.add
                         (local.get 0)
                         (f64.const 0x1p+0 (;=1;))))
@@ -2004,12 +2004,12 @@
           (br 2 (;@1;)))
         (local.set 2
           (f64.add
-            (call $_ZN4libm4math3log3log17h0bf4cb6931207382E
+            (call $_ZN4libm4math3log3log17h781c40c93ff4fcfcE
               (local.get 2))
             (f64.const 0x1.62e42fefa39efp-1 (;=0.6931471805599453;))))
         (br 1 (;@1;)))
       (local.set 2
-        (call $_ZN4libm4math3log3log17h0bf4cb6931207382E
+        (call $_ZN4libm4math3log3log17h781c40c93ff4fcfcE
           (f64.add
             (f64.add
               (local.get 2)
@@ -2018,7 +2018,7 @@
               (f64.const 0x1p+0 (;=1;))
               (f64.add
                 (local.get 2)
-                (call $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E
+                (call $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E
                   (f64.add
                     (f64.mul
                       (local.get 0)
@@ -2077,13 +2077,13 @@
               (local.get 0)
               (local.get 0)))
           (local.set 2
-            (call $_ZN4libm4math6log1pf6log1pf17h0844558dee5d2335E
+            (call $_ZN4libm4math6log1pf6log1pf17h4c967d18f426e9e4E
               (f32.add
                 (local.get 2)
                 (f32.div
                   (local.get 4)
                   (f32.add
-                    (call $_ZN4libm4math4sqrt5sqrtf17hc46cf0663625308aE
+                    (call $_ZN4libm4math4sqrt5sqrtf17h8c1b66187740c44bE
                       (f32.add
                         (local.get 4)
                         (f32.const 0x1p+0 (;=1;))))
@@ -2091,12 +2091,12 @@
           (br 2 (;@1;)))
         (local.set 2
           (f32.add
-            (call $_ZN4libm4math4logf4logf17h8223ed384b9d4052E
+            (call $_ZN4libm4math4logf4logf17h7b88872ed73a994aE
               (local.get 2))
             (f32.const 0x1.62e43p-1 (;=0.6931472;))))
         (br 1 (;@1;)))
       (local.set 2
-        (call $_ZN4libm4math4logf4logf17h8223ed384b9d4052E
+        (call $_ZN4libm4math4logf4logf17h7b88872ed73a994aE
           (f32.add
             (f32.add
               (local.get 2)
@@ -2105,7 +2105,7 @@
               (f32.const 0x1p+0 (;=1;))
               (f32.add
                 (local.get 2)
-                (call $_ZN4libm4math4sqrt5sqrtf17hc46cf0663625308aE
+                (call $_ZN4libm4math4sqrt5sqrtf17h8c1b66187740c44bE
                   (f32.add
                     (f32.mul
                       (local.get 0)
@@ -2125,10 +2125,10 @@
         (i32.const 0)))
   )
   (func $libm_atan (;14;) (type 0) (param f64) (result f64)
-    (call $_ZN4libm4math4atan4atan17h1d7de2875ee78543E
+    (call $_ZN4libm4math4atan4atan17hb57e8f80d0bd9eddE
       (local.get 0))
   )
-  (func $_ZN4libm4math4atan4atan17h1d7de2875ee78543E (;15;) (type 0) (param f64) (result f64)
+  (func $_ZN4libm4math4atan4atan17hb57e8f80d0bd9eddE (;15;) (type 0) (param f64) (result f64)
     (local i32 i64 i32 i32 f64 f64 f64)
     (local.set 1
       (i32.sub
@@ -2362,7 +2362,7 @@
             (i32.wrap_i64
               (local.get 2)))))
       (return
-        (call $_ZN4libm4math4atan4atan17h1d7de2875ee78543E
+        (call $_ZN4libm4math4atan4atan17hb57e8f80d0bd9eddE
           (local.get 0))))
     (local.set 6
       (i32.or
@@ -2450,7 +2450,7 @@
                       (i32.const 67108864))
                     (local.get 3))))
               (local.set 8
-                (call $_ZN4libm4math4atan4atan17h1d7de2875ee78543E
+                (call $_ZN4libm4math4atan4atan17hb57e8f80d0bd9eddE
                   (f64.abs
                     (f64.div
                       (local.get 0)
@@ -2513,7 +2513,7 @@
               (local.get 1)))
           (i32.const 1065353216)))
       (return
-        (call $_ZN4libm4math5atanf5atanf17h9e8f990a4b58387dE
+        (call $_ZN4libm4math5atanf5atanf17h0afe9904700c13b3E
           (local.get 0))))
     (local.set 5
       (i32.or
@@ -2596,7 +2596,7 @@
                     (i32.const 218103808))
                   (local.get 2))))
             (local.set 6
-              (call $_ZN4libm4math5atanf5atanf17h9e8f990a4b58387dE
+              (call $_ZN4libm4math5atanf5atanf17h0afe9904700c13b3E
                 (f32.abs
                   (f32.div
                     (local.get 0)
@@ -2632,7 +2632,7 @@
       (f32.const 0x1.921fb6p+0 (;=1.5707964;))
       (local.get 0))
   )
-  (func $_ZN4libm4math5atanf5atanf17h9e8f990a4b58387dE (;18;) (type 1) (param f32) (result f32)
+  (func $_ZN4libm4math5atanf5atanf17h0afe9904700c13b3E (;18;) (type 1) (param f32) (result f32)
     (local i32 i32 f32 i32 i32 f32 f32)
     (local.set 1
       (i32.sub
@@ -2813,7 +2813,7 @@
     (local.get 0)
   )
   (func $libm_atanf (;19;) (type 1) (param f32) (result f32)
-    (call $_ZN4libm4math5atanf5atanf17h9e8f990a4b58387dE
+    (call $_ZN4libm4math5atanf5atanf17h0afe9904700c13b3E
       (local.get 0))
   )
   (func $libm_atanh (;20;) (type 0) (param f64) (result f64)
@@ -2842,7 +2842,7 @@
             (i32.const 1022)))
         (local.set 2
           (f64.mul
-            (call $_ZN4libm4math5log1p5log1p17h14ebf8985b583205E
+            (call $_ZN4libm4math5log1p5log1p17h5d4b372f78bb46e9E
               (f64.add
                 (local.tee 2
                   (f64.div
@@ -2860,7 +2860,7 @@
             (i32.const 991)))
         (local.set 2
           (f64.mul
-            (call $_ZN4libm4math5log1p5log1p17h14ebf8985b583205E
+            (call $_ZN4libm4math5log1p5log1p17h5d4b372f78bb46e9E
               (f64.add
                 (local.tee 0
                   (f64.add
@@ -2915,7 +2915,7 @@
             (i32.const 1056964608)))
         (local.set 2
           (f32.mul
-            (call $_ZN4libm4math6log1pf6log1pf17h0844558dee5d2335E
+            (call $_ZN4libm4math6log1pf6log1pf17h4c967d18f426e9e4E
               (f32.add
                 (local.tee 2
                   (f32.div
@@ -2933,7 +2933,7 @@
             (i32.const 796917760)))
         (local.set 2
           (f32.mul
-            (call $_ZN4libm4math6log1pf6log1pf17h0844558dee5d2335E
+            (call $_ZN4libm4math6log1pf6log1pf17h4c967d18f426e9e4E
               (f32.add
                 (local.tee 4
                   (f32.add
@@ -3056,7 +3056,7 @@
                 (local.get 6)))
             (i32.const 12))))
       (local.set 11
-        (call $_ZN4libm4math3fma3fma17h83dbddc59dfec157E
+        (call $_ZN4libm4math3fma3fma17hfec38a2f137b951cE
           (local.tee 7
             (f64.mul
               (f64.sub
@@ -3174,7 +3174,7 @@
                                           (local.get 9)))
                                       (f64.add
                                         (f64.add
-                                          (call $_ZN4libm4math3fma3fma17h83dbddc59dfec157E
+                                          (call $_ZN4libm4math3fma3fma17hfec38a2f137b951cE
                                             (local.get 7)
                                             (local.get 8)
                                             (f64.neg
@@ -3210,7 +3210,7 @@
                     (f64.const -0x1.8p-52 (;=-0.00000000000000033306690738754696;))))
                 (f64.const 0x1p-75 (;=0.000000000000000000000026469779601696886;))))))
         (local.set 9
-          (call $_ZN4libm4math3fma3fma17h83dbddc59dfec157E
+          (call $_ZN4libm4math3fma3fma17hfec38a2f137b951cE
             (local.get 8)
             (local.get 8)
             (f64.neg
@@ -3247,7 +3247,7 @@
                                               (local.get 7)))
                                           (local.get 13))
                                         (f64.add
-                                          (call $_ZN4libm4math3fma3fma17h83dbddc59dfec157E
+                                          (call $_ZN4libm4math3fma3fma17hfec38a2f137b951cE
                                             (local.get 8)
                                             (local.get 7)
                                             (f64.neg
@@ -3338,7 +3338,7 @@
     (f64.reinterpret_i64
       (local.get 2))
   )
-  (func $_ZN4libm4math3fma3fma17h83dbddc59dfec157E (;23;) (type 4) (param f64 f64 f64) (result f64)
+  (func $_ZN4libm4math3fma3fma17hfec38a2f137b951cE (;23;) (type 4) (param f64 f64 f64) (result f64)
     (local i32 i64 i64 i32 i64 i64 i32 i32 i64 i64 i32 i64 i64 i64)
     (global.set $__stack_pointer
       (local.tee 3
@@ -4075,7 +4075,7 @@
                     (i32.gt_u
                       (local.get 2)
                       (i32.const 2146435071)))
-                  (call $_ZN4libm4math8rem_pio28rem_pio217hcefa62053e37f08bE
+                  (call $_ZN4libm4math8rem_pio28rem_pio217hcfd3034c1d4391f0E
                     (i32.add
                       (local.get 1)
                       (i32.const 8))
@@ -4102,7 +4102,7 @@
                       (local.get 2)
                       (i32.const 1044816030))))
                 (local.set 3
-                  (call $_ZN4libm4math5k_cos5k_cos17h842803039a620024E
+                  (call $_ZN4libm4math5k_cos5k_cos17h5eb36bbcae756a29E
                     (local.get 0)
                     (f64.const 0x0p+0 (;=0;))))
                 (br 5 (;@1;)))
@@ -4157,7 +4157,7 @@
                     (local.get 3)))))
             (br 3 (;@1;)))
           (local.set 3
-            (call $_ZN4libm4math5k_cos5k_cos17h842803039a620024E
+            (call $_ZN4libm4math5k_cos5k_cos17h5eb36bbcae756a29E
               (local.get 0)
               (local.get 3)))
           (br 2 (;@1;)))
@@ -4209,7 +4209,7 @@
         (br 1 (;@1;)))
       (local.set 3
         (f64.neg
-          (call $_ZN4libm4math5k_cos5k_cos17h842803039a620024E
+          (call $_ZN4libm4math5k_cos5k_cos17h5eb36bbcae756a29E
             (local.get 0)
             (local.get 3)))))
     (global.set $__stack_pointer
@@ -4218,7 +4218,7 @@
         (i32.const 32)))
     (local.get 3)
   )
-  (func $_ZN4libm4math8rem_pio28rem_pio217hcefa62053e37f08bE (;26;) (type 5) (param i32 f64)
+  (func $_ZN4libm4math8rem_pio28rem_pio217hcfd3034c1d4391f0E (;26;) (type 5) (param i32 f64)
     (local i32 i64 i32 i32 i32 i32 i32 f64 i32 i32)
     (global.set $__stack_pointer
       (local.tee 2
@@ -4351,7 +4351,7 @@
                     (local.get 2)
                     (i64.const 0))
                   (local.set 4
-                    (call $_ZN4libm4math14rem_pio2_large14rem_pio2_large17hb30ed8c57854d99aE
+                    (call $_ZN4libm4math14rem_pio2_large14rem_pio2_large17hd7141cf13a36ffbcE
                       (local.get 2)
                       (select
                         (local.get 11)
@@ -4411,7 +4411,7 @@
                       (i32.ne
                         (local.get 5)
                         (i32.const 1075388923)))
-                    (call $_ZN4libm4math8rem_pio28rem_pio26medium17hec12cfe73629e643E
+                    (call $_ZN4libm4math8rem_pio28rem_pio26medium17h661801483d1aa963E
                       (local.get 0)
                       (local.get 1)
                       (i32.const 1075388923))
@@ -4623,12 +4623,12 @@
                 (local.get 9))
               (f64.const -0x1.0b4611a626331p-34 (;=-0.00000000006077100506506192;))))
           (br 2 (;@1;)))
-        (call $_ZN4libm4math8rem_pio28rem_pio26medium17hec12cfe73629e643E
+        (call $_ZN4libm4math8rem_pio28rem_pio26medium17h661801483d1aa963E
           (local.get 0)
           (local.get 1)
           (local.get 5))
         (br 1 (;@1;)))
-      (call $_ZN4libm4math8rem_pio28rem_pio26medium17hec12cfe73629e643E
+      (call $_ZN4libm4math8rem_pio28rem_pio26medium17h661801483d1aa963E
         (local.get 0)
         (local.get 1)
         (i32.const 1074977148)))
@@ -4637,7 +4637,7 @@
         (local.get 2)
         (i32.const 48)))
   )
-  (func $_ZN4libm4math5k_cos5k_cos17h842803039a620024E (;27;) (type 2) (param f64 f64) (result f64)
+  (func $_ZN4libm4math5k_cos5k_cos17h5eb36bbcae756a29E (;27;) (type 2) (param f64 f64) (result f64)
     (local f64 f64 f64)
     (f64.add
       (local.tee 4
@@ -4733,7 +4733,7 @@
                             (i32.gt_u
                               (local.get 4)
                               (i32.const 2139095039)))
-                          (call $_ZN4libm4math9rem_pio2f9rem_pio2f17h6e5f7edcf2fecad6E
+                          (call $_ZN4libm4math9rem_pio2f9rem_pio2f17h3b6adc3e5afb8880E
                             (local.get 1)
                             (local.get 0))
                           (local.set 2
@@ -5139,7 +5139,7 @@
         (i32.const 16)))
     (local.get 0)
   )
-  (func $_ZN4libm4math9rem_pio2f9rem_pio2f17h6e5f7edcf2fecad6E (;29;) (type 6) (param i32 f32)
+  (func $_ZN4libm4math9rem_pio2f9rem_pio2f17h3b6adc3e5afb8880E (;29;) (type 6) (param i32 f32)
     (local i32 f64 i32 i32 i32 f64)
     (global.set $__stack_pointer
       (local.tee 2
@@ -5183,7 +5183,7 @@
                         (i32.const -150)))
                     (i32.const 23))))))
           (local.set 5
-            (call $_ZN4libm4math14rem_pio2_large14rem_pio2_large17hb30ed8c57854d99aE
+            (call $_ZN4libm4math14rem_pio2_large14rem_pio2_large17hd7141cf13a36ffbcE
               (local.get 2)
               (i32.const 1)
               (i32.add
@@ -5272,7 +5272,7 @@
           (local.set 0
             (f64.mul
               (f64.mul
-                (call $_ZN4libm4math3exp3exp17he8b76cdb205f47a1E
+                (call $_ZN4libm4math3exp3exp17h8eb8b2450c3bf8abE
                   (f64.add
                     (local.get 0)
                     (f64.const -0x1.62066151add8bp+10 (;=-1416.0996898839683;))))
@@ -5283,7 +5283,7 @@
           (f64.mul
             (f64.add
               (local.tee 0
-                (call $_ZN4libm4math3exp3exp17he8b76cdb205f47a1E
+                (call $_ZN4libm4math3exp3exp17h8eb8b2450c3bf8abE
                   (local.get 0)))
               (f64.div
                 (f64.const 0x1p+0 (;=1;))
@@ -5300,7 +5300,7 @@
             (f64.div
               (f64.mul
                 (local.tee 0
-                  (call $_ZN4libm4math5expm15expm117h21ef9864e1a1aa7cE
+                  (call $_ZN4libm4math5expm15expm117hf425b3a732f15702E
                     (local.get 0)))
                 (local.get 0))
               (f64.add
@@ -5327,7 +5327,7 @@
         (i32.const 16)))
     (local.get 0)
   )
-  (func $_ZN4libm4math3exp3exp17he8b76cdb205f47a1E (;31;) (type 0) (param f64) (result f64)
+  (func $_ZN4libm4math3exp3exp17h8eb8b2450c3bf8abE (;31;) (type 0) (param f64) (result f64)
     (local i32 i64 i32 i32 f64 f64 f64)
     (global.set $__stack_pointer
       (local.tee 1
@@ -5504,7 +5504,7 @@
         (i32.eqz
           (local.get 4)))
       (local.set 5
-        (call $_ZN4libm4math6scalbn6scalbn17h845f8c2d2803f342E
+        (call $_ZN4libm4math6scalbn6scalbn17hd5ee51b98c77623bE
           (local.get 5)
           (local.get 4))))
     (global.set $__stack_pointer
@@ -5513,7 +5513,7 @@
         (i32.const 16)))
     (local.get 5)
   )
-  (func $_ZN4libm4math5expm15expm117h21ef9864e1a1aa7cE (;32;) (type 0) (param f64) (result f64)
+  (func $_ZN4libm4math5expm15expm117hf425b3a732f15702E (;32;) (type 0) (param f64) (result f64)
     (local i32 i64 i32 f64 f64 f64 f64)
     (f64.store offset=8
       (local.tee 1
@@ -5836,7 +5836,7 @@
           (local.set 0
             (f32.mul
               (f32.mul
-                (call $_ZN4libm4math4expf4expf17h6e24cd4ea996d004E
+                (call $_ZN4libm4math4expf4expf17hedd2067d7b29c452E
                   (f32.add
                     (local.get 0)
                     (f32.const -0x1.45c778p+7 (;=-162.88959;))))
@@ -5847,7 +5847,7 @@
           (f32.mul
             (f32.add
               (local.tee 0
-                (call $_ZN4libm4math4expf4expf17h6e24cd4ea996d004E
+                (call $_ZN4libm4math4expf4expf17hedd2067d7b29c452E
                   (local.get 0)))
               (f32.div
                 (f32.const 0x1p+0 (;=1;))
@@ -5864,7 +5864,7 @@
             (f32.div
               (f32.mul
                 (local.tee 0
-                  (call $_ZN4libm4math6expm1f6expm1f17h785781c0a93d0846E
+                  (call $_ZN4libm4math6expm1f6expm1f17h8c93774ba8d4df49E
                     (local.get 0)))
                 (local.get 0))
               (f32.add
@@ -5891,7 +5891,7 @@
         (i32.const 16)))
     (local.get 0)
   )
-  (func $_ZN4libm4math4expf4expf17h6e24cd4ea996d004E (;34;) (type 1) (param f32) (result f32)
+  (func $_ZN4libm4math4expf4expf17hedd2067d7b29c452E (;34;) (type 1) (param f32) (result f32)
     (local i32 i32 i32 i32 f32 f32 f32)
     (global.set $__stack_pointer
       (local.tee 1
@@ -6063,7 +6063,7 @@
         (i32.eqz
           (local.get 4)))
       (local.set 5
-        (call $_ZN4libm4math6scalbn7scalbnf17h9f2a1833549066d0E
+        (call $_ZN4libm4math6scalbn7scalbnf17ha430054e259e38a4E
           (local.get 5)
           (local.get 4))))
     (global.set $__stack_pointer
@@ -6072,7 +6072,7 @@
         (i32.const 16)))
     (local.get 5)
   )
-  (func $_ZN4libm4math6expm1f6expm1f17h785781c0a93d0846E (;35;) (type 1) (param f32) (result f32)
+  (func $_ZN4libm4math6expm1f6expm1f17h8c93774ba8d4df49E (;35;) (type 1) (param f32) (result f32)
     (local i32 i32 i32 f32 f32 f32 f32)
     (local.set 1
       (i32.sub
@@ -6367,7 +6367,7 @@
     (local.get 0)
   )
   (func $libm_exp (;36;) (type 0) (param f64) (result f64)
-    (call $_ZN4libm4math3exp3exp17he8b76cdb205f47a1E
+    (call $_ZN4libm4math3exp3exp17h8eb8b2450c3bf8abE
       (local.get 0))
   )
   (func $libm_exp2 (;37;) (type 0) (param f64) (result f64)
@@ -6468,7 +6468,7 @@
             (f64.const 0x1p+1023 (;=89884656743115800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;))))
         (br 1 (;@1;)))
       (local.set 0
-        (call $_ZN4libm4math6scalbn6scalbn17h845f8c2d2803f342E
+        (call $_ZN4libm4math6scalbn6scalbn17hd5ee51b98c77623bE
           (f64.add
             (local.tee 7
               (f64.load offset=1048632
@@ -6524,7 +6524,7 @@
         (i32.const 16)))
     (local.get 0)
   )
-  (func $_ZN4libm4math6scalbn6scalbn17h845f8c2d2803f342E (;38;) (type 7) (param f64 i32) (result f64)
+  (func $_ZN4libm4math6scalbn6scalbn17hd5ee51b98c77623bE (;38;) (type 7) (param f64 i32) (result f64)
     (block ;; label = @1
       (block ;; label = @2
         (block ;; label = @3
@@ -6732,15 +6732,15 @@
             (i64.const 52)))))
   )
   (func $libm_expf (;40;) (type 1) (param f32) (result f32)
-    (call $_ZN4libm4math4expf4expf17h6e24cd4ea996d004E
+    (call $_ZN4libm4math4expf4expf17hedd2067d7b29c452E
       (local.get 0))
   )
   (func $libm_expm1 (;41;) (type 0) (param f64) (result f64)
-    (call $_ZN4libm4math5expm15expm117h21ef9864e1a1aa7cE
+    (call $_ZN4libm4math5expm15expm117hf425b3a732f15702E
       (local.get 0))
   )
   (func $libm_expm1f (;42;) (type 1) (param f32) (result f32)
-    (call $_ZN4libm4math6expm1f6expm1f17h785781c0a93d0846E
+    (call $_ZN4libm4math6expm1f6expm1f17h8c93774ba8d4df49E
       (local.get 0))
   )
   (func $libm_fmod (;43;) (type 2) (param f64 f64) (result f64)
@@ -7618,7 +7618,7 @@
         (local.set 1
           (f64.mul
             (local.get 6)
-            (call $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E
+            (call $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E
               (f64.add
                 (local.tee 7
                   (f64.mul
@@ -7774,7 +7774,7 @@
       (local.set 1
         (f32.mul
           (local.get 5)
-          (call $_ZN4libm4math4sqrt5sqrtf17hc46cf0663625308aE
+          (call $_ZN4libm4math4sqrt5sqrtf17h8c1b66187740c44bE
             (f32.demote_f64
               (f64.add
                 (f64.mul
@@ -7790,7 +7790,7 @@
     (local.get 1)
   )
   (func $libm_log (;49;) (type 0) (param f64) (result f64)
-    (call $_ZN4libm4math3log3log17h0bf4cb6931207382E
+    (call $_ZN4libm4math3log3log17h781c40c93ff4fcfcE
       (local.get 0))
   )
   (func $libm_log10 (;50;) (type 0) (param f64) (result f64)
@@ -8123,11 +8123,11 @@
               (f32.const -0x1.09d5b2p-15 (;=-0.00003168997;)))))))
   )
   (func $libm_log1p (;52;) (type 0) (param f64) (result f64)
-    (call $_ZN4libm4math5log1p5log1p17h14ebf8985b583205E
+    (call $_ZN4libm4math5log1p5log1p17h5d4b372f78bb46e9E
       (local.get 0))
   )
   (func $libm_log1pf (;53;) (type 1) (param f32) (result f32)
-    (call $_ZN4libm4math6log1pf6log1pf17h0844558dee5d2335E
+    (call $_ZN4libm4math6log1pf6log1pf17h4c967d18f426e9e4E
       (local.get 0))
   )
   (func $libm_log2 (;54;) (type 0) (param f64) (result f64)
@@ -8446,7 +8446,7 @@
             (i32.const 23)))))
   )
   (func $libm_logf (;56;) (type 1) (param f32) (result f32)
-    (call $_ZN4libm4math4logf4logf17h8223ed384b9d4052E
+    (call $_ZN4libm4math4logf4logf17h7b88872ed73a994aE
       (local.get 0))
   )
   (func $libm_pow (;57;) (type 2) (param f64 f64) (result f64)
@@ -8665,7 +8665,7 @@
               (local.get 7)
               (i64.const 0)))
           (return
-            (call $_ZN4libm4math4sqrt4sqrt17h51c32212435695b8E
+            (call $_ZN4libm4math4sqrt4sqrt17h3b6b03f022c75fd4E
               (local.get 0))))
         (return
           (select
@@ -9320,7 +9320,7 @@
                     (i64.const 4294967295)))))
             (br 1 (;@3;)))
           (local.set 1
-            (call $_ZN4libm4math6scalbn6scalbn17h845f8c2d2803f342E
+            (call $_ZN4libm4math6scalbn6scalbn17hd5ee51b98c77623bE
               (local.get 1)
               (local.get 8))))
         (return
@@ -9876,7 +9876,7 @@
             (f32.const 0x1p+0 (;=1;))
             (local.get 0))))
       (return
-        (call $_ZN4libm4math4sqrt5sqrtf17hc46cf0663625308aE
+        (call $_ZN4libm4math4sqrt5sqrtf17h8c1b66187740c44bE
           (local.get 0))))
     (block ;; label = @1
       (block ;; label = @2
@@ -10100,14 +10100,14 @@
             (local.get 5)))
         (br 1 (;@1;)))
       (local.set 0
-        (call $_ZN4libm4math6scalbn7scalbnf17h9f2a1833549066d0E
+        (call $_ZN4libm4math6scalbn7scalbnf17ha430054e259e38a4E
           (local.get 0)
           (local.get 3))))
     (f32.mul
       (local.get 11)
       (local.get 0))
   )
-  (func $_ZN4libm4math6scalbn7scalbnf17h9f2a1833549066d0E (;59;) (type 10) (param f32 i32) (result f32)
+  (func $_ZN4libm4math6scalbn7scalbnf17ha430054e259e38a4E (;59;) (type 10) (param f32 i32) (result f32)
     (block ;; label = @1
       (block ;; label = @2
         (block ;; label = @3
@@ -10213,7 +10213,7 @@
                     (i32.gt_u
                       (local.get 2)
                       (i32.const 2146435071)))
-                  (call $_ZN4libm4math8rem_pio28rem_pio217hcefa62053e37f08bE
+                  (call $_ZN4libm4math8rem_pio28rem_pio217hcfd3034c1d4391f0E
                     (i32.add
                       (local.get 1)
                       (i32.const 8))
@@ -10236,7 +10236,7 @@
                 (br 5 (;@1;)))
               (local.set 0
                 (f64.neg
-                  (call $_ZN4libm4math5k_cos5k_cos17h842803039a620024E
+                  (call $_ZN4libm4math5k_cos5k_cos17h5eb36bbcae756a29E
                     (local.get 0)
                     (local.get 3))))
               (br 4 (;@1;)))
@@ -10286,7 +10286,7 @@
                     (local.get 3)))))
             (br 3 (;@1;)))
           (local.set 0
-            (call $_ZN4libm4math5k_cos5k_cos17h842803039a620024E
+            (call $_ZN4libm4math5k_cos5k_cos17h5eb36bbcae756a29E
               (local.get 0)
               (local.get 3)))
           (br 2 (;@1;)))
@@ -10445,7 +10445,7 @@
                         (i32.gt_u
                           (local.get 4)
                           (i32.const 2139095039)))
-                      (call $_ZN4libm4math9rem_pio2f9rem_pio2f17h6e5f7edcf2fecad6E
+                      (call $_ZN4libm4math9rem_pio2f9rem_pio2f17h3b6adc3e5afb8880E
                         (local.get 1)
                         (local.get 0))
                       (local.set 2
@@ -10880,14 +10880,14 @@
             (local.get 1))
           (f64.mul
             (f64.mul
-              (call $_ZN4libm4math3exp3exp17he8b76cdb205f47a1E
+              (call $_ZN4libm4math3exp3exp17h8eb8b2450c3bf8abE
                 (f64.add
                   (local.get 2)
                   (f64.const -0x1.62066151add8bp+10 (;=-1416.0996898839683;))))
               (f64.const 0x1p+1021 (;=22471164185778950000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;)))
             (f64.const 0x1p+1021 (;=22471164185778950000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;))))))
     (local.set 2
-      (call $_ZN4libm4math5expm15expm117h21ef9864e1a1aa7cE
+      (call $_ZN4libm4math5expm15expm117hf425b3a732f15702E
         (local.get 2)))
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -10947,14 +10947,14 @@
             (local.get 1))
           (f32.mul
             (f32.mul
-              (call $_ZN4libm4math4expf4expf17h6e24cd4ea996d004E
+              (call $_ZN4libm4math4expf4expf17hedd2067d7b29c452E
                 (f32.add
                   (local.get 2)
                   (f32.const -0x1.45c778p+7 (;=-162.88959;))))
               (f32.const 0x1p+117 (;=166153500000000000000000000000000000;)))
             (f32.const 0x1p+117 (;=166153500000000000000000000000000000;))))))
     (local.set 2
-      (call $_ZN4libm4math6expm1f6expm1f17h785781c0a93d0846E
+      (call $_ZN4libm4math6expm1f6expm1f17h8c93774ba8d4df49E
         (local.get 2)))
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -11017,13 +11017,13 @@
             (i32.gt_u
               (local.get 2)
               (i32.const 2146435071)))
-          (call $_ZN4libm4math8rem_pio28rem_pio217hcefa62053e37f08bE
+          (call $_ZN4libm4math8rem_pio28rem_pio217hcfd3034c1d4391f0E
             (i32.add
               (local.get 1)
               (i32.const 8))
             (local.get 0))
           (local.set 0
-            (call $_ZN4libm4math5k_tan5k_tan17hea3d97e1eb58898fE
+            (call $_ZN4libm4math5k_tan5k_tan17he70947e0d23fd5ccE
               (f64.load offset=8
                 (local.get 1))
               (f64.load offset=24
@@ -11044,7 +11044,7 @@
             (local.get 2)
             (i32.const 1044381696)))
         (local.set 0
-          (call $_ZN4libm4math5k_tan5k_tan17hea3d97e1eb58898fE
+          (call $_ZN4libm4math5k_tan5k_tan17he70947e0d23fd5ccE
             (local.get 0)
             (f64.const 0x0p+0 (;=0;))
             (i32.const 0)))
@@ -11070,7 +11070,7 @@
         (i32.const 32)))
     (local.get 0)
   )
-  (func $_ZN4libm4math5k_tan5k_tan17hea3d97e1eb58898fE (;65;) (type 11) (param f64 f64 i32) (result f64)
+  (func $_ZN4libm4math5k_tan5k_tan17he70947e0d23fd5ccE (;65;) (type 11) (param f64 f64 i32) (result f64)
     (local i64 i32 f64 f64 f64)
     (block ;; label = @1
       (br_if 0 (;@1;)
@@ -11276,7 +11276,7 @@
                 (i32.gt_u
                   (local.get 4)
                   (i32.const 2139095039)))
-              (call $_ZN4libm4math9rem_pio2f9rem_pio2f17h6e5f7edcf2fecad6E
+              (call $_ZN4libm4math9rem_pio2f9rem_pio2f17h3b6adc3e5afb8880E
                 (local.get 1)
                 (local.get 0))
               (local.set 0
@@ -11640,7 +11640,7 @@
             (f64.div
               (f64.neg
                 (local.tee 2
-                  (call $_ZN4libm4math5expm15expm117h21ef9864e1a1aa7cE
+                  (call $_ZN4libm4math5expm15expm117hf425b3a732f15702E
                     (f64.mul
                       (local.get 2)
                       (f64.const -0x1p+1 (;=-2;))))))
@@ -11659,7 +11659,7 @@
               (f64.div
                 (f64.const 0x1p+1 (;=2;))
                 (f64.add
-                  (call $_ZN4libm4math5expm15expm117h21ef9864e1a1aa7cE
+                  (call $_ZN4libm4math5expm15expm117hf425b3a732f15702E
                     (f64.add
                       (local.get 2)
                       (local.get 2)))
@@ -11675,7 +11675,7 @@
       (local.set 2
         (f64.div
           (local.tee 2
-            (call $_ZN4libm4math5expm15expm117h21ef9864e1a1aa7cE
+            (call $_ZN4libm4math5expm15expm117hf425b3a732f15702E
               (f64.add
                 (local.get 2)
                 (local.get 2))))
@@ -11735,7 +11735,7 @@
             (f32.div
               (f32.neg
                 (local.tee 2
-                  (call $_ZN4libm4math6expm1f6expm1f17h785781c0a93d0846E
+                  (call $_ZN4libm4math6expm1f6expm1f17h8c93774ba8d4df49E
                     (f32.mul
                       (local.get 2)
                       (f32.const -0x1p+1 (;=-2;))))))
@@ -11754,7 +11754,7 @@
               (f32.div
                 (f32.const 0x1p+1 (;=2;))
                 (f32.add
-                  (call $_ZN4libm4math6expm1f6expm1f17h785781c0a93d0846E
+                  (call $_ZN4libm4math6expm1f6expm1f17h8c93774ba8d4df49E
                     (f32.add
                       (local.get 2)
                       (local.get 2)))
@@ -11770,7 +11770,7 @@
       (local.set 2
         (f32.div
           (local.tee 2
-            (call $_ZN4libm4math6expm1f6expm1f17h785781c0a93d0846E
+            (call $_ZN4libm4math6expm1f6expm1f17h8c93774ba8d4df49E
               (f32.add
                 (local.get 2)
                 (local.get 2))))
@@ -11793,7 +11793,7 @@
   (func $_ZN4core9panicking9panic_fmt17h6651313c3e2c6c2fE (;69;) (type 8)
     (unreachable)
   )
-  (func $_ZN4libm4math14rem_pio2_large14rem_pio2_large17hb30ed8c57854d99aE (;70;) (type 12) (param i32 i32 i32 i32 i32) (result i32)
+  (func $_ZN4libm4math14rem_pio2_large14rem_pio2_large17hd7141cf13a36ffbcE (;70;) (type 12) (param i32 i32 i32 i32 i32) (result i32)
     (local i32 i32 i32 i32 i32 i32 i32 f64 i32 i32 i32 i32 i32 i32 i32 i32 i32 f64 f64 i64 i64 i64 i32 i32 i32)
     (global.set $__stack_pointer
       (local.tee 5
@@ -12105,7 +12105,7 @@
                             (local.tee 23
                               (f64.mul
                                 (local.tee 22
-                                  (call $_ZN4libm4math6scalbn6scalbn17h845f8c2d2803f342E
+                                  (call $_ZN4libm4math6scalbn6scalbn17hd5ee51b98c77623bE
                                     (local.get 12)
                                     (local.get 18)))
                                 (f64.const 0x1p-3 (;=0.125;))))))
@@ -12332,7 +12332,7 @@
             (local.set 12
               (f64.sub
                 (local.get 12)
-                (call $_ZN4libm4math6scalbn6scalbn17h845f8c2d2803f342E
+                (call $_ZN4libm4math6scalbn6scalbn17hd5ee51b98c77623bE
                   (f64.const 0x1p+0 (;=1;))
                   (local.get 18))))
             (br 1 (;@3;)))
@@ -12527,7 +12527,7 @@
           (br_if 0 (;@3;)
             (f64.ge
               (local.tee 12
-                (call $_ZN4libm4math6scalbn6scalbn17h845f8c2d2803f342E
+                (call $_ZN4libm4math6scalbn6scalbn17hd5ee51b98c77623bE
                   (local.get 12)
                   (i32.sub
                     (i32.const 0)
@@ -12588,7 +12588,7 @@
           (local.get 21)
           (i32.const 2))))
     (local.set 12
-      (call $_ZN4libm4math6scalbn6scalbn17h845f8c2d2803f342E
+      (call $_ZN4libm4math6scalbn6scalbn17hd5ee51b98c77623bE
         (f64.const 0x1p+0 (;=1;))
         (local.get 18)))
     (local.set 0
@@ -12820,7 +12820,7 @@
       (local.get 27)
       (i32.const 7))
   )
-  (func $_ZN4libm4math8rem_pio28rem_pio26medium17hec12cfe73629e643E (;71;) (type 13) (param i32 f64 i32)
+  (func $_ZN4libm4math8rem_pio28rem_pio26medium17h661801483d1aa963E (;71;) (type 13) (param i32 f64 i32)
     (local f64 f64 f64 f64)
     (block ;; label = @1
       (br_if 0 (;@1;)
