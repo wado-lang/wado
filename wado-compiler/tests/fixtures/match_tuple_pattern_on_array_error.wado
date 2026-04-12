@@ -1,0 +1,12 @@
+// Tuple pattern cannot be used against Array type in match.
+// [a, b, c] is tuple destructuring, not array destructuring.
+export fn run() {
+    let arr: Array<i32> = [1, 2, 3];
+    let _x = match arr {
+        [a, b, c] => a + b + c,
+        _ => 0,
+    };
+}
+
+__DATA__
+{"compile_error": "expected 'tuple type'"}

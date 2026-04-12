@@ -6304,7 +6304,7 @@ impl FunctionTranslator<'_, '_> {
                 variant_name,
                 bindings,
                 enum_type,
-                ..
+                payload_type,
             } => {
                 if bindings.is_empty() {
                     return;
@@ -6441,50 +6441,32 @@ impl FunctionTranslator<'_, '_> {
                                     value: Box::new(value),
                                 });
                             }
-                        } else if let TirPattern::Tuple(sub_patterns, _) = binding {
-                            // Tuple payload: payload_i is a ref to a tuple struct.
-                            // Extract each tuple field into the corresponding local.
-                            if let Some(tuple_type_id) =
-                                self.get_case_payload_ref_type(&case_type_id, i)
-                            {
-                                self.local_counter += 1;
-                                let tuple_local = format!("__tuple_payload_{}", self.local_counter);
-                                instrs.push(WirInstr::DeclareLocal {
-                                    name: tuple_local.clone(),
-                                    ty: WirType::Ref {
-                                        type_id: tuple_type_id.clone(),
-                                        nullable: false,
-                                    },
-                                });
-                                instrs.push(WirInstr::LocalSet {
-                                    name: tuple_local.clone(),
-                                    value: Box::new(payload_get),
-                                });
-                                for (j, sub) in sub_patterns.iter().enumerate() {
-                                    if let TirPattern::Binding { local_index, .. } = sub {
-                                        let tuple_field_name = format!("{j}");
-                                        let tuple_field_ty = self.struct_field_wir_type(
-                                            &tuple_type_id,
-                                            &tuple_field_name,
-                                        );
-                                        instrs.push(WirInstr::LocalSet {
-                                            name: self.local_name(*local_index),
-                                            value: Box::new(WirInstr::StructGet {
-                                                type_id: tuple_type_id.clone(),
-                                                field_name: tuple_field_name,
-                                                expr: Box::new(WirInstr::LocalGet {
-                                                    name: tuple_local.clone(),
-                                                    result_ty: WirType::Ref {
-                                                        type_id: tuple_type_id.clone(),
-                                                        nullable: false,
-                                                    },
-                                                }),
-                                                result_ty: tuple_field_ty,
-                                            }),
-                                        });
-                                    }
-                                }
-                            }
+                        } else if !matches!(
+                            binding,
+                            TirPattern::Wildcard
+                                | TirPattern::Literal(_)
+                                | TirPattern::Enum { .. }
+                                | TirPattern::ConstantValue { .. }
+                                | TirPattern::Range { .. }
+                        ) {
+                            // Compound sub-pattern (Tuple, Struct, Variant, Or):
+                            // extract the payload into a temp local and recurse into
+                            // emit_pattern_bindings to handle arbitrarily nested
+                            // destructuring.
+                            let payload_tid = *payload_type;
+                            let payload_wir =
+                                self.ctx.type_id_to_wir_type(self.type_table, payload_tid);
+                            self.local_counter += 1;
+                            let temp_name = format!("__variant_payload_{}", self.local_counter);
+                            instrs.push(WirInstr::DeclareLocal {
+                                name: temp_name.clone(),
+                                ty: payload_wir,
+                            });
+                            instrs.push(WirInstr::LocalSet {
+                                name: temp_name.clone(),
+                                value: Box::new(payload_get),
+                            });
+                            self.emit_pattern_bindings(binding, &temp_name, payload_tid, instrs);
                         }
                     }
                 } else {
@@ -6662,22 +6644,6 @@ impl FunctionTranslator<'_, '_> {
         if let crate::wir::WirTypeDef::Struct(s) = type_def {
             let field = s.fields.get(payload_index + 1)?;
             return Some(field.ty.clone());
-        }
-        None
-    }
-
-    fn get_case_payload_ref_type(
-        &self,
-        case_type_id: &crate::wir::WirTypeId,
-        payload_index: usize,
-    ) -> Option<crate::wir::WirTypeId> {
-        let type_def = self.ctx.types.get(case_type_id.index() as usize)?;
-        if let crate::wir::WirTypeDef::Struct(s) = type_def {
-            // Fields are: [discriminant, payload_0, payload_1, ...]
-            let field = s.fields.get(payload_index + 1)?;
-            if let WirType::Ref { type_id, .. } = &field.ty {
-                return Some(type_id.clone());
-            }
         }
         None
     }
