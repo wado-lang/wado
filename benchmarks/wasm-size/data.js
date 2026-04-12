@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775992994384,
+  "lastUpdate": 1775993313017,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12386,6 +12386,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cea21dae61ba1a692b1d022c08cddda4ccd5c55b"
         },
         "date": 1775992994096,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c0368c7675760fc08e1aab73212fdd63a12cb26d",
+          "message": "Merge pull request #828 from wado-lang/claude/fix-wir-build-bugs-lVU5E\n\nReplace unreachable/eprintln error handling with panics in WIR build",
+          "timestamp": "2026-04-12T20:25:13+09:00",
+          "tree_id": "77535fc0c6d58e388b50c59f000b15b787e0798e",
+          "url": "https://github.com/wado-lang/wado/commit/c0368c7675760fc08e1aab73212fdd63a12cb26d"
+        },
+        "date": 1775993312732,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
