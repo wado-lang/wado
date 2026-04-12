@@ -271,10 +271,7 @@ fn test_string_escape_tab() {
 
     match lit {
         wado_compiler::ast::Literal::String(raw) => {
-            assert_eq!(
-                raw, r"col1\tcol2",
-                "expected raw escape text, got {raw:?}"
-            );
+            assert_eq!(raw, r"col1\tcol2", "expected raw escape text, got {raw:?}");
         }
         other => panic!("expected String, got {other:?}"),
     }

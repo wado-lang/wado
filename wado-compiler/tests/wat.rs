@@ -102,19 +102,20 @@ fn test_tuple_elision_multivalue() {
 
         // Also check i64.mul_wide_u and i64.mul_wide_s
         if (line.contains("i64.mul_wide_u") || line.contains("i64.mul_wide_s"))
-            && i + 1 < lines.len() {
-                let next_line = lines[i + 1].trim();
-                assert!(
-                    !next_line.contains("struct.new"),
-                    "Tuple elision optimization not applied! Found struct.new after multi-value instruction.\n\
+            && i + 1 < lines.len()
+        {
+            let next_line = lines[i + 1].trim();
+            assert!(
+                !next_line.contains("struct.new"),
+                "Tuple elision optimization not applied! Found struct.new after multi-value instruction.\n\
                      Line {}: {}\n\
                      Line {}: {}",
-                    i + 1,
-                    line,
-                    i + 2,
-                    next_line
-                );
-            }
+                i + 1,
+                line,
+                i + 2,
+                next_line
+            );
+        }
     }
 
     // Verify that local.set appears after the multi-value instructions (positive check)

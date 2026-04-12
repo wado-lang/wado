@@ -254,9 +254,10 @@ mod tests {
                     for group in imports.into_iter().flatten() {
                         for import in group {
                             if let Ok((_, imp)) = import
-                                && matches!(imp.ty, wasmparser::TypeRef::Memory(_)) {
-                                    has_memory_import = true;
-                                }
+                                && matches!(imp.ty, wasmparser::TypeRef::Memory(_))
+                            {
+                                has_memory_import = true;
+                            }
                         }
                     }
                 }

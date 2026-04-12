@@ -498,7 +498,10 @@ pub fn compile_source_with_opts(
     source: &str,
     opt_level: OptLevel,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
-    let base_path = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    let base_path = path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
     let host = FilesystemHost::new(base_path);
     let filename = path.to_string_lossy();
 
@@ -532,7 +535,10 @@ pub fn compile_source_with_compiler_options_and_filename(
     options: wado_compiler::CompilerOptions,
     display_filename: Option<&str>,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
-    let base_path = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    let base_path = path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
     let host = FilesystemHost::new(base_path);
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
@@ -558,7 +564,10 @@ pub async fn compile_file_async(
         message: e.to_string(),
     })?;
 
-    let base_path = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    let base_path = path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
     let host = FilesystemHost::new(base_path);
     let filename = path.to_string_lossy();
 

@@ -5016,9 +5016,10 @@ line 2
             let body = func.body.as_ref().unwrap();
             if let Stmt::If(if_stmt) = &body.stmts[0]
                 && let Condition::LetChain { elements, .. } = &if_stmt.condition
-                    && let crate::ast::ConditionElement::Let { pattern, .. } = &elements[0] {
-                        return pattern.clone();
-                    }
+                && let crate::ast::ConditionElement::Let { pattern, .. } = &elements[0]
+            {
+                return pattern.clone();
+            }
         }
         panic!("failed to parse pattern from: {source}");
     }
