@@ -1,0 +1,157 @@
+// Test: Container SROA (P0a) — edge cases for Array<UserStruct>:
+//   * Generic struct Pair<A, B> monomorphized to Pair<i32, i64>
+//   * Struct with private fields used within its own module
+//   * Minimal single-field wrapper struct
+//   * Three-field struct with heterogeneous types (i32, i64, i32)
+//
+// All variants must still AoS→SoA decompose, i.e. emit no `struct.new` for
+// the element type at -O2 while producing the correct result.
+use { println, Stdout } from "core:cli";
+
+// Force monomorphization of the per-field Array<T_k> method families the
+// rewrite depends on.
+#[inline("never")]
+fn _force_array_i32_monomorphization() -> i32 {
+    let mut x: Array<i32> = Array::<i32>::with_capacity(4);
+    x.push(1);
+    x.push(2);
+    x[0] = 10;
+    let first = x[0];
+    let len = x.len();
+    return first + len;
+}
+
+#[inline("never")]
+fn _force_array_i64_monomorphization() -> i64 {
+    let mut x: Array<i64> = Array::<i64>::with_capacity(4);
+    x.push(1 as i64);
+    x.push(2 as i64);
+    x[0] = 10 as i64;
+    let first = x[0];
+    let len = x.len() as i64;
+    return first + len;
+}
+
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
+
+#[inline("never")]
+fn generic_struct_monomorphized() -> i64 {
+    // A generic struct instantiated as Pair<i32, i64>. The pass should treat
+    // the monomorphized Pair//[i32, i64] exactly like a concrete struct.
+    let mut v: Array<Pair<i32, i64>> = [];
+    v.push(Pair { first: 1, second: 100 as i64 });
+    v.push(Pair { first: 2, second: 200 as i64 });
+    v.push(Pair { first: 3, second: 300 as i64 });
+    // Slot copy exercising both fields simultaneously.
+    v[2] = v[1];
+    let mut first_sum: i32 = 0;
+    let mut second_sum: i64 = 0 as i64;
+    for let mut i = 0; i < v.len(); i += 1 {
+        first_sum += v[i].first;
+        second_sum += v[i].second;
+    }
+    return (first_sum as i64) + second_sum;
+}
+
+struct Hidden {
+    a: i32,
+    b: i32,
+}
+
+#[inline("never")]
+fn private_fields_same_module() -> i32 {
+    // Struct with private fields used only within the declaring module. The
+    // pass should decompose Array<Hidden> regardless of field visibility,
+    // since visibility is a module-boundary concept.
+    let mut v: Array<Hidden> = [];
+    v.push(Hidden { a: 1, b: 10 });
+    v.push(Hidden { a: 2, b: 20 });
+    v.push(Hidden { a: 3, b: 30 });
+    v[0] = Hidden { a: 9, b: 90 };
+    let mut sum = 0;
+    for let mut i = 0; i < v.len(); i += 1 {
+        sum += v[i].a + v[i].b;
+    }
+    return sum;
+}
+
+struct Wrap {
+    value: i32,
+}
+
+#[inline("never")]
+fn single_field_wrapper() -> i32 {
+    // Minimal one-field struct. Array<Wrap> decomposes to a single
+    // Array<i32>; the optimization should still trigger even for a trivial
+    // wrapper.
+    let mut v: Array<Wrap> = Array::<Wrap>::with_capacity(4);
+    v.push(Wrap { value: 5 });
+    v.push(Wrap { value: 10 });
+    v.push(Wrap { value: 15 });
+    v[0] = v[2];
+    let mut sum = 0;
+    for let mut i = 0; i < v.len(); i += 1 {
+        sum += v[i].value;
+    }
+    return sum;
+}
+
+struct Triple {
+    x: i32,
+    y: i64,
+    z: i32,
+}
+
+#[inline("never")]
+fn three_field_mixed() -> i64 {
+    // Three fields with heterogeneous widths — this catches any regression
+    // in the per-field-index catalog lookup.
+    let mut v: Array<Triple> = [];
+    v.push(Triple { x: 1, y: 10 as i64, z: 100 });
+    v.push(Triple { x: 2, y: 20 as i64, z: 200 });
+    v.push(Triple { x: 3, y: 30 as i64, z: 300 });
+    v[0] = v[2];
+    let mut x_sum: i32 = 0;
+    let mut y_sum: i64 = 0 as i64;
+    let mut z_sum: i32 = 0;
+    for let mut i = 0; i < v.len(); i += 1 {
+        x_sum += v[i].x;
+        y_sum += v[i].y;
+        z_sum += v[i].z;
+    }
+    return (x_sum as i64) + y_sum + (z_sum as i64);
+}
+
+export fn run() with Stdout {
+    assert _force_array_i32_monomorphization() == 12;
+    assert _force_array_i64_monomorphization() == 12 as i64;
+    // v[2] becomes v[1]=(2, 200): first_sum=1+2+2=5, second_sum=100+200+200=500
+    assert generic_struct_monomorphized() == (5 + 500) as i64;
+    // v[0] becomes Hidden(9,90): (9+90)+(2+20)+(3+30) = 154
+    assert private_fields_same_module() == 154;
+    // v[0] becomes v[2]=15, so values are [15, 10, 15] → 40
+    assert single_field_wrapper() == 40;
+    // v[0] becomes v[2]=(3,30,300): x=3+2+3=8, y=30+20+30=80, z=300+200+300=800
+    assert three_field_mixed() == (8 + 80 + 800) as i64;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O0": [
+        "//Pair<i32,i64>\"",
+        "//Hidden\"",
+        "//Wrap\"",
+        "//Triple\""
+    ],
+    "wir_not_expect:O2": [
+        "//Pair<i32,i64>\"",
+        "//Hidden\"",
+        "//Wrap\"",
+        "//Triple\""
+    ]
+}
