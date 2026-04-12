@@ -466,9 +466,8 @@ fn register_exports(ctx: &mut WirContext<'_>) {
                 },
             });
         } else {
-            eprintln!("[WIR] Warning: export function '{core_func_name}' not found (fq: {fq})");
-            eprintln!(
-                "[WIR] Available functions: {:?}",
+            panic!(
+                "[WIR] export function '{core_func_name}' not found (fq: {fq}); available: {:?}",
                 ctx.func_map.keys().collect::<Vec<_>>()
             );
         }
@@ -603,8 +602,6 @@ fn translate_global_init(
         }
     }
 }
-
-// === Helpers ===
 
 /// Build a mangled function name from TIR function and module source.
 fn build_mangled_name(tir_func: &TirFunction, _module_source: &ModuleSource) -> String {

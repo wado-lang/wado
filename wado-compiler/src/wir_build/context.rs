@@ -29,7 +29,6 @@ pub struct WirContext<'a> {
     /// Reference to the linked package data.
     pub package: &'a FlatPackage,
 
-    // === Type Registry ===
     /// All type definitions in registration order.
     pub types: Vec<WirTypeDef>,
     /// Map from fully-qualified type name to `WirTypeId`.
@@ -47,7 +46,6 @@ pub struct WirContext<'a> {
     /// Variant case type info: case WIR type index → (variant WIR type index, case index).
     pub variant_case_info: IndexMap<u32, (u32, u32)>,
 
-    // === Function Registry ===
     /// All function definitions (with optional bodies).
     pub functions: Vec<WirFunction>,
     /// Map from fully-qualified function name to `WirFuncId`.
@@ -55,7 +53,6 @@ pub struct WirContext<'a> {
     /// Function type index for each function (into types vec).
     pub func_type_ids: Vec<WirTypeId>,
 
-    // === Import Registry ===
     /// Core module imports.
     pub imports: Vec<WirImport>,
     /// Number of imported functions (these come before defined functions in Wasm).
@@ -63,7 +60,6 @@ pub struct WirContext<'a> {
     /// Map from import name to function index (for resolving call targets).
     pub import_func_map: IndexMap<String, WirFuncId>,
 
-    // === Other sections ===
     /// Global variables.
     pub globals: Vec<WirGlobal>,
     /// Map from qualified global name to index in `globals`.
@@ -79,7 +75,6 @@ pub struct WirContext<'a> {
     /// Name section entries.
     pub names: WirNames,
 
-    // === Canonical Closure Types ===
     /// Map from function signature string to canonical closure info.
     /// Key: stringified signature (e.g., "(i32, i32) -> i32")
     /// Value: (`canonical_fn_type_id`, `canonical_closure_struct_type_id`)
@@ -90,7 +85,6 @@ pub struct WirContext<'a> {
     /// Counter for canonical closure type naming.
     pub canonical_closure_counter: u32,
 
-    // === Scratch state ===
     /// Collected string literals (from all TIR modules).
     pub string_literals: Vec<String>,
     /// Collected bytes literals (from all TIR modules).
@@ -98,16 +92,13 @@ pub struct WirContext<'a> {
     /// Available WASI function names (computed during component generation).
     pub available_wasi_funcs: IndexSet<String>,
 
-    // === Wasm module tracking ===
     /// Map from `ModuleSource` to wasm module name (e.g., "mem").
     /// Functions/globals from these modules are extracted into separate wasm core modules.
     pub wasm_module_sources: IndexMap<ModuleSource, String>,
 
-    // === Function body translation helpers ===
     /// Pending function bodies: (function index in self.functions, `TirFunction` ref, `TypeTable` ref)
     pub pending_bodies: Vec<PendingFunctionBody>,
 
-    // === Canonical intrinsic registry ===
     /// CM canonical imports registered lazily by WIR synthesis functions via `ensure_canonical`.
     /// Key: structured canonical intrinsic (e.g., `FutureNew(Some(S32))`).
     /// Value: the `WirFuncId` for the registered import.
@@ -183,8 +174,6 @@ impl<'a> WirContext<'a> {
         }
     }
 
-    // === Type Registration ===
-
     /// Register a type definition and return its `WirTypeId`.
     pub fn register_type(&mut self, fq: String, typedef: WirTypeDef) -> WirTypeId {
         // Dedup: if the same fq name is already registered, return the existing type.
@@ -223,8 +212,6 @@ impl<'a> WirContext<'a> {
         )
     }
 
-    // === Function Registration ===
-
     /// Register a function import and return its `WirFuncId`.
     pub fn register_import_func(
         &mut self,
@@ -262,8 +249,6 @@ impl<'a> WirContext<'a> {
         func_id
     }
 
-    // === Data Section ===
-
     /// Register a string literal and return its data segment index.
     pub fn register_string_literal(&mut self, s: &str) -> u32 {
         if let Some(&idx) = self.string_literal_map.get(s) {
@@ -291,8 +276,6 @@ impl<'a> WirContext<'a> {
         self.bytes_literal_map.insert(b.to_vec(), idx);
         idx
     }
-
-    // === Helpers ===
 
     /// Build a string key for canonical closure type lookup.
     pub fn canonical_closure_key(params: &[WirType], results: &[WirType]) -> String {
@@ -823,8 +806,6 @@ impl<'a> WirContext<'a> {
         self.tuple_type_map.insert(elem_type_ids, type_id.clone());
         Some(type_id)
     }
-
-    // === Build Final WirPackage ===
 
     /// Consume this context and produce the final `WirPackage`.
     pub fn into_wir_package(self) -> WirPackage {
