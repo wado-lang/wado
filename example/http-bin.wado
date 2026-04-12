@@ -135,10 +135,13 @@ global HOMEPAGE: String = #include_str("./http-bin-index.html");
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let method = request.get_method();
     let scheme = scheme_name(request.get_scheme());
-    let authority = if let Some(a) = request.get_authority() {
+    // wasi:http typically leaves the authority unset for incoming HTTP/1.1
+    // requests since the host travels in the Host header. Fall back to it.
+    let authority = if let Some(a) = request.get_authority() && !a.is_empty() {
         a;
     } else {
-        "";
+        let h = request.get_headers();
+        get_header(&(h as Fields), "host");
     };
     let request_url = Url::from_parts(scheme, authority, request.get_path_with_query(), null);
     let url = request_url.to_string();
