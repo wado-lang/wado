@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775974077568,
+  "lastUpdate": 1775974934218,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12152,6 +12152,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3d0295dcb682d09fab116a4e7f789666e18a4345"
         },
         "date": 1775974077327,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "678fc089ec44f727bd77eda94ae787fd8a2f25e7",
+          "message": "Merge pull request #822 from wado-lang/gfx/clippy-fix-by-hand\n\nClippy clean: auto-fix + manual fixes",
+          "timestamp": "2026-04-12T15:18:10+09:00",
+          "tree_id": "ad5abdc616891da03b7a349748196499590d4f63",
+          "url": "https://github.com/wado-lang/wado/commit/678fc089ec44f727bd77eda94ae787fd8a2f25e7"
+        },
+        "date": 1775974933932,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
