@@ -1,0 +1,76 @@
+// Regression test: cross-candidate push with non-duplicable index.
+//
+// The pass whitelists `v.push(w[i])` when `w` is a sibling candidate, but the
+// rewrite clones the index expression N times to build per-field reads. If `i`
+// is non-duplicable (e.g. a function call), the rewrite bails — but escape
+// analysis used to still mark both locals decomposable, leaving a dangling
+// `v.push(w[i])` that referenced the now-unused `Array<[i32, i32]>` locals
+// whose `let` had been replaced by per-field lets. This fixture forces that
+// pattern through both the cross-candidate `push` source and the
+// `v[i] = w[j]` slot copy with a call-expression index.
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn _force_array_i32_monomorphization() -> i32 {
+    let mut x: Array<i32> = Array::<i32>::with_capacity(4);
+    x.push(1);
+    x.push(2);
+    x[0] = 10;
+    let first = x[0];
+    let len = x.len();
+    return first + len;
+}
+
+// Opaque index source — a function call, which is not `is_duplicable_expr`.
+#[inline("never")]
+fn opaque_idx(n: i32) -> i32 {
+    return n;
+}
+
+#[inline("never")]
+fn cross_push_with_call_idx() -> i32 {
+    let mut v: Array<[i32, i32]> = [];
+    let mut w: Array<[i32, i32]> = [];
+    w.push([10, 100]);
+    w.push([20, 200]);
+    w.push([30, 300]);
+    // Non-duplicable index in the tuple source.
+    v.push(w[opaque_idx(1)]);
+    v.push(w[opaque_idx(2)]);
+    return v[0].0 + v[0].1 + v[1].0 + v[1].1;
+}
+
+#[inline("never")]
+fn slot_copy_with_call_idx() -> i32 {
+    let mut v: Array<[i32, i32]> = [];
+    v.push([1, 10]);
+    v.push([2, 20]);
+    v.push([3, 30]);
+    // Slot copy where the destination index is a call — non-duplicable.
+    v[opaque_idx(2)] = v[1];
+    return v[0].0 + v[0].1 + v[1].0 + v[1].1 + v[2].0 + v[2].1;
+}
+
+#[inline("never")]
+fn slot_copy_with_call_source_idx() -> i32 {
+    let mut v: Array<[i32, i32]> = [];
+    v.push([1, 10]);
+    v.push([2, 20]);
+    v.push([3, 30]);
+    // Slot copy where the SOURCE index is a call — non-duplicable.
+    v[0] = v[opaque_idx(2)];
+    return v[0].0 + v[0].1 + v[1].0 + v[1].1 + v[2].0 + v[2].1;
+}
+
+export fn run() with Stdout {
+    assert _force_array_i32_monomorphization() == 12;
+    assert cross_push_with_call_idx() == 20 + 200 + 30 + 300;
+    assert slot_copy_with_call_idx() == 1 + 10 + 2 + 20 + 2 + 20;
+    assert slot_copy_with_call_source_idx() == 3 + 30 + 2 + 20 + 3 + 30;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

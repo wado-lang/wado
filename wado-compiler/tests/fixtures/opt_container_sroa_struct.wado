@@ -1,0 +1,147 @@
+// Test: Container SROA (P0a) — decomposes Array<UserStruct> locals into N
+// parallel Array<T_k> locals, eliminating struct.new for the element payload
+// (AoS → SoA). Tuples and user structs are both GC structs at the Wasm level,
+// so this pass treats Array<Point> the same as Array<[i32, i32]>.
+use { println, Stdout } from "core:cli";
+
+// Ensure Array<i32> and Array<i64> methods are monomorphized so the per-field
+// rewrite has somewhere to dispatch to. Without these, the pass conservatively
+// skips the candidate.
+#[inline("never")]
+fn _force_array_i32_monomorphization() -> i32 {
+    let mut x: Array<i32> = Array::<i32>::with_capacity(4);
+    x.push(1);
+    x.push(2);
+    x[0] = 10;
+    let first = x[0];
+    let len = x.len();
+    return first + len;
+}
+
+#[inline("never")]
+fn _force_array_i64_monomorphization() -> i64 {
+    let mut x: Array<i64> = Array::<i64>::with_capacity(4);
+    x.push(1 as i64);
+    x.push(2 as i64);
+    x[0] = 10 as i64;
+    let first = x[0];
+    let len = x.len() as i64;
+    return first + len;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Row {
+    id: i64,
+    value: i32,
+}
+
+#[inline("never")]
+fn build_and_sum_points() -> i32 {
+    let mut v: Array<Point> = [];
+    v.push(Point { x: 1, y: 10 });
+    v.push(Point { x: 2, y: 20 });
+    v.push(Point { x: 3, y: 30 });
+    let mut sum = 0;
+    for let mut i = 0; i < v.len(); i += 1 {
+        sum += v[i].x + v[i].y;
+    }
+    return sum;
+}
+
+#[inline("never")]
+fn slot_copy_points() -> i32 {
+    // Insertion-sort-style slot copy: v[2] = v[1].
+    let mut v: Array<Point> = [];
+    v.push(Point { x: 1, y: 100 });
+    v.push(Point { x: 2, y: 200 });
+    v.push(Point { x: 3, y: 300 });
+    v[2] = v[1];
+    // Struct literal assignment directly into a slot.
+    v[0] = Point { x: 9, y: 900 };
+    return v[0].x + v[0].y + v[2].x + v[2].y;
+}
+
+#[inline("never")]
+fn with_capacity_points() -> i32 {
+    let mut v: Array<Point> = Array::<Point>::with_capacity(4);
+    v.push(Point { x: 1, y: 10 });
+    v.push(Point { x: 2, y: 20 });
+    let mut sum = 0;
+    for let mut i = 0; i < v.len(); i += 1 {
+        sum += v[i].x * v[i].y;
+    }
+    return sum;
+}
+
+#[inline("never")]
+fn cross_candidate_points() -> i32 {
+    // Two candidates whose elements flow between them via v.push(w[i]).
+    let mut w: Array<Point> = [];
+    w.push(Point { x: 10, y: 100 });
+    w.push(Point { x: 20, y: 200 });
+    w.push(Point { x: 30, y: 300 });
+    let mut v: Array<Point> = [];
+    v.push(w[0]);
+    v.push(w[1]);
+    v.push(w[2]);
+    return v[0].x + v[0].y + v[1].x + v[1].y + v[2].x + v[2].y;
+}
+
+#[inline("never")]
+fn mixed_field_types() -> i64 {
+    // Struct with heterogeneous field types (i64 + i32). The pass must emit
+    // one Array<i64> and one Array<i32>, not two Array<i64>.
+    let mut rows: Array<Row> = [];
+    rows.push(Row { id: 100 as i64, value: 1 });
+    rows.push(Row { id: 200 as i64, value: 2 });
+    rows.push(Row { id: 300 as i64, value: 3 });
+    let mut id_sum: i64 = 0 as i64;
+    let mut val_sum: i32 = 0;
+    for let mut i = 0; i < rows.len(); i += 1 {
+        id_sum += rows[i].id;
+        val_sum += rows[i].value;
+    }
+    return id_sum + (val_sum as i64);
+}
+
+#[inline("never")]
+fn field_order_shorthand() -> i32 {
+    // Struct literal built with the shorthand { x, y } — this produces the
+    // same StructLiteral shape, but fields may be listed in a different order
+    // depending on the parser. The pass must reorder by field_index, not
+    // source position.
+    let mut v: Array<Point> = [];
+    let x = 7;
+    let y = 13;
+    // Explicit out-of-declaration-order literal.
+    v.push(Point { y: 31, x: 17 });
+    v.push(Point { x, y });
+    return v[0].x + v[0].y + v[1].x + v[1].y;
+}
+
+export fn run() with Stdout {
+    assert _force_array_i32_monomorphization() == 12;
+    assert _force_array_i64_monomorphization() == 12 as i64;
+    assert build_and_sum_points() == 66;
+    assert slot_copy_points() == 9 + 900 + 2 + 200;
+    assert with_capacity_points() == 1 * 10 + 2 * 20;
+    assert cross_candidate_points() == 10 + 100 + 20 + 200 + 30 + 300;
+    assert mixed_field_types() == (100 + 200 + 300 + 1 + 2 + 3) as i64;
+    assert field_order_shorthand() == 17 + 31 + 7 + 13;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O0": [
+        "//Point\""
+    ],
+    "wir_not_expect:O2": [
+        "//Point\""
+    ]
+}

@@ -83,27 +83,26 @@ Eliminates unnecessary reference bindings introduced during inlining. When `let 
 
 ### Container SROA (`container_sroa.rs`)
 
-Decomposes `Array<Tuple<T1, ..., Tn>>` local variables into N parallel `Array<T_k>` locals (Array-of-Structs → Struct-of-Arrays). Eliminates `struct.new "tuple//..."` allocations for tuple payloads in container-of-tuple idioms such as the zlib Huffman-tree insertion sort.
+Decomposes `Array<Tuple<T1, ..., Tn>>` and `Array<UserStruct>` local variables into N parallel `Array<T_k>` locals (Array-of-Structs → Struct-of-Arrays). Eliminates the per-element `struct.new` allocation for the container payload in container-of-tuple / container-of-struct idioms such as the zlib Huffman-tree insertion sort.
 
-Motivation: before this pass, writing `let items: Array<[i32, i32]> = []; items.push([a, b]);` forced a per-element `struct.new "tuple//[i32, i32]"` allocation on every push, even though the tuple is immediately consumed by `push` and never escapes. The surrounding `Array<Tuple<T>>` local looks opaque to the ordinary `sroa.rs` pass because the tuple lives on the GC heap behind the array, not as an addressable local. Hoisting the decomposition to the array level eliminates the tuple allocation altogether and exposes the underlying integers for downstream passes.
+Motivation: before this pass, writing `let items: Array<[i32, i32]> = []; items.push([a, b]);` forced a per-element `struct.new "tuple//[i32, i32]"` allocation on every push, even though the tuple is immediately consumed by `push` and never escapes. The surrounding `Array<Tuple<T>>` local looks opaque to the ordinary `sroa.rs` pass because the tuple lives on the GC heap behind the array, not as an addressable local. Hoisting the decomposition to the array level eliminates the tuple allocation altogether and exposes the underlying integers for downstream passes. Tuples and user structs are both WasmGC structs at the Wasm level, so the pass treats them uniformly — an `Array<Point>` with `struct Point { x: i32, y: i32 }` is decomposed into `Array<i32>` / `Array<i32>` locals just like `Array<[i32, i32]>`.
 
 Whitelist-based escape analysis — a candidate local is only decomposed when every use matches one of the following patterns:
 
-- `v.push(tuple)` where `tuple` is either a tuple literal `[e0, ..., ek]` or another candidate's `other.index_value(j)`
-- `v[i] = tuple` (same constraint on the right-hand side)
-- `v[i].K` (field access on an index result — constant `K`)
+- `v.push(src)` where `src` is either a matching literal (`[e0, ..., ek]` for tuple layout, `StructName { ... }` for struct layout) or another candidate's `other.index_value(j)` with a compatible layout
+- `v[i] = src` (same constraint on the right-hand side; the index must be `is_duplicable_expr` because the rewrite clones it N times)
+- `v[i].K` / `v[i].name` (field access on an index result — constant `K` for tuples, field name for structs)
 - `v.len()` / `v.is_empty()`
-- Initialization via `let v: Array<[...]> = []` or `Array::<[...]>::with_capacity(n)`
+- Initialization via `let v: Array<Elem> = []` or `Array::<Elem>::with_capacity(n)`
 
-Any other use (bare local reference, `&v` / `&mut v`, closure capture, unrecognized method) marks the local as escaped. Tuple-source dependencies propagate via a fixpoint: if `b.push(a[j])` is used and `a` escapes, `b` escapes too.
+Any other use (bare local reference, `&v` / `&mut v`, closure capture, unrecognized method) marks the local as escaped. Source dependencies propagate via a fixpoint: if `b.push(a[j])` is used and `a` escapes, `b` escapes too. Cross-candidate `index_value(j)` sources additionally require `j` to be `is_duplicable_expr` — the rewrite clones the index once per field, so a function-call index forces the candidate to escape.
 
-When a candidate is decomposed, the pass allocates N new `Array<T_k>` locals, rewrites each `push`/`index_assign` into N parallel calls on the per-field arrays, and redirects `v[i].K` reads and `v.len()`/`v.is_empty()` queries to the k-th (or 0-th) field array. Requires monomorphized `Array<T_k>::{with_capacity,push,len,IndexValue,IndexAssign}` methods to be present in the catalog; candidates missing any required method are dropped.
+When a candidate is decomposed, the pass allocates N new `Array<T_k>` locals, rewrites each `push`/`index_assign` into N parallel calls on the per-field arrays, and redirects `v[i].K` reads and `v.len()`/`v.is_empty()` queries to the k-th (or 0-th) field array. For struct candidates, source literals are reordered by `field_index` so that output position k always corresponds to the k-th declared field, independent of the source-level field-assignment order. Requires monomorphized `Array<T_k>::{with_capacity,push,len,IndexValue,IndexAssign}` methods to be present in the catalog; candidates missing any required method are dropped.
 
 The pass runs first in the fixed-point loop so the whitelist sees unobfuscated method-call patterns before `inline.rs` rewrites them. Method call receivers in lowered TIR are `Unary::{Ref,MutRef}` wrapping a `Local`, so `receiver_local()` sees through those wrappers.
 
 Future directions (not yet implemented):
 
-- **Struct containers**: generalize from `Array<Tuple<...>>` to `Array<UserStruct>` with the same escape rules. The rewrite is symmetric — one `Array<T_k>` per named field instead of per tuple index.
 - **Nested containers**: `Array<Array<T>>` is still a hard escape today. Recognising known inner shapes (e.g. fixed-width vectors) would let the outer array be decomposed.
 - **Container fields of structs**: today only top-level `let` bindings are candidates. Extending HFS to hoist an `Array<Tuple<...>>` struct field into a local first would give this pass a chance to run on it.
 - **Push-to-tuple-literal fusion with `array.new_fixed`**: when the full set of pushes on a decomposed local is statically known (e.g. init lists), emit `array.new_fixed` for each field array instead of a sequence of `append` calls. Pairs well with the existing WIR-level `collapse array append sequences` phase.

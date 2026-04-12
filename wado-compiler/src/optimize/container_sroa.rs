@@ -26,9 +26,10 @@
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt,
+    TirStmtKind, TirStruct, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -50,14 +51,33 @@ struct Candidate {
     local_name: String,
     /// Whether the original let was `mut`
     is_mut: bool,
-    /// Element types of the tuple (e.g., `[i32, i32]` → `[I32, I32]`)
+    /// Element types of the container (for tuples: the tuple element types;
+    /// for structs: the struct field types in declaration order).
     element_types: Vec<TypeId>,
+    /// How the element is laid out: tuple or user struct. Determines which
+    /// literal shape (`TupleLiteral` vs `StructLiteral`) is accepted as a
+    /// decomposable source, and is carried into the rewrite for consistent
+    /// treatment.
+    layout: ElementLayout,
     /// Span of the original let statement
     span: Span,
     /// Form of the initializer:
     /// - `Empty`: the seq-lit block for `let v: Array<[...]> = [];`
     /// - `WithCapacity(n)`: direct call to `Array::with_capacity(n)`
     init: CandidateInit,
+}
+
+/// Layout of the per-element container value.
+#[derive(Debug, Clone)]
+enum ElementLayout {
+    /// `Array<Tuple<T_0, T_1, ..., T_n>>` — decomposable sources are
+    /// `TupleLiteral` (or another decomposable container's `index_value`).
+    Tuple,
+    /// `Array<UserStruct>` — decomposable sources are `StructLiteral` of that
+    /// specific struct (or another decomposable container's `index_value`).
+    /// The `type_id` identifies the exact struct type so we reject literals
+    /// of a different (even structurally-compatible) struct.
+    Struct { type_id: TypeId },
 }
 
 /// How the candidate was initialized.
@@ -76,6 +96,10 @@ pub fn scalarize_containers(project: &mut FlatPackage) -> bool {
         return false;
     }
 
+    // Build a struct lookup: (name, module_source) → &TirStruct. Used by
+    // `collect_candidates` to expand `Array<UserStruct>` element types.
+    let struct_index = build_struct_index(&project.structs);
+
     let mut changed = false;
     for func_rc in &project.functions {
         // Skip CM bindings (they are ABI bridges, do not optimize their bodies)
@@ -91,10 +115,22 @@ pub fn scalarize_containers(project: &mut FlatPackage) -> bool {
         // Scoped mutable borrow for analysis + rewrite.
         let type_table_rc = project.type_table.clone();
         let mut func = func_rc.borrow_mut();
-        let func_changed = scalarize_in_function(&mut func, &type_table_rc, &catalog);
+        let func_changed =
+            scalarize_in_function(&mut func, &type_table_rc, &catalog, &struct_index);
         changed |= func_changed;
     }
     changed
+}
+
+/// Lookup index for user-defined structs by (name, module source).
+type StructIndex<'a> = IndexMap<(String, ModuleSource), &'a TirStruct>;
+
+fn build_struct_index(structs: &[TirStruct]) -> StructIndex<'_> {
+    let mut out: StructIndex = IndexMap::default();
+    for s in structs {
+        out.insert((s.name.clone(), s.module_source.clone()), s);
+    }
+    out
 }
 
 /// Build a catalog of monomorphized `Array<T>::{method}` function references in this project.
@@ -135,12 +171,13 @@ fn scalarize_in_function(
     func: &mut TirFunction,
     type_table_rc: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
     catalog: &MethodCatalog,
+    struct_index: &StructIndex<'_>,
 ) -> bool {
     // Step 1: collect candidates. Immutable borrow of type_table.
     let candidates = {
         let type_table = type_table_rc.borrow();
         let body = func.body.as_ref().expect("checked in caller");
-        collect_candidates(body, &type_table)
+        collect_candidates(body, &type_table, struct_index)
     };
     if candidates.is_empty() {
         return false;
@@ -196,6 +233,7 @@ fn scalarize_in_function(
                 c.local_index,
                 CandidateRewriteInfo {
                     element_types: c.element_types.clone(),
+                    layout: c.layout.clone(),
                     is_mut: c.is_mut,
                     span: c.span,
                     init: match &c.init {
@@ -224,6 +262,7 @@ fn scalarize_in_function(
 /// Data carried from analysis into rewrite for each decomposed candidate.
 struct CandidateRewriteInfo {
     element_types: Vec<TypeId>,
+    layout: ElementLayout,
     is_mut: bool,
     span: Span,
     init: CandidateInit,
@@ -284,7 +323,11 @@ fn required_methods_available(c: &Candidate, catalog: &MethodCatalog) -> bool {
 /// Collect candidate `let` bindings in the function body. Only looks at top-level
 /// statements (not nested blocks/loops) because P0a restricts scope to simple
 /// function-body locals — enough for the zlib insertion-sort pattern.
-fn collect_candidates(body: &TirBlock, type_table: &TypeTable) -> Vec<Candidate> {
+fn collect_candidates(
+    body: &TirBlock,
+    type_table: &TypeTable,
+    struct_index: &StructIndex<'_>,
+) -> Vec<Candidate> {
     let mut out = Vec::new();
     for stmt in &body.stmts {
         let TirStmtKind::Let {
@@ -298,14 +341,15 @@ fn collect_candidates(body: &TirBlock, type_table: &TypeTable) -> Vec<Candidate>
         else {
             continue;
         };
-        // Type must be Array<Tuple<...>>.
+        // Type must be Array<Tuple<...>> or Array<UserStruct>.
         let Some(elem_ty) = type_table.as_array(*type_id) else {
             continue;
         };
-        let Some(tuple_elems) = type_table.as_tuple(elem_ty) else {
+        let Some((layout, element_types)) = element_layout_of(elem_ty, type_table, struct_index)
+        else {
             continue;
         };
-        if tuple_elems.is_empty() {
+        if element_types.is_empty() {
             continue;
         }
         // Initializer must be one of the recognized forms.
@@ -316,12 +360,51 @@ fn collect_candidates(body: &TirBlock, type_table: &TypeTable) -> Vec<Candidate>
             local_index: *local_index,
             local_name: name.clone(),
             is_mut: *is_mut,
-            element_types: tuple_elems,
+            element_types,
+            layout,
             span: stmt.span,
             init,
         });
     }
     out
+}
+
+/// Determine the decomposable layout and per-field types for a container element
+/// type. Returns `Some((layout, types))` if the element is a tuple or a
+/// user-defined struct whose fields are indexed 0..N; `None` otherwise.
+fn element_layout_of(
+    elem_ty: TypeId,
+    type_table: &TypeTable,
+    struct_index: &StructIndex<'_>,
+) -> Option<(ElementLayout, Vec<TypeId>)> {
+    // Tuple element (e.g., `Array<[i32, i32]>`).
+    if let Some(tuple_elems) = type_table.as_tuple(elem_ty) {
+        return Some((ElementLayout::Tuple, tuple_elems));
+    }
+    // User struct element (e.g., `Array<Point>`). Generic struct instances
+    // appear as `ResolvedType::Struct` after monomorphization.
+    if let ResolvedType::Struct {
+        name,
+        module_source,
+        ..
+    } = type_table.get(elem_ty)
+    {
+        let tir_struct = struct_index.get(&(name.clone(), module_source.clone()))?;
+        if tir_struct.fields.is_empty() {
+            return None;
+        }
+        // Fields indexed 0..N by declaration order. We sort defensively.
+        let mut ordered: Vec<&crate::tir::TirField> = tir_struct.fields.iter().collect();
+        ordered.sort_by_key(|f| f.index);
+        for (i, f) in ordered.iter().enumerate() {
+            if f.index != i as u32 {
+                return None;
+            }
+        }
+        let field_types: Vec<TypeId> = ordered.iter().map(|f| f.type_id).collect();
+        return Some((ElementLayout::Struct { type_id: elem_ty }, field_types));
+    }
+    None
 }
 
 /// Recognize supported initializer forms for container-SROA candidates:
@@ -418,8 +501,11 @@ fn is_method_name(func: &FunctionRef, method: &str) -> bool {
 fn compute_safe_set(body: &TirBlock, candidates: &[Candidate]) -> IndexSet<u32> {
     // Map candidate local → element arity (for push/index_assign/index_value arity checks).
     let mut arity_of: IndexMap<u32, usize> = IndexMap::default();
+    // Map candidate local → element layout (for verifying literal shape matches).
+    let mut layout_of: IndexMap<u32, ElementLayout> = IndexMap::default();
     for c in candidates {
         arity_of.insert(c.local_index, c.element_types.len());
+        layout_of.insert(c.local_index, c.layout.clone());
     }
 
     // Iterate to fixpoint: start with all candidates safe, then remove any that
@@ -429,6 +515,7 @@ fn compute_safe_set(body: &TirBlock, candidates: &[Candidate]) -> IndexSet<u32> 
         let mut checker = WhitelistChecker {
             safe: &safe,
             arity_of: &arity_of,
+            layout_of: &layout_of,
             escaped: IndexSet::default(),
         };
         checker.visit_block(body);
@@ -445,6 +532,7 @@ fn compute_safe_set(body: &TirBlock, candidates: &[Candidate]) -> IndexSet<u32> 
 struct WhitelistChecker<'a> {
     safe: &'a IndexSet<u32>,
     arity_of: &'a IndexMap<u32, usize>,
+    layout_of: &'a IndexMap<u32, ElementLayout>,
     escaped: IndexSet<u32>,
 }
 
@@ -456,13 +544,22 @@ impl WhitelistChecker<'_> {
     }
 
     /// Check an expression used as a value-source for `push`/`index_assign`.
-    /// Returns true if the expression is a decomposable tuple source. If the
-    /// source references another (escaped) candidate as a non-tuple use, that
-    /// candidate is marked escaped.
-    fn check_tuple_source(&mut self, expr: &TirExpr, expected_arity: usize) -> bool {
+    /// Returns true if the expression is a decomposable element source matching
+    /// `expected_layout` and `expected_arity`. If the source references another
+    /// (escaped) candidate as a non-decomposable use, that candidate is marked
+    /// escaped.
+    fn check_source(
+        &mut self,
+        expr: &TirExpr,
+        expected_arity: usize,
+        expected_layout: &ElementLayout,
+    ) -> bool {
         match &expr.kind {
             // Direct tuple literal: [e0, e1, ...]
             TirExprKind::TupleLiteral { elements } => {
+                if !matches!(expected_layout, ElementLayout::Tuple) {
+                    return false;
+                }
                 if elements.len() != expected_arity {
                     return false;
                 }
@@ -472,7 +569,40 @@ impl WhitelistChecker<'_> {
                 }
                 true
             }
-            // Tuple from another candidate: other.index_value(j)
+            // Direct struct literal: StructName { field_0: v0, field_1: v1, ... }
+            TirExprKind::StructLiteral {
+                struct_type,
+                fields,
+                ..
+            } => {
+                let ElementLayout::Struct {
+                    type_id: expected_ty,
+                } = expected_layout
+                else {
+                    return false;
+                };
+                if struct_type != expected_ty {
+                    return false;
+                }
+                if fields.len() != expected_arity {
+                    return false;
+                }
+                // Field indices must cover 0..N exactly once so the rewrite can
+                // pull per-field values unambiguously.
+                let mut seen = vec![false; expected_arity];
+                for f in fields {
+                    let k = f.field_index as usize;
+                    if k >= expected_arity || seen[k] {
+                        return false;
+                    }
+                    seen[k] = true;
+                }
+                for f in fields {
+                    self.visit_expr(&f.value);
+                }
+                true
+            }
+            // Element from another candidate: other.index_value(j)
             TirExprKind::MethodCall {
                 receiver,
                 func,
@@ -494,12 +624,42 @@ impl WhitelistChecker<'_> {
                 if self.arity_of.get(&other).copied() != Some(expected_arity) {
                     return false;
                 }
+                // Layouts must match: tuple ↔ tuple, and struct ↔ same struct.
+                // Cross-layout pushes are impossible under a sound type system,
+                // but we check defensively.
+                let Some(other_layout) = self.layout_of.get(&other) else {
+                    return false;
+                };
+                if !layouts_compatible(expected_layout, other_layout) {
+                    return false;
+                }
+                // The rewrite clones the index expression N times (once per field).
+                // If the index is not duplicable, `decompose_source` bails —
+                // so we must also bail here, otherwise escape analysis would
+                // whitelist this use and the rewrite would leave a dangling
+                // `v.push(w[i])` referencing decomposed locals.
+                if !is_duplicable_expr(&args[0].expr) {
+                    // Fall through to a normal visit so `other` gets marked
+                    // escaped via the bare `index_value` branch in `visit_expr`.
+                    self.visit_expr(expr);
+                    return false;
+                }
                 // Index expression must be visited as a normal expression.
                 self.visit_expr(&args[0].expr);
                 true
             }
             _ => false,
         }
+    }
+}
+
+/// Both layouts must agree: either both tuple of the same arity, or both the
+/// same struct type. Arity is enforced separately by the caller.
+fn layouts_compatible(a: &ElementLayout, b: &ElementLayout) -> bool {
+    match (a, b) {
+        (ElementLayout::Tuple, ElementLayout::Tuple) => true,
+        (ElementLayout::Struct { type_id: ta }, ElementLayout::Struct { type_id: tb }) => ta == tb,
+        _ => false,
     }
 }
 
@@ -523,7 +683,12 @@ impl TirRefVisitor for WhitelistChecker<'_> {
                     // Whitelisted inherent methods
                     if is_array_method(func, "push") && args.len() == 1 {
                         let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
-                        if !self.check_tuple_source(&args[0].expr, arity) {
+                        let layout = self
+                            .layout_of
+                            .get(&rec_local)
+                            .cloned()
+                            .unwrap_or(ElementLayout::Tuple);
+                        if !self.check_source(&args[0].expr, arity, &layout) {
                             self.mark(rec_local);
                         }
                         return;
@@ -538,9 +703,26 @@ impl TirRefVisitor for WhitelistChecker<'_> {
                     if is_trait_method(func, "IndexAssign<i32>", "index_assign") && args.len() == 2
                     {
                         let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
+                        let layout = self
+                            .layout_of
+                            .get(&rec_local)
+                            .cloned()
+                            .unwrap_or(ElementLayout::Tuple);
+                        // The rewrite clones the destination index N times (once per
+                        // field). Non-duplicable indices (e.g. function calls) force a
+                        // bail in `try_expand_call_stmt`, so we must also bail here —
+                        // otherwise the candidate would be decomposed but the original
+                        // `v.index_assign(i, ...)` statement would remain, referencing
+                        // the removed local.
+                        if !is_duplicable_expr(&args[0].expr) {
+                            self.mark(rec_local);
+                            self.visit_expr(&args[0].expr);
+                            self.visit_expr(&args[1].expr);
+                            return;
+                        }
                         // index argument visited normally
                         self.visit_expr(&args[0].expr);
-                        if !self.check_tuple_source(&args[1].expr, arity) {
+                        if !self.check_source(&args[1].expr, arity, &layout) {
                             self.mark(rec_local);
                         }
                         return;
@@ -773,11 +955,12 @@ fn try_expand_call_stmt(expr: &TirExpr, span: Span, ctx: &RewriteCtx) -> Option<
     }
     let info = ctx.candidate_data.get(&rec_local)?;
     let arity = info.element_types.len();
+    let layout = info.layout.clone();
 
-    // Case 1: v.push(tuple_source)
+    // Case 1: v.push(source)
     if is_array_method(func, "push") && args.len() == 1 {
         let src = &args[0].expr;
-        let per_field = decompose_tuple_source(src, arity, ctx)?;
+        let per_field = decompose_source(src, arity, &layout, ctx)?;
         let mut out = Vec::with_capacity(arity);
         for (k, elem_expr) in per_field.into_iter().enumerate() {
             let field_local = ctx.field_local_map[&(rec_local, k as u32)];
@@ -797,14 +980,14 @@ fn try_expand_call_stmt(expr: &TirExpr, span: Span, ctx: &RewriteCtx) -> Option<
         return Some(out);
     }
 
-    // Case 2: v.index_assign(i, tuple_source)
+    // Case 2: v.index_assign(i, source)
     if is_trait_method(func, "IndexAssign<i32>", "index_assign") && args.len() == 2 {
         let idx = &args[0].expr;
         let src = &args[1].expr;
         if !is_duplicable_expr(idx) {
             return None;
         }
-        let per_field = decompose_tuple_source(src, arity, ctx)?;
+        let per_field = decompose_source(src, arity, &layout, ctx)?;
         let mut out = Vec::with_capacity(arity);
         for (k, elem_expr) in per_field.into_iter().enumerate() {
             let field_local = ctx.field_local_map[&(rec_local, k as u32)];
@@ -828,20 +1011,25 @@ fn try_expand_call_stmt(expr: &TirExpr, span: Span, ctx: &RewriteCtx) -> Option<
     None
 }
 
-/// Decompose a tuple-source expression into N per-field expressions.
-/// Supports two forms:
-/// - `TupleLiteral([e_0, e_1, ...])` → `[e_0, e_1, ...]`
+/// Decompose a source expression into N per-field expressions.
+/// Supports three forms:
+/// - `TupleLiteral([e_0, e_1, ...])` (for tuple layout)
+/// - `StructLiteral { .. }` (for struct layout; fields reordered by `field_index`)
 /// - `other.index_value(j)` where `other` is decomposed → `[other_k.index_value(j)]` for each k
 ///
 /// Returns `None` if the expression doesn't match a decomposable form or if
-/// preconditions fail (wrong arity, non-duplicable index, etc.).
-fn decompose_tuple_source(
+/// preconditions fail (wrong arity, non-duplicable index, layout mismatch, etc.).
+fn decompose_source(
     expr: &TirExpr,
     expected_arity: usize,
+    expected_layout: &ElementLayout,
     ctx: &RewriteCtx,
 ) -> Option<Vec<TirExpr>> {
     match &expr.kind {
         TirExprKind::TupleLiteral { elements } => {
+            if !matches!(expected_layout, ElementLayout::Tuple) {
+                return None;
+            }
             if elements.len() != expected_arity {
                 return None;
             }
@@ -855,6 +1043,41 @@ fn decompose_tuple_source(
             }
             Some(out)
         }
+        TirExprKind::StructLiteral {
+            struct_type,
+            fields,
+            ..
+        } => {
+            let ElementLayout::Struct {
+                type_id: expected_ty,
+            } = expected_layout
+            else {
+                return None;
+            };
+            if struct_type != expected_ty {
+                return None;
+            }
+            if fields.len() != expected_arity {
+                return None;
+            }
+            // Reorder by `field_index` so output position k corresponds to
+            // field k (matching the per-field local layout). Check-source
+            // already verified that indices cover 0..N exactly once.
+            let mut out: Vec<Option<TirExpr>> = (0..expected_arity).map(|_| None).collect();
+            for f in fields {
+                let k = f.field_index as usize;
+                if k >= expected_arity {
+                    return None;
+                }
+                if out[k].is_some() {
+                    return None;
+                }
+                let mut e = f.value.clone();
+                rewrite_expr_inplace(&mut e, ctx);
+                out[k] = Some(e);
+            }
+            out.into_iter().collect::<Option<Vec<_>>>()
+        }
         TirExprKind::MethodCall {
             receiver,
             func,
@@ -867,6 +1090,9 @@ fn decompose_tuple_source(
             }
             let other_info = ctx.candidate_data.get(&other)?;
             if other_info.element_types.len() != expected_arity {
+                return None;
+            }
+            if !layouts_compatible(expected_layout, &other_info.layout) {
                 return None;
             }
             let idx_expr = &args[0].expr;
