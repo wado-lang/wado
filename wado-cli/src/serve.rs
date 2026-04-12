@@ -255,7 +255,23 @@ async fn handle_http_request(
                 }
             },
         )
-        .await??;
+        .await;
+
+    let result = match result {
+        Ok(Ok(inner)) => inner,
+        Ok(Err(e)) => {
+            eprintln!("Handler trapped: {e:?}");
+            return Ok(HyperResponse::builder()
+                .status(500)
+                .body(Full::new(Bytes::from(format!("Handler trapped:\n{e:?}"))))?);
+        }
+        Err(e) => {
+            eprintln!("Handler trapped: {e:?}");
+            return Ok(HyperResponse::builder()
+                .status(500)
+                .body(Full::new(Bytes::from(format!("Handler trapped:\n{e:?}"))))?);
+        }
+    };
 
     match result {
         Ok(res) => {

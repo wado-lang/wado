@@ -17,10 +17,28 @@
 //   GET  /base64/:val   — decodes base64-encoded value
 //   *    /anything      — returns request info for any method
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers, StatusCode, Method } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers, StatusCode, Method, Scheme } from "wasi:http";
 use { TreeMap } from "core:collections";
 use { decode } from "core:base64";
-use { JsonValue, stringify } from "./json.wado";
+use { Value } from "core:json_value";
+use { to_string } from "core:json";
+use { Url } from "core:url";
+
+fn scheme_name(s: Option<Scheme>) -> String {
+    return match s {
+        Some(Http) => "http",
+        Some(Https) => "https",
+        Some(Other(name)) => name,
+        None => "http",
+    };
+}
+
+fn stringify(value: &Value) -> String {
+    return match to_string::<Value>(value) {
+        Ok(s) => s,
+        Err(_) => "{}",
+    };
+}
 
 fn method_name(m: Method) -> String {
     return match m {
@@ -37,47 +55,24 @@ fn method_name(m: Method) -> String {
     };
 }
 
-fn split_path_query(full: String) -> [String, String] {
-    if let Some(i) = full.find("?") {
-        let path = full.substr_bytes(0, i);
-        let query = full.substr_bytes(i + 1, full.len());
-        return [path, query];
+fn args_to_json(args: TreeMap<String, String>) -> Value {
+    let mut params = TreeMap::<String, Value>::new();
+    for let [key, val] of args.entries() {
+        params[key] = Value::String(val);
     }
-    return [full, ""];
+    return Value::Object(params);
 }
 
-fn parse_query_params(query: String) -> TreeMap<String, JsonValue> {
-    let mut params = TreeMap::<String, JsonValue>::new();
-    if query.is_empty() {
-        return params;
+fn headers_to_json(headers: &Headers) -> Value {
+    let mut map = TreeMap::<String, Value>::new();
+    for let [name, value] of headers.copy_all() {
+        map[name] = Value::String(String::from_utf8_lossy(value));
     }
-    for let pair of query.split("&") {
-        if pair.is_empty() {
-            continue;
-        }
-        if let Some(eq) = pair.find("=") {
-            let key = pair.substr_bytes(0, eq);
-            let val = pair.substr_bytes(eq + 1, pair.len());
-            params[key] = JsonValue::Str(val);
-        } else {
-            params[pair] = JsonValue::Str("");
-        }
-    }
-    return params;
+    return Value::Object(map);
 }
 
-fn headers_to_json(headers: &Fields) -> JsonValue {
-    let all = headers.copy_all();
-    let mut map = TreeMap::<String, JsonValue>::new();
-    for let entry of all {
-        let [name, value] = entry;
-        map[name] = JsonValue::Str(String::from_utf8_lossy(value));
-    }
-    return JsonValue::Obj(map);
-}
-
-fn get_header(headers: &Fields, name: String) -> String {
-    let values = headers.get(name as FieldName);
+fn get_header(headers: &Headers, name: FieldName) -> String {
+    let values = headers.get(name);
     if values.is_empty() {
         return "";
     }
@@ -107,45 +102,50 @@ fn parse_status_code(s: String) -> Option<u16> {
     }
     if let Some(f) = f64::parse(s) {
         let code = f as i32;
-        if code >= 100 && code <= 599 && f == code as f64 {
-            return Option::<u16>::Some(code as u16);
+        if 100 <= code <= 599 && f == code as f64 {
+            return Option::Some(code as u16);
         }
     }
     return null;
 }
 
-fn build_request_json(method: String, path: String, query: String, headers: &Fields, body: Option<String>) -> String {
-    let mut obj = TreeMap::<String, JsonValue>::new();
-    obj["method"] = JsonValue::Str(method);
-    obj["path"] = JsonValue::Str(path);
-    obj["args"] = JsonValue::Obj(parse_query_params(query));
+fn build_request_json(method: Method, url: String, path: String, args: TreeMap<String, String>, headers: &Headers, body: Option<String>) -> String {
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["method"] = Value::String(method_name(method));
+    obj["path"] = Value::String(path);
+    obj["args"] = args_to_json(args);
     obj["headers"] = headers_to_json(headers);
-    obj["origin"] = JsonValue::Str(get_header(headers, "x-forwarded-for"));
-    let url = if query.is_empty() { path } else { path + "?" + query };
-    obj["url"] = JsonValue::Str(url);
+    obj["origin"] = Value::String(get_header(headers, "x-forwarded-for"));
+    obj["url"] = Value::String(url);
     if let Some(data) = body {
-        obj["data"] = JsonValue::Str(data);
+        obj["data"] = Value::String(data);
     }
-    return stringify(&JsonValue::Obj(obj));
+    return stringify(&Value::Object(obj));
 }
 
 fn json_error(msg: String) -> String {
-    let mut obj = TreeMap::<String, JsonValue>::new();
-    obj["error"] = JsonValue::Str(msg);
-    return stringify(&JsonValue::Obj(obj));
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["error"] = Value::String(msg);
+    return stringify(&Value::Object(obj));
 }
 
 global HOMEPAGE: String = #include_str("./http-bin-index.html");
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let full_path = if let Some(p) = request.get_path_with_query() {
-        p;
-    } else {
-        "/";
-    };
     let method = request.get_method();
-    let method_str = method_name(method);
-    let [path, query] = split_path_query(full_path);
+    let scheme = scheme_name(request.get_scheme());
+    // wasmtime v43 typically leaves the authority unset for incoming HTTP/1.1
+    // requests since the host travels in the Host header. Fall back to it.
+    let authority = if let Some(a) = request.get_authority() && !a.is_empty() {
+        a;
+    } else {
+        let h = request.get_headers();
+        get_header(&h, "host");
+    };
+    let request_url = Url::from_parts(scheme, authority, request.get_path_with_query(), null);
+    let url = request_url.to_string();
+    let path = request_url.path;
+    let args = request_url.query_params();
 
     let mut status: StatusCode = 200;
     let mut content_type = "application/json";
@@ -155,65 +155,65 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         content_type = "text/html; charset=utf-8";
         body_str = HOMEPAGE;
     } else if path == "/get" {
-        if method_str != "GET" {
+        if method != Method::Get {
             status = 405;
             body_str = json_error("Method Not Allowed. Use GET.") + "\n";
         } else {
             let h = request.get_headers();
-            body_str = build_request_json(method_str, path, query, &(h as Fields), null) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, null) + "\n";
         }
     } else if path == "/post" {
-        if method_str != "POST" {
+        if method != Method::Post {
             status = 405;
             body_str = json_error("Method Not Allowed. Use POST.") + "\n";
         } else {
             let h = request.get_headers();
             let data = read_body_from_request(request);
-            body_str = build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, Option::<String>::Some(data)) + "\n";
         }
     } else if path == "/put" {
-        if method_str != "PUT" {
+        if method != Method::Put {
             status = 405;
             body_str = json_error("Method Not Allowed. Use PUT.") + "\n";
         } else {
             let h = request.get_headers();
             let data = read_body_from_request(request);
-            body_str = build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, Option::<String>::Some(data)) + "\n";
         }
     } else if path == "/patch" {
-        if method_str != "PATCH" {
+        if method != Method::Patch {
             status = 405;
             body_str = json_error("Method Not Allowed. Use PATCH.") + "\n";
         } else {
             let h = request.get_headers();
             let data = read_body_from_request(request);
-            body_str = build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, Option::<String>::Some(data)) + "\n";
         }
     } else if path == "/delete" {
-        if method_str != "DELETE" {
+        if method != Method::Delete {
             status = 405;
             body_str = json_error("Method Not Allowed. Use DELETE.") + "\n";
         } else {
             let h = request.get_headers();
-            body_str = build_request_json(method_str, path, query, &(h as Fields), null) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, null) + "\n";
         }
     } else if path == "/headers" {
         let h = request.get_headers();
-        let mut obj = TreeMap::<String, JsonValue>::new();
-        obj["headers"] = headers_to_json(&(h as Fields));
-        body_str = stringify(&JsonValue::Obj(obj)) + "\n";
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["headers"] = headers_to_json(&h);
+        body_str = stringify(&Value::Object(obj)) + "\n";
     } else if path == "/ip" {
         let h = request.get_headers();
-        let origin = get_header(&(h as Fields), "x-forwarded-for");
-        let mut obj = TreeMap::<String, JsonValue>::new();
-        obj["origin"] = JsonValue::Str(if origin.is_empty() { "unknown" } else { origin });
-        body_str = stringify(&JsonValue::Obj(obj)) + "\n";
+        let origin = get_header(&h, "x-forwarded-for");
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["origin"] = Value::String(if origin.is_empty() { "unknown" } else { origin });
+        body_str = stringify(&Value::Object(obj)) + "\n";
     } else if path == "/user-agent" {
         let h = request.get_headers();
-        let ua = get_header(&(h as Fields), "user-agent");
-        let mut obj = TreeMap::<String, JsonValue>::new();
-        obj["user-agent"] = JsonValue::Str(ua);
-        body_str = stringify(&JsonValue::Obj(obj)) + "\n";
+        let ua = get_header(&h, "user-agent");
+        let mut obj = TreeMap::<String, Value>::new();
+        obj["user-agent"] = Value::String(ua);
+        body_str = stringify(&Value::Object(obj)) + "\n";
     } else if path.starts_with("/status/") {
         let code_str = path.substr_bytes(8, path.len());
         if let Some(code) = parse_status_code(code_str) {
@@ -235,11 +235,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         }
     } else if path == "/anything" || path.starts_with("/anything/") {
         let h = request.get_headers();
-        if method_str == "POST" || method_str == "PUT" || method_str == "PATCH" {
+        if method matches { Post | Put | Patch } {
             let data = read_body_from_request(request);
-            body_str = build_request_json(method_str, path, query, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, Option::Some(data)) + "\n";
         } else {
-            body_str = build_request_json(method_str, path, query, &(h as Fields), null) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, null) + "\n";
         }
     } else {
         status = 404;
@@ -250,13 +250,13 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [body_rx, body_tx] = Stream::<u8>::new();
 
     let resp_headers = Fields::new();
-    let _ = resp_headers.append("content-type" as FieldName, content_type.bytes().collect() as FieldValue);
-    let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+    resp_headers.append("content-type", content_type.bytes().collect() as FieldValue);
+    let [response, _response_tx] = Response::new(resp_headers, Option::Some(body_rx), trailers_future);
     response.set_status_code(status);
 
-    task return Result::<Response, ErrorCode>::Ok(response);
+    task return Result::Ok(response);
 
     body_tx.write(body_str.bytes().collect());
     body_tx.drop();
-    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+    trailers_tx.write(Result::Ok(null));
 }

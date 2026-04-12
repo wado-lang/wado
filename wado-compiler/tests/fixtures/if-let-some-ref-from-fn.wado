@@ -1,0 +1,24 @@
+// REGRESSION: at -O2 only, an `if let Some(_) = make_opt()` whose
+// scrutinee is a function call returning `Option<&T>`, when its result is
+// bound via `let`, panics in codegen with
+// "WIR pipeline generated invalid core Wasm module"
+// (validation: "expected a type but nothing on stack").
+//
+// Works at -O0, -O1, -O3, -Os.
+
+fn make_opt() -> Option<&i32> {
+    let x = 1;
+    return Option::Some(&x);
+}
+
+export fn run() {
+    let n = if let Some(_) = make_opt() {
+        1;
+    } else {
+        0;
+    };
+    assert n == 1;
+}
+
+__DATA__
+{}

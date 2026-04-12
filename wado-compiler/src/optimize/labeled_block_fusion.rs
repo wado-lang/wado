@@ -55,25 +55,48 @@ fn fuse_in_function(func: &mut TirFunction) -> bool {
     let Some(body) = &mut func.body else {
         return false;
     };
-    fuse_in_block(body, &mut func.local_count, &mut func.local_types)
+    // Function body is a statement-level block: any value of the trailing
+    // statement is dropped (functions returning a value use explicit `return`).
+    fuse_in_block(
+        body,
+        /* yields_value */ false,
+        &mut func.local_count,
+        &mut func.local_types,
+    )
 }
 
+/// `yields_value` is `true` when the value of `block`'s terminal statement is
+/// consumed by the enclosing context (e.g. `let x = { …; if-let-expr }`).
+/// In that case, fusing an `If` at the tail position would silently change the
+/// block's type from the if's value type to Unit, since the fused labeled block's
+/// breaks carry no value.
 fn fuse_in_block(
     block: &mut TirBlock,
+    yields_value: bool,
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
 ) -> bool {
     // Recurse first into any nested blocks/stmts.
     let mut changed = false;
-    for stmt in &mut block.stmts {
-        changed |= fuse_in_stmt(stmt, local_count, local_types);
+    let last_idx = block.stmts.len().saturating_sub(1);
+    for (i, stmt) in block.stmts.iter_mut().enumerate() {
+        // Only the LAST statement of a value-yielding block contributes the
+        // block's terminal value. All earlier statements are in statement
+        // position and may always be fused.
+        let stmt_yields_value = yields_value && i == last_idx;
+        changed |= fuse_in_stmt(stmt, stmt_yields_value, local_count, local_types);
     }
     // Then look for adjacent (Let+LabeledBlock, If+VariantTest) pairs at this level.
-    changed |= fuse_adjacent_pairs(block, local_count, local_types);
+    changed |= fuse_adjacent_pairs(block, yields_value, local_count, local_types);
     changed
 }
 
-fn fuse_in_stmt(stmt: &mut TirStmt, local_count: &mut u32, local_types: &mut Vec<TypeId>) -> bool {
+fn fuse_in_stmt(
+    stmt: &mut TirStmt,
+    yields_value: bool,
+    local_count: &mut u32,
+    local_types: &mut Vec<TypeId>,
+) -> bool {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => fuse_in_expr(value, local_count, local_types),
         TirStmtKind::Expr(expr) => fuse_in_expr(expr, local_count, local_types),
@@ -83,14 +106,21 @@ fn fuse_in_stmt(stmt: &mut TirStmt, local_count: &mut u32, local_types: &mut Vec
             else_block,
         } => {
             let mut changed = fuse_in_expr(condition, local_count, local_types);
-            changed |= fuse_in_block(then_block, local_count, local_types);
+            // The branches' tail values become this If's value, which becomes the
+            // enclosing block's value when `yields_value` is true.
+            changed |= fuse_in_block(then_block, yields_value, local_count, local_types);
             if let Some(eb) = else_block {
-                changed |= fuse_in_block(eb, local_count, local_types);
+                changed |= fuse_in_block(eb, yields_value, local_count, local_types);
             }
             changed
         }
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            fuse_in_block(body, local_count, local_types)
+        TirStmtKind::Loop { body } => {
+            // Loop bodies don't fall through with a value.
+            fuse_in_block(body, false, local_count, local_types)
+        }
+        TirStmtKind::LabeledBlock { block: body, .. } => {
+            // A statement-level labeled block discards its value.
+            fuse_in_block(body, false, local_count, local_types)
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -99,9 +129,9 @@ fn fuse_in_stmt(stmt: &mut TirStmt, local_count: &mut u32, local_types: &mut Vec
             ..
         } => {
             let mut changed = fuse_in_expr(scrutinee, local_count, local_types);
-            changed |= fuse_in_block(then_block, local_count, local_types);
+            changed |= fuse_in_block(then_block, yields_value, local_count, local_types);
             if let Some(eb) = else_block {
-                changed |= fuse_in_block(eb, local_count, local_types);
+                changed |= fuse_in_block(eb, yields_value, local_count, local_types);
             }
             changed
         }
@@ -178,21 +208,35 @@ fn try_inline_trivial_labeled_block(expr: &mut TirExpr) -> bool {
 fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec<TypeId>) -> bool {
     match &mut expr.kind {
         TirExprKind::LabeledBlock { block, .. } => {
-            // First recurse into the block's contents
-            let changed = fuse_in_block(block, local_count, local_types);
+            // Expression-level labeled block: its terminal value is consumed.
+            let changed = fuse_in_block(
+                block,
+                /* yields_value */ true,
+                local_count,
+                local_types,
+            );
             // Then check if this became a trivial single-break block
             try_inline_trivial_labeled_block(expr) || changed
         }
-        TirExprKind::Block(block) => fuse_in_block(block, local_count, local_types),
+        TirExprKind::Block(block) => {
+            // Expression-level block: terminal value is consumed.
+            fuse_in_block(
+                block,
+                /* yields_value */ true,
+                local_count,
+                local_types,
+            )
+        }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
             let mut changed = fuse_in_expr(condition, local_count, local_types);
-            changed |= fuse_in_block(then_branch, local_count, local_types);
+            // If-expression branches contribute the if's value.
+            changed |= fuse_in_block(then_branch, true, local_count, local_types);
             if let Some(eb) = else_branch {
-                changed |= fuse_in_block(eb, local_count, local_types);
+                changed |= fuse_in_block(eb, true, local_count, local_types);
             }
             changed
         }
@@ -281,10 +325,11 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
             ..
         } => {
             let mut changed = fuse_in_expr(scrutinee, local_count, local_types);
+            // Switch is an expression: each arm contributes the switch's value.
             for arm in arms {
-                changed |= fuse_in_block(arm, local_count, local_types);
+                changed |= fuse_in_block(arm, true, local_count, local_types);
             }
-            changed |= fuse_in_block(default, local_count, local_types);
+            changed |= fuse_in_block(default, true, local_count, local_types);
             changed
         }
         TirExprKind::Match { expr, arms } => {
@@ -320,8 +365,14 @@ fn fuse_in_expr(expr: &mut TirExpr, local_count: &mut u32, local_types: &mut Vec
 
 /// Look for adjacent (Let+LabeledBlock, If+VariantTest) statement pairs in `block`
 /// and fuse them when all preconditions are met.
+///
+/// `yields_value` is `true` when the block's terminal-statement value is consumed
+/// by the enclosing context: in that case, fusing an If at the tail position would
+/// silently turn the block's type into Unit, since the fused labeled block's breaks
+/// carry no value.
 fn fuse_adjacent_pairs(
     block: &mut TirBlock,
+    yields_value: bool,
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
 ) -> bool {
@@ -338,6 +389,17 @@ fn fuse_adjacent_pairs(
 
         if let Some(info) = fusion_info {
             let if_stmt = iter.next().unwrap();
+            // Refuse to fuse when (a) the If is the last statement of this block,
+            // and (b) the block's terminal value is consumed by the enclosing
+            // context. The fused labeled block's breaks carry no value, so its
+            // type is Unit; replacing a value-yielding if-expression with it
+            // would corrupt the block's type. See
+            // tests/fixtures/if-let-some-ref-from-fn.wado.
+            if yields_value && iter.peek().is_none() {
+                new_stmts.push(let_stmt);
+                new_stmts.push(if_stmt);
+                continue;
+            }
             let fused = perform_fusion(let_stmt, if_stmt, info, local_count, local_types);
             new_stmts.extend(fused);
             changed = true;
