@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775981561384,
+  "lastUpdate": 1775983431398,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12269,6 +12269,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/47141d48f9c7c79c0152e4e8ff35c95f59b1a744"
         },
         "date": 1775981561226,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d0fc91f8d2ee31d332a703601f9de3005b6f65c",
+          "message": "Merge pull request #825 from wado-lang/claude/refactor-json-wado-quality-1gUMI\n\njson: refactor for clarity and simpler idioms",
+          "timestamp": "2026-04-12T17:40:23+09:00",
+          "tree_id": "d960d4dbe7718f4dc780e9499122b5bd266d2009",
+          "url": "https://github.com/wado-lang/wado/commit/8d0fc91f8d2ee31d332a703601f9de3005b6f65c"
+        },
+        "date": 1775983431241,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
