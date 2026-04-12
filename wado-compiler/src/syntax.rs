@@ -13,19 +13,31 @@ pub struct SyntaxDefinition {
     pub operators: OperatorCategories,
     pub builtin_types: Vec<&'static str>,
     pub constants: Vec<&'static str>,
+    /// Compile-time literals introduced with `#`, e.g. `#file`, `#line`, `#include_str`.
+    pub compile_time_literals: Vec<&'static str>,
     pub comments: CommentStyles,
 }
 
-/// Keywords categorized by their semantic role
+/// Keywords categorized by their semantic role.
+///
+/// Categories are chosen so that the `TextMate` generator can map each directly
+/// onto a widely-themed scope (`keyword.control`, `storage.type`, `storage.modifier`,
+/// `keyword.other`). Themes that do not ship specific rules for obscure scopes
+/// like `keyword.declaration` still color these correctly.
 #[derive(Debug)]
 pub struct KeywordCategories {
     /// Control flow keywords: if, else, while, for, loop, break, continue, return, match
     pub control: Vec<&'static str>,
-    /// Declaration keywords: fn, let, struct, enum, impl, type, use, from, pub, import, export
-    pub declaration: Vec<&'static str>,
-    /// Modifier keywords: as, with, mut, async, move, unique, in, of
-    pub modifier: Vec<&'static str>,
-    /// Other keywords: assert, effect, handler, reactive, resource, world
+    // Note: `matches` is exposed via `OperatorCategories::other` since it is a
+    // binary pattern-test operator, not a control-flow construct.
+    /// Storage-type keywords: items and bindings — fn, let, global, const, struct,
+    /// enum, variant, flags, impl, trait, type.
+    pub storage_type: Vec<&'static str>,
+    /// Storage-modifier keywords: visibility and qualifiers on declarations —
+    /// pub, export, mut, async, move, unique, stores.
+    pub storage_modifier: Vec<&'static str>,
+    /// Other keywords: everything else that lexes as a keyword but isn't a
+    /// control-flow, storage-type, or storage-modifier keyword.
     pub other: Vec<&'static str>,
 }
 
@@ -59,23 +71,18 @@ impl SyntaxDefinition {
             scope_name: "source.wado",
             file_extensions: vec![".wado"],
             keywords: KeywordCategories {
-                // Control flow
                 control: vec![
                     "if", "else", "while", "for", "loop", "break", "continue", "return", "match",
-                    "matches",
+                    "task",
                 ],
-                // Declarations
-                declaration: vec![
-                    "fn", "let", "global", "const", "struct", "enum", "variant", "impl", "trait",
-                    "type", "use", "from", "pub", "import", "export", "test",
+                storage_type: vec![
+                    "fn", "let", "global", "const", "struct", "enum", "variant", "flags", "impl",
+                    "trait", "type",
                 ],
-                // Modifiers
-                modifier: vec![
-                    "as", "with", "mut", "async", "move", "unique", "in", "of", "stores",
-                ],
-                // Other keywords
+                storage_modifier: vec!["pub", "export", "mut", "async", "move", "unique", "stores"],
                 other: vec![
-                    "assert", "effect", "handler", "reactive", "resource", "world",
+                    "use", "from", "import", "test", "as", "with", "in", "of", "assert", "effect",
+                    "handler", "reactive", "resource", "world",
                 ],
             },
             operators: OperatorCategories {
@@ -86,13 +93,51 @@ impl SyntaxDefinition {
                 assignment: vec![
                     "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", "=",
                 ],
-                other: vec!["->", "=>", "::", "?", "..<", "..="],
+                other: vec!["->", "=>", "::", "?", "..<", "..=", "..", "...", "matches"],
             },
             builtin_types: vec![
-                "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char",
-                "String", "Array", "Option", "Result", "Fn",
+                "i8",
+                "i16",
+                "i32",
+                "i64",
+                "i128",
+                "u8",
+                "u16",
+                "u32",
+                "u64",
+                "u128",
+                "f32",
+                "f64",
+                "bool",
+                "char",
+                "String",
+                "Array",
+                "Option",
+                "Result",
+                "Fn",
+                "Eq",
+                "Ord",
+                "Ordering",
+                "Default",
+                "Display",
+                "DisplayAlt",
+                "Inspect",
+                "InspectAlt",
+                "Iterator",
+                "IntoIterator",
+                "Index",
+                "IndexValue",
+                "IndexAssign",
             ],
             constants: vec!["true", "false", "null", "self"],
+            compile_time_literals: vec![
+                "file",
+                "line",
+                "function",
+                "data",
+                "include_str",
+                "include_bytes",
+            ],
             comments: CommentStyles {
                 line: "//",
                 block_start: "/*",
@@ -115,7 +160,8 @@ mod tests {
         assert_eq!(def.name, "Wado");
         assert_eq!(def.scope_name, "source.wado");
         assert!(def.keywords.control.contains(&"if"));
-        assert!(def.keywords.declaration.contains(&"fn"));
+        assert!(def.keywords.storage_type.contains(&"fn"));
+        assert!(def.keywords.storage_modifier.contains(&"pub"));
     }
 
     /// Verify all keywords in `SyntaxDefinition` are recognized by the lexer
@@ -128,15 +174,19 @@ mod tests {
             .keywords
             .control
             .iter()
-            .chain(def.keywords.declaration.iter())
-            .chain(def.keywords.modifier.iter())
+            .chain(def.keywords.storage_type.iter())
+            .chain(def.keywords.storage_modifier.iter())
             .chain(def.keywords.other.iter())
             .copied()
             .collect();
 
         // Contextual keywords: these are in SyntaxDefinition for highlighting
         // but are parsed as identifiers by the lexer and handled specially by the parser
-        let contextual_keywords = ["test"];
+        // (e.g. `test` for test blocks, `task` for `task return` statements)
+        let contextual_keywords = ["test", "task"];
+        // Keyword-shaped operators: lexer keywords exposed via OperatorCategories
+        // rather than KeywordCategories (e.g. `matches`, the binary pattern-test op)
+        let operator_keywords = ["matches"];
 
         // Verify each keyword is lexed as a keyword token (not an identifier)
         // Skip contextual keywords which are intentionally lexed as identifiers
@@ -158,19 +208,30 @@ mod tests {
         let lexer_keywords = [
             "use", "from", "as", "fn", "with", "let", "mut", "return", "if", "else", "match",
             "matches", "for", "while", "loop", "break", "continue", "in", "of", "pub", "effect",
-            "handler", "reactive", "move", "unique", "struct", "enum", "variant", "type", "impl",
-            "trait", "resource", "world", "async", "import", "export", "assert", "global", "const",
-            "stores",
+            "handler", "reactive", "move", "unique", "struct", "enum", "variant", "flags", "type",
+            "impl", "trait", "resource", "world", "async", "import", "export", "assert", "global",
+            "const", "stores",
         ];
 
-        // Contextual keywords: these are in SyntaxDefinition for highlighting
-        // but are parsed as identifiers by the lexer and handled specially by the parser
-        let contextual_keywords = ["test"];
-
         // Verify SyntaxDefinition covers all lexer keywords
+        // (operator keywords like `matches` live in OperatorCategories instead)
+        let def_operators = &def.operators;
+        let all_op_tokens: Vec<&str> = def_operators
+            .comparison
+            .iter()
+            .chain(def_operators.logical.iter())
+            .chain(def_operators.arithmetic.iter())
+            .chain(def_operators.bitwise.iter())
+            .chain(def_operators.assignment.iter())
+            .chain(def_operators.other.iter())
+            .copied()
+            .collect();
         for keyword in lexer_keywords {
+            let in_keywords = all_keywords.contains(&keyword);
+            let in_operators =
+                operator_keywords.contains(&keyword) && all_op_tokens.contains(&keyword);
             assert!(
-                all_keywords.contains(&keyword),
+                in_keywords || in_operators,
                 "lexer keyword '{keyword}' is missing from SyntaxDefinition"
             );
         }
@@ -200,5 +261,35 @@ mod tests {
         }
 
         // Note: "self" is in constants but handled specially (as identifier in most contexts)
+    }
+
+    /// Verify compile-time literals in `SyntaxDefinition` match the names parsed by `parser.rs`.
+    #[test]
+    fn test_syntax_compile_time_literals_match_parser() {
+        let def = SyntaxDefinition::wado();
+
+        // Authoritative list from parser.rs `parse_expr` hash-literal branch.
+        let parser_literals = [
+            "file",
+            "line",
+            "function",
+            "data",
+            "include_str",
+            "include_bytes",
+        ];
+
+        for lit in parser_literals {
+            assert!(
+                def.compile_time_literals.contains(&lit),
+                "parser compile-time literal '#{lit}' is missing from SyntaxDefinition.compile_time_literals"
+            );
+        }
+
+        for lit in &def.compile_time_literals {
+            assert!(
+                parser_literals.contains(lit),
+                "SyntaxDefinition compile-time literal '#{lit}' is not in parser_literals"
+            );
+        }
     }
 }

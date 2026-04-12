@@ -174,19 +174,25 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
         result
     };
 
-    // Build operator patterns (sorted by length descending to match longer operators first)
-    let mut all_operators: Vec<&str> = def
-        .operators
-        .comparison
-        .iter()
-        .chain(def.operators.logical.iter())
-        .chain(def.operators.arithmetic.iter())
-        .chain(def.operators.bitwise.iter())
-        .chain(def.operators.assignment.iter())
-        .chain(def.operators.other.iter())
-        .copied()
-        .collect();
-    all_operators.sort_by_key(|op| std::cmp::Reverse(op.len()));
+    // Build an alternation for a single operator category.
+    // Operators are sorted by length descending so multi-char tokens win over their prefixes
+    // (e.g. `..=` matches before `..` before `.`). Word-shaped operators (like `matches`) are
+    // wrapped in `\b…\b` so they don't bleed into surrounding identifiers.
+    let operator_alternation = |ops: &[&str]| -> String {
+        let mut sorted: Vec<&str> = ops.to_vec();
+        sorted.sort_by_key(|op| std::cmp::Reverse(op.len()));
+        sorted
+            .iter()
+            .map(|op| {
+                if op.chars().all(|c| c.is_ascii_alphabetic() || c == '_') {
+                    format!("\\b{op}\\b")
+                } else {
+                    escape_regex(op)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("|")
+    };
 
     json!({
         "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
@@ -197,6 +203,7 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
             { "include": "#data-section" },
             { "include": "#comments" },
             { "include": "#attributes" },
+            { "include": "#compile-time-literals" },
             { "include": "#strings" },
             { "include": "#characters" },
             { "include": "#numbers" },
@@ -378,17 +385,30 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
                         "name": "keyword.control.wado",
                         "match": keyword_pattern(&def.keywords.control)
                     },
+                    // Dual-scope via capture 1: the outer `name` gives the semantic scope
+                    // (`storage.type`) while the capture layers a `keyword.control.*` scope
+                    // so themes that only style `keyword.control` (minimalist themes) still
+                    // color declaration keywords.
                     {
-                        "name": "keyword.declaration.wado",
-                        "match": keyword_pattern(&def.keywords.declaration)
+                        "name": "storage.type.wado",
+                        "match": keyword_pattern(&def.keywords.storage_type),
+                        "captures": {
+                            "1": { "name": "keyword.control.declaration.wado" }
+                        }
+                    },
+                    {
+                        "name": "storage.modifier.wado",
+                        "match": keyword_pattern(&def.keywords.storage_modifier),
+                        "captures": {
+                            "1": { "name": "keyword.control.modifier.wado" }
+                        }
                     },
                     {
                         "name": "keyword.other.wado",
-                        "match": keyword_pattern(&def.keywords.modifier)
-                    },
-                    {
-                        "name": "keyword.other.wado",
-                        "match": keyword_pattern(&def.keywords.other)
+                        "match": keyword_pattern(&def.keywords.other),
+                        "captures": {
+                            "1": { "name": "keyword.control.other.wado" }
+                        }
                     },
                     {
                         "name": "constant.language.wado",
@@ -418,7 +438,7 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
                         "name": "meta.function.definition.wado",
                         "match": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?:<|\\()",
                         "captures": {
-                            "1": { "name": "keyword.declaration.wado" },
+                            "1": { "name": "storage.type.wado" },
                             "2": { "name": "entity.name.function.wado" }
                         }
                     },
@@ -440,37 +460,39 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
             },
             "operators": {
                 "patterns": [
+                    // `other` is emitted first so multi-char tokens like `..<`, `..=`, `->` win
+                    // before the single-char comparison/assignment patterns match their prefix.
+                    {
+                        "name": "keyword.operator.other.wado",
+                        "match": operator_alternation(&def.operators.other)
+                    },
                     {
                         "name": "keyword.operator.comparison.wado",
-                        "match": def.operators.comparison.iter().map(|s| escape_regex(s)).collect::<Vec<_>>().join("|")
+                        "match": operator_alternation(&def.operators.comparison)
                     },
                     {
                         "name": "keyword.operator.logical.wado",
-                        "match": def.operators.logical.iter().map(|s| escape_regex(s)).collect::<Vec<_>>().join("|")
+                        "match": operator_alternation(&def.operators.logical)
                     },
                     {
                         "name": "keyword.operator.arithmetic.wado",
-                        "match": def.operators.arithmetic.iter().map(|s| escape_regex(s)).collect::<Vec<_>>().join("|")
+                        "match": operator_alternation(&def.operators.arithmetic)
                     },
                     {
                         "name": "keyword.operator.bitwise.wado",
-                        "match": def.operators.bitwise.iter().map(|s| escape_regex(s)).collect::<Vec<_>>().join("|")
+                        "match": operator_alternation(&def.operators.bitwise)
                     },
                     {
                         "name": "keyword.operator.assignment.wado",
-                        "match": def.operators.assignment.iter().map(|s| escape_regex(s)).collect::<Vec<_>>().join("|")
-                    },
+                        "match": operator_alternation(&def.operators.assignment)
+                    }
+                ]
+            },
+            "compile-time-literals": {
+                "patterns": [
                     {
-                        "name": "keyword.operator.arrow.wado",
-                        "match": "->|=>"
-                    },
-                    {
-                        "name": "keyword.operator.reference.wado",
-                        "match": "&(?=\\s*mut\\b)|&"
-                    },
-                    {
-                        "name": "keyword.operator.dereference.wado",
-                        "match": "\\*(?=[a-zA-Z_])"
+                        "name": "constant.language.compile-time.wado",
+                        "match": format!("#({})\\b", def.compile_time_literals.join("|"))
                     }
                 ]
             },
