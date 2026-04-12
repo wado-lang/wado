@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1775986501777,
+  "lastUpdate": 1775992994384,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12347,6 +12347,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/58336d2d12d8b2381ca800940f096d544cd1e24b"
         },
         "date": 1775986501494,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cea21dae61ba1a692b1d022c08cddda4ccd5c55b",
+          "message": "Merge pull request #827 from wado-lang/gfx/refactor_example\n\nRefactor http-bin example, fix two -O2 codegen bugs, improve serve trap reporting",
+          "timestamp": "2026-04-12T20:19:55+09:00",
+          "tree_id": "5ac8e6685bdfbb3630e370f1c9757a0dfb64a6aa",
+          "url": "https://github.com/wado-lang/wado/commit/cea21dae61ba1a692b1d022c08cddda4ccd5c55b"
+        },
+        "date": 1775992994096,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
