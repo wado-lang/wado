@@ -28,20 +28,21 @@ The optimizer runs after lowering and before Wasm emission:
 
 1. **Early DCE**: remove unreachable functions/types/globals (all levels)
 2. **Fixed-point iteration loop** (skipped for `-O0`):
-   1. Function Inlining (`inline.rs`)
-   2. LabeledBlock Fusion (`labeled_block_fusion.rs`)
-   3. Reference Elimination (`ref_elim.rs`)
-   4. SROA (`sroa.rs`)
-   5. Copy Propagation (`copy_prop.rs`)
-   6. Common Subexpression Elimination (`cse.rs`)
-   7. Store-to-Load Forwarding (`store_load_forward.rs`)
-   8. Constant Propagation (`const_propagation.rs`)
-   9. Constant Folding (`const_folding.rs`)
-   10. Constant Global Promotion (`const_global_promotion.rs`)
-   11. Constant Branch Pruning (`const_branch_prune.rs`)
-   12. Loop-Invariant Code Motion (`licm.rs`)
-   13. Condition Implication (`condition_implication.rs`)
-   14. Template String Buffer Hoisting (`tmpl_hoist.rs`)
+   1. Container SROA (`container_sroa.rs`)
+   2. Function Inlining (`inline.rs`)
+   3. LabeledBlock Fusion (`labeled_block_fusion.rs`)
+   4. Reference Elimination (`ref_elim.rs`)
+   5. SROA (`sroa.rs`)
+   6. Copy Propagation (`copy_prop.rs`)
+   7. Common Subexpression Elimination (`cse.rs`)
+   8. Store-to-Load Forwarding (`store_load_forward.rs`)
+   9. Constant Propagation (`const_propagation.rs`)
+   10. Constant Folding (`const_folding.rs`)
+   11. Constant Global Promotion (`const_global_promotion.rs`)
+   12. Constant Branch Pruning (`const_branch_prune.rs`)
+   13. Loop-Invariant Code Motion (`licm.rs`)
+   14. Condition Implication (`condition_implication.rs`)
+   15. Template String Buffer Hoisting (`tmpl_hoist.rs`)
 3. **Hot Field Scalarization** (`field_scalarize.rs`): runs once after the loop converges
 4. **Final DCE**: clean up code made dead by optimizations (all levels)
 5. **Select Lowering** (`select_lowering.rs`): post-optimization rewrite (all levels)
@@ -79,6 +80,35 @@ The pass merges this into a single labeled block, routing `break null` to the el
 ### Reference Elimination (`ref_elim.rs`)
 
 Eliminates unnecessary reference bindings introduced during inlining. When `let self: &T = &local_var` is followed by field accesses only, replaces them with direct field access on the original variable.
+
+### Container SROA (`container_sroa.rs`)
+
+Decomposes `Array<Tuple<T1, ..., Tn>>` local variables into N parallel `Array<T_k>` locals (Array-of-Structs → Struct-of-Arrays). Eliminates `struct.new "tuple//..."` allocations for tuple payloads in container-of-tuple idioms such as the zlib Huffman-tree insertion sort.
+
+Motivation: before this pass, writing `let items: Array<[i32, i32]> = []; items.push([a, b]);` forced a per-element `struct.new "tuple//[i32, i32]"` allocation on every push, even though the tuple is immediately consumed by `push` and never escapes. The surrounding `Array<Tuple<T>>` local looks opaque to the ordinary `sroa.rs` pass because the tuple lives on the GC heap behind the array, not as an addressable local. Hoisting the decomposition to the array level eliminates the tuple allocation altogether and exposes the underlying integers for downstream passes.
+
+Whitelist-based escape analysis — a candidate local is only decomposed when every use matches one of the following patterns:
+
+- `v.push(tuple)` where `tuple` is either a tuple literal `[e0, ..., ek]` or another candidate's `other.index_value(j)`
+- `v[i] = tuple` (same constraint on the right-hand side)
+- `v[i].K` (field access on an index result — constant `K`)
+- `v.len()` / `v.is_empty()`
+- Initialization via `let v: Array<[...]> = []` or `Array::<[...]>::with_capacity(n)`
+
+Any other use (bare local reference, `&v` / `&mut v`, closure capture, unrecognized method) marks the local as escaped. Tuple-source dependencies propagate via a fixpoint: if `b.push(a[j])` is used and `a` escapes, `b` escapes too.
+
+When a candidate is decomposed, the pass allocates N new `Array<T_k>` locals, rewrites each `push`/`index_assign` into N parallel calls on the per-field arrays, and redirects `v[i].K` reads and `v.len()`/`v.is_empty()` queries to the k-th (or 0-th) field array. Requires monomorphized `Array<T_k>::{with_capacity,push,len,IndexValue,IndexAssign}` methods to be present in the catalog; candidates missing any required method are dropped.
+
+The pass runs first in the fixed-point loop so the whitelist sees unobfuscated method-call patterns before `inline.rs` rewrites them. Method call receivers in lowered TIR are `Unary::{Ref,MutRef}` wrapping a `Local`, so `receiver_local()` sees through those wrappers.
+
+Future directions (not yet implemented):
+
+- **Struct containers**: generalize from `Array<Tuple<...>>` to `Array<UserStruct>` with the same escape rules. The rewrite is symmetric — one `Array<T_k>` per named field instead of per tuple index.
+- **Nested containers**: `Array<Array<T>>` is still a hard escape today. Recognising known inner shapes (e.g. fixed-width vectors) would let the outer array be decomposed.
+- **Container fields of structs**: today only top-level `let` bindings are candidates. Extending HFS to hoist an `Array<Tuple<...>>` struct field into a local first would give this pass a chance to run on it.
+- **Push-to-tuple-literal fusion with `array.new_fixed`**: when the full set of pushes on a decomposed local is statically known (e.g. init lists), emit `array.new_fixed` for each field array instead of a sequence of `append` calls. Pairs well with the existing WIR-level `collapse array append sequences` phase.
+- **Parallel index-assign coalescing**: adjacent field-level stores (`v_0[i] = ...; v_1[i] = ...;`) duplicate the bounds check and dispatch. A post-pass that shares the index and the bounds-checked array reference between the N stores would recover the remaining overhead versus hand-written SoA code.
+- **Cross-function propagation**: a candidate escapes the moment it is passed to a non-inlined function. Adding a `stores`-aware summary of how callees use their `&mut Array<Tuple<...>>` parameters would extend the pass across function boundaries without losing soundness.
 
 ### Scalar Replacement of Aggregates (`sroa.rs`)
 
