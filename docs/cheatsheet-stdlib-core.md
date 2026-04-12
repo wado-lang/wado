@@ -869,6 +869,7 @@ impl String {
     pub fn concat(a: String, b: String) -> String;
     pub fn bytes(&self) -> StrUtf8ByteIter;
     pub fn chars(&self) -> StrCharIter;
+    pub fn char_at_byte(&self, byte_index: i32) -> Option<char>;
     pub fn push(&mut self, c: char);
     pub fn truncate(&mut self, byte_len: i32);
     pub fn truncate_chars(&mut self, char_count: i32);
