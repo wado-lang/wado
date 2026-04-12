@@ -1,13 +1,19 @@
 //! Optimization pass for Wado TIR
 //!
-//! This module coordinates various optimization passes:
+//! This module coordinates the following optimization passes:
 //! - Dead Code Elimination (DCE) via `dce` module
 //! - Function inlining via `inline` module
+//! - Labeled block fusion via `labeled_block_fusion` module
 //! - Reference elimination via `ref_elim` module
 //! - Scalar Replacement of Aggregates (SROA) via `sroa` module
 //! - Copy propagation via `copy_prop` module
+//! - Common Subexpression Elimination (CSE) via `cse` module
+//! - Store-to-load forwarding via `store_load_forward` module
 //! - Constant optimizations (propagation, folding, global promotion, branch pruning) via `const_*` modules
 //! - Loop-Invariant Code Motion (LICM) via `licm` module
+//! - Condition implication elimination via `condition_implication` module
+//! - Template buffer hoisting via `tmpl_hoist` module
+//! - Hot Field Scalarization (HFS) via `field_scalarize` module
 //! - Select lowering via `select_lowering` module
 
 mod condition_implication;
@@ -200,13 +206,21 @@ fn run_pass(
 
 /// Run optimization passes with a fixed-point iteration strategy.
 ///
-/// Each iteration runs the full optimization pipeline:
-/// - Function inlining
-/// - Reference elimination
-/// - Scalar Replacement of Aggregates (SROA)
-/// - Copy propagation
-/// - Constant optimizations (propagation → folding → global promotion → branch pruning)
-/// - Loop-invariant code motion (LICM)
+/// Each iteration runs 14 optimization passes in the following order:
+/// 1. Function inlining (`inline`)
+/// 2. Labeled block fusion (`labeled_block_fusion`)
+/// 3. Reference elimination (`ref_elim`)
+/// 4. Scalar Replacement of Aggregates (`sroa`)
+/// 5. Copy propagation (`copy_prop`)
+/// 6. Common Subexpression Elimination (`cse`)
+/// 7. Store-to-load forwarding (`store_load_forward`)
+/// 8. Constant propagation (`const_prop`)
+/// 9. Constant folding (`const_fold`)
+/// 10. Constant global promotion (`const_global_promotion`)
+/// 11. Constant branch pruning (`branch_prune`)
+/// 12. Loop-invariant code motion (`licm`)
+/// 13. Condition implication elimination (`condition_implication`)
+/// 14. Template buffer hoisting (`tmpl_hoist`)
 ///
 /// The `config` parameter controls the number of iterations and inline threshold.
 /// More iterations can find more optimization opportunities but take longer.

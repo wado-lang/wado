@@ -11,10 +11,11 @@ use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::name::ModuleSource;
 use crate::tir::{
-    CallArg, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, InlineHint, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::block_has_break_to;
+use crate::token::Span;
 
 // The inline threshold is based on expression count, which provides a more
 // accurate measure of function complexity than statement count.
@@ -1008,41 +1009,6 @@ fn inline_calls_in_block(
     block.stmts = new_stmts;
 }
 
-/// Create a default value for a type (for initializing result locals)
-fn create_default_value(type_id: TypeId, type_table: &TypeTable, span: crate::Span) -> TirExpr {
-    let kind = match type_table.get(type_id) {
-        ResolvedType::Primitive(prim) => match prim {
-            PrimitiveType::I8
-            | PrimitiveType::I16
-            | PrimitiveType::I32
-            | PrimitiveType::I64
-            | PrimitiveType::I128
-            | PrimitiveType::U8
-            | PrimitiveType::U16
-            | PrimitiveType::U32
-            | PrimitiveType::U64
-            | PrimitiveType::U128 => TirExprKind::IntLiteral {
-                value: 0,
-                repr: "0".to_string(),
-            },
-            PrimitiveType::F32 | PrimitiveType::F64 => TirExprKind::FloatLiteral {
-                value: 0.0,
-                repr: "0.0".to_string(),
-            },
-            PrimitiveType::Bool => TirExprKind::BoolLiteral(false),
-            PrimitiveType::Char => TirExprKind::CharLiteral('\0'),
-            PrimitiveType::V128 => TirExprKind::IntLiteral {
-                value: 0,
-                repr: "0".to_string(),
-            },
-        },
-        // For all reference types (structs, arrays, options, etc.), use Null
-        // The value will be immediately overwritten, so this is just a placeholder
-        _ => TirExprKind::Null,
-    };
-    TirExpr::new(kind, type_id, span)
-}
-
 /// Look up an inline candidate by module path and function name.
 fn find_inline_candidate<'a>(
     candidates: &'a IndexMap<(ModuleSource, String), TirFunction>,
@@ -1061,31 +1027,46 @@ fn find_inline_candidate<'a>(
     candidates.get(&key).map(|c| (c, key))
 }
 
-/// Try to inline a call expression, returning the inlined expression and key
-fn try_inline_call_expr(
-    expr: &TirExpr,
-    candidates: &IndexMap<(ModuleSource, String), TirFunction>,
-    current_module: &ModuleSource,
+/// Binding for a single parameter during inlining.
+///
+/// Each binding becomes a `Let` statement at the head of the synthesized
+/// labeled block. Fields carry the information needed without requiring the
+/// shared helper to know whether the call site is a free function or a method.
+struct InlineBinding {
+    /// Original callee-side local index of the parameter being bound.
+    /// Used to build the `param_to_local` remapping for the inlined body.
+    callee_local_index: u32,
+    /// Parameter name (used verbatim as the new `let` name for debuggability).
+    name: String,
+    /// Whether the synthesized `let` should be mutable. Free function calls
+    /// preserve the original parameter's `is_mut`; method calls always pass
+    /// `false` (the method body cannot rebind `self` or its arguments).
+    is_mut: bool,
+    /// Type of the value bound to the new local. This may differ from
+    /// `param.type_id` due to monomorphization (arg type differs from param type)
+    /// or `&mut self` wrapping (receiver gets wrapped in a `MutRef` unary).
+    local_type: TypeId,
+    /// The value expression bound to the new local.
+    value: TirExpr,
+}
+
+/// Core inlining routine: builds a labeled block that binds each prepared
+/// parameter value and executes the callee body with locals remapped into the
+/// caller's frame.
+///
+/// Shared by `try_inline_call_expr` and `try_inline_method_call_expr`. The
+/// difference between the two lies entirely in how they prepare `bindings`.
+fn build_inlined_labeled_block(
+    candidate: &TirFunction,
+    body: &TirBlock,
+    func_name: &str,
+    bindings: Vec<InlineBinding>,
+    call_span: Span,
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
-    _type_table: &TypeTable,
     inline_counter: &mut u32,
-) -> Option<(TirExpr, (ModuleSource, String))> {
-    let TirExprKind::Call { func, args, .. } = &expr.kind else {
-        return None;
-    };
-
-    let call_module_source = func.module_source.clone();
-    let func_name = func.name.clone();
-
-    // Look up the candidate function.
-    let (candidate, inlined_key) =
-        find_inline_candidate(candidates, &call_module_source, current_module, &func_name)?;
-
-    // Get the function body
-    let body = candidate.body.as_ref()?;
-
-    // Generate unique label for this inline site
+) -> TirExpr {
+    // Generate unique label for this inline site.
     // Sanitize function name for use as label (replace non-alphanumeric with _)
     let sanitized_name: String = func_name
         .chars()
@@ -1100,47 +1081,46 @@ fn try_inline_call_expr(
     let label = format!("__inline_{}_{}", sanitized_name, *inline_counter);
     *inline_counter += 1;
 
-    // Calculate local index offset for remapping
+    // Calculate local index offset for remapping.
     let local_offset = *local_count;
 
     let callee_param_count = candidate.params.len() as u32;
     let callee_local_count = candidate.local_count;
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
 
-    // Create argument bindings as let statements inside a labeled block
     // IMPORTANT: Push param types first to match index assignment order
     // (params get indices local_offset+0, local_offset+1, ..., then non-params follow)
-    let mut block_stmts = Vec::new();
+    let mut block_stmts = Vec::with_capacity(bindings.len() + body.stmts.len());
     let mut param_to_local: IndexMap<u32, u32> = IndexMap::default();
 
-    for (i, (param, arg)) in candidate.params.iter().zip(args.iter()).enumerate() {
+    for (i, binding) in bindings.into_iter().enumerate() {
         let new_local_index = local_offset + i as u32;
-        param_to_local.insert(param.local_index, new_local_index);
+        param_to_local.insert(binding.callee_local_index, new_local_index);
 
-        // Extend local_types for parameter - use argument's type_id to match
-        // the actual value being assigned (handles monomorphization type variance)
-        local_types.push(arg.expr.type_id);
+        // Extend local_types for parameter using the binding's actual local_type
+        // (handles monomorphization type variance and &mut self ref wrapping).
+        local_types.push(binding.local_type);
         *local_count += 1;
 
-        // Use original parameter name (not _inline_ prefix)
+        // Use original parameter name (not _inline_ prefix).
         block_stmts.push(TirStmt::new(
             TirStmtKind::Let {
-                name: param.name.clone(),
+                name: binding.name,
                 local_index: new_local_index,
-                is_mut: param.is_mut, // Preserve mutability from the original parameter
+                is_mut: binding.is_mut,
                 is_reactive: false,
-                type_id: arg.expr.type_id,
-                value: arg.expr.clone(),
+                type_id: binding.local_type,
+                value: binding.value,
                 skip_value_copy: false,
             },
-            expr.span,
+            call_span,
         ));
     }
 
-    // param_offset marks where non-param locals start (after all params)
-    let param_offset = local_offset + candidate.params.len() as u32;
+    // param_offset marks where non-param locals start (after all params).
+    let param_offset = local_offset + callee_param_count;
 
-    // Now extend local_types for the non-parameter locals
+    // Now extend local_types for the non-parameter locals.
     for i in callee_param_count..callee_local_count {
         if let Some(&type_id) = candidate.local_types.get(i as usize) {
             local_types.push(type_id);
@@ -1148,7 +1128,7 @@ fn try_inline_call_expr(
     }
     *local_count += new_locals_needed;
 
-    // Convert the body, transforming `return` into `break label: expr`
+    // Convert the body, transforming `return` into `break label: expr`.
     let remapped_stmts = remap_and_convert_returns(
         body,
         &param_to_local,
@@ -1159,21 +1139,69 @@ fn try_inline_call_expr(
 
     block_stmts.extend(remapped_stmts);
 
-    // Create a labeled block expression that produces the return value
-    let inlined_expr = TirExpr::new(
+    // Create a labeled block expression that produces the return value.
+    TirExpr::new(
         TirExprKind::LabeledBlock {
             label,
-            block: TirBlock::new(block_stmts, expr.span),
+            block: TirBlock::new(block_stmts, call_span),
             result_type: candidate.return_type,
         },
         candidate.return_type,
+        call_span,
+    )
+}
+
+/// Try to inline a free function call expression, returning the inlined
+/// expression and the callee's lookup key.
+fn try_inline_call_expr(
+    expr: &TirExpr,
+    candidates: &IndexMap<(ModuleSource, String), TirFunction>,
+    current_module: &ModuleSource,
+    local_count: &mut u32,
+    local_types: &mut Vec<TypeId>,
+    _type_table: &TypeTable,
+    inline_counter: &mut u32,
+) -> Option<(TirExpr, (ModuleSource, String))> {
+    let TirExprKind::Call { func, args, .. } = &expr.kind else {
+        return None;
+    };
+
+    let func_name = func.name.clone();
+    let (candidate, inlined_key) =
+        find_inline_candidate(candidates, &func.module_source, current_module, &func_name)?;
+    let body = candidate.body.as_ref()?;
+
+    // Use argument's type_id to match the actual value being assigned
+    // (handles monomorphization type variance).
+    let bindings: Vec<InlineBinding> = candidate
+        .params
+        .iter()
+        .zip(args.iter())
+        .map(|(param, arg)| InlineBinding {
+            callee_local_index: param.local_index,
+            name: param.name.clone(),
+            is_mut: param.is_mut,
+            local_type: arg.expr.type_id,
+            value: arg.expr.clone(),
+        })
+        .collect();
+
+    let inlined_expr = build_inlined_labeled_block(
+        candidate,
+        body,
+        &func_name,
+        bindings,
         expr.span,
+        local_count,
+        local_types,
+        inline_counter,
     );
 
     Some((inlined_expr, inlined_key))
 }
 
-/// Try to inline a method call expression, returning the inlined expression and key
+/// Try to inline a method call expression, returning the inlined expression
+/// and the callee's lookup key.
 fn try_inline_method_call_expr(
     expr: &TirExpr,
     candidates: &IndexMap<(ModuleSource, String), TirFunction>,
@@ -1193,43 +1221,12 @@ fn try_inline_method_call_expr(
         return None;
     };
 
-    let call_module_source = func.module_source.clone();
     let func_name = func.name.clone();
-
-    // Look up the candidate function.
     let (candidate, inlined_key) =
-        find_inline_candidate(candidates, &call_module_source, current_module, &func_name)?;
-
-    // Get the function body
+        find_inline_candidate(candidates, &func.module_source, current_module, &func_name)?;
     let body = candidate.body.as_ref()?;
 
-    // Generate unique label for this inline site
-    // Sanitize function name for use as label (replace non-alphanumeric with _)
-    let sanitized_name: String = func_name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let label = format!("__inline_{}_{}", sanitized_name, *inline_counter);
-    *inline_counter += 1;
-
-    // Calculate local index offset for remapping
-    let local_offset = *local_count;
-
-    let callee_param_count = candidate.params.len() as u32;
-    let callee_local_count = candidate.local_count;
-    let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
-
-    // Create argument bindings as let statements inside a labeled block
-    // IMPORTANT: Push param types first to match index assignment order
-    // For methods, first param is `self` (receiver), then the rest are args
-    let mut block_stmts = Vec::new();
-    let mut param_to_local: IndexMap<u32, u32> = IndexMap::default();
+    let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
 
     // Bind receiver to first parameter (self).
     // For &mut self receivers, wrap in a MutRef expression so that field
@@ -1238,8 +1235,6 @@ fn try_inline_method_call_expr(
     // For &self receivers, a value copy is safe (no mutations) and lets copy
     // propagation simplify `self.field` → `receiver.field` without a ref level.
     let first_param = &candidate.params[0];
-    let self_local_index = local_offset;
-    param_to_local.insert(first_param.local_index, self_local_index);
     let (self_type_id, self_value) =
         if matches!(type_table.get(first_param.type_id), ResolvedType::MutRef(_)) {
             if matches!(type_table.get(receiver.type_id), ResolvedType::MutRef(_)) {
@@ -1261,77 +1256,35 @@ fn try_inline_method_call_expr(
         } else {
             (receiver.type_id, (**receiver).clone())
         };
-    local_types.push(self_type_id);
-    *local_count += 1;
+    bindings.push(InlineBinding {
+        callee_local_index: first_param.local_index,
+        name: first_param.name.clone(),
+        is_mut: false,
+        local_type: self_type_id,
+        value: self_value,
+    });
 
-    // Use original parameter name (not _inline_ prefix)
-    block_stmts.push(TirStmt::new(
-        TirStmtKind::Let {
-            name: first_param.name.clone(),
-            local_index: self_local_index,
+    // Bind remaining args to remaining parameters.
+    // Use argument's type_id to handle monomorphization type variance.
+    for (param, arg) in candidate.params.iter().skip(1).zip(args.iter()) {
+        bindings.push(InlineBinding {
+            callee_local_index: param.local_index,
+            name: param.name.clone(),
             is_mut: false,
-            is_reactive: false,
-            type_id: self_type_id,
-            value: self_value,
-            skip_value_copy: false,
-        },
-        expr.span,
-    ));
-
-    // Bind remaining args to remaining parameters
-    // Use argument's type_id to handle monomorphization type variance
-    for (i, (param, arg)) in candidate.params.iter().skip(1).zip(args.iter()).enumerate() {
-        let new_local_index = local_offset + 1 + i as u32;
-        param_to_local.insert(param.local_index, new_local_index);
-        local_types.push(arg.expr.type_id);
-        *local_count += 1;
-
-        // Use original parameter name (not _inline_ prefix)
-        block_stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: param.name.clone(),
-                local_index: new_local_index,
-                is_mut: false,
-                is_reactive: false,
-                type_id: arg.expr.type_id,
-                value: arg.expr.clone(),
-                skip_value_copy: false,
-            },
-            expr.span,
-        ));
+            local_type: arg.expr.type_id,
+            value: arg.expr.clone(),
+        });
     }
 
-    // param_offset marks where non-param locals start (after all params)
-    let param_offset = local_offset + candidate.params.len() as u32;
-
-    // Now extend local_types for the non-parameter locals
-    for i in callee_param_count..callee_local_count {
-        if let Some(&type_id) = candidate.local_types.get(i as usize) {
-            local_types.push(type_id);
-        }
-    }
-    *local_count += new_locals_needed;
-
-    // Convert the body, transforming `return` into `break label: expr`
-    let remapped_stmts = remap_and_convert_returns(
+    let inlined_expr = build_inlined_labeled_block(
+        candidate,
         body,
-        &param_to_local,
-        param_offset,
-        callee_param_count,
-        &label,
-    );
-
-    block_stmts.extend(remapped_stmts);
-
-    // Create a labeled block expression that produces the return value
-    let inlined_expr = TirExpr::new(
-        TirExprKind::LabeledBlock {
-            label,
-            block: TirBlock::new(block_stmts, expr.span),
-            result_type: candidate.return_type,
-        },
-        candidate.return_type,
+        &func_name,
+        bindings,
         expr.span,
+        local_count,
+        local_types,
+        inline_counter,
     );
 
     Some((inlined_expr, inlined_key))
@@ -2423,11 +2376,4 @@ fn inline_calls_in_expr(
             unreachable!("TemplateString should be expanded before this phase")
         }
     }
-}
-
-// Note: create_default_value is kept but currently unused since we use labeled block expressions
-// which don't need a default value initialization. It may be useful for future optimizations.
-#[allow(dead_code)]
-fn _create_default_value(type_id: TypeId, type_table: &TypeTable, span: crate::Span) -> TirExpr {
-    create_default_value(type_id, type_table, span)
 }

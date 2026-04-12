@@ -660,50 +660,6 @@ fn collect_modified_vars_in_expr(
     }
 }
 
-/// Check if an expression is loop-invariant given the set of modified variables.
-/// An expression is loop-invariant if:
-/// 1. It's a constant/literal
-/// 2. It's a local variable not in the modified set
-/// 3. It's a field access on a loop-invariant expression
-#[allow(dead_code)]
-fn is_loop_invariant(expr: &TirExpr, modified_vars: &IndexSet<u32>) -> bool {
-    match &expr.kind {
-        // Constants are always invariant
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::BytesLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::FuncRef { .. } => true,
-
-        // Local variable is invariant if not modified in the loop
-        TirExprKind::Local { index, .. } => !modified_vars.contains(index),
-
-        // Field access is invariant if the base expression is invariant
-        TirExprKind::FieldAccess { expr, .. }
-        | TirExprKind::TupleSpread { expr }
-        | TirExprKind::TupleZip { expr }
-        | TirExprKind::TypePackExpansion {
-            call_expr: expr, ..
-        } => is_loop_invariant(expr, modified_vars),
-
-        // Pure binary ops are invariant if operands are invariant
-        // (Assignments are handled separately via TirExprKind::Assign, not as binary ops)
-        TirExprKind::Binary { left, right, .. } => {
-            is_loop_invariant(left, modified_vars) && is_loop_invariant(right, modified_vars)
-        }
-        TirExprKind::Unary { expr, .. } => is_loop_invariant(expr, modified_vars),
-        TirExprKind::Cast { expr, .. } => is_loop_invariant(expr, modified_vars),
-
-        // Everything else is considered not invariant (conservative)
-        // This includes: calls, method calls, index access (could have side effects), etc.
-        _ => false,
-    }
-}
-
 /// Information about an immutable reference binding: `let ref_var: &T = &source_var`
 #[derive(Debug, Clone)]
 struct LicmRefBinding {
