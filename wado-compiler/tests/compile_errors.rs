@@ -101,9 +101,9 @@ fn test_lexer_error_invalid_character() {
 
 #[test]
 fn test_parser_error_missing_function_body() {
-    let source = r#"
+    let source = r"
 fn main()
-"#;
+";
 
     let result = common::compile_source(source);
     assert!(result.is_err());
@@ -118,7 +118,7 @@ fn main()
             ..
         } => {
             assert!(
-                message.contains("expected") || message.contains("{"),
+                message.contains("expected") || message.contains('{'),
                 "Unexpected message: {message}"
             );
             assert!(line > 0);
@@ -131,11 +131,11 @@ fn main()
 
 #[test]
 fn test_parser_error_unexpected_token() {
-    let source = r#"
+    let source = r"
 fn main() {
     let = 42;
 }
-"#;
+";
 
     let result = common::compile_source(source);
     assert!(result.is_err());
@@ -163,12 +163,12 @@ fn main() {
 
 #[test]
 fn test_parser_error_missing_semicolon() {
-    let source = r#"
+    let source = r"
 fn main() {
     let x = 1
     let y = 2;
 }
-"#;
+";
 
     let result = common::compile_source(source);
     assert!(result.is_err());
@@ -183,7 +183,7 @@ fn main() {
             ..
         } => {
             assert!(
-                message.contains("expected") || message.contains(";"),
+                message.contains("expected") || message.contains(';'),
                 "Unexpected message: {message}"
             );
             assert!(line >= 3);
@@ -196,9 +196,9 @@ fn main() {
 
 #[test]
 fn test_parser_error_invalid_use_statement() {
-    let source = r#"
+    let source = r"
 use;
-"#;
+";
 
     let result = common::compile_source(source);
     assert!(result.is_err());
@@ -288,11 +288,11 @@ fn main() {
 
 #[test]
 fn test_comparison_chain_error_not_equal_cannot_chain() {
-    let source = r#"
+    let source = r"
 fn run() {
     let a = 1 != 2 != 3;
 }
-"#;
+";
 
     let result = common::compile_source(source);
     assert!(result.is_err());
@@ -320,11 +320,11 @@ fn run() {
 
 #[test]
 fn test_comparison_chain_error_mixed_ascending_descending() {
-    let source = r#"
+    let source = r"
 fn run() {
     let a = 1 < 2 > 3;
 }
-"#;
+";
 
     let result = common::compile_source(source);
     assert!(result.is_err());
@@ -352,11 +352,11 @@ fn run() {
 
 #[test]
 fn test_comparison_chain_error_mixed_descending_ascending() {
-    let source = r#"
+    let source = r"
 fn run() {
     let a = 3 > 2 < 1;
 }
-"#;
+";
 
     let result = common::compile_source(source);
     assert!(result.is_err());
@@ -384,11 +384,11 @@ fn run() {
 
 #[test]
 fn test_comparison_chain_error_equality_with_inequality() {
-    let source = r#"
+    let source = r"
 fn run() {
     let a = 1 == 2 < 3;
 }
-"#;
+";
 
     let result = common::compile_source(source);
     assert!(result.is_err());
@@ -416,11 +416,11 @@ fn run() {
 
 #[test]
 fn test_comparison_chain_error_inequality_with_equality() {
-    let source = r#"
+    let source = r"
 fn run() {
     let a = 1 < 2 == 3;
 }
-"#;
+";
 
     let result = common::compile_source(source);
     assert!(result.is_err());
@@ -448,11 +448,11 @@ fn run() {
 
 #[test]
 fn test_comparison_chain_error_not_equal_after_less_than() {
-    let source = r#"
+    let source = r"
 fn run() {
     let a = 1 < 2 != 3;
 }
-"#;
+";
 
     let result = common::compile_source(source);
     assert!(result.is_err());
@@ -491,7 +491,7 @@ fn test_error_display_with_filename() {
     let display = format!("{err}");
     assert!(display.contains("test.wado"));
     assert!(display.contains("10"));
-    assert!(display.contains("5"));
+    assert!(display.contains('5'));
     assert!(display.contains("unexpected token"));
     assert!(display.contains("parse error"));
 }

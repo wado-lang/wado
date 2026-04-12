@@ -1240,12 +1240,12 @@ mod tests {
     #[test]
     fn test_simple_binding() {
         let module = parse(
-            r#"
+            r"
             fn run() {
                 let x = 1;
                 let y = x;
             }
-        "#,
+        ",
         );
         let (ok, diags) = bind_and_check(&module);
         assert!(ok);
@@ -1255,14 +1255,14 @@ mod tests {
     #[test]
     fn test_out_of_scope() {
         let module = parse(
-            r#"
+            r"
             fn run() {
                 if true {
                     let x = 1;
                 }
                 let y = x;
             }
-        "#,
+        ",
         );
         let (ok, diags) = bind_and_check(&module);
         assert!(!ok);
@@ -1274,12 +1274,12 @@ mod tests {
     #[test]
     fn test_duplicate_in_scope() {
         let module = parse(
-            r#"
+            r"
             fn run() {
                 let x = 1;
                 let x = 2;
             }
-        "#,
+        ",
         );
         let (ok, diags) = bind_and_check(&module);
         assert!(!ok);
@@ -1290,34 +1290,33 @@ mod tests {
     #[test]
     fn test_same_scope_shadow_with_self_ref() {
         let module = parse(
-            r#"
+            r"
             fn run() {
                 let x = 1;
                 let x = x + 1;
             }
-        "#,
+        ",
         );
         let (ok, diags) = bind_and_check(&module);
-        assert!(ok, "shadowing with self-ref should be allowed: {:?}", diags);
+        assert!(ok, "shadowing with self-ref should be allowed: {diags:?}");
         assert!(diags.is_empty());
     }
 
     #[test]
     fn test_same_scope_shadow_with_self_ref_in_call() {
         let module = parse(
-            r#"
+            r"
             fn transform(n: i32) -> i32 { return n; }
             fn run() {
                 let x = 1;
                 let x = transform(x);
             }
-        "#,
+        ",
         );
         let (ok, diags) = bind_and_check(&module);
         assert!(
             ok,
-            "shadowing with self-ref in call should be allowed: {:?}",
-            diags
+            "shadowing with self-ref in call should be allowed: {diags:?}"
         );
         assert!(diags.is_empty());
     }
@@ -1326,12 +1325,12 @@ mod tests {
     fn test_same_scope_shadow_closure_param_not_self_ref() {
         // |x| x + 1 — the x inside refers to the closure param, not the outer variable
         let module = parse(
-            r#"
+            r"
             fn run() {
                 let x = 1;
                 let x = |x: i32| x + 1;
             }
-        "#,
+        ",
         );
         let (ok, diags) = bind_and_check(&module);
         assert!(!ok, "closure param shadowing should NOT count as self-ref");
@@ -1342,29 +1341,29 @@ mod tests {
     fn test_same_scope_shadow_closure_capture_is_self_ref() {
         // || x + 1 — captures the outer x, this IS a self-reference
         let module = parse(
-            r#"
+            r"
             fn run() {
                 let x = 1;
                 let x = || x + 1;
             }
-        "#,
+        ",
         );
         let (ok, diags) = bind_and_check(&module);
-        assert!(ok, "closure capture should count as self-ref: {:?}", diags);
+        assert!(ok, "closure capture should count as self-ref: {diags:?}");
         assert!(diags.is_empty());
     }
 
     #[test]
     fn test_shadowing_in_nested_scope() {
         let module = parse(
-            r#"
+            r"
             fn run() {
                 let x = 1;
                 if true {
                     let x = 2;
                 }
             }
-        "#,
+        ",
         );
         let (ok, diags) = bind_and_check(&module);
         assert!(ok);
@@ -1374,12 +1373,12 @@ mod tests {
     #[test]
     fn test_assign_to_immutable() {
         let module = parse(
-            r#"
+            r"
             fn run() {
                 let x = 1;
                 x = 2;
             }
-        "#,
+        ",
         );
         let (ok, diags) = bind_and_check(&module);
         assert!(!ok);
@@ -1390,12 +1389,12 @@ mod tests {
     #[test]
     fn test_assign_to_mutable() {
         let module = parse(
-            r#"
+            r"
             fn run() {
                 let mut x = 1;
                 x = 2;
             }
-        "#,
+        ",
         );
         let (ok, diags) = bind_and_check(&module);
         assert!(ok);

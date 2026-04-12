@@ -13,7 +13,7 @@ fn parse_wit_and_generate(wit: &str) -> String {
     let mut generator = WadoCodeGenerator::new();
 
     let mut output = String::new();
-    for (iface_id, _) in resolve.interfaces.iter() {
+    for (iface_id, _) in &resolve.interfaces {
         let module = transformer
             .transform_interface(iface_id)
             .expect("Failed to transform interface");
@@ -24,13 +24,13 @@ fn parse_wit_and_generate(wit: &str) -> String {
 
 #[test]
 fn test_simple_function() {
-    let wit = r#"
+    let wit = r"
 package test:example@0.1.0;
 
 interface greet {
     hello: func(name: string) -> string;
 }
-"#;
+";
 
     let output = parse_wit_and_generate(wit);
 
@@ -41,7 +41,7 @@ interface greet {
 
 #[test]
 fn test_record_type() {
-    let wit = r#"
+    let wit = r"
 package test:example@0.1.0;
 
 interface types {
@@ -50,7 +50,7 @@ interface types {
         y: s32,
     }
 }
-"#;
+";
 
     let output = parse_wit_and_generate(wit);
 
@@ -61,7 +61,7 @@ interface types {
 
 #[test]
 fn test_enum_type() {
-    let wit = r#"
+    let wit = r"
 package test:example@0.1.0;
 
 interface types {
@@ -71,7 +71,7 @@ interface types {
         blue,
     }
 }
-"#;
+";
 
     let output = parse_wit_and_generate(wit);
 
@@ -83,14 +83,14 @@ interface types {
 
 #[test]
 fn test_option_and_result_types() {
-    let wit = r#"
+    let wit = r"
 package test:example@0.1.0;
 
 interface api {
     get-value: func(key: string) -> option<string>;
     parse: func(input: string) -> result<u32, string>;
 }
-"#;
+";
 
     let output = parse_wit_and_generate(wit);
 
@@ -100,7 +100,7 @@ interface api {
 
 #[test]
 fn test_resource_type() {
-    let wit = r#"
+    let wit = r"
 package test:example@0.1.0;
 
 interface storage {
@@ -109,7 +109,7 @@ interface storage {
         write: func(data: list<u8>);
     }
 }
-"#;
+";
 
     let output = parse_wit_and_generate(wit);
 

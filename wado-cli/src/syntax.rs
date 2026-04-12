@@ -611,15 +611,15 @@ mod tests {
     use super::*;
     use jsonschema::validator_for;
 
-    /// TextMate grammar JSON schema
-    /// From: https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json
+    /// `TextMate` grammar JSON schema
+    /// From: <https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json>
     fn textmate_grammar_schema() -> serde_json::Value {
         serde_json::from_str(include_str!("../schemas/tmlanguage.schema.json"))
             .expect("failed to parse tmlanguage schema")
     }
 
     /// VS Code language-configuration.json schema
-    /// From: https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/language-configuration.json
+    /// From: <https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/language-configuration.json>
     fn language_configuration_schema() -> serde_json::Value {
         serde_json::from_str(include_str!(
             "../schemas/language-configuration.schema.json"
@@ -639,12 +639,11 @@ mod tests {
             .map(|e| e.to_string())
             .collect();
 
-        if !errors.is_empty() {
-            panic!(
-                "TextMate grammar failed schema validation:\n{}",
-                errors.join("\n")
-            );
-        }
+        assert!(
+            errors.is_empty(),
+            "TextMate grammar failed schema validation:\n{}",
+            errors.join("\n")
+        );
     }
 
     #[test]
@@ -659,11 +658,10 @@ mod tests {
             .map(|e| e.to_string())
             .collect();
 
-        if !errors.is_empty() {
-            panic!(
-                "Language configuration failed schema validation:\n{}",
-                errors.join("\n")
-            );
-        }
+        assert!(
+            errors.is_empty(),
+            "Language configuration failed schema validation:\n{}",
+            errors.join("\n")
+        );
     }
 }

@@ -31,10 +31,8 @@ mod tests {
         let mut found_exports = Vec::new();
         for payload in parser.parse_all(wasm) {
             if let Ok(Payload::ExportSection(exports)) = payload {
-                for export in exports {
-                    if let Ok(exp) = export {
-                        found_exports.push(exp.name.to_string());
-                    }
+                for exp in exports.into_iter().flatten() {
+                    found_exports.push(exp.name.to_string());
                 }
             }
         }

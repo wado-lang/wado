@@ -46,7 +46,7 @@ fn test_template_string_empty() {
                 "expected no parts in empty template"
             );
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -62,10 +62,10 @@ fn test_template_string_plain_text() {
                 wado_compiler::ast::TemplatePart::String(s) => {
                     assert_eq!(s, "hello world");
                 }
-                other => panic!("expected String part, got {:?}", other),
+                other => panic!("expected String part, got {other:?}"),
             }
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -87,7 +87,7 @@ fn test_template_string_single_interpolation() {
                 wado_compiler::ast::TemplatePart::String(s) => {
                     assert_eq!(s, "Hello, ");
                 }
-                other => panic!("expected String part, got {:?}", other),
+                other => panic!("expected String part, got {other:?}"),
             }
 
             // Part 1: {name}
@@ -98,10 +98,10 @@ fn test_template_string_single_interpolation() {
                         wado_compiler::ast::Expr::Ident(ident) => {
                             assert_eq!(ident.name, "name");
                         }
-                        other => panic!("expected Ident, got {:?}", other),
+                        other => panic!("expected Ident, got {other:?}"),
                     }
                 }
-                other => panic!("expected Interpolation part, got {:?}", other),
+                other => panic!("expected Interpolation part, got {other:?}"),
             }
 
             // Part 2: "!"
@@ -109,10 +109,10 @@ fn test_template_string_single_interpolation() {
                 wado_compiler::ast::TemplatePart::String(s) => {
                     assert_eq!(s, "!");
                 }
-                other => panic!("expected String part, got {:?}", other),
+                other => panic!("expected String part, got {other:?}"),
             }
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -148,7 +148,7 @@ fn test_template_string_multiple_interpolations() {
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
             ));
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -166,10 +166,10 @@ fn test_template_string_expression_interpolation() {
                     // Should be a binary expression (x + y)
                     assert!(matches!(&**expr, wado_compiler::ast::Expr::Binary(_)));
                 }
-                other => panic!("expected Interpolation with binary expr, got {:?}", other),
+                other => panic!("expected Interpolation with binary expr, got {other:?}"),
             }
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -187,17 +187,17 @@ fn test_template_format_simple() {
                         wado_compiler::ast::Expr::Ident(ident) => {
                             assert_eq!(ident.name, "pi");
                         }
-                        other => panic!("expected Ident, got {:?}", other),
+                        other => panic!("expected Ident, got {other:?}"),
                     }
 
                     // Check format spec
                     let format_spec = format.as_ref().expect("expected format spec");
                     assert_eq!(format_spec.spec, ".2f", "expected '.2f' format spec");
                 }
-                other => panic!("expected Interpolation, got {:?}", other),
+                other => panic!("expected Interpolation, got {other:?}"),
             }
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -212,9 +212,9 @@ fn test_template_format_zero_padding() {
                 let format_spec = format.as_ref().expect("expected format spec");
                 assert_eq!(format_spec.spec, "0.3f");
             }
-            other => panic!("expected Interpolation, got {:?}", other),
+            other => panic!("expected Interpolation, got {other:?}"),
         },
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -229,9 +229,9 @@ fn test_template_format_width() {
                 let format_spec = format.as_ref().expect("expected format spec");
                 assert_eq!(format_spec.spec, "10");
             }
-            other => panic!("expected Interpolation, got {:?}", other),
+            other => panic!("expected Interpolation, got {other:?}"),
         },
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -254,10 +254,10 @@ fn test_template_double_colon_not_format() {
                     // The expression should be a function call
                     assert!(matches!(&**expr, wado_compiler::ast::Expr::Call(_)));
                 }
-                other => panic!("expected Interpolation, got {:?}", other),
+                other => panic!("expected Interpolation, got {other:?}"),
             }
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -273,9 +273,9 @@ fn test_template_colon_alone_is_format() {
                 let format_spec = format.as_ref().expect("expected format spec");
                 assert_eq!(format_spec.spec, "d");
             }
-            other => panic!("expected Interpolation, got {:?}", other),
+            other => panic!("expected Interpolation, got {other:?}"),
         },
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -302,10 +302,10 @@ fn test_template_nested() {
                         wado_compiler::ast::Expr::TemplateString(_)
                     ));
                 }
-                other => panic!("expected Interpolation, got {:?}", other),
+                other => panic!("expected Interpolation, got {other:?}"),
             }
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -327,7 +327,7 @@ fn test_template_consecutive_interpolations() {
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
             ));
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -344,7 +344,7 @@ fn test_template_starts_with_interpolation() {
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
             ));
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -361,23 +361,23 @@ fn test_template_ends_with_interpolation() {
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
             ));
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
 #[test]
 fn test_template_escape_sequences() {
-    let module = parse_expr(r#"`Line 1\nLine 2\ttab`"#).expect("parse failed");
+    let module = parse_expr(r"`Line 1\nLine 2\ttab`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
         wado_compiler::ast::Expr::TemplateString(template) => match &template.parts[0] {
             wado_compiler::ast::TemplatePart::String(s) => {
-                assert_eq!(s, r#"Line 1\nLine 2\ttab"#);
+                assert_eq!(s, r"Line 1\nLine 2\ttab");
             }
-            other => panic!("expected String part, got {:?}", other),
+            other => panic!("expected String part, got {other:?}"),
         },
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -413,10 +413,10 @@ fn test_template_complex_expression() {
                     // Should parse as a binary expression
                     assert!(matches!(&**expr, wado_compiler::ast::Expr::Binary(_)));
                 }
-                other => panic!("expected Interpolation, got {:?}", other),
+                other => panic!("expected Interpolation, got {other:?}"),
             }
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }
 
@@ -432,9 +432,9 @@ fn test_template_method_call() {
                     // Should be a method call
                     assert!(matches!(&**expr, wado_compiler::ast::Expr::MethodCall(_)));
                 }
-                other => panic!("expected Interpolation, got {:?}", other),
+                other => panic!("expected Interpolation, got {other:?}"),
             }
         }
-        other => panic!("expected TemplateString, got {:?}", other),
+        other => panic!("expected TemplateString, got {other:?}"),
     }
 }

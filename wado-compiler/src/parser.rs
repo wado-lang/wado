@@ -4571,7 +4571,7 @@ mod tests {
 
     #[test]
     fn test_world_decl() {
-        let source = r#"
+        let source = r"
             world CliCommand {
                 import Stdout {
                     write_via_stream,
@@ -4579,7 +4579,7 @@ mod tests {
 
                 export async fn run() -> Result<(), ()>;
             }
-        "#;
+        ";
 
         let module = parse(source).unwrap();
         assert_eq!(module.items.len(), 1);
@@ -4607,7 +4607,7 @@ mod tests {
 
     #[test]
     fn test_world_multiple_imports_exports() {
-        let source = r#"
+        let source = r"
             world TestWorld {
                 import Stdout {
                     write_via_stream,
@@ -4625,7 +4625,7 @@ mod tests {
                 export async fn run() -> Result<(), ()>;
                 export fn get_version() -> string;
             }
-        "#;
+        ";
 
         let module = parse(source).unwrap();
 
@@ -4654,12 +4654,12 @@ mod tests {
 
     #[test]
     fn test_effect_with_async_method() {
-        let source = r#"
+        let source = r"
             effect Http {
                 async fn get(url: String) -> Response;
                 fn status() -> i32;
             }
-        "#;
+        ";
 
         let module = parse(source).unwrap();
 
@@ -4716,11 +4716,11 @@ mod tests {
 
     #[test]
     fn test_export_with_params() {
-        let source = r#"
+        let source = r"
             world TestWorld {
                 export fn process(input: String, count: i32) -> Result<String, Error>;
             }
-        "#;
+        ";
 
         let module = parse(source).unwrap();
 
@@ -4740,11 +4740,11 @@ mod tests {
     #[test]
     fn test_bodyless_function_declaration() {
         // Bodyless functions are compiler built-ins
-        let source = r#"
+        let source = r"
             pub fn stream_new() -> i64;
             pub fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
             fn internal_helper();
-        "#;
+        ";
 
         let module = parse(source).unwrap();
         assert_eq!(module.items.len(), 3);
@@ -4877,11 +4877,11 @@ mod tests {
 
     #[test]
     fn test_assert_simple() {
-        let source = r#"
+        let source = r"
             fn test() {
                 assert x > 0;
             }
-        "#;
+        ";
 
         let module = parse(source).unwrap();
 
@@ -4928,11 +4928,11 @@ mod tests {
 
     #[test]
     fn test_assert_with_template_message() {
-        let source = r#"
+        let source = r"
             fn test() {
                 assert x > 0, `x must be positive, got {x}`;
             }
-        "#;
+        ";
 
         let module = parse(source).unwrap();
 
@@ -5014,12 +5014,11 @@ line 2
         let module = parse(&wrapped).unwrap();
         if let Item::Function(func) = &module.items[0] {
             let body = func.body.as_ref().unwrap();
-            if let Stmt::If(if_stmt) = &body.stmts[0] {
-                if let Condition::LetChain { elements, .. } = &if_stmt.condition {
-                    if let crate::ast::ConditionElement::Let { pattern, .. } = &elements[0] {
-                        return pattern.clone();
-                    }
-                }
+            if let Stmt::If(if_stmt) = &body.stmts[0]
+                && let Condition::LetChain { elements, .. } = &if_stmt.condition
+                && let crate::ast::ConditionElement::Let { pattern, .. } = &elements[0]
+            {
+                return pattern.clone();
             }
         }
         panic!("failed to parse pattern from: {source}");
@@ -5223,11 +5222,11 @@ line 2
     fn test_effect_method_with_generics() {
         // Ensure effect methods with generic parameters parse correctly
         // (previously used a naive skip that could break on nested <>)
-        let source = r#"
+        let source = r"
             effect Store {
                 fn get<K>(key: K) -> String;
             }
-        "#;
+        ";
         let module = parse(source).unwrap();
         if let Item::Effect(effect) = &module.items[0] {
             assert_eq!(effect.methods.len(), 1);
@@ -5263,12 +5262,12 @@ line 2
 
     #[test]
     fn test_trait_decl_associated_type_bounds() {
-        let source = r#"
+        let source = r"
             trait Container {
                 type Item: Eq + Ord;
                 fn get(&self) -> Self::Item;
             }
-        "#;
+        ";
         let module = parse(source).unwrap();
         if let Item::Trait(trait_decl) = &module.items[0] {
             assert_eq!(trait_decl.associated_types.len(), 1);
