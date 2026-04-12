@@ -63,17 +63,16 @@ fn args_to_json(args: TreeMap<String, String>) -> Value {
     return Value::Object(params);
 }
 
-fn headers_to_json(headers: &Fields) -> Value {
-    let all = headers.copy_all();
+fn headers_to_json(headers: &Headers) -> Value {
     let mut map = TreeMap::<String, Value>::new();
-    for let [name, value] of all {
+    for let [name, value] of headers.copy_all() {
         map[name] = Value::String(String::from_utf8_lossy(value));
     }
     return Value::Object(map);
 }
 
-fn get_header(headers: &Fields, name: String) -> String {
-    let values = headers.get(name as FieldName);
+fn get_header(headers: &Headers, name: FieldName) -> String {
+    let values = headers.get(name);
     if values.is_empty() {
         return "";
     }
@@ -110,7 +109,7 @@ fn parse_status_code(s: String) -> Option<u16> {
     return null;
 }
 
-fn build_request_json(method: Method, url: String, path: String, args: TreeMap<String, String>, headers: &Fields, body: Option<String>) -> String {
+fn build_request_json(method: Method, url: String, path: String, args: TreeMap<String, String>, headers: &Headers, body: Option<String>) -> String {
     let mut obj = TreeMap::<String, Value>::new();
     obj["method"] = Value::String(method_name(method));
     obj["path"] = Value::String(path);
@@ -135,13 +134,13 @@ global HOMEPAGE: String = #include_str("./http-bin-index.html");
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let method = request.get_method();
     let scheme = scheme_name(request.get_scheme());
-    // wasi:http typically leaves the authority unset for incoming HTTP/1.1
+    // wasmtime v43 typically leaves the authority unset for incoming HTTP/1.1
     // requests since the host travels in the Host header. Fall back to it.
     let authority = if let Some(a) = request.get_authority() && !a.is_empty() {
         a;
     } else {
         let h = request.get_headers();
-        get_header(&(h as Fields), "host");
+        get_header(&h, "host");
     };
     let request_url = Url::from_parts(scheme, authority, request.get_path_with_query(), null);
     let url = request_url.to_string();
@@ -161,7 +160,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
             body_str = json_error("Method Not Allowed. Use GET.") + "\n";
         } else {
             let h = request.get_headers();
-            body_str = build_request_json(method, url, path, args, &(h as Fields), null) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, null) + "\n";
         }
     } else if path == "/post" {
         if method != Method::Post {
@@ -170,7 +169,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         } else {
             let h = request.get_headers();
             let data = read_body_from_request(request);
-            body_str = build_request_json(method, url, path, args, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, Option::<String>::Some(data)) + "\n";
         }
     } else if path == "/put" {
         if method != Method::Put {
@@ -179,7 +178,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         } else {
             let h = request.get_headers();
             let data = read_body_from_request(request);
-            body_str = build_request_json(method, url, path, args, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, Option::<String>::Some(data)) + "\n";
         }
     } else if path == "/patch" {
         if method != Method::Patch {
@@ -188,7 +187,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         } else {
             let h = request.get_headers();
             let data = read_body_from_request(request);
-            body_str = build_request_json(method, url, path, args, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, Option::<String>::Some(data)) + "\n";
         }
     } else if path == "/delete" {
         if method != Method::Delete {
@@ -196,22 +195,22 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
             body_str = json_error("Method Not Allowed. Use DELETE.") + "\n";
         } else {
             let h = request.get_headers();
-            body_str = build_request_json(method, url, path, args, &(h as Fields), null) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, null) + "\n";
         }
     } else if path == "/headers" {
         let h = request.get_headers();
         let mut obj = TreeMap::<String, Value>::new();
-        obj["headers"] = headers_to_json(&(h as Fields));
+        obj["headers"] = headers_to_json(&h);
         body_str = stringify(&Value::Object(obj)) + "\n";
     } else if path == "/ip" {
         let h = request.get_headers();
-        let origin = get_header(&(h as Fields), "x-forwarded-for");
+        let origin = get_header(&h, "x-forwarded-for");
         let mut obj = TreeMap::<String, Value>::new();
         obj["origin"] = Value::String(if origin.is_empty() { "unknown" } else { origin });
         body_str = stringify(&Value::Object(obj)) + "\n";
     } else if path == "/user-agent" {
         let h = request.get_headers();
-        let ua = get_header(&(h as Fields), "user-agent");
+        let ua = get_header(&h, "user-agent");
         let mut obj = TreeMap::<String, Value>::new();
         obj["user-agent"] = Value::String(ua);
         body_str = stringify(&Value::Object(obj)) + "\n";
@@ -238,9 +237,9 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         let h = request.get_headers();
         if method matches { Post | Put | Patch } {
             let data = read_body_from_request(request);
-            body_str = build_request_json(method, url, path, args, &(h as Fields), Option::<String>::Some(data)) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, Option::Some(data)) + "\n";
         } else {
-            body_str = build_request_json(method, url, path, args, &(h as Fields), null) + "\n";
+            body_str = build_request_json(method, url, path, args, &h, null) + "\n";
         }
     } else {
         status = 404;
