@@ -1,0 +1,29 @@
+// TreeMap literal with string literal keys (non-identifier key names)
+use { println } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    // String literal keys allow non-identifier characters in TreeMap literals
+    let headers: TreeMap<String, String> = {
+        "Content-Type": "application/json",
+        "X-Request-ID": "abc-123",
+    };
+
+    assert headers.len() == 2;
+    assert headers["Content-Type"] == "application/json";
+    assert headers["X-Request-ID"] == "abc-123";
+
+    // Mixed: identifier keys and string literal keys
+    let config: TreeMap<String, i32> = {
+        width: 1920,
+        "max-height": 1080,
+    };
+
+    assert config["width"] == 1920;
+    assert config["max-height"] == 1080;
+
+    println("treemap string key: ok");
+}
+
+__DATA__
+{"stdout": "treemap string key: ok\n"}
