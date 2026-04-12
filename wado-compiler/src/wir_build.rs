@@ -8,15 +8,15 @@ use crate::flat_package::FlatPackage;
 use crate::wir::WirPackage;
 
 pub mod component_plan;
+mod calls;
+mod canonical_abi;
 mod context;
 mod functions;
+mod pattern_match;
+mod primitive_ops;
 mod translate;
-mod translate_calls;
-mod translate_canonical;
-mod translate_match;
-mod translate_ops;
-mod translate_value_copy;
 mod types;
+mod value_copy;
 
 pub use context::DEFINED_FUNC_BASE;
 
