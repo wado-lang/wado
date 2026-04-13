@@ -111,7 +111,7 @@ fn parse_status_code(s: String) -> Option<u16> {
 }
 
 fn build_request_json(
-    method: String,
+    method: Method,
     url: String,
     path: String,
     args: TreeMap<String, String>,
@@ -119,7 +119,7 @@ fn build_request_json(
     body: Option<String>,
 ) -> String {
     return stringify(&Value::Object({
-        "method": Value::String(method),
+        "method": Value::String(method_name(method)),
         "path": Value::String(path),
         "args": args_to_json(args),
         "headers": headers_to_json(headers),
@@ -142,7 +142,6 @@ global HOMEPAGE: String = #include_str("./http-bin-index.html");
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let method = request.get_method();
-    let method_str = method_name(method);
     let scheme = scheme_name(request.get_scheme());
     // wasmtime v43 typically leaves the authority unset for incoming HTTP/1.1
     // requests since the host travels in the Host header. Fall back to it.
@@ -167,51 +166,51 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
             body_str = HOMEPAGE;
         },
         "/get" => {
-            if method_str != "GET" {
+            if method == Method::Get {
+                let h = request.get_headers();
+                body_str = build_request_json(method, url, path, args, &h, null) + "\n";
+            } else {
                 status = 405;
                 body_str = json_error("Method Not Allowed. Use GET.") + "\n";
-            } else {
-                let h = request.get_headers();
-                body_str = build_request_json(method_str, url, path, args, &h, null) + "\n";
             }
         },
         "/post" => {
-            if method_str != "POST" {
-                status = 405;
-                body_str = json_error("Method Not Allowed. Use POST.") + "\n";
-            } else {
+            if method == Method::Post {
                 let h = request.get_headers();
                 let data = read_body_from_request(request);
-                body_str = build_request_json(method_str, url, path, args, &h, Option::<String>::Some(data)) + "\n";
+                body_str = build_request_json(method, url, path, args, &h, Option::<String>::Some(data)) + "\n";
+            } else {
+                status = 405;
+                body_str = json_error("Method Not Allowed. Use POST.") + "\n";
             }
         },
         "/put" => {
-            if method_str != "PUT" {
-                status = 405;
-                body_str = json_error("Method Not Allowed. Use PUT.") + "\n";
-            } else {
+            if method == Method::Put {
                 let h = request.get_headers();
                 let data = read_body_from_request(request);
-                body_str = build_request_json(method_str, url, path, args, &h, Option::<String>::Some(data)) + "\n";
+                body_str = build_request_json(method, url, path, args, &h, Option::<String>::Some(data)) + "\n";
+            } else {
+                status = 405;
+                body_str = json_error("Method Not Allowed. Use PUT.") + "\n";
             }
         },
         "/patch" => {
-            if method_str != "PATCH" {
-                status = 405;
-                body_str = json_error("Method Not Allowed. Use PATCH.") + "\n";
-            } else {
+            if method == Method::Patch {
                 let h = request.get_headers();
                 let data = read_body_from_request(request);
-                body_str = build_request_json(method_str, url, path, args, &h, Option::<String>::Some(data)) + "\n";
+                body_str = build_request_json(method, url, path, args, &h, Option::<String>::Some(data)) + "\n";
+            } else {
+                status = 405;
+                body_str = json_error("Method Not Allowed. Use PATCH.") + "\n";
             }
         },
         "/delete" => {
-            if method_str != "DELETE" {
+            if method == Method::Delete {
+                let h = request.get_headers();
+                body_str = build_request_json(method, url, path, args, &h, null) + "\n";
+            } else {
                 status = 405;
                 body_str = json_error("Method Not Allowed. Use DELETE.") + "\n";
-            } else {
-                let h = request.get_headers();
-                body_str = build_request_json(method_str, url, path, args, &h, null) + "\n";
             }
         },
         "/headers" => {
@@ -256,11 +255,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
                 }
             } else if path == "/anything" || path.starts_with("/anything/") {
                 let h = request.get_headers();
-                if method_str == "POST" || method_str == "PUT" || method_str == "PATCH" {
+                if method matches { Post | Put | Patch } {
                     let data = read_body_from_request(request);
-                    body_str = build_request_json(method_str, url, path, args, &h, Option::Some(data)) + "\n";
+                    body_str = build_request_json(method, url, path, args, &h, Option::Some(data)) + "\n";
                 } else {
-                    body_str = build_request_json(method_str, url, path, args, &h, null) + "\n";
+                    body_str = build_request_json(method, url, path, args, &h, null) + "\n";
                 }
             } else {
                 status = 404;
@@ -271,7 +270,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // Access log: emit request summary as JSON to stderr.
     log_stderr(stringify(&Value::Object({
-        "method": Value::String(method_str),
+        "method": Value::String(method_name(method)),
         "path": Value::String(path),
         "status": Value::Number(status as f64),
     })));
