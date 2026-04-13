@@ -12,23 +12,50 @@
 //!                                                let sum = v_0[i] + v_1[i];
 //! ```
 //!
-//! P0a scope is intentionally narrow:
-//! - Only `Array<Tuple<...>>` locals (not nested arrays, not user structs).
-//! - Only method-call usage; direct indexing is expected to have been desugared
-//!   already into `index_value`/`index_assign` trait calls by lowering.
-//! - Requires the monomorphizer to have already emitted per-field
-//!   `Array<T_k>::{with_capacity, push, len, is_empty}` plus the corresponding
-//!   `^IndexValue<i32>::index_value` / `^IndexAssign<i32>::index_assign` trait
-//!   methods; otherwise the candidate is skipped.
+//! P0a scope covers `Array<Tuple<...>>` and `Array<UserStruct>` locals (both have
+//! the same `WasmGC` struct representation). Nested arrays are not yet decomposed.
+//! Only method-call usage is handled; direct indexing is expected to have been
+//! desugared already into `index_value`/`index_assign` trait calls by lowering.
 //!
-//! Runs early in the optimization loop (before inline) so method-call patterns
-//! are still intact.
+//! # Array method identification
+//!
+//! Rather than hardcoding method names (`"push"`, `"len"`, `"index_value"`, …),
+//! this pass identifies relevant Array methods by **signature shape**:
+//!
+//! | Kind             | Signature                                         | stdlib method  |
+//! |------------------|---------------------------------------------------|----------------|
+//! | `ElementWriter`  | `fn(&mut Array<T>, T) -> ()`                      | `push`         |
+//! | `IndexReader`    | `fn(&Array<T>, i32) -> T`                         | `index_value`  |
+//! | `IndexWriter`    | `fn(&mut Array<T>, i32, T) -> ()`                 | `index_assign` |
+//! | `Constructor`    | `fn(i32) -> Array<T>` (static)                    | `with_capacity`|
+//! | `Query`          | `fn(&Array<T>) -> i32 \| bool` (length-invariant) | `len`, `is_empty`, `capacity` |
+//!
+//! Classification happens once when the `MethodCatalog` is built, and every
+//! whitelist and rewrite decision is driven by looking up the call's classified
+//! `ArrayMethodKind`. Unclassified Array methods cause the candidate to escape,
+//! so adding a new stdlib method that doesn't match any kind is safe by default.
+//! Adding a new method that *does* match a kind (e.g., `push_back`) is
+//! automatically handled — no optimizer change required.
+//!
+//! # Pipeline position
+//!
+//! Runs *first* in each fixed-point iteration, before `inline`. The pass
+//! relies on every `Array<T>` access being a method call (`push`,
+//! `index_value`, `index_assign`, `len`, ...), but `inline` expands those
+//! thin wrappers into raw `builtin::array_get`/`array_set` + field-access
+//! pairs, after which the method-call shape is gone. Running before inline
+//! preserves the call structure that `array_method_kind` classifies.
+//!
+//! Running inside each loop iteration (rather than only once up front) also
+//! lets container SROA pick up new `Array<Tuple<...>>` locals exposed by
+//! earlier-iteration inlining of helper functions.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt,
+    TirStmtKind, TirStruct, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -36,7 +63,137 @@ use crate::token::Span;
 /// Signature key for a monomorphized `Array<T>` method: (`trait_name`, `method_name`).
 /// Inherent methods (`push/len/is_empty/with_capacity`) use `trait_name = None`;
 /// trait methods (`index_value/index_assign`) use `Some("IndexValue<i32>")` etc.
+///
+/// This key is the *method family* identifier — it is invariant under the element
+/// type `T` (i.e., `Array<i32>::push` and `Array<i64>::push` share the same
+/// `SigKey`). The catalog then uses `(TypeId, SigKey)` for per-element-type lookup.
 type SigKey = (Option<String>, String);
+
+/// Classification of an `Array<T>` method by signature shape. Determines whether
+/// the pass can safely rewrite calls on decomposed candidates, and how.
+///
+/// See the module-level table for the mapping from each kind to stdlib methods.
+/// Classification is *signature-driven*: any Array method whose signature
+/// matches one of these shapes is automatically handled, regardless of name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum ArrayMethodKind {
+    /// `fn(&mut Array<T>, T) -> ()` — stores one element (e.g., `push`).
+    ///
+    /// Rewrite: N parallel calls, one per field, with the T argument projected
+    /// per field.
+    ElementWriter,
+    /// `fn(&Array<T>, i32) -> T` — reads one element by index (e.g., `index_value`).
+    ///
+    /// Rewrite: at each use, read each per-field array at the same index and
+    /// reconstruct a tuple/struct literal — but only when the surrounding
+    /// expression is a `FieldAccess` with a constant field index (so we can
+    /// dispatch directly to the relevant per-field read). Bare full-value reads
+    /// cause the candidate to escape.
+    IndexReader,
+    /// `fn(&mut Array<T>, i32, T) -> ()` — writes one element by index
+    /// (e.g., `index_assign`).
+    ///
+    /// Rewrite: N parallel calls, sharing the same (duplicable) index and
+    /// projecting the T argument per field.
+    IndexWriter,
+    /// `fn(i32) -> Array<T>` (static, no receiver) — constructs a new container
+    /// with the given capacity (e.g., `with_capacity`).
+    ///
+    /// Rewrite: N parallel calls, one per field, each constructing an
+    /// `Array<T_k>` with the same capacity.
+    Constructor,
+    /// `fn(&Array<T>) -> i32 | bool` — length-invariant query with no element
+    /// argument (e.g., `len`, `is_empty`, `capacity`).
+    ///
+    /// Rewrite: dispatch to field 0's corresponding method. Since push, slot
+    /// assign, and constructor-with-capacity all keep per-field arrays in
+    /// lockstep, field 0 is representative.
+    ///
+    /// We restrict the return type to `i32`/`bool` so that only true
+    /// length-invariant queries qualify — a hypothetical `hash_code() -> u64`
+    /// that depends on element contents would not match.
+    Query,
+}
+
+/// Classify an Array method's signature into an `ArrayMethodKind`, if it matches
+/// any of the recognized shapes. Returns the element type `T` on success so
+/// callers can sanity-check consistency with the call-site receiver type.
+fn classify_array_method_sig(
+    func: &TirFunction,
+    type_table: &TypeTable,
+) -> Option<ArrayMethodKind> {
+    // Must be a method (instance or static) on `Array`.
+    let info = func.method_info.as_ref()?;
+    if info.base_struct_name != "Array" {
+        return None;
+    }
+    // Must be a monomorphized instance so we know the concrete element type.
+    let mono = func.monomorph_info.as_ref()?;
+    if mono.impl_type_args.len() != 1 {
+        return None;
+    }
+    let elem_ty = mono.impl_type_args[0];
+
+    let params: Vec<TypeId> = func.params.iter().map(|p| p.type_id).collect();
+    let ret = func.return_type;
+
+    let is_array_of_t = |ty: TypeId| type_table.as_array(ty) == Some(elem_ty);
+    let is_ref_array_of_t = |ty: TypeId| {
+        matches!(
+            type_table.get(ty),
+            ResolvedType::Ref(inner) if type_table.as_array(*inner) == Some(elem_ty)
+        )
+    };
+    let is_mut_ref_array_of_t = |ty: TypeId| {
+        matches!(
+            type_table.get(ty),
+            ResolvedType::MutRef(inner) if type_table.as_array(*inner) == Some(elem_ty)
+        )
+    };
+    let is_t = |ty: TypeId| ty == elem_ty;
+    let is_i32 = |ty: TypeId| ty == TypeTable::I32;
+    let is_unit = |ty: TypeId| ty == TypeTable::UNIT;
+    // Length-invariant query return types: i32 (len, capacity) or bool (is_empty).
+    let is_query_return = |ty: TypeId| ty == TypeTable::I32 || ty == TypeTable::BOOL;
+
+    match params.as_slice() {
+        // fn(&Array<T>) -> i32 | bool — Query
+        [p0] if is_ref_array_of_t(*p0) && is_query_return(ret) => Some(ArrayMethodKind::Query),
+        // fn(i32) -> Array<T> — Constructor (static)
+        [p0] if is_i32(*p0) && is_array_of_t(ret) => Some(ArrayMethodKind::Constructor),
+        // fn(&mut Array<T>, T) -> () — ElementWriter
+        [p0, p1] if is_mut_ref_array_of_t(*p0) && is_t(*p1) && is_unit(ret) => {
+            Some(ArrayMethodKind::ElementWriter)
+        }
+        // fn(&Array<T>, i32) -> T — IndexReader
+        [p0, p1] if is_ref_array_of_t(*p0) && is_i32(*p1) && is_t(ret) => {
+            Some(ArrayMethodKind::IndexReader)
+        }
+        // fn(&mut Array<T>, i32, T) -> () — IndexWriter
+        [p0, p1, p2] if is_mut_ref_array_of_t(*p0) && is_i32(*p1) && is_t(*p2) && is_unit(ret) => {
+            Some(ArrayMethodKind::IndexWriter)
+        }
+        _ => None,
+    }
+}
+
+/// Extract the `SigKey` (trait name, method name) from a `FunctionRef` that
+/// refers to an Array method. Returns `None` for non-method functions or methods
+/// on other types.
+fn sig_key_of(func: &FunctionRef) -> Option<SigKey> {
+    let info = func.method_info.as_ref()?;
+    if info.base_struct_name != "Array" {
+        return None;
+    }
+    Some((info.trait_name.clone(), info.method_name.clone()))
+}
+
+/// Lookup: method family `SigKey` → `ArrayMethodKind`. Built once from the
+/// function table and used at every call site to classify the operation.
+/// Since classification depends only on signature *shape* (not element type),
+/// one entry per family suffices — `Array<i32>::push` and `Array<i64>::push`
+/// share `((None, "push"), ElementWriter)`.
+type SigKindIndex = IndexMap<SigKey, ArrayMethodKind>;
 
 /// Lookup table: (element type `T_k`, (trait, method)) → `FunctionRef` for
 /// `Array<T_k>::method`. Built once per pass.
@@ -50,31 +207,60 @@ struct Candidate {
     local_name: String,
     /// Whether the original let was `mut`
     is_mut: bool,
-    /// Element types of the tuple (e.g., `[i32, i32]` → `[I32, I32]`)
+    /// Element types of the container (for tuples: the tuple element types;
+    /// for structs: the struct field types in declaration order).
     element_types: Vec<TypeId>,
+    /// How the element is laid out: tuple or user struct. Determines which
+    /// literal shape (`TupleLiteral` vs `StructLiteral`) is accepted as a
+    /// decomposable source, and is carried into the rewrite for consistent
+    /// treatment.
+    layout: ElementLayout,
     /// Span of the original let statement
     span: Span,
-    /// Form of the initializer:
-    /// - `Empty`: the seq-lit block for `let v: Array<[...]> = [];`
-    /// - `WithCapacity(n)`: direct call to `Array::with_capacity(n)`
+    /// Form of the initializer — currently always a `Constructor` call whose
+    /// (duplicable) capacity expression is carried forward to build the
+    /// per-field `Array<T_k>::with_capacity(...)` calls during rewrite.
     init: CandidateInit,
 }
 
+/// Layout of the per-element container value.
+#[derive(Debug, Clone)]
+enum ElementLayout {
+    /// `Array<Tuple<T_0, T_1, ..., T_n>>` — decomposable sources are
+    /// `TupleLiteral` (or another decomposable container's `index_value`).
+    Tuple,
+    /// `Array<UserStruct>` — decomposable sources are `StructLiteral` of that
+    /// specific struct (or another decomposable container's `index_value`).
+    /// The `type_id` identifies the exact struct type so we reject literals
+    /// of a different (even structurally-compatible) struct.
+    Struct { type_id: TypeId },
+}
+
 /// How the candidate was initialized.
-enum CandidateInit {
-    /// Empty array literal (desugared to `SequenceLiteralBuilder::new_literal(0)` then `build()`).
-    Empty,
-    /// `Array::with_capacity(n)` where `n` is an integer literal.
-    WithCapacity(u64),
+///
+/// Any Array method classified as `Constructor` with a single duplicable
+/// capacity argument qualifies. The capacity expression is cloned once per
+/// decomposed field at rewrite time, so it must be side-effect-free.
+struct CandidateInit {
+    /// Capacity expression to pass to each per-field `with_capacity(...)` call.
+    capacity: TirExpr,
 }
 
 /// Apply container SROA to all functions in the project.
 pub fn scalarize_containers(project: &mut FlatPackage) -> bool {
-    // Build the method catalog once, using an immutable borrow on functions.
-    let catalog = build_method_catalog(project);
+    // Build the method catalog + signature-kind index once, using an immutable
+    // borrow on functions. Both indexes are derived from the same scan.
+    let (catalog, sig_kinds) = {
+        let type_table = project.type_table.borrow();
+        build_method_catalog(project, &type_table)
+    };
     if catalog.is_empty() {
         return false;
     }
+
+    // Build a struct lookup: (name, module_source) → &TirStruct. Used by
+    // `collect_candidates` to expand `Array<UserStruct>` element types.
+    let struct_index = build_struct_index(&project.structs);
 
     let mut changed = false;
     for func_rc in &project.functions {
@@ -91,30 +277,55 @@ pub fn scalarize_containers(project: &mut FlatPackage) -> bool {
         // Scoped mutable borrow for analysis + rewrite.
         let type_table_rc = project.type_table.clone();
         let mut func = func_rc.borrow_mut();
-        let func_changed = scalarize_in_function(&mut func, &type_table_rc, &catalog);
+        let func_changed = scalarize_in_function(
+            &mut func,
+            &type_table_rc,
+            &catalog,
+            &sig_kinds,
+            &struct_index,
+        );
         changed |= func_changed;
     }
     changed
 }
 
-/// Build a catalog of monomorphized `Array<T>::{method}` function references in this project.
-fn build_method_catalog(project: &FlatPackage) -> MethodCatalog {
+/// Lookup index for user-defined structs by (name, module source).
+type StructIndex<'a> = IndexMap<(String, ModuleSource), &'a TirStruct>;
+
+fn build_struct_index(structs: &[TirStruct]) -> StructIndex<'_> {
+    let mut out: StructIndex = IndexMap::default();
+    for s in structs {
+        out.insert((s.name.clone(), s.module_source.clone()), s);
+    }
+    out
+}
+
+/// Build a catalog of monomorphized `Array<T>::{method}` function references in
+/// this project, plus a parallel `SigKindIndex` that classifies each method
+/// family into an `ArrayMethodKind` based on its signature shape.
+fn build_method_catalog(
+    project: &FlatPackage,
+    type_table: &TypeTable,
+) -> (MethodCatalog, SigKindIndex) {
     let mut catalog = MethodCatalog::default();
+    let mut sig_kinds = SigKindIndex::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        // Must be an instance/static method with `method_info`
+        // Must be an instance/static method with `method_info`.
         let Some(method_info) = &func.method_info else {
             continue;
         };
-        // Must be a method on Array (by base struct name)
+        // Must be a method on Array (by base struct name). The kind is still
+        // Array-specific because the pass itself is Array-specific — we only
+        // de-hardcode method *names*, not the container type.
         if method_info.base_struct_name != "Array" {
             continue;
         }
-        // Must be a monomorphized method (we need the concrete impl type arg)
+        // Must be a monomorphized method (we need the concrete impl type arg).
         let Some(mono) = &func.monomorph_info else {
             continue;
         };
-        // Expect exactly one impl type arg (the element type T)
+        // Expect exactly one impl type arg (the element type T).
         if mono.impl_type_args.len() != 1 {
             continue;
         }
@@ -125,9 +336,20 @@ fn build_method_catalog(project: &FlatPackage) -> MethodCatalog {
         );
         let func_ref = FunctionRef::from_resolved(&func, func.module_source.clone());
         // First-writer wins (there should only be one per (T, sig)).
-        catalog.entry((element_ty, sig_key)).or_insert(func_ref);
+        catalog
+            .entry((element_ty, sig_key.clone()))
+            .or_insert(func_ref);
+
+        // Classify this method by signature shape. A method family (same
+        // `SigKey`) has the same shape across all element types, so first-
+        // writer-wins is fine here too.
+        if !sig_kinds.contains_key(&sig_key)
+            && let Some(kind) = classify_array_method_sig(&func, type_table)
+        {
+            sig_kinds.insert(sig_key, kind);
+        }
     }
-    catalog
+    (catalog, sig_kinds)
 }
 
 /// Per-function driver: detect candidates, analyze uses, allocate parallel locals, rewrite.
@@ -135,30 +357,40 @@ fn scalarize_in_function(
     func: &mut TirFunction,
     type_table_rc: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
     catalog: &MethodCatalog,
+    sig_kinds: &SigKindIndex,
+    struct_index: &StructIndex<'_>,
 ) -> bool {
     // Step 1: collect candidates. Immutable borrow of type_table.
     let candidates = {
         let type_table = type_table_rc.borrow();
         let body = func.body.as_ref().expect("checked in caller");
-        collect_candidates(body, &type_table)
+        collect_candidates(body, &type_table, struct_index, sig_kinds)
     };
     if candidates.is_empty() {
         return false;
     }
 
     // Step 2: escape analysis. Build safe-set via whitelist + tuple-source fixpoint.
+    // Also track which `ArrayMethodKind`s were observed on each whitelisted use,
+    // so step 3 can demand only the monomorphizations that will actually be
+    // emitted per field (rather than unconditionally requiring all four kinds).
     let body_ref = func.body.as_ref().expect("checked in caller");
-    let safe_indices = compute_safe_set(body_ref, &candidates);
+    let (safe_indices, used_kinds_map) = compute_safe_set(body_ref, &candidates, sig_kinds);
     if safe_indices.is_empty() {
         return false;
     }
 
     // Step 3: verify that every required (element_ty, sig) is present in the catalog.
-    // If any candidate has missing methods, drop it.
+    // Required kinds = `Constructor` (always, for the initializer) ∪ observed
+    // kinds. If any candidate has missing monomorphizations, drop it.
+    let empty_used: IndexSet<ArrayMethodKind> = IndexSet::default();
     let safe_candidates: Vec<&Candidate> = candidates
         .iter()
         .filter(|c| safe_indices.contains(&c.local_index))
-        .filter(|c| required_methods_available(c, catalog))
+        .filter(|c| {
+            let used = used_kinds_map.get(&c.local_index).unwrap_or(&empty_used);
+            required_methods_available(c, used, catalog, sig_kinds)
+        })
         .collect();
     if safe_candidates.is_empty() {
         return false;
@@ -196,11 +428,11 @@ fn scalarize_in_function(
                 c.local_index,
                 CandidateRewriteInfo {
                     element_types: c.element_types.clone(),
+                    layout: c.layout.clone(),
                     is_mut: c.is_mut,
                     span: c.span,
-                    init: match &c.init {
-                        CandidateInit::Empty => CandidateInit::Empty,
-                        CandidateInit::WithCapacity(n) => CandidateInit::WithCapacity(*n),
+                    init: CandidateInit {
+                        capacity: c.init.capacity.clone(),
                     },
                 },
             )
@@ -215,6 +447,7 @@ fn scalarize_in_function(
         field_info_map: &field_info_map,
         candidate_data: &candidate_data,
         catalog,
+        sig_kinds,
     };
     rewrite_block(body, &ctx);
 
@@ -224,6 +457,7 @@ fn scalarize_in_function(
 /// Data carried from analysis into rewrite for each decomposed candidate.
 struct CandidateRewriteInfo {
     element_types: Vec<TypeId>,
+    layout: ElementLayout,
     is_mut: bool,
     span: Span,
     init: CandidateInit,
@@ -235,56 +469,83 @@ struct RewriteCtx<'a> {
     field_info_map: &'a IndexMap<(u32, u32), (String, TypeId)>,
     candidate_data: &'a IndexMap<u32, CandidateRewriteInfo>,
     catalog: &'a MethodCatalog,
+    sig_kinds: &'a SigKindIndex,
 }
 
-/// Returns true if every method needed to rewrite this candidate exists in the catalog.
-fn required_methods_available(c: &Candidate, catalog: &MethodCatalog) -> bool {
-    // Methods the rewrite might use, parameterized by each element type T_k.
-    // - init: with_capacity (for both Empty and WithCapacity init forms)
-    // - push, len (inherent)
-    // - IndexValue<i32>::index_value, IndexAssign<i32>::index_assign (trait)
-    //
-    // Note: `is_empty` is not required because even if the original candidate
-    // uses `v.is_empty()`, the rewrite only needs `len` (we dispatch `is_empty`
-    // to field 0's `len` via... actually no, we use `is_empty` on field 0 if
-    // present. If a candidate uses `is_empty` but the per-field method isn't
-    // monomorphized, escape analysis should conservatively leave the candidate
-    // alone — that check is enforced by the call-site whitelist returning
-    // false for unavailable methods, handled during rewrite.
+/// Returns true if every `ArrayMethodKind` the rewrite might use is available
+/// for every element type `T_k` of the candidate.
+///
+/// The rewrite always needs:
+/// - `Constructor` (for both `Empty` and `WithCapacity` init forms — both are
+///   emitted as `Array<T_k>::with_capacity(n)`)
+/// - `ElementWriter` (push — any original `push` is expanded to per-field pushes)
+/// - `IndexReader` (`index_value` — any read `v[i].K` or cross-candidate source)
+/// - `IndexWriter` (`index_assign` — any slot copy `v[i] = src`)
+///
+/// `Query` (len / `is_empty` / capacity) is rewritten by dispatching to field 0,
+/// so we don't require it to be present for every `T_k` — only for field 0.
+/// In practice all `T_k` get the same stdlib methods monomorphized together,
+/// so checking field 0 alone is enough.
+///
+/// Check that every `ArrayMethodKind` the rewrite will need for this candidate
+/// has a corresponding monomorphization in the catalog for every per-field
+/// element type.
+///
+/// `Constructor` is always required (the initializer itself uses it). The other
+/// kinds are only required when escape analysis observed at least one use of
+/// that kind on the candidate — the rewrite only needs to emit per-field
+/// versions of methods that are actually called.
+fn required_methods_available(
+    c: &Candidate,
+    used_kinds: &IndexSet<ArrayMethodKind>,
+    catalog: &MethodCatalog,
+    sig_kinds: &SigKindIndex,
+) -> bool {
+    let mut required: IndexSet<ArrayMethodKind> = IndexSet::default();
+    required.insert(ArrayMethodKind::Constructor);
+    for &k in used_kinds {
+        required.insert(k);
+    }
     for &t in &c.element_types {
-        let required: [SigKey; 4] = [
-            (None, "with_capacity".to_string()),
-            (None, "push".to_string()),
-            (None, "len".to_string()),
-            (
-                Some("IndexValue<i32>".to_string()),
-                "index_value".to_string(),
-            ),
-        ];
-        for key in &required {
-            if !catalog.contains_key(&(t, key.clone())) {
+        for &kind in &required {
+            if find_sig_key_for_kind(catalog, sig_kinds, t, kind).is_none() {
                 return false;
             }
-        }
-    }
-    // index_assign is only needed for candidates that use it. We require it
-    // unconditionally here for simplicity — if not monomorphized, we bail.
-    for &t in &c.element_types {
-        let key: SigKey = (
-            Some("IndexAssign<i32>".to_string()),
-            "index_assign".to_string(),
-        );
-        if !catalog.contains_key(&(t, key)) {
-            return false;
         }
     }
     true
 }
 
+/// Locate the `SigKey` of a monomorphized `Array<elem_ty>` method whose signature
+/// classifies as `kind`. Returns the first match, or `None` if no such method is
+/// monomorphized in this project.
+///
+/// The catalog is keyed by `(TypeId, SigKey)` and the `sig_kinds` index maps
+/// `SigKey → ArrayMethodKind`. We combine them to answer queries of the form
+/// "which stdlib Array method of kind K is available for element type T?".
+fn find_sig_key_for_kind(
+    catalog: &MethodCatalog,
+    sig_kinds: &SigKindIndex,
+    elem_ty: TypeId,
+    kind: ArrayMethodKind,
+) -> Option<SigKey> {
+    for ((t, sig), _) in catalog {
+        if *t == elem_ty && sig_kinds.get(sig).copied() == Some(kind) {
+            return Some(sig.clone());
+        }
+    }
+    None
+}
+
 /// Collect candidate `let` bindings in the function body. Only looks at top-level
 /// statements (not nested blocks/loops) because P0a restricts scope to simple
 /// function-body locals — enough for the zlib insertion-sort pattern.
-fn collect_candidates(body: &TirBlock, type_table: &TypeTable) -> Vec<Candidate> {
+fn collect_candidates(
+    body: &TirBlock,
+    type_table: &TypeTable,
+    struct_index: &StructIndex<'_>,
+    sig_kinds: &SigKindIndex,
+) -> Vec<Candidate> {
     let mut out = Vec::new();
     for stmt in &body.stmts {
         let TirStmtKind::Let {
@@ -298,25 +559,27 @@ fn collect_candidates(body: &TirBlock, type_table: &TypeTable) -> Vec<Candidate>
         else {
             continue;
         };
-        // Type must be Array<Tuple<...>>.
+        // Type must be Array<Tuple<...>> or Array<UserStruct>.
         let Some(elem_ty) = type_table.as_array(*type_id) else {
             continue;
         };
-        let Some(tuple_elems) = type_table.as_tuple(elem_ty) else {
+        let Some((layout, element_types)) = element_layout_of(elem_ty, type_table, struct_index)
+        else {
             continue;
         };
-        if tuple_elems.is_empty() {
+        if element_types.is_empty() {
             continue;
         }
         // Initializer must be one of the recognized forms.
-        let Some(init) = recognize_init(value) else {
+        let Some(init) = recognize_init(value, sig_kinds) else {
             continue;
         };
         out.push(Candidate {
             local_index: *local_index,
             local_name: name.clone(),
             is_mut: *is_mut,
-            element_types: tuple_elems,
+            element_types,
+            layout,
             span: stmt.span,
             init,
         });
@@ -324,128 +587,217 @@ fn collect_candidates(body: &TirBlock, type_table: &TypeTable) -> Vec<Candidate>
     out
 }
 
-/// Recognize supported initializer forms for container-SROA candidates:
-/// - `__seq_lit: { let __b = builder_new_literal(0); break __seq_lit: __b.build(); }`
-///   → empty array literal (`[]`), treated as capacity=0.
-/// - `Array::with_capacity(n)` where `n` is an integer literal → explicit capacity.
-fn recognize_init(value: &TirExpr) -> Option<CandidateInit> {
-    // Form 1: __seq_lit LabeledBlock (empty literal)
-    if let TirExprKind::LabeledBlock { label, block, .. } = &value.kind
-        && label == "__seq_lit"
-        && is_empty_seq_lit_block(block)
-    {
-        return Some(CandidateInit::Empty);
+/// Determine the decomposable layout and per-field types for a container element
+/// type. Returns `Some((layout, types))` if the element is a tuple or a
+/// user-defined struct whose fields are indexed 0..N; `None` otherwise.
+fn element_layout_of(
+    elem_ty: TypeId,
+    type_table: &TypeTable,
+    struct_index: &StructIndex<'_>,
+) -> Option<(ElementLayout, Vec<TypeId>)> {
+    // Tuple element (e.g., `Array<[i32, i32]>`).
+    if let Some(tuple_elems) = type_table.as_tuple(elem_ty) {
+        return Some((ElementLayout::Tuple, tuple_elems));
     }
-
-    // Form 2: direct Array::with_capacity(n) call.
-    if let TirExprKind::Call { func, args, .. } = &value.kind
-        && is_array_method(func, "with_capacity")
-        && args.len() == 1
-        && let TirExprKind::IntLiteral { value: n, .. } = &args[0].expr.kind
+    // User struct element (e.g., `Array<Point>`). Generic struct instances
+    // appear as `ResolvedType::Struct` after monomorphization.
+    if let ResolvedType::Struct {
+        name,
+        module_source,
+        ..
+    } = type_table.get(elem_ty)
     {
-        return Some(CandidateInit::WithCapacity(*n));
+        let tir_struct = struct_index.get(&(name.clone(), module_source.clone()))?;
+        if tir_struct.fields.is_empty() {
+            return None;
+        }
+        // Fields indexed 0..N by declaration order. We sort defensively.
+        let mut ordered: Vec<&crate::tir::TirField> = tir_struct.fields.iter().collect();
+        ordered.sort_by_key(|f| f.index);
+        for (i, f) in ordered.iter().enumerate() {
+            if f.index != i as u32 {
+                return None;
+            }
+        }
+        let field_types: Vec<TypeId> = ordered.iter().map(|f| f.type_id).collect();
+        return Some((ElementLayout::Struct { type_id: elem_ty }, field_types));
     }
-
     None
 }
 
-/// Check whether a `LabeledBlock` body matches the empty-literal seq-lit pattern:
-/// a `let __b = ...SequenceLiteralBuilder::new_literal(0);` followed by a
-/// `break __seq_lit: __b.build();`. We don't care which element type the builder
-/// uses at this check — we only care that it's structurally a no-element literal.
-fn is_empty_seq_lit_block(block: &TirBlock) -> bool {
-    if block.stmts.len() != 2 {
-        return false;
-    }
-    // Stmt 0: let <name> = <call>(0)
-    let TirStmtKind::Let { value: init, .. } = &block.stmts[0].kind else {
-        return false;
+/// Recognize the supported initializer form for container-SROA candidates.
+///
+/// Two equivalent shapes are accepted, both matched purely *structurally*
+/// (no hardcoded label or method names):
+///
+/// 1. A direct `Call` classified as `Constructor` by signature — e.g.
+///    `Array::<T>::with_capacity(cap)` written by the user directly. The
+///    argument must be side-effect-free so it can be cloned once per field.
+/// 2. The `SequenceLiteralBuilder` desugaring for empty array literals
+///    (`[]`), which lowers to
+///    `{ let __b = <Constructor call>; break label: __b.<build>(); }`.
+///    We structurally unwrap the labeled block, look through the `Let`, and
+///    fall through to form (1) on the inner constructor call. Neither the
+///    label string nor the builder method name is inspected — only the
+///    shape of the wrapper.
+fn recognize_init(value: &TirExpr, sig_kinds: &SigKindIndex) -> Option<CandidateInit> {
+    let inner = unwrap_builder_labeled_block(value).unwrap_or(value);
+    let TirExprKind::Call { func, args, .. } = &inner.kind else {
+        return None;
     };
-    match &init.kind {
-        TirExprKind::Call { func, args, .. } => {
-            // new_literal(0): 0 means empty literal
-            if !is_method_name(func, "new_literal") {
-                return false;
-            }
-            if args.len() != 1 {
-                return false;
-            }
-            if !matches!(&args[0].expr.kind, TirExprKind::IntLiteral { value: 0, .. }) {
-                return false;
-            }
-        }
-        _ => return false,
+    if array_method_kind(func, sig_kinds) != Some(ArrayMethodKind::Constructor) {
+        return None;
     }
-    // Stmt 1: break __seq_lit: <something>
+    if args.len() != 1 {
+        return None;
+    }
+    // The capacity expression is cloned once per per-field constructor
+    // call during rewrite, so it must be side-effect-free.
+    if !is_duplicable_expr(&args[0].expr) {
+        return None;
+    }
+    Some(CandidateInit {
+        capacity: args[0].expr.clone(),
+    })
+}
+
+/// Unwrap a labeled block of shape
+/// `{ let __b = <X>; break label: <method on __b> }` and return `<X>`.
+///
+/// This is the structural shape of the `[]` literal desugaring via
+/// `SequenceLiteralBuilder`: the `Let` holds the constructor call, and the
+/// `Break` holds the `build()` method call on the freshly constructed local.
+/// We don't check the label, the binding name, or the break method's name —
+/// only that the `Break` exits this block by calling a zero-argument method
+/// whose receiver is the `Let`'s local (directly or via `&__b` / `&mut __b`).
+fn unwrap_builder_labeled_block(expr: &TirExpr) -> Option<&TirExpr> {
+    let TirExprKind::LabeledBlock { label, block, .. } = &expr.kind else {
+        return None;
+    };
+    if block.stmts.len() != 2 {
+        return None;
+    }
+    let TirStmtKind::Let {
+        local_index: b_local,
+        value: inner,
+        ..
+    } = &block.stmts[0].kind
+    else {
+        return None;
+    };
     let TirStmtKind::Break {
-        label: Some(l),
-        value: Some(_),
+        label: brk_label,
+        value: Some(brk_val),
     } = &block.stmts[1].kind
     else {
-        return false;
+        return None;
     };
-    l == "__seq_lit"
+    if brk_label.as_deref() != Some(label.as_str()) {
+        return None;
+    }
+    // Break value must be a zero-argument method call whose receiver is `__b`
+    // (possibly wrapped in `&`/`&mut`). We don't care what the method does
+    // semantically — the `SequenceLiteralBuilder::build()` contract is
+    // enforced by the trait, and any user-level code matching this shape is
+    // vanishingly unlikely to mean anything other than a builder commit.
+    let TirExprKind::MethodCall { receiver, args, .. } = &brk_val.kind else {
+        return None;
+    };
+    if !args.is_empty() {
+        return None;
+    }
+    let receiver_local = match &receiver.kind {
+        TirExprKind::Local { index, .. } => *index,
+        TirExprKind::Unary {
+            op: crate::tir::TirUnaryOp::Ref | crate::tir::TirUnaryOp::MutRef,
+            expr: inner_ref,
+        } => {
+            let TirExprKind::Local { index, .. } = &inner_ref.kind else {
+                return None;
+            };
+            *index
+        }
+        _ => return None,
+    };
+    if receiver_local != *b_local {
+        return None;
+    }
+    Some(inner)
 }
 
-/// Does this `FunctionRef` refer to an `Array::{method}` inherent method?
-fn is_array_method(func: &FunctionRef, method: &str) -> bool {
-    let Some(info) = &func.method_info else {
-        return false;
-    };
-    info.base_struct_name == "Array" && info.trait_name.is_none() && info.method_name == method
-}
-
-/// Does this `FunctionRef` refer to any method (on any type) with the given name?
-fn is_method_name(func: &FunctionRef, method: &str) -> bool {
-    func.method_info
-        .as_ref()
-        .is_some_and(|i| i.method_name == method)
+/// Look up the `ArrayMethodKind` of a call target by signature, via the
+/// pre-built `SigKindIndex`. Returns `None` for non-method functions, non-Array
+/// methods, or Array methods whose signature didn't match any kind.
+fn array_method_kind(func: &FunctionRef, sig_kinds: &SigKindIndex) -> Option<ArrayMethodKind> {
+    let sig = sig_key_of(func)?;
+    sig_kinds.get(&sig).copied()
 }
 
 /// Compute the set of safe (decomposable) candidate locals via whitelist escape
-/// analysis plus a fixpoint for tuple-source dependency:
+/// analysis plus a fixpoint for element-source dependency:
 ///
 /// - A candidate `v` is whitelisted if every use is one of:
-///   * `v.push(tuple_source)` — where `tuple_source` is tuple-decomposable
-///   * `v.index_assign(i, tuple_source)`
-///   * `v.len()` or `v.is_empty()`
-///   * `v.index_value(i).K` — field access on index result (K = constant)
-/// - "`tuple_source`" is either a direct `TupleLiteral` of N elements, or
-///   `other.index_value(j)` where `other` is also safe (fixpoint).
+///   * `v.ElementWriter(source)` — where `source` is element-decomposable
+///     (i.e., `push` or a push-shaped method family)
+///   * `v.IndexWriter(i, source)` (slot assign)
+///   * `v.Query()` (length-invariant query like `len`/`is_empty`/`capacity`)
+///   * `v.IndexReader(i).K` — field access on an index-read result (K constant)
+/// - "element source" is either a direct `TupleLiteral`/`StructLiteral` of N
+///   elements, or `other.IndexReader(j)` where `other` is also safe (fixpoint).
 ///
-/// Anything else — bare `Local { v }`, `&v`, `&mut v`, different method call,
-/// field access at a non-index position — marks `v` as escaped.
-fn compute_safe_set(body: &TirBlock, candidates: &[Candidate]) -> IndexSet<u32> {
+/// Anything else — bare `Local { v }`, `&v`, `&mut v`, an unclassified method
+/// call, a full-value `index_value(i)` without `FieldAccess` — marks `v` as
+/// escaped. Classification is signature-driven via `sig_kinds`.
+fn compute_safe_set(
+    body: &TirBlock,
+    candidates: &[Candidate],
+    sig_kinds: &SigKindIndex,
+) -> (IndexSet<u32>, IndexMap<u32, IndexSet<ArrayMethodKind>>) {
     // Map candidate local → element arity (for push/index_assign/index_value arity checks).
     let mut arity_of: IndexMap<u32, usize> = IndexMap::default();
+    // Map candidate local → element layout (for verifying literal shape matches).
+    let mut layout_of: IndexMap<u32, ElementLayout> = IndexMap::default();
     for c in candidates {
         arity_of.insert(c.local_index, c.element_types.len());
+        layout_of.insert(c.local_index, c.layout.clone());
     }
 
     // Iterate to fixpoint: start with all candidates safe, then remove any that
-    // reference an escaped candidate via tuple-source push.
+    // reference an escaped candidate via element-source push. The used-kinds map
+    // is rebuilt from scratch each iteration so it reflects the final safe set.
     let mut safe: IndexSet<u32> = candidates.iter().map(|c| c.local_index).collect();
-    loop {
+    let used_kinds = loop {
         let mut checker = WhitelistChecker {
             safe: &safe,
             arity_of: &arity_of,
+            layout_of: &layout_of,
+            sig_kinds,
             escaped: IndexSet::default(),
+            used_kinds: IndexMap::default(),
         };
         checker.visit_block(body);
         if checker.escaped.is_empty() {
-            break;
+            break checker.used_kinds;
         }
         for idx in checker.escaped {
             safe.shift_remove(&idx);
         }
-    }
-    safe
+    };
+    (safe, used_kinds)
 }
 
 struct WhitelistChecker<'a> {
     safe: &'a IndexSet<u32>,
     arity_of: &'a IndexMap<u32, usize>,
+    layout_of: &'a IndexMap<u32, ElementLayout>,
+    sig_kinds: &'a SigKindIndex,
     escaped: IndexSet<u32>,
+    /// Per-candidate set of `ArrayMethodKind`s observed on whitelisted uses.
+    /// Only kinds the rewrite actually needs to emit are recorded; bare
+    /// `IndexReader` uses (which escape) are not. Drives the
+    /// `required_methods_available` check so we only demand stdlib
+    /// monomorphizations that will actually be called.
+    used_kinds: IndexMap<u32, IndexSet<ArrayMethodKind>>,
 }
 
 impl WhitelistChecker<'_> {
@@ -455,14 +807,28 @@ impl WhitelistChecker<'_> {
         }
     }
 
+    /// Record that a whitelisted call of `kind` was observed on candidate `idx`.
+    fn record_use(&mut self, idx: u32, kind: ArrayMethodKind) {
+        self.used_kinds.entry(idx).or_default().insert(kind);
+    }
+
     /// Check an expression used as a value-source for `push`/`index_assign`.
-    /// Returns true if the expression is a decomposable tuple source. If the
-    /// source references another (escaped) candidate as a non-tuple use, that
-    /// candidate is marked escaped.
-    fn check_tuple_source(&mut self, expr: &TirExpr, expected_arity: usize) -> bool {
+    /// Returns true if the expression is a decomposable element source matching
+    /// `expected_layout` and `expected_arity`. If the source references another
+    /// (escaped) candidate as a non-decomposable use, that candidate is marked
+    /// escaped.
+    fn check_source(
+        &mut self,
+        expr: &TirExpr,
+        expected_arity: usize,
+        expected_layout: &ElementLayout,
+    ) -> bool {
         match &expr.kind {
             // Direct tuple literal: [e0, e1, ...]
             TirExprKind::TupleLiteral { elements } => {
+                if !matches!(expected_layout, ElementLayout::Tuple) {
+                    return false;
+                }
                 if elements.len() != expected_arity {
                     return false;
                 }
@@ -472,13 +838,46 @@ impl WhitelistChecker<'_> {
                 }
                 true
             }
-            // Tuple from another candidate: other.index_value(j)
+            // Direct struct literal: StructName { field_0: v0, field_1: v1, ... }
+            TirExprKind::StructLiteral {
+                struct_type,
+                fields,
+                ..
+            } => {
+                let ElementLayout::Struct {
+                    type_id: expected_ty,
+                } = expected_layout
+                else {
+                    return false;
+                };
+                if struct_type != expected_ty {
+                    return false;
+                }
+                if fields.len() != expected_arity {
+                    return false;
+                }
+                // Field indices must cover 0..N exactly once so the rewrite can
+                // pull per-field values unambiguously.
+                let mut seen = vec![false; expected_arity];
+                for f in fields {
+                    let k = f.field_index as usize;
+                    if k >= expected_arity || seen[k] {
+                        return false;
+                    }
+                    seen[k] = true;
+                }
+                for f in fields {
+                    self.visit_expr(&f.value);
+                }
+                true
+            }
+            // Element from another candidate: other.IndexReader(j)
             TirExprKind::MethodCall {
                 receiver,
                 func,
                 args,
                 ..
-            } if is_trait_method(func, "IndexValue<i32>", "index_value") => {
+            } if array_method_kind(func, self.sig_kinds) == Some(ArrayMethodKind::IndexReader) => {
                 if args.len() != 1 {
                     return false;
                 }
@@ -494,12 +893,45 @@ impl WhitelistChecker<'_> {
                 if self.arity_of.get(&other).copied() != Some(expected_arity) {
                     return false;
                 }
+                // Layouts must match: tuple ↔ tuple, and struct ↔ same struct.
+                // Cross-layout pushes are impossible under a sound type system,
+                // but we check defensively.
+                let Some(other_layout) = self.layout_of.get(&other) else {
+                    return false;
+                };
+                if !layouts_compatible(expected_layout, other_layout) {
+                    return false;
+                }
+                // The rewrite clones the index expression N times (once per field).
+                // If the index is not duplicable, `decompose_source` bails —
+                // so we must also bail here, otherwise escape analysis would
+                // whitelist this use and the rewrite would leave a dangling
+                // `v.push(w[i])` referencing decomposed locals.
+                if !is_duplicable_expr(&args[0].expr) {
+                    // Fall through to a normal visit so `other` gets marked
+                    // escaped via the bare `index_value` branch in `visit_expr`.
+                    self.visit_expr(expr);
+                    return false;
+                }
                 // Index expression must be visited as a normal expression.
                 self.visit_expr(&args[0].expr);
+                // Record that `other` is being read via IndexReader so it
+                // needs that method monomorphization during rewrite.
+                self.record_use(other, ArrayMethodKind::IndexReader);
                 true
             }
             _ => false,
         }
+    }
+}
+
+/// Both layouts must agree: either both tuple of the same arity, or both the
+/// same struct type. Arity is enforced separately by the caller.
+fn layouts_compatible(a: &ElementLayout, b: &ElementLayout) -> bool {
+    match (a, b) {
+        (ElementLayout::Tuple, ElementLayout::Tuple) => true,
+        (ElementLayout::Struct { type_id: ta }, ElementLayout::Struct { type_id: tb }) => ta == tb,
+        _ => false,
     }
 }
 
@@ -520,44 +952,73 @@ impl TirRefVisitor for WhitelistChecker<'_> {
                 if let Some(rec_local) = receiver_local(receiver)
                     && self.safe.contains(&rec_local)
                 {
-                    // Whitelisted inherent methods
-                    if is_array_method(func, "push") && args.len() == 1 {
-                        let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
-                        if !self.check_tuple_source(&args[0].expr, arity) {
+                    let kind = array_method_kind(func, self.sig_kinds);
+                    match (kind, args.len()) {
+                        // v.push-shaped(source)
+                        (Some(ArrayMethodKind::ElementWriter), 1) => {
+                            let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
+                            let layout = self
+                                .layout_of
+                                .get(&rec_local)
+                                .cloned()
+                                .unwrap_or(ElementLayout::Tuple);
+                            if self.check_source(&args[0].expr, arity, &layout) {
+                                self.record_use(rec_local, ArrayMethodKind::ElementWriter);
+                            } else {
+                                self.mark(rec_local);
+                            }
+                            return;
+                        }
+                        // v.len() / v.is_empty() / v.capacity() — Query, no arg
+                        (Some(ArrayMethodKind::Query), 0) => {
+                            self.record_use(rec_local, ArrayMethodKind::Query);
+                            return;
+                        }
+                        // v.index_assign-shaped(i, source)
+                        (Some(ArrayMethodKind::IndexWriter), 2) => {
+                            let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
+                            let layout = self
+                                .layout_of
+                                .get(&rec_local)
+                                .cloned()
+                                .unwrap_or(ElementLayout::Tuple);
+                            // The rewrite clones the destination index N times
+                            // (once per field). Non-duplicable indices force a
+                            // bail in `try_expand_call_stmt`, so we must also
+                            // bail here — otherwise the candidate would be
+                            // decomposed but the original `v.index_assign(i,
+                            // ...)` statement would remain, referencing the
+                            // removed local.
+                            if !is_duplicable_expr(&args[0].expr) {
+                                self.mark(rec_local);
+                                self.visit_expr(&args[0].expr);
+                                self.visit_expr(&args[1].expr);
+                                return;
+                            }
+                            // index argument visited normally
+                            self.visit_expr(&args[0].expr);
+                            if self.check_source(&args[1].expr, arity, &layout) {
+                                self.record_use(rec_local, ArrayMethodKind::IndexWriter);
+                            } else {
+                                self.mark(rec_local);
+                            }
+                            return;
+                        }
+                        // Bare v.index_value(i) — safe only when the *enclosing*
+                        // expression is a `FieldAccess` with a constant field
+                        // index. That case is short-circuited by the
+                        // `FieldAccess` branch below; if we arrive here directly
+                        // the entire struct value is escaping.
+                        (Some(ArrayMethodKind::IndexReader), 1) => {
+                            self.mark(rec_local);
+                            self.visit_expr(&args[0].expr);
+                            return;
+                        }
+                        // Any other method call on a candidate → escape.
+                        _ => {
                             self.mark(rec_local);
                         }
-                        return;
                     }
-                    if is_array_method(func, "len") && args.is_empty() {
-                        return;
-                    }
-                    if is_array_method(func, "is_empty") && args.is_empty() {
-                        return;
-                    }
-                    // Whitelisted trait methods
-                    if is_trait_method(func, "IndexAssign<i32>", "index_assign") && args.len() == 2
-                    {
-                        let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
-                        // index argument visited normally
-                        self.visit_expr(&args[0].expr);
-                        if !self.check_tuple_source(&args[1].expr, arity) {
-                            self.mark(rec_local);
-                        }
-                        return;
-                    }
-                    if is_trait_method(func, "IndexValue<i32>", "index_value") && args.len() == 1 {
-                        // Bare index_value receiver use — this is only safe when the
-                        // ENCLOSING expression is a FieldAccess with constant field_index.
-                        // Since we're not tracking the parent here, let the FieldAccess
-                        // handler short-circuit this. If we arrive here directly (not via
-                        // field access), mark as escaped because the full tuple value is
-                        // being used.
-                        self.mark(rec_local);
-                        self.visit_expr(&args[0].expr);
-                        return;
-                    }
-                    // Any other method call on a candidate → escape.
-                    self.mark(rec_local);
                 }
                 // Fall through: recurse into receiver and args normally.
                 self.visit_expr(receiver);
@@ -565,7 +1026,7 @@ impl TirRefVisitor for WhitelistChecker<'_> {
                     self.visit_expr(&arg.expr);
                 }
             }
-            // v.index_value(i).K — safe read pattern
+            // v.IndexReader(i).K — safe read pattern
             TirExprKind::FieldAccess { expr: inner, .. } => {
                 if let TirExprKind::MethodCall {
                     receiver,
@@ -573,12 +1034,13 @@ impl TirRefVisitor for WhitelistChecker<'_> {
                     args,
                     ..
                 } = &inner.kind
-                    && is_trait_method(func, "IndexValue<i32>", "index_value")
+                    && array_method_kind(func, self.sig_kinds) == Some(ArrayMethodKind::IndexReader)
                     && args.len() == 1
                     && let Some(rec_local) = receiver_local(receiver)
                     && self.safe.contains(&rec_local)
                 {
                     // Safe — just visit the index expression.
+                    self.record_use(rec_local, ArrayMethodKind::IndexReader);
                     self.visit_expr(&args[0].expr);
                     return;
                 }
@@ -621,12 +1083,10 @@ impl TirRefVisitor for WhitelistChecker<'_> {
 fn receiver_local(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
-        TirExprKind::Unary { op, expr: inner }
-            if matches!(
-                op,
-                crate::tir::TirUnaryOp::Ref | crate::tir::TirUnaryOp::MutRef
-            ) =>
-        {
+        TirExprKind::Unary {
+            op: crate::tir::TirUnaryOp::Ref | crate::tir::TirUnaryOp::MutRef,
+            expr: inner,
+        } => {
             if let TirExprKind::Local { index, .. } = &inner.kind {
                 Some(*index)
             } else {
@@ -635,16 +1095,6 @@ fn receiver_local(expr: &TirExpr) -> Option<u32> {
         }
         _ => None,
     }
-}
-
-/// Does this `FunctionRef` refer to `Array^Trait::method`?
-fn is_trait_method(func: &FunctionRef, trait_name: &str, method: &str) -> bool {
-    let Some(info) = &func.method_info else {
-        return false;
-    };
-    info.base_struct_name == "Array"
-        && info.trait_name.as_deref() == Some(trait_name)
-        && info.method_name == method
 }
 
 /// Rewrite all statements in a block, replacing candidate let-bindings and
@@ -689,9 +1139,9 @@ fn process_stmt(mut stmt: TirStmt, out: &mut Vec<TirStmt>, ctx: &RewriteCtx) {
 }
 
 /// Emit N per-field Let statements for a decomposed candidate.
-/// The original Let's initializer is replaced by N `Array<T_k>::with_capacity(n)`
-/// calls, one per field. For `Empty` init, `n = 0`. For `WithCapacity(n)`, the
-/// same `n` is reused for every field.
+/// The original Let's initializer is replaced by N `Array<T_k>::with_capacity(cap)`
+/// calls, one per field. The same (duplicable) capacity expression from the
+/// original initializer is cloned once per field.
 fn expand_candidate_let(stmt: &TirStmt, out: &mut Vec<TirStmt>, ctx: &RewriteCtx) {
     let TirStmtKind::Let { local_index, .. } = &stmt.kind else {
         return;
@@ -700,14 +1150,11 @@ fn expand_candidate_let(stmt: &TirStmt, out: &mut Vec<TirStmt>, ctx: &RewriteCtx
         .candidate_data
         .get(local_index)
         .expect("candidate data must exist for decomposed local");
-    let cap = match &info.init {
-        CandidateInit::Empty => 0,
-        CandidateInit::WithCapacity(n) => *n,
-    };
     for (k, &elem_ty) in info.element_types.iter().enumerate() {
         let new_local_index = ctx.field_local_map[&(*local_index, k as u32)];
         let (new_name, arr_ty) = ctx.field_info_map[&(*local_index, k as u32)].clone();
-        let init = build_with_capacity_call(elem_ty, arr_ty, cap, info.span, ctx);
+        let init =
+            build_with_capacity_call(elem_ty, arr_ty, info.init.capacity.clone(), info.span, ctx);
         let let_stmt = TirStmt::new(
             TirStmtKind::Let {
                 name: new_name,
@@ -724,32 +1171,34 @@ fn expand_candidate_let(stmt: &TirStmt, out: &mut Vec<TirStmt>, ctx: &RewriteCtx
     }
 }
 
-/// Build a `Array<T_k>::with_capacity(cap)` TIR call using the catalog.
+/// Build a `Array<T_k>::Constructor(cap)` TIR call — e.g. `with_capacity(cap)`.
+/// The specific method is resolved via `find_sig_key_for_kind(Constructor)`,
+/// so there's no hardcoded name match. `cap` is the (duplicable) capacity
+/// expression recognized from the original initializer, already cloned once
+/// for this field.
 fn build_with_capacity_call(
     elem_ty: TypeId,
     arr_ty: TypeId,
-    cap: u64,
+    cap: TirExpr,
     span: Span,
     ctx: &RewriteCtx,
 ) -> TirExpr {
-    let sig: SigKey = (None, "with_capacity".to_string());
+    let sig = find_sig_key_for_kind(
+        ctx.catalog,
+        ctx.sig_kinds,
+        elem_ty,
+        ArrayMethodKind::Constructor,
+    )
+    .expect("Constructor checked by required_methods_available");
     let func = ctx
         .catalog
         .get(&(elem_ty, sig))
-        .expect("with_capacity checked by required_methods_available")
+        .expect("Constructor entry checked by required_methods_available")
         .clone();
-    let cap_arg = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: cap,
-            repr: cap.to_string(),
-        },
-        TypeTable::I32,
-        span,
-    );
     let call = TirExprKind::Call {
         func,
         type_args: Vec::new(),
-        args: vec![CallArg::new(cap_arg, false)],
+        args: vec![CallArg::new(cap, false)],
     };
     TirExpr::new(call, arr_ty, span)
 }
@@ -773,75 +1222,86 @@ fn try_expand_call_stmt(expr: &TirExpr, span: Span, ctx: &RewriteCtx) -> Option<
     }
     let info = ctx.candidate_data.get(&rec_local)?;
     let arity = info.element_types.len();
+    let layout = info.layout.clone();
 
-    // Case 1: v.push(tuple_source)
-    if is_array_method(func, "push") && args.len() == 1 {
-        let src = &args[0].expr;
-        let per_field = decompose_tuple_source(src, arity, ctx)?;
-        let mut out = Vec::with_capacity(arity);
-        for (k, elem_expr) in per_field.into_iter().enumerate() {
-            let field_local = ctx.field_local_map[&(rec_local, k as u32)];
-            let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
-            let elem_ty = info.element_types[k];
-            let call = build_push_call(
-                elem_ty,
-                arr_ty,
-                field_local,
-                field_name,
-                elem_expr,
-                span,
-                ctx,
-            );
-            out.push(TirStmt::new(TirStmtKind::Expr(call), span));
+    let kind = array_method_kind(func, ctx.sig_kinds);
+    match (kind, args.len()) {
+        // Case 1: v.ElementWriter(source) — e.g. push
+        (Some(ArrayMethodKind::ElementWriter), 1) => {
+            let src = &args[0].expr;
+            let per_field = decompose_source(src, arity, &layout, ctx)?;
+            let sig = sig_key_of(func)?;
+            let mut out = Vec::with_capacity(arity);
+            for (k, elem_expr) in per_field.into_iter().enumerate() {
+                let field_local = ctx.field_local_map[&(rec_local, k as u32)];
+                let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
+                let elem_ty = info.element_types[k];
+                let call = build_element_writer_call(
+                    elem_ty,
+                    arr_ty,
+                    field_local,
+                    field_name,
+                    elem_expr,
+                    &sig,
+                    span,
+                    ctx,
+                );
+                out.push(TirStmt::new(TirStmtKind::Expr(call), span));
+            }
+            Some(out)
         }
-        return Some(out);
+        // Case 2: v.IndexWriter(i, source) — e.g. index_assign
+        (Some(ArrayMethodKind::IndexWriter), 2) => {
+            let idx = &args[0].expr;
+            let src = &args[1].expr;
+            if !is_duplicable_expr(idx) {
+                return None;
+            }
+            let per_field = decompose_source(src, arity, &layout, ctx)?;
+            let sig = sig_key_of(func)?;
+            let mut out = Vec::with_capacity(arity);
+            for (k, elem_expr) in per_field.into_iter().enumerate() {
+                let field_local = ctx.field_local_map[&(rec_local, k as u32)];
+                let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
+                let elem_ty = info.element_types[k];
+                let call = build_index_writer_call(
+                    elem_ty,
+                    arr_ty,
+                    field_local,
+                    field_name,
+                    idx.clone(),
+                    elem_expr,
+                    &sig,
+                    span,
+                    ctx,
+                );
+                out.push(TirStmt::new(TirStmtKind::Expr(call), span));
+            }
+            Some(out)
+        }
+        _ => None,
     }
-
-    // Case 2: v.index_assign(i, tuple_source)
-    if is_trait_method(func, "IndexAssign<i32>", "index_assign") && args.len() == 2 {
-        let idx = &args[0].expr;
-        let src = &args[1].expr;
-        if !is_duplicable_expr(idx) {
-            return None;
-        }
-        let per_field = decompose_tuple_source(src, arity, ctx)?;
-        let mut out = Vec::with_capacity(arity);
-        for (k, elem_expr) in per_field.into_iter().enumerate() {
-            let field_local = ctx.field_local_map[&(rec_local, k as u32)];
-            let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
-            let elem_ty = info.element_types[k];
-            let call = build_index_assign_call(
-                elem_ty,
-                arr_ty,
-                field_local,
-                field_name,
-                idx.clone(),
-                elem_expr,
-                span,
-                ctx,
-            );
-            out.push(TirStmt::new(TirStmtKind::Expr(call), span));
-        }
-        return Some(out);
-    }
-
-    None
 }
 
-/// Decompose a tuple-source expression into N per-field expressions.
-/// Supports two forms:
-/// - `TupleLiteral([e_0, e_1, ...])` → `[e_0, e_1, ...]`
+/// Decompose a source expression into N per-field expressions.
+/// Supports three forms:
+/// - `TupleLiteral([e_0, e_1, ...])` (for tuple layout)
+/// - `StructLiteral { .. }` (for struct layout; fields reordered by `field_index`)
 /// - `other.index_value(j)` where `other` is decomposed → `[other_k.index_value(j)]` for each k
 ///
 /// Returns `None` if the expression doesn't match a decomposable form or if
-/// preconditions fail (wrong arity, non-duplicable index, etc.).
-fn decompose_tuple_source(
+/// preconditions fail (wrong arity, non-duplicable index, layout mismatch, etc.).
+fn decompose_source(
     expr: &TirExpr,
     expected_arity: usize,
+    expected_layout: &ElementLayout,
     ctx: &RewriteCtx,
 ) -> Option<Vec<TirExpr>> {
     match &expr.kind {
         TirExprKind::TupleLiteral { elements } => {
+            if !matches!(expected_layout, ElementLayout::Tuple) {
+                return None;
+            }
             if elements.len() != expected_arity {
                 return None;
             }
@@ -855,12 +1315,49 @@ fn decompose_tuple_source(
             }
             Some(out)
         }
+        TirExprKind::StructLiteral {
+            struct_type,
+            fields,
+            ..
+        } => {
+            let ElementLayout::Struct {
+                type_id: expected_ty,
+            } = expected_layout
+            else {
+                return None;
+            };
+            if struct_type != expected_ty {
+                return None;
+            }
+            if fields.len() != expected_arity {
+                return None;
+            }
+            // Reorder by `field_index` so output position k corresponds to
+            // field k (matching the per-field local layout). Check-source
+            // already verified that indices cover 0..N exactly once.
+            let mut out: Vec<Option<TirExpr>> = (0..expected_arity).map(|_| None).collect();
+            for f in fields {
+                let k = f.field_index as usize;
+                if k >= expected_arity {
+                    return None;
+                }
+                if out[k].is_some() {
+                    return None;
+                }
+                let mut e = f.value.clone();
+                rewrite_expr_inplace(&mut e, ctx);
+                out[k] = Some(e);
+            }
+            out.into_iter().collect::<Option<Vec<_>>>()
+        }
         TirExprKind::MethodCall {
             receiver,
             func,
             args,
             ..
-        } if is_trait_method(func, "IndexValue<i32>", "index_value") && args.len() == 1 => {
+        } if array_method_kind(func, ctx.sig_kinds) == Some(ArrayMethodKind::IndexReader)
+            && args.len() == 1 =>
+        {
             let other = receiver_local(receiver)?;
             if !ctx.decomposed.contains(&other) {
                 return None;
@@ -869,22 +1366,27 @@ fn decompose_tuple_source(
             if other_info.element_types.len() != expected_arity {
                 return None;
             }
+            if !layouts_compatible(expected_layout, &other_info.layout) {
+                return None;
+            }
             let idx_expr = &args[0].expr;
             if !is_duplicable_expr(idx_expr) {
                 return None;
             }
+            let sig = sig_key_of(func)?;
             let mut out = Vec::with_capacity(expected_arity);
             for k in 0..expected_arity {
                 let other_field_local = ctx.field_local_map[&(other, k as u32)];
                 let (other_field_name, other_arr_ty) =
                     ctx.field_info_map[&(other, k as u32)].clone();
                 let other_elem_ty = other_info.element_types[k];
-                let call = build_index_value_call(
+                let call = build_index_reader_call(
                     other_elem_ty,
                     other_arr_ty,
                     other_field_local,
                     other_field_name,
                     idx_expr.clone(),
+                    &sig,
                     expr.span,
                     ctx,
                 );
@@ -928,21 +1430,24 @@ fn build_receiver(
     )
 }
 
-/// Build `v_field.push(value)` using the catalog.
-fn build_push_call(
+/// Build `v_field.ElementWriter(value)` — e.g. `v_field.push(value)` — using the
+/// supplied method family `sig`. The `sig` is taken from the original call that
+/// triggered the rewrite, so any stdlib method matching `ElementWriter` flows
+/// through unchanged.
+fn build_element_writer_call(
     elem_ty: TypeId,
     arr_ty: TypeId,
     field_local: u32,
     field_name: String,
     value: TirExpr,
+    sig: &SigKey,
     span: Span,
     ctx: &RewriteCtx,
 ) -> TirExpr {
-    let sig: SigKey = (None, "push".to_string());
     let func = ctx
         .catalog
-        .get(&(elem_ty, sig))
-        .expect("push checked by required_methods_available")
+        .get(&(elem_ty, sig.clone()))
+        .expect("ElementWriter entry checked by required_methods_available")
         .clone();
     let receiver = build_receiver(
         field_local,
@@ -960,25 +1465,23 @@ fn build_push_call(
     TirExpr::new(kind, TypeTable::UNIT, span)
 }
 
-/// Build `v_field.index_assign(index, value)` using the catalog.
-fn build_index_assign_call(
+/// Build `v_field.IndexWriter(index, value)` — e.g. `index_assign(index, value)`.
+/// The `sig` is taken from the original call that triggered the rewrite.
+fn build_index_writer_call(
     elem_ty: TypeId,
     arr_ty: TypeId,
     field_local: u32,
     field_name: String,
     index: TirExpr,
     value: TirExpr,
+    sig: &SigKey,
     span: Span,
     ctx: &RewriteCtx,
 ) -> TirExpr {
-    let sig: SigKey = (
-        Some("IndexAssign<i32>".to_string()),
-        "index_assign".to_string(),
-    );
     let func = ctx
         .catalog
-        .get(&(elem_ty, sig))
-        .expect("index_assign checked by required_methods_available")
+        .get(&(elem_ty, sig.clone()))
+        .expect("IndexWriter entry checked by required_methods_available")
         .clone();
     let receiver = build_receiver(
         field_local,
@@ -996,24 +1499,23 @@ fn build_index_assign_call(
     TirExpr::new(kind, TypeTable::UNIT, span)
 }
 
-/// Build `v_field.index_value(index)` using the catalog. Returns a `TirExpr` of type `elem_ty`.
-fn build_index_value_call(
+/// Build `v_field.IndexReader(index)` — e.g. `index_value(index)`. Returns a
+/// `TirExpr` of type `elem_ty`. The `sig` is taken from the original call that
+/// triggered the rewrite.
+fn build_index_reader_call(
     elem_ty: TypeId,
     arr_ty: TypeId,
     field_local: u32,
     field_name: String,
     index: TirExpr,
+    sig: &SigKey,
     span: Span,
     ctx: &RewriteCtx,
 ) -> TirExpr {
-    let sig: SigKey = (
-        Some("IndexValue<i32>".to_string()),
-        "index_value".to_string(),
-    );
     let func = ctx
         .catalog
-        .get(&(elem_ty, sig))
-        .expect("index_value checked by required_methods_available")
+        .get(&(elem_ty, sig.clone()))
+        .expect("IndexReader entry checked by required_methods_available")
         .clone();
     let receiver = build_receiver(
         field_local,
@@ -1146,7 +1648,7 @@ fn rewrite_expr_inplace(expr: &mut TirExpr, ctx: &RewriteCtx) {
             args,
             ..
         } = &inner.kind
-        && is_trait_method(func, "IndexValue<i32>", "index_value")
+        && array_method_kind(func, ctx.sig_kinds) == Some(ArrayMethodKind::IndexReader)
         && args.len() == 1
         && let Some(rec_local) = receiver_local(receiver)
         && ctx.decomposed.contains(&rec_local)
@@ -1162,12 +1664,14 @@ fn rewrite_expr_inplace(expr: &mut TirExpr, ctx: &RewriteCtx) {
             let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
             let mut idx_expr = args[0].expr.clone();
             rewrite_expr_inplace(&mut idx_expr, ctx);
-            let new_call = build_index_value_call(
+            let sig = sig_key_of(func).expect("IndexReader call must have SigKey");
+            let new_call = build_index_reader_call(
                 elem_ty,
                 arr_ty,
                 field_local,
                 field_name,
                 idx_expr,
+                &sig,
                 expr.span,
                 ctx,
             );
@@ -1176,7 +1680,10 @@ fn rewrite_expr_inplace(expr: &mut TirExpr, ctx: &RewriteCtx) {
         }
     }
 
-    // Handle len/is_empty on decomposed candidate: use field 0 (invariant).
+    // Handle Query calls on decomposed candidates (len/is_empty/capacity —
+    // anything classified as length-invariant). Dispatch to field 0: since
+    // all per-field arrays are kept in lockstep by push/index_assign/
+    // with_capacity, field 0 is representative.
     if let TirExprKind::MethodCall {
         receiver,
         func,
@@ -1186,7 +1693,7 @@ fn rewrite_expr_inplace(expr: &mut TirExpr, ctx: &RewriteCtx) {
         && let Some(rec_local) = receiver_local(receiver)
         && ctx.decomposed.contains(&rec_local)
         && args.is_empty()
-        && (is_array_method(func, "len") || is_array_method(func, "is_empty"))
+        && array_method_kind(func, ctx.sig_kinds) == Some(ArrayMethodKind::Query)
     {
         let info = ctx
             .candidate_data
@@ -1195,17 +1702,18 @@ fn rewrite_expr_inplace(expr: &mut TirExpr, ctx: &RewriteCtx) {
         let elem_ty = info.element_types[0];
         let field_local = ctx.field_local_map[&(rec_local, 0)];
         let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, 0)].clone();
-        let method_name = if is_array_method(func, "len") {
-            "len"
-        } else {
-            "is_empty"
-        };
-        let sig: SigKey = (None, method_name.to_string());
+        // Look up the same query method on Array<T_0>. A missing catalog entry
+        // here is a compiler bug: escape analysis records every observed Query
+        // use via `record_use`, and `required_methods_available` verifies the
+        // entry exists for every per-field element type before the candidate
+        // is admitted to the decomposed set. Reaching this branch with a miss
+        // would mean those invariants broke.
+        let sig = sig_key_of(func).expect("Query call must have SigKey");
         let new_func = ctx
             .catalog
             .get(&(elem_ty, sig))
-            .expect("len/is_empty catalog entry (required check should ensure this)")
-            .clone();
+            .cloned()
+            .expect("Query monomorphization must exist for decomposed element type");
         let new_receiver = build_receiver(
             field_local,
             field_name,

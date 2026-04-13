@@ -209,21 +209,29 @@ fn run_pass(
 
 /// Run optimization passes with a fixed-point iteration strategy.
 ///
-/// Each iteration runs 14 optimization passes in the following order:
-/// 1. Function inlining (`inline`)
-/// 2. Labeled block fusion (`labeled_block_fusion`)
-/// 3. Reference elimination (`ref_elim`)
-/// 4. Scalar Replacement of Aggregates (`sroa`)
-/// 5. Copy propagation (`copy_prop`)
-/// 6. Common Subexpression Elimination (`cse`)
-/// 7. Store-to-load forwarding (`store_load_forward`)
-/// 8. Constant propagation (`const_prop`)
-/// 9. Constant folding (`const_fold`)
-/// 10. Constant global promotion (`const_global_promotion`)
-/// 11. Constant branch pruning (`branch_prune`)
-/// 12. Loop-invariant code motion (`licm`)
-/// 13. Condition implication elimination (`condition_implication`)
-/// 14. Template buffer hoisting (`tmpl_hoist`)
+/// Each iteration runs the following passes in order. Container SROA runs
+/// first because it needs to see `Array<T>` *method calls* (push, `index_value`,
+/// `index_assign`, len, ...) before inline expands them into raw field-accesses
+/// and `builtin::array_get`/`array_set` pairs. Running it before `inline` in
+/// each iteration — rather than only in iteration 0 — also lets the
+/// optimization loop re-run container SROA on newly-inlined code that
+/// exposes fresh `Array<Tuple<...>>` locals.
+///
+/// 1. Container SROA (`container_sroa`)
+/// 2. Function inlining (`inline`)
+/// 3. Labeled block fusion (`labeled_block_fusion`)
+/// 4. Reference elimination (`ref_elim`)
+/// 5. Scalar Replacement of Aggregates (`sroa`)
+/// 6. Copy propagation (`copy_prop`)
+/// 7. Common Subexpression Elimination (`cse`)
+/// 8. Store-to-load forwarding (`store_load_forward`)
+/// 9. Constant propagation (`const_prop`)
+/// 10. Constant folding (`const_fold`)
+/// 11. Constant global promotion (`const_global_promotion`)
+/// 12. Constant branch pruning (`branch_prune`)
+/// 13. Loop-invariant code motion (`licm`)
+/// 14. Condition implication elimination (`condition_implication`)
+/// 15. Template buffer hoisting (`tmpl_hoist`)
 ///
 /// The `config` parameter controls the number of iterations and inline threshold.
 /// More iterations can find more optimization opportunities but take longer.
@@ -239,6 +247,13 @@ fn run_optimization_passes(
     for i in 0..config.iterations {
         profiler.span_start(&format!("tir/iteration {}", i + 1));
         let mut changed = false;
+        // Container SROA must run *before* inline in each iteration: inline
+        // expands trait methods like `IndexValue::index_value` into raw
+        // `builtin::array_get` + field-access pairs, after which the
+        // method-call shape container SROA relies on is gone. Running early
+        // also means we see the `SequenceLiteralBuilder` desugaring for `[]`
+        // while its inner `Constructor` call is still a plain `Call` node,
+        // which `recognize_init` can match structurally.
         changed |= run_pass("tir/container_sroa", project, profiler, |p| {
             scalarize_containers(p)
         });
