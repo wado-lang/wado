@@ -37,8 +37,18 @@
 //! Adding a new method that *does* match a kind (e.g., `push_back`) is
 //! automatically handled — no optimizer change required.
 //!
-//! Runs early in the optimization loop (before inline) so method-call patterns
-//! are still intact.
+//! # Pipeline position
+//!
+//! Runs *first* in each fixed-point iteration, before `inline`. The pass
+//! relies on every `Array<T>` access being a method call (`push`,
+//! `index_value`, `index_assign`, `len`, ...), but `inline` expands those
+//! thin wrappers into raw `builtin::array_get`/`array_set` + field-access
+//! pairs, after which the method-call shape is gone. Running before inline
+//! preserves the call structure that `array_method_kind` classifies.
+//!
+//! Running inside each loop iteration (rather than only once up front) also
+//! lets container SROA pick up new `Array<Tuple<...>>` locals exposed by
+//! earlier-iteration inlining of helper functions.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -65,7 +75,7 @@ type SigKey = (Option<String>, String);
 /// See the module-level table for the mapping from each kind to stdlib methods.
 /// Classification is *signature-driven*: any Array method whose signature
 /// matches one of these shapes is automatically handled, regardless of name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum ArrayMethodKind {
     /// `fn(&mut Array<T>, T) -> ()` — stores one element (e.g., `push`).
     ///
@@ -207,9 +217,9 @@ struct Candidate {
     layout: ElementLayout,
     /// Span of the original let statement
     span: Span,
-    /// Form of the initializer:
-    /// - `Empty`: the seq-lit block for `let v: Array<[...]> = [];`
-    /// - `WithCapacity(n)`: direct call to `Array::with_capacity(n)`
+    /// Form of the initializer — currently always a `Constructor` call whose
+    /// (duplicable) capacity expression is carried forward to build the
+    /// per-field `Array<T_k>::with_capacity(...)` calls during rewrite.
     init: CandidateInit,
 }
 
@@ -227,11 +237,13 @@ enum ElementLayout {
 }
 
 /// How the candidate was initialized.
-enum CandidateInit {
-    /// Empty array literal (desugared to `SequenceLiteralBuilder::new_literal(0)` then `build()`).
-    Empty,
-    /// `Array::with_capacity(n)` where `n` is an integer literal.
-    WithCapacity(u64),
+///
+/// Any Array method classified as `Constructor` with a single duplicable
+/// capacity argument qualifies. The capacity expression is cloned once per
+/// decomposed field at rewrite time, so it must be side-effect-free.
+struct CandidateInit {
+    /// Capacity expression to pass to each per-field `with_capacity(...)` call.
+    capacity: TirExpr,
 }
 
 /// Apply container SROA to all functions in the project.
@@ -359,18 +371,26 @@ fn scalarize_in_function(
     }
 
     // Step 2: escape analysis. Build safe-set via whitelist + tuple-source fixpoint.
+    // Also track which `ArrayMethodKind`s were observed on each whitelisted use,
+    // so step 3 can demand only the monomorphizations that will actually be
+    // emitted per field (rather than unconditionally requiring all four kinds).
     let body_ref = func.body.as_ref().expect("checked in caller");
-    let safe_indices = compute_safe_set(body_ref, &candidates, sig_kinds);
+    let (safe_indices, used_kinds_map) = compute_safe_set(body_ref, &candidates, sig_kinds);
     if safe_indices.is_empty() {
         return false;
     }
 
     // Step 3: verify that every required (element_ty, sig) is present in the catalog.
-    // If any candidate has missing methods, drop it.
+    // Required kinds = `Constructor` (always, for the initializer) ∪ observed
+    // kinds. If any candidate has missing monomorphizations, drop it.
+    let empty_used: IndexSet<ArrayMethodKind> = IndexSet::default();
     let safe_candidates: Vec<&Candidate> = candidates
         .iter()
         .filter(|c| safe_indices.contains(&c.local_index))
-        .filter(|c| required_methods_available(c, catalog, sig_kinds))
+        .filter(|c| {
+            let used = used_kinds_map.get(&c.local_index).unwrap_or(&empty_used);
+            required_methods_available(c, used, catalog, sig_kinds)
+        })
         .collect();
     if safe_candidates.is_empty() {
         return false;
@@ -411,9 +431,8 @@ fn scalarize_in_function(
                     layout: c.layout.clone(),
                     is_mut: c.is_mut,
                     span: c.span,
-                    init: match &c.init {
-                        CandidateInit::Empty => CandidateInit::Empty,
-                        CandidateInit::WithCapacity(n) => CandidateInit::WithCapacity(*n),
+                    init: CandidateInit {
+                        capacity: c.init.capacity.clone(),
                     },
                 },
             )
@@ -468,19 +487,27 @@ struct RewriteCtx<'a> {
 /// In practice all `T_k` get the same stdlib methods monomorphized together,
 /// so checking field 0 alone is enough.
 ///
-/// For simplicity, we require all four rewrite-necessary kinds unconditionally
-/// (not just the ones the candidate actually uses): this matches the previous
-/// behavior. If any per-field kind is missing, the candidate is dropped.
+/// Check that every `ArrayMethodKind` the rewrite will need for this candidate
+/// has a corresponding monomorphization in the catalog for every per-field
+/// element type.
+///
+/// `Constructor` is always required (the initializer itself uses it). The other
+/// kinds are only required when escape analysis observed at least one use of
+/// that kind on the candidate — the rewrite only needs to emit per-field
+/// versions of methods that are actually called.
 fn required_methods_available(
     c: &Candidate,
+    used_kinds: &IndexSet<ArrayMethodKind>,
     catalog: &MethodCatalog,
     sig_kinds: &SigKindIndex,
 ) -> bool {
-    use ArrayMethodKind::{Constructor, ElementWriter, IndexReader, IndexWriter};
-    const REQUIRED_KINDS: [ArrayMethodKind; 4] =
-        [Constructor, ElementWriter, IndexReader, IndexWriter];
+    let mut required: IndexSet<ArrayMethodKind> = IndexSet::default();
+    required.insert(ArrayMethodKind::Constructor);
+    for &k in used_kinds {
+        required.insert(k);
+    }
     for &t in &c.element_types {
-        for kind in REQUIRED_KINDS {
+        for &kind in &required {
             if find_sig_key_for_kind(catalog, sig_kinds, t, kind).is_none() {
                 return false;
             }
@@ -598,30 +625,104 @@ fn element_layout_of(
     None
 }
 
-/// Recognize supported initializer forms for container-SROA candidates:
-/// - `__seq_lit: { let __b = builder_new_literal(0); break __seq_lit: __b.build(); }`
-///   → empty array literal (`[]`), treated as capacity=0.
-/// - Any Array method classified as `Constructor` taking a single integer literal
-///   → explicit capacity (the classic case being `Array::with_capacity(n)`).
+/// Recognize the supported initializer form for container-SROA candidates.
+///
+/// Two equivalent shapes are accepted, both matched purely *structurally*
+/// (no hardcoded label or method names):
+///
+/// 1. A direct `Call` classified as `Constructor` by signature — e.g.
+///    `Array::<T>::with_capacity(cap)` written by the user directly. The
+///    argument must be side-effect-free so it can be cloned once per field.
+/// 2. The `SequenceLiteralBuilder` desugaring for empty array literals
+///    (`[]`), which lowers to
+///    `{ let __b = <Constructor call>; break label: __b.<build>(); }`.
+///    We structurally unwrap the labeled block, look through the `Let`, and
+///    fall through to form (1) on the inner constructor call. Neither the
+///    label string nor the builder method name is inspected — only the
+///    shape of the wrapper.
 fn recognize_init(value: &TirExpr, sig_kinds: &SigKindIndex) -> Option<CandidateInit> {
-    // Form 1: __seq_lit LabeledBlock (empty literal)
-    if let TirExprKind::LabeledBlock { label, block, .. } = &value.kind
-        && label == "__seq_lit"
-        && is_empty_seq_lit_block(block)
-    {
-        return Some(CandidateInit::Empty);
+    let inner = unwrap_builder_labeled_block(value).unwrap_or(value);
+    let TirExprKind::Call { func, args, .. } = &inner.kind else {
+        return None;
+    };
+    if array_method_kind(func, sig_kinds) != Some(ArrayMethodKind::Constructor) {
+        return None;
     }
-
-    // Form 2: static Constructor call with an integer-literal capacity.
-    if let TirExprKind::Call { func, args, .. } = &value.kind
-        && array_method_kind(func, sig_kinds) == Some(ArrayMethodKind::Constructor)
-        && args.len() == 1
-        && let TirExprKind::IntLiteral { value: n, .. } = &args[0].expr.kind
-    {
-        return Some(CandidateInit::WithCapacity(*n));
+    if args.len() != 1 {
+        return None;
     }
+    // The capacity expression is cloned once per per-field constructor
+    // call during rewrite, so it must be side-effect-free.
+    if !is_duplicable_expr(&args[0].expr) {
+        return None;
+    }
+    Some(CandidateInit {
+        capacity: args[0].expr.clone(),
+    })
+}
 
-    None
+/// Unwrap a labeled block of shape
+/// `{ let __b = <X>; break label: <method on __b> }` and return `<X>`.
+///
+/// This is the structural shape of the `[]` literal desugaring via
+/// `SequenceLiteralBuilder`: the `Let` holds the constructor call, and the
+/// `Break` holds the `build()` method call on the freshly constructed local.
+/// We don't check the label, the binding name, or the break method's name —
+/// only that the `Break` exits this block by calling a zero-argument method
+/// whose receiver is the `Let`'s local (directly or via `&__b` / `&mut __b`).
+fn unwrap_builder_labeled_block(expr: &TirExpr) -> Option<&TirExpr> {
+    let TirExprKind::LabeledBlock { label, block, .. } = &expr.kind else {
+        return None;
+    };
+    if block.stmts.len() != 2 {
+        return None;
+    }
+    let TirStmtKind::Let {
+        local_index: b_local,
+        value: inner,
+        ..
+    } = &block.stmts[0].kind
+    else {
+        return None;
+    };
+    let TirStmtKind::Break {
+        label: brk_label,
+        value: Some(brk_val),
+    } = &block.stmts[1].kind
+    else {
+        return None;
+    };
+    if brk_label.as_deref() != Some(label.as_str()) {
+        return None;
+    }
+    // Break value must be a zero-argument method call whose receiver is `__b`
+    // (possibly wrapped in `&`/`&mut`). We don't care what the method does
+    // semantically — the `SequenceLiteralBuilder::build()` contract is
+    // enforced by the trait, and any user-level code matching this shape is
+    // vanishingly unlikely to mean anything other than a builder commit.
+    let TirExprKind::MethodCall { receiver, args, .. } = &brk_val.kind else {
+        return None;
+    };
+    if !args.is_empty() {
+        return None;
+    }
+    let receiver_local = match &receiver.kind {
+        TirExprKind::Local { index, .. } => *index,
+        TirExprKind::Unary {
+            op: crate::tir::TirUnaryOp::Ref | crate::tir::TirUnaryOp::MutRef,
+            expr: inner_ref,
+        } => {
+            let TirExprKind::Local { index, .. } = &inner_ref.kind else {
+                return None;
+            };
+            *index
+        }
+        _ => return None,
+    };
+    if receiver_local != *b_local {
+        return None;
+    }
+    Some(inner)
 }
 
 /// Look up the `ArrayMethodKind` of a call target by signature, via the
@@ -630,54 +731,6 @@ fn recognize_init(value: &TirExpr, sig_kinds: &SigKindIndex) -> Option<Candidate
 fn array_method_kind(func: &FunctionRef, sig_kinds: &SigKindIndex) -> Option<ArrayMethodKind> {
     let sig = sig_key_of(func)?;
     sig_kinds.get(&sig).copied()
-}
-
-/// Check whether a `LabeledBlock` body matches the empty-literal seq-lit pattern:
-/// a `let __b = ...SequenceLiteralBuilder::new_literal(0);` followed by a
-/// `break __seq_lit: __b.build();`. We don't care which element type the builder
-/// uses at this check — we only care that it's structurally a no-element literal.
-fn is_empty_seq_lit_block(block: &TirBlock) -> bool {
-    if block.stmts.len() != 2 {
-        return false;
-    }
-    // Stmt 0: let <name> = <call>(0)
-    let TirStmtKind::Let { value: init, .. } = &block.stmts[0].kind else {
-        return false;
-    };
-    match &init.kind {
-        TirExprKind::Call { func, args, .. } => {
-            // new_literal(0): 0 means empty literal
-            if !is_method_name(func, "new_literal") {
-                return false;
-            }
-            if args.len() != 1 {
-                return false;
-            }
-            if !matches!(&args[0].expr.kind, TirExprKind::IntLiteral { value: 0, .. }) {
-                return false;
-            }
-        }
-        _ => return false,
-    }
-    // Stmt 1: break __seq_lit: <something>
-    let TirStmtKind::Break {
-        label: Some(l),
-        value: Some(_),
-    } = &block.stmts[1].kind
-    else {
-        return false;
-    };
-    l == "__seq_lit"
-}
-
-/// Does this `FunctionRef` refer to any method (on any type) with the given name?
-/// Used only for compiler-internal synthesis patterns (e.g., the
-/// `SequenceLiteralBuilder::new_literal` builder that appears inside empty array
-/// literals after desugaring). Not used to identify Array operations themselves.
-fn is_method_name(func: &FunctionRef, method: &str) -> bool {
-    func.method_info
-        .as_ref()
-        .is_some_and(|i| i.method_name == method)
 }
 
 /// Compute the set of safe (decomposable) candidate locals via whitelist escape
@@ -699,7 +752,7 @@ fn compute_safe_set(
     body: &TirBlock,
     candidates: &[Candidate],
     sig_kinds: &SigKindIndex,
-) -> IndexSet<u32> {
+) -> (IndexSet<u32>, IndexMap<u32, IndexSet<ArrayMethodKind>>) {
     // Map candidate local → element arity (for push/index_assign/index_value arity checks).
     let mut arity_of: IndexMap<u32, usize> = IndexMap::default();
     // Map candidate local → element layout (for verifying literal shape matches).
@@ -710,25 +763,27 @@ fn compute_safe_set(
     }
 
     // Iterate to fixpoint: start with all candidates safe, then remove any that
-    // reference an escaped candidate via element-source push.
+    // reference an escaped candidate via element-source push. The used-kinds map
+    // is rebuilt from scratch each iteration so it reflects the final safe set.
     let mut safe: IndexSet<u32> = candidates.iter().map(|c| c.local_index).collect();
-    loop {
+    let used_kinds = loop {
         let mut checker = WhitelistChecker {
             safe: &safe,
             arity_of: &arity_of,
             layout_of: &layout_of,
             sig_kinds,
             escaped: IndexSet::default(),
+            used_kinds: IndexMap::default(),
         };
         checker.visit_block(body);
         if checker.escaped.is_empty() {
-            break;
+            break checker.used_kinds;
         }
         for idx in checker.escaped {
             safe.shift_remove(&idx);
         }
-    }
-    safe
+    };
+    (safe, used_kinds)
 }
 
 struct WhitelistChecker<'a> {
@@ -737,6 +792,12 @@ struct WhitelistChecker<'a> {
     layout_of: &'a IndexMap<u32, ElementLayout>,
     sig_kinds: &'a SigKindIndex,
     escaped: IndexSet<u32>,
+    /// Per-candidate set of `ArrayMethodKind`s observed on whitelisted uses.
+    /// Only kinds the rewrite actually needs to emit are recorded; bare
+    /// `IndexReader` uses (which escape) are not. Drives the
+    /// `required_methods_available` check so we only demand stdlib
+    /// monomorphizations that will actually be called.
+    used_kinds: IndexMap<u32, IndexSet<ArrayMethodKind>>,
 }
 
 impl WhitelistChecker<'_> {
@@ -744,6 +805,11 @@ impl WhitelistChecker<'_> {
         if self.safe.contains(&idx) {
             self.escaped.insert(idx);
         }
+    }
+
+    /// Record that a whitelisted call of `kind` was observed on candidate `idx`.
+    fn record_use(&mut self, idx: u32, kind: ArrayMethodKind) {
+        self.used_kinds.entry(idx).or_default().insert(kind);
     }
 
     /// Check an expression used as a value-source for `push`/`index_assign`.
@@ -849,6 +915,9 @@ impl WhitelistChecker<'_> {
                 }
                 // Index expression must be visited as a normal expression.
                 self.visit_expr(&args[0].expr);
+                // Record that `other` is being read via IndexReader so it
+                // needs that method monomorphization during rewrite.
+                self.record_use(other, ArrayMethodKind::IndexReader);
                 true
             }
             _ => false,
@@ -893,13 +962,16 @@ impl TirRefVisitor for WhitelistChecker<'_> {
                                 .get(&rec_local)
                                 .cloned()
                                 .unwrap_or(ElementLayout::Tuple);
-                            if !self.check_source(&args[0].expr, arity, &layout) {
+                            if self.check_source(&args[0].expr, arity, &layout) {
+                                self.record_use(rec_local, ArrayMethodKind::ElementWriter);
+                            } else {
                                 self.mark(rec_local);
                             }
                             return;
                         }
                         // v.len() / v.is_empty() / v.capacity() — Query, no arg
                         (Some(ArrayMethodKind::Query), 0) => {
+                            self.record_use(rec_local, ArrayMethodKind::Query);
                             return;
                         }
                         // v.index_assign-shaped(i, source)
@@ -925,7 +997,9 @@ impl TirRefVisitor for WhitelistChecker<'_> {
                             }
                             // index argument visited normally
                             self.visit_expr(&args[0].expr);
-                            if !self.check_source(&args[1].expr, arity, &layout) {
+                            if self.check_source(&args[1].expr, arity, &layout) {
+                                self.record_use(rec_local, ArrayMethodKind::IndexWriter);
+                            } else {
                                 self.mark(rec_local);
                             }
                             return;
@@ -966,6 +1040,7 @@ impl TirRefVisitor for WhitelistChecker<'_> {
                     && self.safe.contains(&rec_local)
                 {
                     // Safe — just visit the index expression.
+                    self.record_use(rec_local, ArrayMethodKind::IndexReader);
                     self.visit_expr(&args[0].expr);
                     return;
                 }
@@ -1064,9 +1139,9 @@ fn process_stmt(mut stmt: TirStmt, out: &mut Vec<TirStmt>, ctx: &RewriteCtx) {
 }
 
 /// Emit N per-field Let statements for a decomposed candidate.
-/// The original Let's initializer is replaced by N `Array<T_k>::with_capacity(n)`
-/// calls, one per field. For `Empty` init, `n = 0`. For `WithCapacity(n)`, the
-/// same `n` is reused for every field.
+/// The original Let's initializer is replaced by N `Array<T_k>::with_capacity(cap)`
+/// calls, one per field. The same (duplicable) capacity expression from the
+/// original initializer is cloned once per field.
 fn expand_candidate_let(stmt: &TirStmt, out: &mut Vec<TirStmt>, ctx: &RewriteCtx) {
     let TirStmtKind::Let { local_index, .. } = &stmt.kind else {
         return;
@@ -1075,14 +1150,11 @@ fn expand_candidate_let(stmt: &TirStmt, out: &mut Vec<TirStmt>, ctx: &RewriteCtx
         .candidate_data
         .get(local_index)
         .expect("candidate data must exist for decomposed local");
-    let cap = match &info.init {
-        CandidateInit::Empty => 0,
-        CandidateInit::WithCapacity(n) => *n,
-    };
     for (k, &elem_ty) in info.element_types.iter().enumerate() {
         let new_local_index = ctx.field_local_map[&(*local_index, k as u32)];
         let (new_name, arr_ty) = ctx.field_info_map[&(*local_index, k as u32)].clone();
-        let init = build_with_capacity_call(elem_ty, arr_ty, cap, info.span, ctx);
+        let init =
+            build_with_capacity_call(elem_ty, arr_ty, info.init.capacity.clone(), info.span, ctx);
         let let_stmt = TirStmt::new(
             TirStmtKind::Let {
                 name: new_name,
@@ -1101,11 +1173,13 @@ fn expand_candidate_let(stmt: &TirStmt, out: &mut Vec<TirStmt>, ctx: &RewriteCtx
 
 /// Build a `Array<T_k>::Constructor(cap)` TIR call — e.g. `with_capacity(cap)`.
 /// The specific method is resolved via `find_sig_key_for_kind(Constructor)`,
-/// so there's no hardcoded name match.
+/// so there's no hardcoded name match. `cap` is the (duplicable) capacity
+/// expression recognized from the original initializer, already cloned once
+/// for this field.
 fn build_with_capacity_call(
     elem_ty: TypeId,
     arr_ty: TypeId,
-    cap: u64,
+    cap: TirExpr,
     span: Span,
     ctx: &RewriteCtx,
 ) -> TirExpr {
@@ -1121,18 +1195,10 @@ fn build_with_capacity_call(
         .get(&(elem_ty, sig))
         .expect("Constructor entry checked by required_methods_available")
         .clone();
-    let cap_arg = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: cap,
-            repr: cap.to_string(),
-        },
-        TypeTable::I32,
-        span,
-    );
     let call = TirExprKind::Call {
         func,
         type_args: Vec::new(),
-        args: vec![CallArg::new(cap_arg, false)],
+        args: vec![CallArg::new(cap, false)],
     };
     TirExpr::new(call, arr_ty, span)
 }
@@ -1636,27 +1702,33 @@ fn rewrite_expr_inplace(expr: &mut TirExpr, ctx: &RewriteCtx) {
         let elem_ty = info.element_types[0];
         let field_local = ctx.field_local_map[&(rec_local, 0)];
         let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, 0)].clone();
-        // Look up the same query method on Array<T_0>. If it's not
-        // monomorphized for T_0, leave the expression alone — we must not
-        // silently drop the call.
+        // Look up the same query method on Array<T_0>. A missing catalog entry
+        // here is a compiler bug: escape analysis records every observed Query
+        // use via `record_use`, and `required_methods_available` verifies the
+        // entry exists for every per-field element type before the candidate
+        // is admitted to the decomposed set. Reaching this branch with a miss
+        // would mean those invariants broke.
         let sig = sig_key_of(func).expect("Query call must have SigKey");
-        if let Some(new_func) = ctx.catalog.get(&(elem_ty, sig)).cloned() {
-            let new_receiver = build_receiver(
-                field_local,
-                field_name,
-                arr_ty,
-                /*mut_ref=*/ false,
-                expr.span,
-            );
-            let kind = TirExprKind::MethodCall {
-                receiver: Box::new(new_receiver),
-                func: new_func,
-                type_args: Vec::new(),
-                args: Vec::new(),
-            };
-            expr.kind = kind;
-            return;
-        }
+        let new_func = ctx
+            .catalog
+            .get(&(elem_ty, sig))
+            .cloned()
+            .expect("Query monomorphization must exist for decomposed element type");
+        let new_receiver = build_receiver(
+            field_local,
+            field_name,
+            arr_ty,
+            /*mut_ref=*/ false,
+            expr.span,
+        );
+        let kind = TirExprKind::MethodCall {
+            receiver: Box::new(new_receiver),
+            func: new_func,
+            type_args: Vec::new(),
+            args: Vec::new(),
+        };
+        expr.kind = kind;
+        return;
     }
 
     // Default: recurse into children.
