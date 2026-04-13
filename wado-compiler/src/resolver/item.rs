@@ -45,21 +45,17 @@ pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
 
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
-        // Set up type parameters in scope before resolving fields
-        let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-        for (index, param) in struct_decl.type_params.iter().enumerate() {
-            let type_id = self
-                .type_table
-                .borrow_mut()
-                .make_type_param(param.name.clone(), index as u32);
-            self.trait_ctx
-                .type_params
-                .insert(param.name.clone(), (index as u32, type_id));
-        }
+        // Set up type parameters in scope before resolving fields. Use an
+        // inherited scope so that any caller-provided `assoc_type_bindings` or
+        // `self_type` remain visible — only `type_params` are replaced, matching
+        // the original `mem::take(&mut self.trait_ctx.type_params)` semantics.
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.trait_ctx.type_params.clear();
+        scope.register_generic_params(&struct_decl.type_params, 0);
 
         let mut fields = Vec::new();
         for (index, field) in struct_decl.fields.iter().enumerate() {
-            let type_id = self.resolve_type(&field.ty);
+            let type_id = scope.resolve_type(&field.ty);
             let serde_rename = field.attrs.iter().find_map(|a| {
                 if a.name == "serde" {
                     a.kv_value("rename").map(str::to_string)
@@ -93,13 +89,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_effect: p.is_effect,
                 is_pack: p.is_pack,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                 index: i as u32,
             })
             .collect();
 
-        // Restore previous type params scope
-        self.trait_ctx.type_params = old_type_params;
+        drop(scope);
 
         let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
             if a.name == "serde" {
@@ -156,24 +151,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         variant_decl: &ast::VariantDecl,
     ) -> TirVariantDecl {
-        // Set up type parameters in scope before resolving field types
-        let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-        for (index, param) in variant_decl.type_params.iter().enumerate() {
-            let type_id = self
-                .type_table
-                .borrow_mut()
-                .make_type_param(param.name.clone(), index as u32);
-            self.trait_ctx
-                .type_params
-                .insert(param.name.clone(), (index as u32, type_id));
-        }
+        // Set up type parameters in scope before resolving field types. Use an
+        // inherited scope so any caller-provided `assoc_type_bindings`/`self_type`
+        // stay visible — only `type_params` are replaced, matching the original
+        // `mem::take(&mut self.trait_ctx.type_params)` semantics.
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.trait_ctx.type_params.clear();
+        scope.register_generic_params(&variant_decl.type_params, 0);
 
         // Resolve each case - each variant case has exactly one payload type
         let mut cases = Vec::new();
         for (index, case) in variant_decl.cases.iter().enumerate() {
             // Unit variants have `()` (unit type) payload
             let payload = if let Some(payload_ty) = &case.payload {
-                self.resolve_type(payload_ty)
+                scope.resolve_type(payload_ty)
             } else {
                 TypeTable::UNIT
             };
@@ -195,13 +186,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_effect: p.is_effect,
                 is_pack: p.is_pack,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                 index: i as u32,
             })
             .collect();
 
-        // Restore previous type params scope
-        self.trait_ctx.type_params = old_type_params;
+        drop(scope);
 
         let comp_features = extract_comp_features(&variant_decl.attrs);
         if comp_features != 0 {
@@ -284,47 +274,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Resolve a function
     pub(super) fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
-        // Set up type parameters in scope before resolving types
-        let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-        let old_type_param_bounds = std::mem::take(&mut self.trait_ctx.type_param_bounds);
-        let mut type_param_list = Vec::new();
-        let mut real_type_param_index = 0u32;
-        for param in &func.type_params {
-            // Effect params are not types — skip them in type param registration
-            if param.is_effect {
-                continue;
-            }
-            let type_id = if param.is_pack {
-                self.type_table
-                    .borrow_mut()
-                    .make_type_pack(param.name.clone(), real_type_param_index)
-            } else {
-                self.type_table
-                    .borrow_mut()
-                    .make_type_param(param.name.clone(), real_type_param_index)
-            };
-            self.trait_ctx
-                .type_params
-                .insert(param.name.clone(), (real_type_param_index, type_id));
-            if !param.bounds.is_empty() {
-                self.trait_ctx
-                    .type_param_bounds
-                    .insert(param.name.clone(), param.bounds.clone());
-            }
-            type_param_list.push((param.name.clone(), type_id));
-            real_type_param_index += 1;
-        }
+        // Set up type parameters in scope before resolving types. Use an
+        // inherited scope so any caller-provided `assoc_type_bindings`/`self_type`
+        // stay visible — only `type_params` and `type_param_bounds` are replaced,
+        // matching the original `mem::take` semantics for those two fields.
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.trait_ctx.type_params.clear();
+        scope.trait_ctx.type_param_bounds.clear();
+        scope.register_generic_params(&func.type_params, 0);
+        let type_param_list: Vec<(String, crate::tir::TypeId)> = func
+            .type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .filter_map(|p| {
+                scope
+                    .trait_ctx
+                    .type_params
+                    .get(&p.name)
+                    .map(|&(_, id)| (p.name.clone(), id))
+            })
+            .collect();
 
         // Set effect params in scope (for resolving effect names in function types)
-        let old_effect_params = std::mem::take(&mut self.current_effect_params);
+        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
+            let _ = scope.logger.error(TypeError::InvalidLiteral {
                 message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
                 span: effect_params[1].span,
             });
         }
-        self.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
+        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
 
         // Store type parameters for generic functions (for call site substitution)
         let has_real_type_params = func.type_params.iter().any(|p| !p.is_effect);
@@ -334,11 +314,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .params
                 .iter()
                 .filter(|p| p.self_kind == crate::ast::SelfKind::None)
-                .map(|p| self.resolve_type(&p.ty))
+                .map(|p| scope.resolve_type(&p.ty))
                 .collect();
-            self.generic_function_params
+            scope
+                .generic_function_params
                 .insert(func.name.clone(), type_param_list);
-            self.generic_function_resolved_param_types
+            scope
+                .generic_function_resolved_param_types
                 .insert(func.name.clone(), resolved_param_types);
         }
 
@@ -346,7 +328,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let declared_return_type = func
             .return_type
             .as_ref()
-            .map(|t| self.resolve_type(t))
+            .map(|t| scope.resolve_type(t))
             .unwrap_or(TypeTable::UNIT);
 
         // For async functions, the Wasm-level return type is unit (the result is delivered
@@ -360,7 +342,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Update the function_return_types with the resolved return type
         // (This replaces the potentially incorrect type from static resolution)
-        self.function_return_types
+        scope
+            .function_return_types
             .insert(func.name.clone(), return_type);
 
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
@@ -372,7 +355,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Resolve parameters
         let mut params = Vec::new();
         for param in &func.params {
-            let type_id = self.resolve_type(&param.ty);
+            let type_id = scope.resolve_type(&param.ty);
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut);
             params.push(TirParam {
                 name: param.name.clone(),
@@ -384,13 +367,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Validate stores declarations
-        self.validate_stores(&func.stores, &params, func.span);
+        scope.validate_stores(&func.stores, &params, func.span);
 
         // Resolve body
         let body = func
             .body
             .as_ref()
-            .map(|b| self.resolve_block(b, &mut ctx, None));
+            .map(|b| scope.resolve_block(b, &mut ctx, None));
 
         // Validate: non-unit return type requires explicit `return` in the body
         if return_type != TypeTable::UNIT
@@ -398,8 +381,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             && let Some(ref body) = body
             && Self::find_return_type_in_block(body).is_none()
         {
-            let _ = self.logger.error(TypeError::MissingReturn {
-                return_type: self.type_table.borrow().type_name(return_type),
+            let _ = scope.logger.error(TypeError::MissingReturn {
+                return_type: scope.type_table.borrow().type_name(return_type),
                 span: func.span,
             });
         }
@@ -414,18 +397,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_effect: p.is_effect,
                 is_pack: p.is_pack,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                 index: i as u32,
             })
             .collect();
 
         // Resolve effects while effect params are still in scope
-        let effects = self.resolve_effects(&func.effects);
+        let effects = scope.resolve_effects(&func.effects);
 
-        // Restore previous type params scope
-        self.trait_ctx.type_params = old_type_params;
-        self.trait_ctx.type_param_bounds = old_type_param_bounds;
-        self.current_effect_params = old_effect_params;
+        // Restore effect params scope
+        scope.current_effect_params = old_effect_params;
+        drop(scope);
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -557,9 +539,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         impl_type: &Type,
         trait_name: Option<&str>,
     ) -> Option<TirFunction> {
-        // Set up type parameters in scope before resolving types
-        let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-        let old_type_param_bounds = std::mem::take(&mut self.trait_ctx.type_param_bounds);
+        // Use an inherited scope so the caller's `assoc_type_bindings` (set up
+        // for the surrounding impl block) remain visible — `Self::Output` etc.
+        // must still resolve while we're inside this method body. Type params
+        // and bounds get rebuilt below to match the original `mem::take`
+        // behavior.
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.trait_ctx.type_params.clear();
         let mut type_param_list = Vec::new();
 
         // First, collect type params from impl block's generic type (e.g., impl Box<T>)
@@ -574,12 +560,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg {
                     let name = &named.name;
-                    if !self.trait_ctx.type_params.contains_key(name) {
-                        let type_id = self
+                    if !scope.trait_ctx.type_params.contains_key(name) {
+                        let type_id = scope
                             .type_table
                             .borrow_mut()
                             .make_type_param(name.clone(), i as u32);
-                        self.trait_ctx
+                        scope
+                            .trait_ctx
                             .type_params
                             .insert(name.clone(), (i as u32, type_id));
                         // Store impl type param info for later monomorphization
@@ -596,17 +583,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         } else if let ast::Type::Named(named) = impl_type {
             // Blanket impl case: `impl<I: Iterator> IntoIterator for I`
-            // The impl type is a type parameter itself, registered by the caller.
-            // old_type_params holds the caller's type params (taken via std::mem::take above).
-            if let Some(&(idx, _)) = old_type_params.get(&named.name) {
-                let type_id = self
+            // The impl type is a type parameter itself, registered by the caller,
+            // now living in the saved (parent) scope.
+            if let Some(&(idx, _)) = scope.saved().type_params.get(&named.name) {
+                let type_id = scope
                     .type_table
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
-                self.trait_ctx
+                scope
+                    .trait_ctx
                     .type_params
                     .insert(named.name.clone(), (idx, type_id));
-                let bounds = old_type_param_bounds
+                let bounds = scope
+                    .saved()
+                    .type_param_bounds
                     .get(&named.name)
                     .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
                     .unwrap_or_default();
@@ -623,16 +613,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Reference impl case: `impl<T: Bound> Trait for &T` / `impl<T: Bound> Trait for &mut T`
             // The inner type T is a type parameter registered by the caller.
             if let ast::Type::Named(named) = boxed.as_ref()
-                && let Some(&(idx, _)) = old_type_params.get(&named.name)
+                && let Some(&(idx, _)) = scope.saved().type_params.get(&named.name)
             {
-                let type_id = self
+                let type_id = scope
                     .type_table
                     .borrow_mut()
                     .make_type_param(named.name.clone(), idx);
-                self.trait_ctx
+                scope
+                    .trait_ctx
                     .type_params
                     .insert(named.name.clone(), (idx, type_id));
-                let bounds = old_type_param_bounds
+                let bounds = scope
+                    .saved()
+                    .type_param_bounds
                     .get(&named.name)
                     .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
                     .unwrap_or_default();
@@ -650,16 +643,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Extract type pack params from the tuple's TypePackSpread elements.
             for elem in elements {
                 if let ast::Type::TypePackSpread(name, _) = elem
-                    && let Some(&(idx, _)) = old_type_params.get(name)
+                    && let Some(&(idx, _)) = scope.saved().type_params.get(name)
                 {
-                    let type_id = self
+                    let type_id = scope
                         .type_table
                         .borrow_mut()
                         .make_type_pack(name.clone(), idx);
-                    self.trait_ctx
+                    scope
+                        .trait_ctx
                         .type_params
                         .insert(name.clone(), (idx, type_id));
-                    let bounds = old_type_param_bounds
+                    let bounds = scope
+                        .saved()
+                        .type_param_bounds
                         .get(name)
                         .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
                         .unwrap_or_default();
@@ -676,39 +672,40 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Populate bounds from the impl block's type_params
-        // (inherited from outer scope - second-pass sets these up)
-        // Re-read from current_type_param_bounds which was set by the caller
-        // Actually, the caller (second-pass) already set up bounds, but we took them.
-        // We need to restore them from old_type_param_bounds temporarily... NO.
-        // The caller sets up bounds BEFORE calling resolve_method, so old_type_param_bounds
-        // contains the caller's bounds. We should use those as base and add method-level bounds.
-        self.trait_ctx.type_param_bounds = old_type_param_bounds.clone();
+        // (inherited from outer scope - second-pass sets these up).
+        // The caller sets up bounds BEFORE calling resolve_method, so the saved
+        // scope contains the caller's bounds. We start from those and add
+        // method-level bounds on top.
+        let saved_bounds = scope.saved().type_param_bounds.clone();
+        scope.trait_ctx.type_param_bounds = saved_bounds;
 
         // Set effect params in scope (for resolving effect names in function types)
-        let old_effect_params = std::mem::take(&mut self.current_effect_params);
+        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
+            let _ = scope.logger.error(TypeError::InvalidLiteral {
                 message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
                 span: effect_params[1].span,
             });
         }
-        self.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
+        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
 
         // Then, collect method-level type params
-        let offset = self.trait_ctx.type_params.len();
+        let offset = scope.trait_ctx.type_params.len();
         for (index, param) in func.type_params.iter().enumerate() {
             let idx = (offset + index) as u32;
-            let type_id = self
+            let type_id = scope
                 .type_table
                 .borrow_mut()
                 .make_type_param(param.name.clone(), idx);
-            self.trait_ctx
+            scope
+                .trait_ctx
                 .type_params
                 .insert(param.name.clone(), (idx, type_id));
             type_param_list.push((param.name.clone(), type_id));
             if !param.bounds.is_empty() {
-                self.trait_ctx
+                scope
+                    .trait_ctx
                     .type_param_bounds
                     .insert(param.name.clone(), param.bounds.clone());
             }
@@ -716,20 +713,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Set up Self type for the impl block
         // This allows `&Self` to resolve correctly in method parameters
-        let old_self_type = self.trait_ctx.self_type;
-        self.trait_ctx.self_type = Some(self.resolve_type(impl_type));
+        let old_self_type = scope.trait_ctx.self_type;
+        scope.trait_ctx.self_type = Some(scope.resolve_type(impl_type));
 
         // Resolve return type
         let return_type = func
             .return_type
             .as_ref()
-            .map(|t| self.resolve_type(t))
+            .map(|t| scope.resolve_type(t))
             .unwrap_or(TypeTable::UNIT);
 
         // Update the function_return_types with the resolved return type
         // (This replaces the potentially incorrect type from static resolution)
         let mangled_name = MethodName::format_local(struct_name, trait_name, &func.name);
-        self.function_return_types
+        scope
+            .function_return_types
             .insert(mangled_name.clone(), return_type);
 
         // Display name for #function: StructName::method_name
@@ -742,17 +740,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let type_id = match param.self_kind {
                 ast::SelfKind::Ref => {
                     // &self: wrap impl type in immutable reference
-                    let inner_type = self.resolve_type(impl_type);
-                    self.type_table.borrow_mut().make_ref(inner_type)
+                    let inner_type = scope.resolve_type(impl_type);
+                    scope.type_table.borrow_mut().make_ref(inner_type)
                 }
                 ast::SelfKind::MutRef => {
                     // &mut self: wrap impl type in mutable reference
-                    let inner_type = self.resolve_type(impl_type);
-                    self.type_table.borrow_mut().make_mut_ref(inner_type)
+                    let inner_type = scope.resolve_type(impl_type);
+                    scope.type_table.borrow_mut().make_mut_ref(inner_type)
                 }
                 ast::SelfKind::None => {
                     // Regular parameter
-                    self.resolve_type(&param.ty)
+                    scope.resolve_type(&param.ty)
                 }
             };
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut);
@@ -766,13 +764,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Validate stores declarations
-        self.validate_stores(&func.stores, &params, func.span);
+        scope.validate_stores(&func.stores, &params, func.span);
 
         // Resolve body
         let body = func
             .body
             .as_ref()
-            .map(|b| self.resolve_block(b, &mut ctx, None));
+            .map(|b| scope.resolve_block(b, &mut ctx, None));
 
         // Validate: non-unit return type requires explicit `return` in the body
         if return_type != TypeTable::UNIT
@@ -780,8 +778,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             && let Some(ref body) = body
             && Self::find_return_type_in_block(body).is_none()
         {
-            let _ = self.logger.error(TypeError::MissingReturn {
-                return_type: self.type_table.borrow().type_name(return_type),
+            let _ = scope.logger.error(TypeError::MissingReturn {
+                return_type: scope.type_table.borrow().type_name(return_type),
                 span: func.span,
             });
         }
@@ -796,7 +794,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_effect: p.is_effect,
                 is_pack: p.is_pack,
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                 index: i as u32,
             })
             .collect();
@@ -809,17 +807,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
             func.params
                 .iter()
                 .filter(|p| p.self_kind == crate::ast::SelfKind::None)
-                .map(|p| self.resolve_type(&p.ty))
+                .map(|p| scope.resolve_type(&p.ty))
                 .collect()
         };
 
         // Resolve effects while effect params are still in scope
-        let effects = self.resolve_effects(&func.effects);
+        let effects = scope.resolve_effects(&func.effects);
 
-        // Restore previous type params scope and bounds
-        self.trait_ctx.type_params = old_type_params;
-        self.trait_ctx.type_param_bounds = old_type_param_bounds;
-        self.current_effect_params = old_effect_params;
+        // Restore effect params and Self type. `trait_ctx` is auto-restored on
+        // `drop(scope)`, which replaces everything set up above.
+        scope.current_effect_params = old_effect_params;
+        scope.trait_ctx.self_type = old_self_type;
+        drop(scope);
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {
@@ -828,9 +827,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             self.generic_method_resolved_param_types
                 .insert(mangled_name, method_resolved_param_types);
         }
-
-        // Restore Self type
-        self.trait_ctx.self_type = old_self_type;
 
         Some(TirFunction {
             module_source: ModuleSource::default(),

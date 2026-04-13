@@ -1,0 +1,52 @@
+// `two<T>(a: T, b: T)` requires both arguments to unify into the same T.
+// Wado coercion only applies to literals, so when one argument is an
+// already-typed value (e.g. `1 as u8`) and the other is a literal, the
+// literal must coerce to that concrete type.
+
+fn two<T>(a: T, b: T) -> T {
+    return a;
+}
+
+struct CoerceHolder {
+    dummy: i32,
+}
+
+impl CoerceHolder {
+    pub fn two_static<T>(a: T, b: T) -> T {
+        return a;
+    }
+
+    pub fn two_method<T>(&self, a: T, b: T) -> T {
+        let _ = self.dummy;
+        return a;
+    }
+}
+
+test "free fn: literal coerces to typed neighbour (u8)" {
+    let r = two(1 as u8, 2);
+    assert r == 1 as u8;
+}
+
+test "free fn: literal coerces to typed neighbour (i64)" {
+    let r = two(10 as i64, 20);
+    assert r == 10 as i64;
+}
+
+test "free fn: both literals default to i32" {
+    let r = two(1, 2);
+    assert r == 1;
+}
+
+test "static method: literal coerces to typed neighbour" {
+    let r = CoerceHolder::two_static(1 as u8, 2);
+    assert r == 1 as u8;
+}
+
+test "instance method: literal coerces to typed neighbour" {
+    let h = CoerceHolder { dummy: 0 };
+    let r = h.two_method(1 as u8, 2);
+    assert r == 1 as u8;
+}
+
+__DATA__
+{"test": {}}

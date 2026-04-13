@@ -1,0 +1,40 @@
+// Type parameter omission for generic instance methods in the same module.
+
+struct InstContainer {
+    base: i32,
+}
+
+impl InstContainer {
+    pub fn transform<T>(&self, x: T) -> T {
+        return x;
+    }
+
+    pub fn first<T, U>(&self, a: T, b: U) -> T {
+        return a;
+    }
+
+    pub fn second<T, U>(&self, a: T, b: U) -> U {
+        return b;
+    }
+}
+
+test "instance method: single type param" {
+    let c = InstContainer { base: 0 };
+    let a = c.transform(42);
+    let b = c.transform("hello");
+    let d = c.transform(100 as i64);
+    assert a == 42;
+    assert b == "hello";
+    assert d == 100 as i64;
+}
+
+test "instance method: two distinct type params" {
+    let c = InstContainer { base: 0 };
+    let a = c.first(10 as i64, "world");
+    let b = c.second(10 as i64, "world");
+    assert a == 10 as i64;
+    assert b == "world";
+}
+
+__DATA__
+{"test": {}}

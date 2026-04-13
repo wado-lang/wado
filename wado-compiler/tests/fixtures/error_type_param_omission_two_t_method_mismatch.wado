@@ -1,0 +1,25 @@
+// Instance method `two_method<T>(&self, a: T, b: T)` should fail to compile
+// when both arguments are already-typed values of different concrete types.
+// Wado coercion only applies to literals, so the compiler cannot reconcile
+// `i64` with `i32`.
+
+struct Holder {
+    dummy: i32,
+}
+
+impl Holder {
+    pub fn two_method<T>(&self, a: T, b: T) -> T {
+        let _ = self.dummy;
+        let _ = b;
+        return a;
+    }
+}
+
+export fn run() {
+    let h = Holder { dummy: 0 };
+    let r = h.two_method(1 as i64, 2 as i32);
+    let _ = r;
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

@@ -335,6 +335,48 @@ impl<H: CompilerHost> Resolver<'_, H> {
         None
     }
 
+    /// Re-coerce numeric literal arguments to inferred parameter types.
+    ///
+    /// When a generic call has its type arguments inferred (e.g. `two<T>(1 as u8, 2)`),
+    /// numeric literal arguments resolved before inference may have picked up the
+    /// default `i32`/`f64` type because the expected type was an unsubstituted
+    /// `TypeParam`. After inference, we know the concrete `T`, so any literal arg
+    /// whose corresponding parameter is now a numeric type should be re-coerced.
+    ///
+    /// `expected_param_types` should be the parameter types after substituting the
+    /// inferred type arguments.
+    pub(super) fn recoerce_literal_args(
+        &mut self,
+        raw_args: &[Expr],
+        args: &mut [TirExpr],
+        expected_param_types: &[TypeId],
+    ) {
+        for (i, arg) in args.iter_mut().enumerate() {
+            let Some(raw) = raw_args.get(i) else {
+                continue;
+            };
+            let Some(&expected) = expected_param_types.get(i) else {
+                continue;
+            };
+            if !Self::is_literal_number_arg(Some(raw)) {
+                continue;
+            }
+            if arg.type_id == expected {
+                continue;
+            }
+            let is_numeric = {
+                let tt = self.type_table.borrow();
+                tt.is_integer(expected) || tt.is_float(expected)
+            };
+            if !is_numeric {
+                continue;
+            }
+            if let Some(coerced) = self.try_coerce_numeric_literal(raw, expected) {
+                *arg = coerced;
+            }
+        }
+    }
+
     /// Try to coerce an expression to match the expected type.
     /// Handles numeric literals, null, string newtypes, and tuple-to-array coercion.
     /// Returns `None` if no coercion applies.

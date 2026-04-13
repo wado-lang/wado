@@ -72,28 +72,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for item in &module.items {
             match item {
                 Item::Struct(struct_decl) => {
-                    // Set up type parameters in scope for resolving field types
-                    let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-                    let old_type_param_bounds =
-                        std::mem::take(&mut self.trait_ctx.type_param_bounds);
-                    for (index, param) in struct_decl.type_params.iter().enumerate() {
-                        let type_id = self
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(param.name.clone(), index as u32);
-                        self.trait_ctx
-                            .type_params
-                            .insert(param.name.clone(), (index as u32, type_id));
-                        if !param.bounds.is_empty() {
-                            self.trait_ctx
-                                .type_param_bounds
-                                .insert(param.name.clone(), param.bounds.clone());
-                        }
-                    }
+                    // Set up type parameters in scope for resolving field types.
+                    // Use an inherited scope so caller-provided context stays
+                    // visible — only `type_params` and `type_param_bounds` are
+                    // replaced, matching the original `mem::take` semantics.
+                    let mut scope = self.enter_inherited_type_param_scope();
+                    scope.trait_ctx.type_params.clear();
+                    scope.trait_ctx.type_param_bounds.clear();
+                    scope.register_generic_params(&struct_decl.type_params, 0);
 
                     let mut fields = Vec::new();
                     for field in &struct_decl.fields {
-                        let type_id = self.resolve_type(&field.ty);
+                        let type_id = scope.resolve_type(&field.ty);
                         fields.push((field.name.clone(), type_id, field.is_pub));
                     }
                     // Extract type parameter bounds
@@ -113,26 +103,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .iter()
                         .enumerate()
                         .map(|(i, param)| {
-                            self.type_table
+                            scope
+                                .type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), i as u32)
                         })
                         .collect();
 
-                    self.struct_fields.insert(
+                    let module_source = scope.current_module_source.clone();
+                    scope.struct_fields.insert(
                         struct_decl.name.clone(),
                         StructFieldInfo {
                             name: struct_decl.name.clone(),
-                            module_source: self.current_module_source.clone(),
+                            module_source,
                             fields,
                             type_param_bounds,
                             type_param_type_ids,
                         },
                     );
 
-                    // Restore type params scope
-                    self.trait_ctx.type_params = old_type_params;
-                    self.trait_ctx.type_param_bounds = old_type_param_bounds;
+                    drop(scope);
                 }
                 Item::Newtype(newtype_decl) => {
                     if newtype_decl.type_params.is_empty() {
@@ -162,19 +152,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
                 Item::Variant(variant_decl) => {
-                    // Set up type parameters in scope for resolving field types
-                    let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-                    let mut type_param_type_ids = Vec::new();
-                    for (index, param) in variant_decl.type_params.iter().enumerate() {
-                        let type_id = self
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(param.name.clone(), index as u32);
-                        self.trait_ctx
-                            .type_params
-                            .insert(param.name.clone(), (index as u32, type_id));
-                        type_param_type_ids.push(type_id);
-                    }
+                    // Set up type parameters in scope for resolving field types.
+                    // Use an inherited scope so caller-provided context stays
+                    // visible — only `type_params` is replaced, matching the
+                    // original `mem::take(&mut self.trait_ctx.type_params)`.
+                    let mut scope = self.enter_inherited_type_param_scope();
+                    scope.trait_ctx.type_params.clear();
+                    scope.register_generic_params(&variant_decl.type_params, 0);
+                    let type_param_type_ids: Vec<TypeId> = variant_decl
+                        .type_params
+                        .iter()
+                        .filter_map(|p| scope.trait_ctx.type_params.get(&p.name).map(|&(_, id)| id))
+                        .collect();
 
                     // Collect type parameters
                     let type_params: Vec<String> = variant_decl
@@ -189,7 +178,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         // Each variant case has exactly one payload type.
                         // Unit variants have `()` (unit type) payload.
                         let payload = if let Some(payload_ty) = &case.payload {
-                            self.resolve_type(payload_ty)
+                            scope.resolve_type(payload_ty)
                         } else {
                             TypeTable::UNIT
                         };
@@ -199,11 +188,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                     }
 
-                    self.variant_cases.insert(
+                    let module_source = scope.current_module_source.clone();
+                    scope.variant_cases.insert(
                         variant_decl.name.clone(),
                         VariantInfo {
                             name: variant_decl.name.clone(),
-                            module_source: self.current_module_source.clone(),
+                            module_source: module_source.clone(),
                             type_params,
                             cases,
                             type_param_type_ids,
@@ -212,14 +202,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     let comp_features = super::item::extract_comp_features(&variant_decl.attrs);
                     if comp_features != 0 {
-                        self.type_table.borrow_mut().register_comp_feature_variant(
-                            comp_features,
-                            self.current_module_source.clone(),
-                        );
+                        scope
+                            .type_table
+                            .borrow_mut()
+                            .register_comp_feature_variant(comp_features, module_source);
                     }
 
-                    // Restore type params scope
-                    self.trait_ctx.type_params = old_type_params;
+                    drop(scope);
                 }
                 Item::Enum(enum_decl) => {
                     // Collect enum cases (no field types, just names and indices)
@@ -288,70 +277,58 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Item::Function(func) => {
                     // Set up the function's own type parameters before resolving the return type,
                     // so that associated type projections like `V::Output` can be resolved.
-                    let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-                    let old_type_param_bounds =
-                        std::mem::take(&mut self.trait_ctx.type_param_bounds);
-                    let mut real_idx = 0u32;
-                    for param in &func.type_params {
-                        if param.is_effect {
-                            continue;
-                        }
-                        let type_id = if param.is_pack {
-                            self.type_table
-                                .borrow_mut()
-                                .make_type_pack(param.name.clone(), real_idx)
-                        } else {
-                            self.type_table
-                                .borrow_mut()
-                                .make_type_param(param.name.clone(), real_idx)
-                        };
-                        self.trait_ctx
-                            .type_params
-                            .insert(param.name.clone(), (real_idx, type_id));
-                        if !param.bounds.is_empty() {
-                            self.trait_ctx
-                                .type_param_bounds
-                                .insert(param.name.clone(), param.bounds.clone());
-                        }
-                        real_idx += 1;
-                    }
+                    // Use inherited scope to preserve caller-provided context;
+                    // only `type_params` and `type_param_bounds` are replaced
+                    // (matching the original `mem::take` semantics).
+                    let mut scope = self.enter_inherited_type_param_scope();
+                    scope.trait_ctx.type_params.clear();
+                    scope.trait_ctx.type_param_bounds.clear();
+                    scope.register_generic_params(&func.type_params, 0);
                     let return_type = func
                         .return_type
                         .as_ref()
-                        .map(|t| self.resolve_type(t))
+                        .map(|t| scope.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
-                    self.trait_ctx.type_params = old_type_params;
-                    self.trait_ctx.type_param_bounds = old_type_param_bounds;
+                    drop(scope);
                     self.function_return_types
                         .insert(func.name.clone(), return_type);
                 }
                 Item::Impl(impl_block) => {
-                    // Set up type parameters from impl block before resolving method signatures
-                    let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-                    let old_type_param_bounds =
-                        std::mem::take(&mut self.trait_ctx.type_param_bounds);
+                    // Set up type parameters from impl block before resolving method signatures.
+                    // Use inherited scope to preserve caller-provided context;
+                    // only `type_params`, `type_param_bounds`, and
+                    // `assoc_type_bindings` are replaced (matching the
+                    // original `mem::take` semantics for those fields).
+                    let mut scope = self.enter_inherited_type_param_scope();
+                    scope.trait_ctx.type_params.clear();
+                    scope.trait_ctx.type_param_bounds.clear();
+                    scope.trait_ctx.assoc_type_bindings.clear();
 
                     // First, collect explicit type params from impl<T>, skipping concrete types
                     // (e.g., `impl<i32, T> IndexValue<i32> for Triple<T>` — skip "i32").
                     let mut actual_idx = 0u32;
                     for param in &impl_block.type_params {
-                        if self.is_known_type_name(&param.name) {
+                        if scope.is_known_type_name(&param.name) {
                             continue;
                         }
                         let type_id = if param.is_pack {
-                            self.type_table
+                            scope
+                                .type_table
                                 .borrow_mut()
                                 .make_type_pack(param.name.clone(), actual_idx)
                         } else {
-                            self.type_table
+                            scope
+                                .type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), actual_idx)
                         };
-                        self.trait_ctx
+                        scope
+                            .trait_ctx
                             .type_params
                             .insert(param.name.clone(), (actual_idx, type_id));
                         if !param.bounds.is_empty() {
-                            self.trait_ctx
+                            scope
+                                .trait_ctx
                                 .type_param_bounds
                                 .insert(param.name.clone(), param.bounds.clone());
                         }
@@ -372,15 +349,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         for (i, arg) in generic.args.iter().enumerate() {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;
-                                if !self.trait_ctx.type_params.contains_key(name)
-                                    && !self.is_known_type_name(name)
+                                if !scope.trait_ctx.type_params.contains_key(name)
+                                    && !scope.is_known_type_name(name)
                                 {
                                     let index = (offset + i) as u32;
-                                    let type_id = self
+                                    let type_id = scope
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), index);
-                                    self.trait_ctx
+                                    scope
+                                        .trait_ctx
                                         .type_params
                                         .insert(name.clone(), (index, type_id));
                                 }
@@ -389,40 +367,41 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
 
                     // Set up associated type bindings for trait implementations
-                    let old_associated_type_bindings =
-                        std::mem::take(&mut self.trait_ctx.assoc_type_bindings);
                     if impl_block.trait_type.is_some() {
                         for binding in &impl_block.associated_types {
-                            let type_id = self.resolve_type(&binding.ty);
-                            self.trait_ctx
+                            let type_id = scope.resolve_type(&binding.ty);
+                            scope
+                                .trait_ctx
                                 .assoc_type_bindings
                                 .insert(binding.name.clone(), type_id);
                         }
                     }
 
                     // Collect method signatures with mangled names
-                    let struct_name = self.get_type_name(&impl_block.ty);
+                    let struct_name = scope.get_type_name(&impl_block.ty);
                     let trait_name = impl_block
                         .trait_type
                         .as_ref()
-                        .map(|t| self.get_type_name(t));
+                        .map(|t| scope.get_type_name(t));
 
                     for method in &impl_block.methods {
                         // Set up method-level type parameters so that `V::Output`-style
                         // associated type projections can be resolved in the return type.
                         let mut method_type_param_names: Vec<String> = Vec::new();
-                        let offset = self.trait_ctx.type_params.len();
+                        let offset = scope.trait_ctx.type_params.len();
                         for (i, param) in method.type_params.iter().enumerate() {
                             let idx = (offset + i) as u32;
-                            let type_id = self
+                            let type_id = scope
                                 .type_table
                                 .borrow_mut()
                                 .make_type_param(param.name.clone(), idx);
-                            self.trait_ctx
+                            scope
+                                .trait_ctx
                                 .type_params
                                 .insert(param.name.clone(), (idx, type_id));
                             if !param.bounds.is_empty() {
-                                self.trait_ctx
+                                scope
+                                    .trait_ctx
                                     .type_param_bounds
                                     .insert(param.name.clone(), param.bounds.clone());
                             }
@@ -432,13 +411,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let return_type = method
                             .return_type
                             .as_ref()
-                            .map(|t| self.resolve_type(t))
+                            .map(|t| scope.resolve_type(t))
                             .unwrap_or(TypeTable::UNIT);
 
                         // Remove method-level type params from scope
                         for name in &method_type_param_names {
-                            self.trait_ctx.type_params.shift_remove(name);
-                            self.trait_ctx.type_param_bounds.shift_remove(name);
+                            scope.trait_ctx.type_params.shift_remove(name);
+                            scope.trait_ctx.type_param_bounds.shift_remove(name);
                         }
 
                         let mangled_name = MethodName::format_local(
@@ -446,13 +425,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             trait_name.as_deref(),
                             &method.name,
                         );
-                        self.function_return_types.insert(mangled_name, return_type);
+                        scope
+                            .function_return_types
+                            .insert(mangled_name, return_type);
                     }
 
-                    // Restore type parameters, bounds, and associated type bindings
-                    self.trait_ctx.type_params = old_type_params;
-                    self.trait_ctx.type_param_bounds = old_type_param_bounds;
-                    self.trait_ctx.assoc_type_bindings = old_associated_type_bindings;
+                    // Type parameters, bounds, and associated type bindings
+                    // are auto-restored on `drop(scope)`.
+                    drop(scope);
                 }
                 _ => {}
             }

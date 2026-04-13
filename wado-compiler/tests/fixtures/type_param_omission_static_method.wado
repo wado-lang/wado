@@ -1,0 +1,38 @@
+// Type parameter omission for generic static methods in the same module.
+
+struct StaticBox {
+    dummy: i32,
+}
+
+impl StaticBox {
+    pub fn wrap<T>(x: T) -> T {
+        return x;
+    }
+
+    pub fn first<T, U>(a: T, b: U) -> T {
+        return a;
+    }
+
+    pub fn second<T, U>(a: T, b: U) -> U {
+        return b;
+    }
+}
+
+test "static method: single type param" {
+    let a = StaticBox::wrap(42);
+    let b = StaticBox::wrap("hello");
+    let c = StaticBox::wrap(100 as i64);
+    assert a == 42;
+    assert b == "hello";
+    assert c == 100 as i64;
+}
+
+test "static method: two distinct type params" {
+    let a = StaticBox::first(10 as i64, "world");
+    let b = StaticBox::second(10 as i64, "world");
+    assert a == 10 as i64;
+    assert b == "world";
+}
+
+__DATA__
+{"test": {}}

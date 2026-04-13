@@ -1,0 +1,39 @@
+// Type parameter omission for generic free functions in the same module.
+// The compiler should infer T (and U) from the actual argument types.
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn first<T, U>(a: T, b: U) -> T {
+    return a;
+}
+
+fn second<T, U>(a: T, b: U) -> U {
+    return b;
+}
+
+test "inferred from i32 literal" {
+    let a = identity(42);
+    assert a == 42;
+}
+
+test "inferred from string literal" {
+    let s = identity("hello");
+    assert s == "hello";
+}
+
+test "inferred from explicit cast" {
+    let n = identity(100 as i64);
+    assert n == 100 as i64;
+}
+
+test "inferred for two distinct type params" {
+    let a = first(10 as i64, "world");
+    let b = second(10 as i64, "world");
+    assert a == 10 as i64;
+    assert b == "world";
+}
+
+__DATA__
+{"test": {}}
