@@ -459,6 +459,18 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let _resolve_funcs_span = self.logger.span("resolve/resolve_funcs");
         let mut tir_module = TirModule::new(module_source);
 
+        // Pre-populate the generic-function inference caches for every
+        // generic function in the current module. This allows same-module
+        // forward references (e.g. `outer<T>` calling `inner<T>` defined
+        // later in the file) to infer type arguments at the call site
+        // during body resolution, without relying on a later
+        // monomorphization-time fallback.
+        for item in &module.items {
+            if let Item::Function(func) = item {
+                self.precompute_generic_function_cache(func);
+            }
+        }
+
         for item in &module.items {
             match item {
                 Item::Function(func) => {

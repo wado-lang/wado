@@ -211,9 +211,10 @@ pub(super) fn unify(
 ///
 /// Use [`solve`](Self::solve) to get the final type arguments in
 /// declaration order. Unbound parameters fall back to their original
-/// `TypeParam TypeId`. Helpers [`solve_strict`](Self::solve_strict) and
-/// [`solve_with_phantoms`](Self::solve_with_phantoms) wrap the common
-/// "strict all-or-nothing" and "partial with fallback" patterns.
+/// `TypeParam TypeId`. Helper [`solve_with_phantoms`](Self::solve_with_phantoms)
+/// additionally reports whether every parameter resolved to a concrete
+/// type, so callers can tell unresolved (phantom / forwarded) parameters
+/// from bound ones.
 pub(super) struct InferCtx<'a> {
     type_table: &'a RefCell<TypeTable>,
     /// Declaration-order `TypeParam` / `TypePack` ids that this solve is
@@ -270,6 +271,31 @@ impl<'a> InferCtx<'a> {
     /// arguments in declaration order. Parameters that remain unbound
     /// fall back to their original `TypeParam TypeId`.
     pub(super) fn solve(mut self) -> Vec<TypeId> {
+        self.run_deferred_passes();
+        self.params
+            .iter()
+            .map(|param_id| self.bindings.get(param_id).copied().unwrap_or(*param_id))
+            .collect()
+    }
+
+    /// Run every queued constraint and return both the final type
+    /// arguments and the raw bindings map. Callers use the map to tell
+    /// "no inference happened" (the param is missing) from "bound to
+    /// itself" (which can happen when a generic function forwards its
+    /// own type parameter to another generic function and the interned
+    /// `TypeId`s coincide) — the returned `Vec<TypeId>` alone cannot
+    /// distinguish these two cases.
+    pub(super) fn solve_with_bindings(mut self) -> (Vec<TypeId>, IndexMap<TypeId, TypeId>) {
+        self.run_deferred_passes();
+        let inferred: Vec<TypeId> = self
+            .params
+            .iter()
+            .map(|param_id| self.bindings.get(param_id).copied().unwrap_or(*param_id))
+            .collect();
+        (inferred, self.bindings)
+    }
+
+    fn run_deferred_passes(&mut self) {
         // Pass 2: literal-number args.
         for (expected, actual) in std::mem::take(&mut self.deferred_args) {
             unify(self.type_table, expected, actual, &mut self.bindings);
@@ -278,38 +304,14 @@ impl<'a> InferCtx<'a> {
         for (decl_return, expected) in std::mem::take(&mut self.expected_returns) {
             unify(self.type_table, decl_return, expected, &mut self.bindings);
         }
-
-        self.params
-            .iter()
-            .map(|param_id| self.bindings.get(param_id).copied().unwrap_or(*param_id))
-            .collect()
-    }
-
-    /// Run [`solve`](Self::solve) and return `Some(args)` only if every
-    /// declaration-order parameter ended up bound to a concrete type.
-    /// Returns `None` when any parameter or type pack remains unresolved —
-    /// matching the legacy `infer_type_args_from_args` / `infer_type_args_from_method`
-    /// "all or nothing" behaviour for plain function/static-method calls.
-    pub(super) fn solve_strict(self) -> Option<Vec<TypeId>> {
-        if self.params.is_empty() {
-            return None;
-        }
-        let type_table = self.type_table;
-        let inferred = self.solve();
-        let all_concrete = inferred.iter().all(|&id| {
-            !matches!(
-                type_table.borrow().get(id),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            )
-        });
-        if all_concrete { Some(inferred) } else { None }
     }
 
     /// Run [`solve`](Self::solve) and return arguments paired with a flag
-    /// indicating whether every parameter resolved. Unlike
-    /// [`solve_strict`], this returns the partial result in the failure
-    /// case so callers that can tolerate unresolved parameters (e.g.
-    /// generic struct fields with phantom parameters) can still use them.
+    /// indicating whether every parameter resolved. Callers that can
+    /// tolerate unresolved parameters (e.g. generic struct fields with
+    /// phantom parameters, or a generic function forwarding one of its
+    /// own type parameters) can still use the partial result; callers
+    /// that require fully-concrete type args can check the flag.
     pub(super) fn solve_with_phantoms(self) -> (Vec<TypeId>, bool) {
         let type_table = self.type_table;
         let inferred = self.solve();

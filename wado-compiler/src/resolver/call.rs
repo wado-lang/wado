@@ -1486,7 +1486,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         let param_ids: Vec<TypeId> = type_param_list.iter().map(|(_, id)| *id).collect();
-        let mut infer = super::infer::InferCtx::new(&self.type_table, param_ids);
+        let mut infer = super::infer::InferCtx::new(&self.type_table, param_ids.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
                 infer.add_deferred(*param_type, arg.type_id);
@@ -1498,7 +1498,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
             infer.add_expected_return(decl_ret, expected);
         }
 
-        infer.solve_strict().unwrap_or_default()
+        // Use the permissive solver: inside a generic scope, a caller may
+        // forward its own type parameter (e.g. `outer<T>` calling `inner(g)`
+        // where `g: &mut T`) so the returned type args contain the caller's
+        // `TypeParam` ids, which then get substituted to concrete types
+        // during monomorphization. Fall back to the legacy empty result
+        // only when *no* param was ever touched by a unification
+        // constraint, since two TypeParams named `T` at index `0` intern
+        // to the same `TypeId` and the only reliable signal of "something
+        // was inferred" is the bindings map itself.
+        let (inferred, bindings) = infer.solve_with_bindings();
+        let any_bound = param_ids.iter().any(|p| bindings.contains_key(p));
+        if !any_bound {
+            return vec![];
+        }
+        inferred
     }
 
     /// Look up a generic function (current or imported) and produce a temporary
@@ -1664,7 +1678,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         drop(scope);
 
         let param_ids: Vec<TypeId> = type_param_list.iter().map(|(_, id)| *id).collect();
-        let mut infer = super::infer::InferCtx::new(&self.type_table, param_ids);
+        let mut infer = super::infer::InferCtx::new(&self.type_table, param_ids.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
                 infer.add_deferred(*param_type, arg.type_id);
@@ -1676,7 +1690,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             infer.add_expected_return(decl_ret, expected);
         }
 
-        infer.solve_strict().unwrap_or_default()
+        // Permissive solve — see `infer_type_args_from_args` for the
+        // TypeParam-forwarding rationale.
+        let (inferred, bindings) = infer.solve_with_bindings();
+        let any_bound = param_ids.iter().any(|p| bindings.contains_key(p));
+        if !any_bound {
+            return vec![];
+        }
+        inferred
     }
 
     /// Look up function parameter types with type args substituted.

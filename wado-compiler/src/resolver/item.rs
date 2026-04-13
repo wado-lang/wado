@@ -272,6 +272,58 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
+    /// Populate the generic-function inference caches (type params,
+    /// resolved param types, resolved return type) for `func` without
+    /// resolving its body. Used as a pre-pass before body resolution so
+    /// that same-module forward references to other generic functions
+    /// (e.g. `outer<T>` defined before `inner<T>` in the same file) can
+    /// run argument-derived type inference at the call site.
+    ///
+    /// Idempotent: may be called multiple times. Uses fresh `TypeId`s
+    /// each time; subsequent overwrites inside `resolve_function` keep
+    /// the cache consistent with the body's own `TypeId`s.
+    pub(super) fn precompute_generic_function_cache(&mut self, func: &Function) {
+        if !func.type_params.iter().any(|p| !p.is_effect) {
+            return;
+        }
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.trait_ctx.type_params.clear();
+        scope.trait_ctx.type_param_bounds.clear();
+        scope.register_generic_params(&func.type_params, 0);
+        let type_param_list: Vec<(String, crate::tir::TypeId)> = func
+            .type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .filter_map(|p| {
+                scope
+                    .trait_ctx
+                    .type_params
+                    .get(&p.name)
+                    .map(|&(_, id)| (p.name.clone(), id))
+            })
+            .collect();
+        let resolved_param_types: Vec<crate::tir::TypeId> = func
+            .params
+            .iter()
+            .filter(|p| p.self_kind == crate::ast::SelfKind::None)
+            .map(|p| scope.resolve_type(&p.ty))
+            .collect();
+        let declared_return_type = func
+            .return_type
+            .as_ref()
+            .map(|t| scope.resolve_type(t))
+            .unwrap_or(TypeTable::UNIT);
+        scope
+            .generic_function_params
+            .insert(func.name.clone(), type_param_list);
+        scope
+            .generic_function_resolved_param_types
+            .insert(func.name.clone(), resolved_param_types);
+        scope
+            .generic_function_resolved_return_types
+            .insert(func.name.clone(), declared_return_type);
+    }
+
     /// Resolve a function
     pub(super) fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types. Use an
