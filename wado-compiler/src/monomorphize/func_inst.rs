@@ -3786,4 +3786,3 @@ fn trait_method_to_binary_op(trait_name: Option<&str>, method_name: &str) -> Opt
         _ => None,
     }
 }
-

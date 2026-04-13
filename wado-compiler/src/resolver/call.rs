@@ -751,12 +751,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
         // If no explicit type args, try to infer from argument types
         if type_args.is_empty() {
-            type_args = self.infer_type_args_from_args(
-                &func_name,
-                &call.args,
-                &args,
-                expected_type,
-            );
+            type_args =
+                self.infer_type_args_from_args(&func_name, &call.args, &args, expected_type);
         }
 
         // For local function calls (None), use the current module source
@@ -1528,23 +1524,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let src = symbol.module_source.clone();
         let name = symbol.name.clone();
 
-        let func_info: Option<(
-            Vec<ast::GenericParam>,
-            Vec<ast::Param>,
-            Option<ast::Type>,
-        )> = Self::lookup_func_in_loaded_module(
-            self.loaded_modules,
-            &self.loaded_module_func_indices,
-            &src,
-            &name,
-        )
-        .map(|func| {
-            (
-                func.type_params.clone(),
-                func.params.clone(),
-                func.return_type.clone(),
+        let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>, Option<ast::Type>)> =
+            Self::lookup_func_in_loaded_module(
+                self.loaded_modules,
+                &self.loaded_module_func_indices,
+                &src,
+                &name,
             )
-        });
+            .map(|func| {
+                (
+                    func.type_params.clone(),
+                    func.params.clone(),
+                    func.return_type.clone(),
+                )
+            });
         let (type_params, params, return_type_ast) = func_info?;
 
         if type_params.iter().all(|p| p.is_effect) {
@@ -1777,10 +1770,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // which may differ from variant_info.module_source (e.g., prelude/types.wado).
         let mut canonical_module_source = None;
 
-        let mut infer = super::infer::InferCtx::new(
-            &self.type_table,
-            variant_info.type_param_type_ids.clone(),
-        );
+        let mut infer =
+            super::infer::InferCtx::new(&self.type_table, variant_info.type_param_type_ids.clone());
 
         // Forward inference: unify the case payload's declared type against
         // the actual payload expression's type.

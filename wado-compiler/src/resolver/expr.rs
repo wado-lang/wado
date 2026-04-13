@@ -2222,8 +2222,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // `let x: Container<i32> = Container { value: 0 }`) fill phantom
             // parameters that never appear in a field, matching the
             // behaviour of plain function calls.
-            let type_args =
-                self.infer_type_args_from_fields(&struct_name, &fields, expected_type);
+            let type_args = self.infer_type_args_from_fields(&struct_name, &fields, expected_type);
 
             // Substitute type parameters in field value types.
             // This is necessary for empty array literals in self-referential fields
@@ -2466,10 +2465,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return vec![];
         }
 
-        let mut infer = super::infer::InferCtx::new(
-            &self.type_table,
-            struct_info.type_param_type_ids.clone(),
-        );
+        let mut infer =
+            super::infer::InferCtx::new(&self.type_table, struct_info.type_param_type_ids.clone());
 
         for (struct_field, (_, expected_field_type, _)) in
             fields.iter().zip(struct_info.fields.iter())

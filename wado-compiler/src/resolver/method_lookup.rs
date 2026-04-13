@@ -1159,8 +1159,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         struct_module_source: Option<&ModuleSource>,
         method_name: &str,
     ) -> Option<ast::Function> {
-        let method_has_type_params =
-            |m: &ast::Function| m.type_params.iter().any(|p| !p.is_effect);
+        let method_has_type_params = |m: &ast::Function| m.type_params.iter().any(|p| !p.is_effect);
 
         let search_impl_modules = |module: &ast::Module| -> Option<ast::Function> {
             for item in &module.items {

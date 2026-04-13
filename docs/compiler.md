@@ -1027,6 +1027,22 @@ struct Array<T> {
 
 This optimization enables ergonomic APIs with methods while maintaining direct Wasm GC representation.
 
+### Generic Type Inference
+
+Generic function, method, struct, variant, and closure calls all share a single inference engine in `resolver/infer.rs`. Callers build an `InferCtx`, feed it argument and return-type constraints, and ask it to solve for a list of `TypeId`s in declaration order.
+
+Constraints are collected in three confidence tiers, and solved in that order so stronger information always wins:
+
+1. **Strong (argument-derived)** — `InferCtx::add(expected, actual)` unifies the declaration parameter type (which may contain `TypeParam` holes) against a concrete argument type immediately. The first typed argument to mention a type parameter pins its binding via `IndexMap::or_insert`, so later arguments cannot overwrite it.
+2. **Weak (literal-number)** — `InferCtx::add_deferred(expected, actual)` queues constraints whose "actual" type comes from an integer or float literal. These run only after every strong constraint, so `fn two<T>(x: T, y: T); two(1, 2 as u8)` picks `T = u8` instead of locking on the literal's default type.
+3. **Weaker (expected-return)** — `InferCtx::add_expected_return(decl_return, expected)` queues a back-inference constraint derived from the caller's expected type (e.g. `let x: i32 = foo();`). It runs last so a use-site annotation only fills type parameters that the arguments left unbound.
+
+The structural unifier `unify()` handles `TypeParam`, tuple/variadic `TypePack` splices, same-named `GenericInstance`s, `Array<K>` against homogeneous tuple literals, `BuiltinArray<T>`, `Ref<T>`, `MutRef<T>`, and `Function` types. It never fails: an unmatched shape is silently skipped so a caller can try the next argument or fall through to a fallback.
+
+`InferCtx` exposes three solve methods. `solve()` returns the final type arguments, falling back to the original `TypeParam TypeId` for unbound parameters. `solve_with_phantoms()` additionally reports whether every parameter resolved to a concrete type, which callers use to detect phantom-only parameters. `solve_with_bindings()` returns the raw bindings map alongside the inferred vec; callers that may forward a caller-scope type parameter into an inner generic call (e.g. `outer<T>(g: &mut T) { inner(g); }`) use the map to tell "no inference happened" from "bound to the same interned `TypeId`".
+
+Because `TypeParam` ids are interned by `(name, index)`, two generic functions that both declare a `T` at index `0` share the same `TypeId`. The resolver relies on this interning during forwarding: `inner`'s `T` is "bound" to `outer`'s `T` (same id), and monomorphization later substitutes them to the caller's concrete type. To support same-module forward references (`outer` defined before `inner` in the same file), `resolver.rs` runs a pre-pass that calls `precompute_generic_function_cache` for every generic function in the module before any body is resolved. All implicit generic forwarding is therefore handled in the resolver; the monomorphizer only consumes calls whose `type_args` are already populated.
+
 ### 128-bit Integer Types (i128/u128)
 
 See [WEP: 128-bit Integer Types](./wep-2026-01-24-i128-u128-types.md).
@@ -1256,4 +1272,3 @@ Selection rules:
 - Effect handlers
 - Reactive signals (source values, derived values, effect blocks)
 - JSX
-- Generic function/method call type inference

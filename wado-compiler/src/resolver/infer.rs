@@ -77,15 +77,13 @@ pub(super) fn unify(
             },
         ) if TypeTable::is_tuple_type(expected_name, expected_module_source)
             && TypeTable::is_tuple_type(actual_name, actual_module_source)
-            && expected_elems.iter().any(|e| {
-                matches!(type_table.borrow().get(*e), ResolvedType::TypePack { .. })
-            }) =>
+            && expected_elems
+                .iter()
+                .any(|e| matches!(type_table.borrow().get(*e), ResolvedType::TypePack { .. })) =>
         {
             let pack_idx = expected_elems
                 .iter()
-                .position(|e| {
-                    matches!(type_table.borrow().get(*e), ResolvedType::TypePack { .. })
-                })
+                .position(|e| matches!(type_table.borrow().get(*e), ResolvedType::TypePack { .. }))
                 .unwrap();
 
             let fixed_before = pack_idx;
@@ -324,4 +322,3 @@ impl<'a> InferCtx<'a> {
         (inferred, all_concrete)
     }
 }
-
