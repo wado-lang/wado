@@ -13,6 +13,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Resolver;
+use super::infer::InferCtx;
 use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
 use super::util;
 
@@ -2222,7 +2223,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // `let x: Container<i32> = Container { value: 0 }`) fill phantom
             // parameters that never appear in a field, matching the
             // behaviour of plain function calls.
-            let type_args = self.infer_type_args_from_fields(&struct_name, &fields, expected_type);
+            let type_args = self.infer_struct_type_args(&struct_name, &fields, expected_type);
 
             // Substitute type parameters in field value types.
             // This is necessary for empty array literals in self-referential fields
@@ -2440,7 +2441,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Infer type arguments for a generic struct from its field values, with
     /// optional expected-type driven back-inference for phantom parameters.
     ///
-    /// Runs [`super::infer::InferCtx`] over the struct's declared field types
+    /// Runs [`InferCtx`] over the struct's declared field types
     /// against the literal's resolved field values. If `expected_type` is a
     /// `GenericInstance` of the same struct (e.g. the caller wrote
     /// `let m: DirMap<Direction, i32> = DirMap { values: [] }`), the expected
@@ -2452,7 +2453,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// result — unbound parameters fall back to their original `TypeParam`
     /// ids, which the monomorphizer then substitutes from the surrounding
     /// context. This matches the historical "phantoms are OK" behaviour.
-    pub(super) fn infer_type_args_from_fields(
+    pub(super) fn infer_struct_type_args(
         &self,
         struct_name: &str,
         fields: &[TirStructField],
@@ -2465,8 +2466,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return vec![];
         }
 
-        let mut infer =
-            super::infer::InferCtx::new(&self.type_table, struct_info.type_param_type_ids.clone());
+        let mut infer = InferCtx::new(&self.type_table, struct_info.type_param_type_ids.clone());
 
         for (struct_field, (_, expected_field_type, _)) in
             fields.iter().zip(struct_info.fields.iter())
@@ -2499,21 +2499,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         let (inferred, _) = infer.solve_with_phantoms();
         inferred
-    }
-
-    /// Unify expected type with actual type to extract type parameter mappings.
-    ///
-    /// Thin wrapper over [`super::infer::unify`] — the unifier lives in
-    /// `resolver::infer` so that all five generic-inference call sites
-    /// (function/method/struct/variant/static-method) share a single
-    /// structural matcher.
-    pub(super) fn unify_types_for_inference(
-        &self,
-        expected: TypeId,
-        actual: TypeId,
-        type_param_map: &mut IndexMap<TypeId, TypeId>,
-    ) {
-        super::infer::unify(&self.type_table, expected, actual, type_param_map);
     }
 
     /// Check if a type contains a `TypePack` (variadic pack parameter).

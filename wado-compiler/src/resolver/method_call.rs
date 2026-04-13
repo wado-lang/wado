@@ -10,6 +10,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Resolver;
+use super::method_lookup::MethodInferenceInput;
 use super::types::{FunctionContext, MethodInfo, TypeError};
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -230,6 +231,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             inherited_from_base,
             cm_name,
             is_ref_impl,
+            method_type_param_ids: _,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -249,6 +251,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 inherited_from_base: None,
                 cm_name: None,
                 is_ref_impl: false,
+                method_type_param_ids: vec![],
             }
         };
 
@@ -440,16 +443,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // If no explicit type args, try to infer from arguments
         let method_type_args = if type_args.is_empty() {
             // Try to infer method type args from actual arguments and expected return type
-            self.infer_method_type_args(
-                receiver.type_id,
-                &method_call.method,
-                &args,
-                &method_call.args,
+            self.infer_method_type_args(MethodInferenceInput {
+                receiver_type: receiver.type_id,
+                method_name: &method_call.method,
                 impl_offset,
-                &expected_param_types,
-                return_type,
-                expected_type,
-            )
+                param_types: &expected_param_types,
+                args: &args,
+                raw_args: &method_call.args,
+                decl_return_type: return_type,
+                expected_return_type: expected_type,
+            })
         } else {
             type_args
         };

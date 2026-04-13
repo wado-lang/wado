@@ -21,7 +21,7 @@ pub(super) struct StructFieldInfo {
     /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
     pub(super) type_param_bounds: Vec<(String, Vec<String>)>,
     /// `TypeIds` of the struct's own type parameters in declaration order.
-    /// Used by `infer_type_args_from_fields` to fill phantom type params
+    /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
     pub(super) type_param_type_ids: Vec<TypeId>,
 }
@@ -664,6 +664,15 @@ pub(super) struct MethodInfo {
     /// True when the method was found on a reference type impl (e.g., `impl Trait for &T`).
     /// The receiver needs an additional auto-ref for `&self` methods (Self is &T, so &self is &&T).
     pub(super) is_ref_impl: bool,
+    /// Method-level type parameter `TypeId`s in declaration order (excluding effect params).
+    ///
+    /// Populated only by lookups that also set up method-level type params in their
+    /// resolution scope — currently [`Resolver::find_method_in_trait_bounds`] for
+    /// `T::method()` style calls through a type parameter bound. Other producers
+    /// leave it empty because their call sites have no method-level inference to
+    /// perform (either the method is non-generic, or its type args come from a
+    /// separate method-AST lookup such as [`Resolver::infer_method_type_args`]).
+    pub(super) method_type_param_ids: Vec<TypeId>,
 }
 
 /// Labeled block expression target for tracking break types

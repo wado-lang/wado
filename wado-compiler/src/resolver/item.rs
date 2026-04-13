@@ -1,11 +1,12 @@
 //! Item-level resolution (structs, functions, methods, globals, variants, tests).
 
-use crate::ast::{self, Function, GlobalDecl, Type};
+use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    TirFunction, TirGlobal, TirParam, TirStruct, TirTest, TirVariantCase, TirVariantDecl, TypeTable,
+    TirFunction, TirGlobal, TirParam, TirStruct, TirTest, TirVariantCase, TirVariantDecl, TypeId,
+    TypeTable,
 };
 
 use super::Resolver;
@@ -290,38 +291,48 @@ impl<H: CompilerHost> Resolver<'_, H> {
         scope.trait_ctx.type_params.clear();
         scope.trait_ctx.type_param_bounds.clear();
         scope.register_generic_params(&func.type_params, 0);
-        let type_param_list: Vec<(String, crate::tir::TypeId)> = func
+        scope.populate_generic_function_cache(func);
+    }
+
+    /// Populate the three generic-function inference caches
+    /// (`generic_function_params`, `generic_function_resolved_param_types`,
+    /// `generic_function_resolved_return_types`) for `func`, keyed by its
+    /// name. Type parameters must already be registered in
+    /// `self.trait_ctx.type_params` before calling this.
+    ///
+    /// Returns the resolved declared return type so callers that need it
+    /// (e.g. `resolve_function` for `task_return_type`) can avoid resolving
+    /// it a second time.
+    fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
+        let type_param_list: Vec<(String, TypeId)> = func
             .type_params
             .iter()
             .filter(|p| !p.is_effect)
             .filter_map(|p| {
-                scope
-                    .trait_ctx
+                self.trait_ctx
                     .type_params
                     .get(&p.name)
                     .map(|&(_, id)| (p.name.clone(), id))
             })
             .collect();
-        let resolved_param_types: Vec<crate::tir::TypeId> = func
+        let resolved_param_types: Vec<TypeId> = func
             .params
             .iter()
-            .filter(|p| p.self_kind == crate::ast::SelfKind::None)
-            .map(|p| scope.resolve_type(&p.ty))
+            .filter(|p| p.self_kind == SelfKind::None)
+            .map(|p| self.resolve_type(&p.ty))
             .collect();
         let declared_return_type = func
             .return_type
             .as_ref()
-            .map(|t| scope.resolve_type(t))
+            .map(|t| self.resolve_type(t))
             .unwrap_or(TypeTable::UNIT);
-        scope
-            .generic_function_params
+        self.generic_function_params
             .insert(func.name.clone(), type_param_list);
-        scope
-            .generic_function_resolved_param_types
+        self.generic_function_resolved_param_types
             .insert(func.name.clone(), resolved_param_types);
-        scope
-            .generic_function_resolved_return_types
+        self.generic_function_resolved_return_types
             .insert(func.name.clone(), declared_return_type);
+        declared_return_type
     }
 
     /// Resolve a function
@@ -334,18 +345,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         scope.trait_ctx.type_params.clear();
         scope.trait_ctx.type_param_bounds.clear();
         scope.register_generic_params(&func.type_params, 0);
-        let type_param_list: Vec<(String, crate::tir::TypeId)> = func
-            .type_params
-            .iter()
-            .filter(|p| !p.is_effect)
-            .filter_map(|p| {
-                scope
-                    .trait_ctx
-                    .type_params
-                    .get(&p.name)
-                    .map(|&(_, id)| (p.name.clone(), id))
-            })
-            .collect();
 
         // Set effect params in scope (for resolving effect names in function types)
         let old_effect_params = std::mem::take(&mut scope.current_effect_params);
@@ -358,30 +357,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
         scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
 
-        // Store type parameters for generic functions (for call site substitution)
+        // Populate the generic-function inference caches
+        // (`generic_function_params`, `generic_function_resolved_param_types`,
+        // `generic_function_resolved_return_types`). Populated before the
+        // `function_return_types` update below because that map is shared
+        // with non-generic callers and may be overwritten by external
+        // registrations (trait methods, etc.) over time. The declared return
+        // type is also used for `task_return_type` in async fns.
         let has_real_type_params = func.type_params.iter().any(|p| !p.is_effect);
-        if has_real_type_params {
-            // Resolve param types now (while type params are in scope) for later type inference.
-            let resolved_param_types: Vec<crate::tir::TypeId> = func
-                .params
-                .iter()
-                .filter(|p| p.self_kind == crate::ast::SelfKind::None)
-                .map(|p| scope.resolve_type(&p.ty))
-                .collect();
-            scope
-                .generic_function_params
-                .insert(func.name.clone(), type_param_list);
-            scope
-                .generic_function_resolved_param_types
-                .insert(func.name.clone(), resolved_param_types);
-        }
-
-        // Resolve return type annotation (used for task_return_type in async fns)
-        let declared_return_type = func
-            .return_type
-            .as_ref()
-            .map(|t| scope.resolve_type(t))
-            .unwrap_or(TypeTable::UNIT);
+        let declared_return_type = if has_real_type_params {
+            scope.populate_generic_function_cache(func)
+        } else {
+            func.return_type
+                .as_ref()
+                .map(|t| scope.resolve_type(t))
+                .unwrap_or(TypeTable::UNIT)
+        };
 
         // For async functions, the Wasm-level return type is unit (the result is delivered
         // via `task return`, not via the Wasm function return). The declared return type is
@@ -391,16 +382,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         } else {
             declared_return_type
         };
-
-        // Cache the type-param-scoped return type for generic-inference back-inference
-        // (see `infer::InferCtx::add_expected_return`). Stored before the `function_return_types`
-        // update below because that map is shared with non-generic callers and may be overwritten
-        // by external registrations (trait methods, etc.) over time.
-        if has_real_type_params {
-            scope
-                .generic_function_resolved_return_types
-                .insert(func.name.clone(), declared_return_type);
-        }
 
         // Update the function_return_types with the resolved return type
         // (This replaces the potentially incorrect type from static resolution)
@@ -863,12 +844,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Store resolved param types for generic methods (before restoring type params scope)
         // so TypeParams have the correct ids for later inference at call sites.
-        let method_resolved_param_types: Vec<crate::tir::TypeId> = if func.type_params.is_empty() {
+        let method_resolved_param_types: Vec<TypeId> = if func.type_params.is_empty() {
             vec![]
         } else {
             func.params
                 .iter()
-                .filter(|p| p.self_kind == crate::ast::SelfKind::None)
+                .filter(|p| p.self_kind == SelfKind::None)
                 .map(|p| scope.resolve_type(&p.ty))
                 .collect()
         };

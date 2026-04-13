@@ -516,6 +516,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // where `T` must be a proper TypeParam to allow substitution at the call site.
                 // We use index 0, 1, ... because find_method_in_trait_bounds is only called
                 // for TypeParam/AssocTypeProjection receivers, where impl_offset = 0.
+                let mut method_type_param_ids: Vec<TypeId> = Vec::new();
                 for (index, param) in method.type_params.iter().enumerate() {
                     let type_id = scope
                         .type_table
@@ -530,6 +531,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .trait_ctx
                             .type_param_bounds
                             .insert(param.name.clone(), param.bounds.clone());
+                    }
+                    if !param.is_effect {
+                        method_type_param_ids.push(type_id);
                     }
                 }
 
@@ -563,6 +567,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         inherited_from_base: None,
                         cm_name: None,
                         is_ref_impl: false,
+                        method_type_param_ids,
                     },
                 ));
             }

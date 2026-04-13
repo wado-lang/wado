@@ -11,6 +11,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Resolver;
+use super::infer::InferCtx;
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo,
@@ -23,6 +24,39 @@ enum ImplBlockRef {
     Loaded(ModuleSource, usize),
     /// From `current_module_items[item_idx]`, with the current module source
     CurrentModule(usize),
+}
+
+/// Inputs for [`Resolver::infer_method_type_args`].
+///
+/// Groups everything the caller has already resolved about the method
+/// (signature fields in `TypeParam`-based form, impl-level offset) with the
+/// call-site context (argument list in both typed and raw forms, expected
+/// return type) that the inference solver needs.
+pub(super) struct MethodInferenceInput<'a> {
+    /// Receiver's `TypeId` at the call site (any reference level; the
+    /// helper strips references internally).
+    pub receiver_type: TypeId,
+    /// Method name — used to look up the method's AST for the list of
+    /// method-level type parameter names.
+    pub method_name: &'a str,
+    /// Number of impl-level type parameters already in scope (e.g. 2 for
+    /// `impl<A, B> Container<A, B>`). Method-level type parameters are
+    /// numbered starting from this offset.
+    pub impl_offset: u32,
+    /// Method parameter types in their `TypeParam`-based (uninstantiated)
+    /// form; parallel to `args` / `raw_args`.
+    pub param_types: &'a [TypeId],
+    /// Already-resolved argument expressions, in order.
+    pub args: &'a [TirExpr],
+    /// Raw AST expressions for `args`, used to detect literal-number
+    /// arguments that participate in deferred-literal unification.
+    pub raw_args: &'a [Expr],
+    /// Method declared return type in its `TypeParam`-based form; used for
+    /// back-inference from `expected_return_type`.
+    pub decl_return_type: TypeId,
+    /// Expected return type at the call site (from a type annotation or
+    /// surrounding call), used for back-inference.
+    pub expected_return_type: Option<TypeId>,
 }
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -369,6 +403,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             inherited_from_base: None,
                             cm_name: None,
                             is_ref_impl: false,
+                            method_type_param_ids: vec![],
                         });
                     }
                     if method_name == "zip" {
@@ -402,6 +437,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             inherited_from_base: None,
                             cm_name: None,
                             is_ref_impl: false,
+                            method_type_param_ids: vec![],
                         });
                     }
                     (
@@ -492,6 +528,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     inherited_from_base: None,
                     cm_name: None,
                     is_ref_impl: false,
+                    method_type_param_ids: vec![],
                 });
             }
             // If find_local_method_info returned None, the method either doesn't exist
@@ -627,6 +664,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         inherited_from_base: None,
                                         cm_name: None,
                                         is_ref_impl: false,
+                                        method_type_param_ids: vec![],
                                     });
                                 }
                             }
@@ -718,6 +756,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         inherited_from_base: None,
                                         cm_name: None,
                                         is_ref_impl: false,
+                                        method_type_param_ids: vec![],
                                     });
                                 }
                             }
@@ -850,6 +889,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 inherited_from_base: None,
                 cm_name,
                 is_ref_impl: false,
+                method_type_param_ids: vec![],
             });
         }
         None
@@ -1081,15 +1121,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// generic instance).
     pub(super) fn infer_method_type_args(
         &mut self,
-        receiver_type: TypeId,
-        method_name: &str,
-        args: &[TirExpr],
-        raw_args: &[Expr],
-        impl_offset: u32,
-        expected_param_types: &[TypeId],
-        decl_return_type: TypeId,
-        expected_return_type: Option<TypeId>,
+        input: MethodInferenceInput<'_>,
     ) -> Vec<TypeId> {
+        let MethodInferenceInput {
+            receiver_type,
+            method_name,
+            impl_offset,
+            param_types,
+            args,
+            raw_args,
+            decl_return_type,
+            expected_return_type,
+        } = input;
+
         let base_type_id = self.get_base_type(receiver_type);
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
@@ -1108,32 +1152,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // names (excluding effect params). We use these names together with
         // `impl_offset` to materialise the `TypeParam` ids the solver needs
         // to track, without re-resolving the method signature.
-        let found = self.find_method_ast(&struct_name, struct_module_source.as_ref(), method_name);
-        let Some(method_decl) = found else {
+        let Some(method_type_param_names) = self.find_method_type_param_names(
+            &struct_name,
+            struct_module_source.as_ref(),
+            method_name,
+        ) else {
             return vec![];
         };
-
-        let method_type_param_names: Vec<String> = method_decl
-            .type_params
-            .iter()
-            .filter(|p| !p.is_effect)
-            .map(|tp| tp.name.clone())
-            .collect();
-        if method_type_param_names.is_empty() {
-            return vec![];
-        }
 
         let method_type_param_ids: Vec<TypeId> = {
             let mut tt = self.type_table.borrow_mut();
             method_type_param_names
-                .iter()
+                .into_iter()
                 .enumerate()
-                .map(|(i, name)| tt.make_type_param(name.clone(), impl_offset + i as u32))
+                .map(|(i, name)| tt.make_type_param(name, impl_offset + i as u32))
                 .collect()
         };
 
-        let mut infer = super::infer::InferCtx::new(&self.type_table, method_type_param_ids);
-        for (i, (&param_type, arg)) in expected_param_types.iter().zip(args.iter()).enumerate() {
+        let mut infer = InferCtx::new(&self.type_table, method_type_param_ids);
+        for (i, (&param_type, arg)) in param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
                 infer.add_deferred(param_type, arg.type_id);
             } else {
@@ -1147,33 +1184,57 @@ impl<H: CompilerHost> Resolver<'_, H> {
         infer.solve()
     }
 
-    /// Find an instance method's AST definition for `infer_method_type_args`.
-    /// Searches the struct's own module first, then all loaded modules, then
-    /// the current module, then falls back to trait default methods.
+    /// Find the non-effect type parameter names of an instance method, in
+    /// declaration order, for use by `infer_method_type_args`.
     ///
-    /// Only returns methods with at least one non-effect type parameter —
-    /// the caller has nothing to infer otherwise.
-    fn find_method_ast(
+    /// Searches in priority order:
+    /// 1. Inherent impls on `struct_name` in the struct's own module.
+    /// 2. Inherent impls on `struct_name` in any other loaded module.
+    /// 3. Inherent impls on `struct_name` in the current module.
+    /// 4. Trait default methods (in any loaded module) — these have no
+    ///    enclosing impl block, so "impl type params" are empty and
+    ///    `impl_offset` is already correct.
+    ///
+    /// Returns `None` when no matching method exists or when the matched
+    /// method has no non-effect type parameters (nothing to infer).
+    /// Returning just the names (rather than cloning the whole
+    /// `ast::Function`) keeps this cheap, since the names are all the
+    /// solver needs to materialise the method-level `TypeParam` ids.
+    fn find_method_type_param_names(
         &self,
         struct_name: &str,
         struct_module_source: Option<&ModuleSource>,
         method_name: &str,
-    ) -> Option<ast::Function> {
-        let method_has_type_params = |m: &ast::Function| m.type_params.iter().any(|p| !p.is_effect);
+    ) -> Option<Vec<String>> {
+        let extract_names = |method: &ast::Function| -> Option<Vec<String>> {
+            let names: Vec<String> = method
+                .type_params
+                .iter()
+                .filter(|p| !p.is_effect)
+                .map(|tp| tp.name.clone())
+                .collect();
+            if names.is_empty() { None } else { Some(names) }
+        };
 
-        let search_impl_modules = |module: &ast::Module| -> Option<ast::Function> {
-            for item in &module.items {
+        let impl_matches_struct = |impl_block: &ast::ImplBlock| -> bool {
+            if impl_block.trait_type.is_some() {
+                return false;
+            }
+            let impl_type_name = self.get_type_name(&impl_block.ty);
+            let impl_base_name = impl_type_name.split('<').next().unwrap_or(&impl_type_name);
+            impl_type_name == struct_name || impl_base_name == struct_name
+        };
+
+        let search_items = |items: &[Item]| -> Option<Vec<String>> {
+            for item in items {
                 if let Item::Impl(impl_block) = item
-                    && impl_block.trait_type.is_none()
+                    && impl_matches_struct(impl_block)
                 {
-                    let impl_type_name = self.get_type_name(&impl_block.ty);
-                    let impl_base_name =
-                        impl_type_name.split('<').next().unwrap_or(&impl_type_name);
-                    if impl_type_name == struct_name || impl_base_name == struct_name {
-                        for method in &impl_block.methods {
-                            if method.name == method_name && method_has_type_params(method) {
-                                return Some(method.clone());
-                            }
+                    for method in &impl_block.methods {
+                        if method.name == method_name
+                            && let Some(names) = extract_names(method)
+                        {
+                            return Some(names);
                         }
                     }
                 }
@@ -1183,33 +1244,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         if let Some(module_source) = struct_module_source
             && let Some(module) = self.loaded_modules.get(module_source)
-            && let Some(found) = search_impl_modules(module)
+            && let Some(names) = search_items(&module.items)
         {
-            return Some(found);
+            return Some(names);
         }
 
         for module in self.loaded_modules.values() {
-            if let Some(found) = search_impl_modules(module) {
-                return Some(found);
+            if let Some(names) = search_items(&module.items) {
+                return Some(names);
             }
         }
 
-        // Current module items: same impl search, inlined because
-        // current_module_items is a slice, not a full Module.
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && impl_block.trait_type.is_none()
-            {
-                let impl_type_name = self.get_type_name(&impl_block.ty);
-                let impl_base_name = impl_type_name.split('<').next().unwrap_or(&impl_type_name);
-                if impl_type_name == struct_name || impl_base_name == struct_name {
-                    for method in &impl_block.methods {
-                        if method.name == method_name && method_has_type_params(method) {
-                            return Some(method.clone());
-                        }
-                    }
-                }
-            }
+        if let Some(names) = search_items(self.current_module_items) {
+            return Some(names);
         }
 
         // Fallback: trait default methods. These have no enclosing impl, so
@@ -1220,9 +1267,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     for default_method in &trait_decl.methods {
                         if default_method.name == method_name
                             && default_method.body.is_some()
-                            && method_has_type_params(default_method)
+                            && let Some(names) = extract_names(default_method)
                         {
-                            return Some(default_method.clone());
+                            return Some(names);
                         }
                     }
                 }
@@ -1712,6 +1759,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         inherited_from_base: None,
                         cm_name: None,
                         is_ref_impl: false,
+                        method_type_param_ids: vec![],
                     },
                     impl_module_source: impl_module_source.clone(),
                     blanket_type_param: blanket_type_param.clone(),
@@ -1798,6 +1846,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     inherited_from_base: None,
                                     cm_name: None,
                                     is_ref_impl: false,
+                                    method_type_param_ids: vec![],
                                 },
                                 impl_module_source: impl_module_source.clone(),
                                 blanket_type_param: blanket_type_param.clone(),
@@ -2822,6 +2871,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             inherited_from_base: _,
             cm_name: _,
             is_ref_impl: _,
+            method_type_param_ids: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
