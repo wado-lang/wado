@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776072025649,
+  "lastUpdate": 1776072151356,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12620,6 +12620,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/273672e357643c5245c6c98b6b8491c5d85ba666"
         },
         "date": 1776072025371,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "687529587994c73491897bba4cb93583dc9e8591",
+          "message": "Merge pull request #834 from wado-lang/claude/extend-array-struct-optimization-Qgji3\n\noptimize: extend container SROA to Array<UserStruct>, tighten pipeline",
+          "timestamp": "2026-04-13T18:19:15+09:00",
+          "tree_id": "46b788492a3284b5f13c297d3d1340c4e7181b1d",
+          "url": "https://github.com/wado-lang/wado/commit/687529587994c73491897bba4cb93583dc9e8591"
+        },
+        "date": 1776072151078,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
