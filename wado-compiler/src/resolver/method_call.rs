@@ -444,7 +444,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 receiver.type_id,
                 &method_call.method,
                 &args,
+                &method_call.args,
                 impl_offset,
+                &expected_param_types,
+                return_type,
                 expected_type,
             )
         } else {

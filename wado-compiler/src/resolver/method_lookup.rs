@@ -1059,277 +1059,178 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Infer method type arguments from actual argument types.
-    /// Returns a list of inferred type args matching the method's type params order.
-    /// Uses the position of type params in parameter types to map actual arg types.
-    /// Recursively match an AST return type against a resolved expected `TypeId`,
-    /// filling in `bindings[i]` for each `type_param_names`[i] found in the return type.
-    fn match_return_type_against_expected(
-        return_ty: &ast::Type,
-        type_param_names: &[String],
-        expected: TypeId,
-        type_table: &TypeTable,
-        bindings: &mut [TypeId],
-    ) {
-        match return_ty {
-            // Direct type param reference: T, U, etc.
-            ast::Type::Named(named) => {
-                if let Some(idx) = type_param_names.iter().position(|n| *n == named.name)
-                    && bindings[idx] == TypeTable::UNKNOWN
-                {
-                    bindings[idx] = expected;
-                }
-            }
-            // Generic type like Option<T>, Result<T, E>, Array<T>
-            ast::Type::Generic(generic) => {
-                let expected_resolved = type_table.get(expected).clone();
-                let (expected_name, expected_type_args) = match &expected_resolved {
-                    ResolvedType::GenericInstance {
-                        name, type_args, ..
-                    } => (name.clone(), type_args.clone()),
-                    _ => return,
-                };
-                if expected_name == generic.name && generic.args.len() == expected_type_args.len() {
-                    for (ast_arg, &resolved_arg) in
-                        generic.args.iter().zip(expected_type_args.iter())
-                    {
-                        Self::match_return_type_against_expected(
-                            ast_arg,
-                            type_param_names,
-                            resolved_arg,
-                            type_table,
-                            bindings,
-                        );
-                    }
-                }
-            }
-            // Reference types
-            ast::Type::Reference(inner) => {
-                let expected_resolved = type_table.get(expected).clone();
-                if let ResolvedType::Ref(inner_expected) = expected_resolved {
-                    Self::match_return_type_against_expected(
-                        inner,
-                        type_param_names,
-                        inner_expected,
-                        type_table,
-                        bindings,
-                    );
-                }
-            }
-            ast::Type::MutReference(inner) => {
-                let expected_resolved = type_table.get(expected).clone();
-                if let ResolvedType::MutRef(inner_expected) = expected_resolved {
-                    Self::match_return_type_against_expected(
-                        inner,
-                        type_param_names,
-                        inner_expected,
-                        type_table,
-                        bindings,
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-
+    /// Infer method-level type arguments for an instance method call using
+    /// the method's already-resolved parameter and return types.
+    ///
+    /// `expected_param_types` and `decl_return_type` must come from a method
+    /// lookup (`lookup_method_info` / `find_trait_method_for_type`) so that
+    /// any `TypeParam` ids they contain already use the same indexing
+    /// convention as downstream substitution via
+    /// `SubstitutionContext::with_method_args(args, impl_offset)`.
+    ///
+    /// This intentionally does **not** re-resolve the method's AST: doing so
+    /// in a fresh scope would emit spurious errors for references like
+    /// `Self::Item` that depend on assoc-type bindings the outer resolver
+    /// context has but that `infer_method_type_args` cannot easily
+    /// reconstruct.
+    ///
+    /// Returns a vector sized to the method's own non-effect type parameters
+    /// in declaration order. Unbound parameters fall back to their original
+    /// `TypeParam` ids; an empty vector is returned when there is nothing to
+    /// infer (no method type params, or the receiver is not a struct /
+    /// generic instance).
     pub(super) fn infer_method_type_args(
-        &self,
+        &mut self,
         receiver_type: TypeId,
         method_name: &str,
         args: &[TirExpr],
+        raw_args: &[Expr],
         impl_offset: u32,
+        expected_param_types: &[TypeId],
+        decl_return_type: TypeId,
         expected_return_type: Option<TypeId>,
     ) -> Vec<TypeId> {
         let base_type_id = self.get_base_type(receiver_type);
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
-        let (struct_name, struct_module_source) = match &base_type {
-            ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), Some(module_source.clone())),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), Some(module_source.clone())),
+        let struct_name = match &base_type {
+            ResolvedType::Struct { name, .. } => name.clone(),
+            ResolvedType::GenericInstance { name, .. } => name.clone(),
             _ => return vec![],
         };
+        let struct_module_source = match &base_type {
+            ResolvedType::Struct { module_source, .. }
+            | ResolvedType::GenericInstance { module_source, .. } => Some(module_source.clone()),
+            _ => None,
+        };
 
-        // Search for the method in loaded modules
-        let mut method_type_params: Vec<String> = Vec::new();
-        let mut param_type_strs: Vec<String> = Vec::new();
-        let mut method_return_type: Option<ast::Type> = None;
+        // Locate the method's AST just to recover the list of type parameter
+        // names (excluding effect params). We use these names together with
+        // `impl_offset` to materialise the `TypeParam` ids the solver needs
+        // to track, without re-resolving the method signature.
+        let found = self.find_method_ast(&struct_name, struct_module_source.as_ref(), method_name);
+        let Some(method_decl) = found else {
+            return vec![];
+        };
 
-        // Helper function to extract param info from method
-        let extract_method_info =
-            |method: &crate::ast::Function| -> (Vec<String>, Vec<String>, Option<ast::Type>) {
-                let type_params: Vec<String> =
-                    method.type_params.iter().map(|p| p.name.clone()).collect();
-                let params: Vec<String> = method
-                    .params
-                    .iter()
-                    // Skip self parameter (has SelfKind::Ref/MutRef and name "self")
-                    .filter(|p| {
-                        !(matches!(
-                            p.self_kind,
-                            ast::SelfKind::Ref | ast::SelfKind::MutRef | ast::SelfKind::None
-                        ) && p.name == "self")
-                    })
-                    .map(|p| self.get_type_name(&p.ty))
-                    .collect();
-                let return_ty = method.return_type.clone();
-                (type_params, params, return_ty)
-            };
+        let method_type_param_names: Vec<String> = method_decl
+            .type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .map(|tp| tp.name.clone())
+            .collect();
+        if method_type_param_names.is_empty() {
+            return vec![];
+        }
 
-        // Check specific module first
-        if let Some(ref module_source) = struct_module_source
-            && let Some(module) = self.loaded_modules.get(module_source)
-        {
+        let method_type_param_ids: Vec<TypeId> = {
+            let mut tt = self.type_table.borrow_mut();
+            method_type_param_names
+                .iter()
+                .enumerate()
+                .map(|(i, name)| tt.make_type_param(name.clone(), impl_offset + i as u32))
+                .collect()
+        };
+
+        let mut infer = super::infer::InferCtx::new(&self.type_table, method_type_param_ids);
+        for (i, (&param_type, arg)) in expected_param_types.iter().zip(args.iter()).enumerate() {
+            if Self::is_literal_number_arg(raw_args.get(i)) {
+                infer.add_deferred(param_type, arg.type_id);
+            } else {
+                infer.add(param_type, arg.type_id);
+            }
+        }
+        if let Some(expected) = expected_return_type {
+            infer.add_expected_return(decl_return_type, expected);
+        }
+
+        infer.solve()
+    }
+
+    /// Find an instance method's AST definition for `infer_method_type_args`.
+    /// Searches the struct's own module first, then all loaded modules, then
+    /// the current module, then falls back to trait default methods.
+    ///
+    /// Only returns methods with at least one non-effect type parameter —
+    /// the caller has nothing to infer otherwise.
+    fn find_method_ast(
+        &self,
+        struct_name: &str,
+        struct_module_source: Option<&ModuleSource>,
+        method_name: &str,
+    ) -> Option<ast::Function> {
+        let method_has_type_params =
+            |m: &ast::Function| m.type_params.iter().any(|p| !p.is_effect);
+
+        let search_impl_modules = |module: &ast::Module| -> Option<ast::Function> {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
                     && impl_block.trait_type.is_none()
                 {
                     let impl_type_name = self.get_type_name(&impl_block.ty);
-                    // Match impl type name: either exact match or the base name matches
-                    // For generic types like ArrayIter<T>, match if base name "ArrayIter" matches
                     let impl_base_name =
                         impl_type_name.split('<').next().unwrap_or(&impl_type_name);
                     if impl_type_name == struct_name || impl_base_name == struct_name {
                         for method in &impl_block.methods {
-                            if method.name == method_name && !method.type_params.is_empty() {
-                                let (tp, pp, rt) = extract_method_info(method);
-                                method_type_params = tp;
-                                param_type_strs = pp;
-                                method_return_type = rt;
-                                break;
+                            if method.name == method_name && method_has_type_params(method) {
+                                return Some(method.clone());
                             }
                         }
                     }
                 }
             }
-        }
+            None
+        };
 
-        // Search all loaded modules if not found
-        if method_type_params.is_empty() {
-            for module in self.loaded_modules.values() {
-                for item in &module.items {
-                    if let Item::Impl(impl_block) = item
-                        && impl_block.trait_type.is_none()
-                    {
-                        let impl_type_name = self.get_type_name(&impl_block.ty);
-                        let impl_base_name =
-                            impl_type_name.split('<').next().unwrap_or(&impl_type_name);
-                        if impl_type_name == struct_name || impl_base_name == struct_name {
-                            for method in &impl_block.methods {
-                                if method.name == method_name && !method.type_params.is_empty() {
-                                    let (tp, pp, rt) = extract_method_info(method);
-                                    method_type_params = tp;
-                                    param_type_strs = pp;
-                                    method_return_type = rt;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                if !method_type_params.is_empty() {
-                    break;
-                }
-            }
-        }
-
-        // If not found in inherent impls, search trait declarations for default methods
-        if method_type_params.is_empty() {
-            'outer: for module in self.loaded_modules.values() {
-                for item in &module.items {
-                    if let Item::Trait(trait_decl) = item {
-                        for default_method in &trait_decl.methods {
-                            if default_method.name == method_name
-                                && default_method.body.is_some()
-                                && !default_method.type_params.is_empty()
-                            {
-                                let (tp, pp, rt) = extract_method_info(default_method);
-                                method_type_params = tp;
-                                param_type_strs = pp;
-                                method_return_type = rt;
-                                break 'outer;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if method_type_params.is_empty() {
-            return vec![];
-        }
-
-        // Infer type args by matching type param names against param types and actual arg types
-        let mut inferred: Vec<TypeId> = vec![TypeTable::UNKNOWN; method_type_params.len()];
-
-        for (i, type_param_name) in method_type_params.iter().enumerate() {
-            // Find the first parameter whose type matches this type param
-            for (param_idx, param_type_str) in param_type_strs.iter().enumerate() {
-                if param_idx >= args.len() {
-                    continue;
-                }
-
-                if param_type_str == type_param_name {
-                    // This param has type T (or Acc, etc.) - use the actual arg type
-                    inferred[i] = args[param_idx].type_id;
-                    break;
-                }
-
-                // Check if the type param appears in a function type's return position
-                // e.g., for "fn(T) -> U" we can infer U from the closure's return type
-                if param_type_str.starts_with("fn(") {
-                    // Parse function type to extract return type
-                    // Format: "fn(param1, param2, ...) -> ReturnType"
-                    if let Some(arrow_pos) = param_type_str.find(" -> ") {
-                        let return_type_str = &param_type_str[arrow_pos + 4..];
-                        if return_type_str == type_param_name {
-                            // The return type is our type param - infer from closure's return type
-                            let arg_type = self
-                                .type_table
-                                .borrow()
-                                .get(args[param_idx].type_id)
-                                .clone();
-                            if let ResolvedType::Function { return_type, .. } = arg_type {
-                                inferred[i] = return_type;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // If there are still unknown type params and we have an expected return type,
-        // try to infer them by matching the method's return type against the expected type.
-        if let Some(expected) = expected_return_type
-            && let Some(ref return_ty) = method_return_type
-            && inferred.contains(&TypeTable::UNKNOWN)
+        if let Some(module_source) = struct_module_source
+            && let Some(module) = self.loaded_modules.get(module_source)
+            && let Some(found) = search_impl_modules(module)
         {
-            let type_table = self.type_table.borrow();
-            Self::match_return_type_against_expected(
-                return_ty,
-                &method_type_params,
-                expected,
-                &type_table,
-                &mut inferred,
-            );
+            return Some(found);
         }
 
-        // Return only if we found at least some type args
-        if inferred.iter().all(|&t| t == TypeTable::UNKNOWN) {
-            vec![]
-        } else {
-            // Use impl_offset to verify - type params start after impl params
-            let _ = impl_offset;
-            inferred
+        for module in self.loaded_modules.values() {
+            if let Some(found) = search_impl_modules(module) {
+                return Some(found);
+            }
         }
+
+        // Current module items: same impl search, inlined because
+        // current_module_items is a slice, not a full Module.
+        for item in self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && impl_block.trait_type.is_none()
+            {
+                let impl_type_name = self.get_type_name(&impl_block.ty);
+                let impl_base_name = impl_type_name.split('<').next().unwrap_or(&impl_type_name);
+                if impl_type_name == struct_name || impl_base_name == struct_name {
+                    for method in &impl_block.methods {
+                        if method.name == method_name && method_has_type_params(method) {
+                            return Some(method.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: trait default methods. These have no enclosing impl, so
+        // their "impl type params" are empty.
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Trait(trait_decl) = item {
+                    for default_method in &trait_decl.methods {
+                        if default_method.name == method_name
+                            && default_method.body.is_some()
+                            && method_has_type_params(default_method)
+                        {
+                            return Some(default_method.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Get the base (non-reference) type by stripping all Ref/MutRef wrappers
