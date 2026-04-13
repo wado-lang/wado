@@ -856,8 +856,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<(ast::SelfKind, Vec<TypeId>, Vec<bool>)> {
-        // First collect method info without resolving types
-        let mut found_method: Option<(ast::SelfKind, Vec<ast::Type>, Vec<bool>)> = None;
+        // First collect method info without resolving types. We also capture the
+        // impl block's type AST and the method's type params so that param-type
+        // resolution can run with both impl- and method-level type params in scope
+        // (otherwise `T` resolves to `UNKNOWN` and downstream typecheck loses the
+        // ability to detect generic-arg conflicts after inference).
+        let mut found_method: Option<(
+            ast::SelfKind,
+            Vec<ast::Type>,
+            Vec<bool>,
+            ast::Type,
+            Vec<ast::GenericParam>,
+        )> = None;
 
         for item in self.current_module_items {
             if let Item::Impl(impl_block) = item {
@@ -883,7 +893,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 non_self.iter().map(|p| p.ty.clone()).collect();
                             let param_is_mut: Vec<bool> =
                                 non_self.iter().map(|p| p.is_mut).collect();
-                            found_method = Some((self_kind, param_types, param_is_mut));
+                            found_method = Some((
+                                self_kind,
+                                param_types,
+                                param_is_mut,
+                                impl_block.ty.clone(),
+                                method.type_params.clone(),
+                            ));
                             break;
                         }
                     }
@@ -894,14 +910,66 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Now resolve the types (needs mutable borrow)
-        found_method.map(|(self_kind, param_types_ast, param_is_mut)| {
-            let param_types: Vec<TypeId> = param_types_ast
-                .iter()
-                .map(|ty| self.resolve_type(ty))
-                .collect();
-            (self_kind, param_types, param_is_mut)
-        })
+        // Now resolve the types (needs mutable borrow). Set up impl-level and
+        // method-level type params in scope so that references to `T` resolve
+        // to `TypeParam` rather than `UNKNOWN`.
+        found_method.map(
+            |(self_kind, param_types_ast, param_is_mut, impl_ty, method_type_params)| {
+                let saved_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+
+                // Impl-level type params (e.g. `impl Box<T>` -> register T at index 0)
+                let mut impl_offset = 0u32;
+                if let ast::Type::Generic(generic) = &impl_ty {
+                    for (i, arg) in generic.args.iter().enumerate() {
+                        if let ast::Type::Named(named) = arg
+                            && !self.trait_ctx.type_params.contains_key(&named.name)
+                        {
+                            let type_id = self
+                                .type_table
+                                .borrow_mut()
+                                .make_type_param(named.name.clone(), i as u32);
+                            self.trait_ctx
+                                .type_params
+                                .insert(named.name.clone(), (i as u32, type_id));
+                            impl_offset = (i as u32) + 1;
+                        }
+                    }
+                }
+
+                // Method-level type params (e.g. `fn make<T>(x: T)` -> register T)
+                for (i, tp) in method_type_params
+                    .iter()
+                    .filter(|p| !p.is_effect)
+                    .enumerate()
+                {
+                    if self.trait_ctx.type_params.contains_key(&tp.name) {
+                        continue;
+                    }
+                    let idx = impl_offset + i as u32;
+                    let type_id = if tp.is_pack {
+                        self.type_table
+                            .borrow_mut()
+                            .make_type_pack(tp.name.clone(), idx)
+                    } else {
+                        self.type_table
+                            .borrow_mut()
+                            .make_type_param(tp.name.clone(), idx)
+                    };
+                    self.trait_ctx
+                        .type_params
+                        .insert(tp.name.clone(), (idx, type_id));
+                }
+
+                let param_types: Vec<TypeId> = param_types_ast
+                    .iter()
+                    .map(|ty| self.resolve_type(ty))
+                    .collect();
+
+                self.trait_ctx.type_params = saved_type_params;
+
+                (self_kind, param_types, param_is_mut)
+            },
+        )
     }
 
     /// Extract parameter types (excluding self) from method parameters

@@ -1,0 +1,16 @@
+// `two<T>(a: T, b: T)` should fail to compile when one argument is a String
+// and the other is an integer literal. Numeric literal coercion does not
+// produce a String, so unification cannot reconcile `String` with `i32`.
+
+fn two<T>(a: T, b: T) -> T {
+    let _ = b;
+    return a;
+}
+
+export fn run() {
+    let r = two("hello", 2);
+    let _ = r;
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

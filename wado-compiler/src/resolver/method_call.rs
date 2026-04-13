@@ -366,7 +366,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Resolve arguments with coercion using method parameter types
-        let args: Vec<TirExpr> = method_call
+        let mut args: Vec<TirExpr> = method_call
             .args
             .iter()
             .enumerate()
@@ -458,6 +458,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Apply unified substitution
         if !subst_ctx.is_empty() {
             return_type = subst_ctx.substitute(return_type, &mut self.type_table.borrow_mut());
+        }
+
+        // Re-coerce literal-number args and typecheck each arg against the substituted
+        // parameter type. This catches inference conflicts such as
+        // `h.two_method<T>(1 as i64, 2 as i32)` where `T` cannot be both `i64` and `i32`.
+        // The pre-inference typecheck at line ~380 only sees TypeParam (a wildcard),
+        // so the conflict must be caught after substitution.
+        if !method_type_args.is_empty() {
+            let substituted_param_types: Vec<TypeId> = expected_param_types
+                .iter()
+                .map(|&t| subst_ctx.substitute(t, &mut self.type_table.borrow_mut()))
+                .collect();
+            self.recoerce_literal_args(&method_call.args, &mut args, &substituted_param_types);
+            for (i, arg) in args.iter().enumerate() {
+                if let Some(&expected) = substituted_param_types.get(i) {
+                    self.typecheck(
+                        arg.type_id,
+                        expected,
+                        method_call
+                            .args
+                            .get(i)
+                            .map_or(method_call.span, super::ast::Expr::span),
+                    );
+                }
+            }
         }
 
         // Get struct name and monomorph info from base type for mangled method name.
@@ -1386,6 +1411,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     }
                                 }
 
+                                // Method-level type params (e.g. fn make<T>(...) -> T)
+                                let m_offset = self.trait_ctx.type_params.len();
+                                for (i, tp) in method
+                                    .type_params
+                                    .iter()
+                                    .filter(|p| !p.is_effect)
+                                    .enumerate()
+                                {
+                                    if self.trait_ctx.type_params.contains_key(&tp.name) {
+                                        continue;
+                                    }
+                                    let idx = (m_offset + i) as u32;
+                                    let type_id = if tp.is_pack {
+                                        self.type_table
+                                            .borrow_mut()
+                                            .make_type_pack(tp.name.clone(), idx)
+                                    } else {
+                                        self.type_table
+                                            .borrow_mut()
+                                            .make_type_param(tp.name.clone(), idx)
+                                    };
+                                    self.trait_ctx
+                                        .type_params
+                                        .insert(tp.name.clone(), (idx, type_id));
+                                }
+
                                 let result = self.resolve_return_type_in_module(
                                     struct_module,
                                     method.return_type.as_ref(),
@@ -1471,6 +1522,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         }
                     }
 
+                    // Method-level type params (e.g. fn make<T>(...) -> T)
+                    let m_offset = self.trait_ctx.type_params.len();
+                    for (i, tp) in method
+                        .type_params
+                        .iter()
+                        .filter(|p| !p.is_effect)
+                        .enumerate()
+                    {
+                        if self.trait_ctx.type_params.contains_key(&tp.name) {
+                            continue;
+                        }
+                        let idx = (m_offset + i) as u32;
+                        let type_id = if tp.is_pack {
+                            self.type_table
+                                .borrow_mut()
+                                .make_type_pack(tp.name.clone(), idx)
+                        } else {
+                            self.type_table
+                                .borrow_mut()
+                                .make_type_param(tp.name.clone(), idx)
+                        };
+                        self.trait_ctx
+                            .type_params
+                            .insert(tp.name.clone(), (idx, type_id));
+                    }
+
                     let result = method
                         .return_type
                         .as_ref()
@@ -1524,53 +1601,126 @@ impl<H: CompilerHost> Resolver<'_, H> {
         TypeTable::UNKNOWN
     }
 
-    /// Look up static method parameter types for coercion
+    /// Look up static method parameter types for coercion.
+    ///
+    /// Sets up impl-level and method-level type parameters in scope so that
+    /// generic parameter types resolve to `TypeParam(...)` instead of `Unknown`.
+    /// Callers can then substitute these with concrete types after inference.
     pub(super) fn lookup_static_method_param_types(
         &mut self,
         struct_name: &str,
         method_name: &str,
     ) -> Vec<TypeId> {
         // Check in current module's impl blocks first (highest priority)
-        let params: Option<Vec<_>> = self.current_module_items.iter().find_map(|item| {
-            if let Item::Impl(impl_block) = item {
-                let impl_struct_name = self.get_type_name(&impl_block.ty);
-                if impl_struct_name == struct_name {
-                    for method in &impl_block.methods {
-                        let has_self = method
-                            .params
-                            .iter()
-                            .any(|p| p.self_kind != ast::SelfKind::None);
-                        if method.name == method_name && !has_self {
-                            return Some(method.params.clone());
+        let found: Option<(ast::Type, ast::Function)> =
+            self.current_module_items.iter().find_map(|item| {
+                if let Item::Impl(impl_block) = item {
+                    let impl_struct_name = self.get_type_name(&impl_block.ty);
+                    if impl_struct_name == struct_name {
+                        for method in &impl_block.methods {
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if method.name == method_name && !has_self {
+                                return Some((impl_block.ty.clone(), method.clone()));
+                            }
                         }
                     }
                 }
-            }
-            None
-        });
+                None
+            });
 
-        if let Some(params) = params {
-            return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+        if let Some((impl_ty, method)) = found {
+            return self.resolve_static_method_params_in_scope(&impl_ty, &method);
         }
 
         // O(1) lookup via pre-built static method index
-        if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
-            for (name, module_source, item_idx, method_idx) in methods {
-                if name == method_name
-                    && let Some(module) = self.loaded_modules.get(module_source)
-                    && let Item::Impl(impl_block) = &module.items[*item_idx]
+        let indexed: Option<(ast::Type, ast::Function)> =
+            if let Some(methods) = self.trait_env.static_method_index.get(struct_name) {
+                let mut found = None;
+                for (name, module_source, item_idx, method_idx) in methods {
+                    if name == method_name
+                        && let Some(module) = self.loaded_modules.get(module_source)
+                        && let Item::Impl(impl_block) = &module.items[*item_idx]
+                    {
+                        let method = &impl_block.methods[*method_idx];
+                        found = Some((impl_block.ty.clone(), method.clone()));
+                        break;
+                    }
+                }
+                found
+            } else {
+                None
+            };
+        if let Some((impl_ty, method)) = indexed {
+            return self.resolve_static_method_params_in_scope(&impl_ty, &method);
+        }
+
+        Vec::new()
+    }
+
+    /// Resolve a static method's parameter types with impl-level and method-level
+    /// type parameters set up in `trait_ctx.type_params`. Restores the original
+    /// scope before returning.
+    fn resolve_static_method_params_in_scope(
+        &mut self,
+        impl_ty: &ast::Type,
+        method: &ast::Function,
+    ) -> Vec<TypeId> {
+        let saved_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+
+        // Impl-level type params (e.g. `impl Box<T>` -> register T)
+        if let ast::Type::Generic(generic) = impl_ty {
+            for (i, arg) in generic.args.iter().enumerate() {
+                if let ast::Type::Named(named) = arg
+                    && !self.trait_ctx.type_params.contains_key(&named.name)
                 {
-                    let method = &impl_block.methods[*method_idx];
-                    return method
-                        .params
-                        .iter()
-                        .map(|p| self.resolve_type(&p.ty))
-                        .collect();
+                    let type_id = self
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(named.name.clone(), i as u32);
+                    self.trait_ctx
+                        .type_params
+                        .insert(named.name.clone(), (i as u32, type_id));
                 }
             }
         }
 
-        Vec::new()
+        // Method-level type params (e.g. `fn make<T>(x: T)` -> register T)
+        let offset = self.trait_ctx.type_params.len();
+        for (i, tp) in method
+            .type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .enumerate()
+        {
+            if self.trait_ctx.type_params.contains_key(&tp.name) {
+                continue;
+            }
+            let idx = (offset + i) as u32;
+            let type_id = if tp.is_pack {
+                self.type_table
+                    .borrow_mut()
+                    .make_type_pack(tp.name.clone(), idx)
+            } else {
+                self.type_table
+                    .borrow_mut()
+                    .make_type_param(tp.name.clone(), idx)
+            };
+            self.trait_ctx
+                .type_params
+                .insert(tp.name.clone(), (idx, type_id));
+        }
+
+        let result: Vec<TypeId> = method
+            .params
+            .iter()
+            .map(|p| self.resolve_type(&p.ty))
+            .collect();
+
+        self.trait_ctx.type_params = saved_type_params;
+        result
     }
 
     /// Find the AST definition of a static method for a given struct.

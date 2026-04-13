@@ -1,0 +1,38 @@
+// Type parameter omission across module boundaries for free functions,
+// generic static methods, and generic instance methods.
+
+use { wrap, pair_first, CrossBox } from "./sub/type_param_omission_helper.wado";
+
+test "cross-module free function" {
+    let a = wrap(42);
+    let b = wrap("hello");
+    let c = wrap(100 as i64);
+    assert a == 42;
+    assert b == "hello";
+    assert c == 100 as i64;
+}
+
+test "cross-module free function with two type params" {
+    let a = pair_first(10, "ignored");
+    assert a == 10;
+}
+
+test "cross-module static method" {
+    let a = CrossBox::make(42);
+    let b = CrossBox::make("hello");
+    assert a == 42;
+    assert b == "hello";
+}
+
+test "cross-module instance method" {
+    let c = CrossBox { dummy: 0 };
+    let a = c.select(42);
+    let b = c.select("hello");
+    let d = c.pair(10 as i64, "ignored");
+    assert a == 42;
+    assert b == "hello";
+    assert d == 10 as i64;
+}
+
+__DATA__
+{"test": {}}

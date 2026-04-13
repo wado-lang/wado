@@ -1,0 +1,15 @@
+// `two<T>(a: T, b: T)` should fail to compile when both arguments are
+// already-typed values of different concrete types. Wado coercion only
+// applies to literals, so the compiler cannot reconcile `u8` with `u32`.
+
+fn two<T>(a: T, b: T) -> T {
+    return a;
+}
+
+export fn run() {
+    let r = two(1 as u8, 2 as u32);
+    let _ = r;
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

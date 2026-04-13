@@ -77,20 +77,15 @@ fn scheme_name(s: Option<Scheme>) -> String {
 }
 
 fn stringify<T: Serialize>(value: &T) -> String {
-    return match to_string::<T>(value) {
+    return match to_string(value) {
         Ok(s) => s,
         Err(_) => "{}",
     };
 }
 
 /// Serializes the value as JSON followed by a trailing newline.
-///
-/// NOTE: the inner `stringify::<T>(...)` turbofish is a workaround for a
-/// compiler bug — dropping the `::<T>` causes the WIR pipeline to emit
-/// mismatched Wasm GC ref types and codegen panics with an internal
-/// compiler error.
 fn ndjson<T: Serialize>(value: &T) -> String {
-    return stringify::<T>(value) + "\n";
+    return stringify(value) + "\n";
 }
 
 /// Returns the substring after `prefix` if `s` starts with it, else None.

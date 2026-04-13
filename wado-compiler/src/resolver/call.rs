@@ -189,7 +189,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Resolve arguments with coercion awareness
-        let args: Vec<TirExpr> = call
+        let mut args: Vec<TirExpr> = call
             .args
             .iter()
             .enumerate()
@@ -255,11 +255,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         // If no explicit type args, try to infer from argument types
                         let mangled_name = MethodName::format_local(prefix, None, suffix);
                         if method_type_args.is_empty() {
-                            method_type_args = self.infer_type_args_from_args(suffix, &args);
+                            method_type_args =
+                                self.infer_type_args_from_args(suffix, &call.args, &args);
                         }
                         if method_type_args.is_empty() {
                             method_type_args =
-                                self.infer_type_args_from_method(prefix, suffix, &args);
+                                self.infer_type_args_from_method(prefix, suffix, &call.args, &args);
                         }
                         // Check trait bounds and register assoc type resolutions for inferred type args
                         if !method_type_args.is_empty() {
@@ -327,6 +328,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         },
                                         newtype_type_id,
                                         call.span,
+                                    );
+                                }
+                            }
+                        }
+
+                        // Re-coerce literal-number args to inferred parameter types and
+                        // typecheck each arg against the substituted parameter type.
+                        // Before inference, the literal args were resolved with `TypeParam`
+                        // (or `Unknown`) as the expected type, so they fell back to defaults
+                        // (i32/f64). Now that we know the concrete substitution, retry
+                        // coercion and verify the inferred type-arg binding is consistent
+                        // with every arg (e.g. `two_static<T>(1 as u8, 2 as u32)` must
+                        // fail because `T` cannot be both `u8` and `u32`).
+                        if !method_type_args.is_empty() {
+                            let raw_param_types =
+                                self.lookup_static_method_param_types(prefix, suffix);
+                            let substituted: Vec<TypeId> = raw_param_types
+                                .iter()
+                                .map(|&t| self.substitute_type_params(t, &method_type_args))
+                                .collect();
+                            self.recoerce_literal_args(&call.args, &mut args, &substituted);
+                            for (i, arg) in args.iter().enumerate() {
+                                if let Some(&expected) = substituted.get(i) {
+                                    self.typecheck(
+                                        arg.type_id,
+                                        expected,
+                                        call.args.get(i).map_or(call.span, ast::Expr::span),
                                     );
                                 }
                             }
@@ -714,7 +742,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
         // If no explicit type args, try to infer from argument types
         if type_args.is_empty() {
-            type_args = self.infer_type_args_from_args(&func_name, &args);
+            type_args = self.infer_type_args_from_args(&func_name, &call.args, &args);
         }
 
         // For local function calls (None), use the current module source
@@ -750,6 +778,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 span: call.span,
             });
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+        }
+        // Re-coerce literal-number args to inferred parameter types. This catches
+        // calls like `two<T>(1 as u8, 2)` where the literal `2` was first resolved
+        // as the default i32 because the original expected type was a TypeParam.
+        if !type_args.is_empty() {
+            self.recoerce_literal_args(&call.args, &mut args, &check_param_types);
         }
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
@@ -1408,21 +1442,64 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Infer type arguments for a generic function call from the actual argument types.
-    /// Uses pre-resolved param types (stored during function resolution in the function's
-    /// own type param scope, so `TypeParam` ids are correct).
+    ///
+    /// Uses pre-resolved param types from the current-module cache when available,
+    /// otherwise falls back to looking up imported functions in loaded modules and
+    /// resolving their param types in a temporary type-param scope.
+    ///
+    /// Performs two-phase unification: non-literal args are unified first so that
+    /// numeric literals (which would otherwise lock the type param to the i32/f64
+    /// default) cannot override a more specific concrete type from a typed neighbour.
+    ///
     /// Returns the inferred type args in declaration order, or empty vec if inference fails.
-    fn infer_type_args_from_args(&self, func_name: &str, args: &[TirExpr]) -> Vec<TypeId> {
-        let Some(type_param_list) = self.generic_function_params.get(func_name) else {
-            return vec![];
+    pub(super) fn infer_type_args_from_args(
+        &mut self,
+        func_name: &str,
+        raw_args: &[Expr],
+        args: &[TirExpr],
+    ) -> Vec<TypeId> {
+        // Fast path: current-module cache (populated during item resolution).
+        let cached = if let (Some(tp), Some(rp)) = (
+            self.generic_function_params.get(func_name).cloned(),
+            self.generic_function_resolved_param_types
+                .get(func_name)
+                .cloned(),
+        ) {
+            Some((tp, rp))
+        } else {
+            None
         };
-        let Some(resolved_param_types) = self.generic_function_resolved_param_types.get(func_name)
-        else {
-            return vec![];
+
+        let (type_param_list, resolved_param_types) = if let Some(v) = cached {
+            v
+        } else {
+            // Fallback: cross-module lookup via imported functions / loaded modules.
+            let Some(info) = self.lookup_generic_func_for_inference(func_name) else {
+                return vec![];
+            };
+            info
         };
-        let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::default();
-        for (param_type, arg) in resolved_param_types.iter().zip(args.iter()) {
-            self.unify_types_for_inference(*param_type, arg.type_id, &mut type_param_map);
+
+        if type_param_list.is_empty() {
+            return vec![];
         }
+
+        let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::default();
+
+        // Phase 1: unify non-literal args. Their types are concrete and high-confidence.
+        for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
+            if !Self::is_literal_number_arg(raw_args.get(i)) {
+                self.unify_types_for_inference(*param_type, arg.type_id, &mut type_param_map);
+            }
+        }
+        // Phase 2: unify literal-number args. `or_insert` ensures these cannot overwrite
+        // bindings already discovered from typed neighbours in phase 1.
+        for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
+            if Self::is_literal_number_arg(raw_args.get(i)) {
+                self.unify_types_for_inference(*param_type, arg.type_id, &mut type_param_map);
+            }
+        }
+
         let inferred: Vec<TypeId> = type_param_list
             .iter()
             .map(|(_, id)| type_param_map.get(id).copied().unwrap_or(*id))
@@ -1440,12 +1517,88 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
+    /// Look up a generic function (current or imported) and produce a temporary
+    /// `(type_param_list, resolved_param_types)` pair suitable for type-arg inference.
+    /// Sets up the function's type params in scope while resolving param types.
+    fn lookup_generic_func_for_inference(
+        &mut self,
+        func_name: &str,
+    ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>)> {
+        // Resolve the imported function via the symbol table to get its defining module.
+        let symbol = self.symbols.lookup(func_name)?;
+        let src = symbol.module_source.clone();
+        let name = symbol.name.clone();
+
+        let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>)> =
+            Self::lookup_func_in_loaded_module(
+                self.loaded_modules,
+                &self.loaded_module_func_indices,
+                &src,
+                &name,
+            )
+            .map(|func| (func.type_params.clone(), func.params.clone()));
+        let (type_params, params) = func_info?;
+
+        if type_params.iter().all(|p| p.is_effect) {
+            return Some((vec![], vec![]));
+        }
+
+        // Temporarily register the function's type params so resolve_type produces
+        // TypeParam ids for parameter types like `T`.
+        let saved = std::mem::take(&mut self.trait_ctx.type_params);
+        let mut type_param_list: Vec<(String, TypeId)> = vec![];
+        let mut idx = 0u32;
+        for tp in &type_params {
+            if tp.is_effect {
+                continue;
+            }
+            let type_id = if tp.is_pack {
+                self.type_table
+                    .borrow_mut()
+                    .make_type_pack(tp.name.clone(), idx)
+            } else {
+                self.type_table
+                    .borrow_mut()
+                    .make_type_param(tp.name.clone(), idx)
+            };
+            self.trait_ctx
+                .type_params
+                .insert(tp.name.clone(), (idx, type_id));
+            type_param_list.push((tp.name.clone(), type_id));
+            idx += 1;
+        }
+
+        let resolved_param_types: Vec<TypeId> = params
+            .iter()
+            .filter(|p| p.self_kind == ast::SelfKind::None)
+            .map(|p| self.resolve_type(&p.ty))
+            .collect();
+
+        self.trait_ctx.type_params = saved;
+        Some((type_param_list, resolved_param_types))
+    }
+
+    /// Returns true if `arg` is a numeric literal expression (`123`, `3.14`, `-5`)
+    /// with no explicit type annotation. These args participate in literal coercion
+    /// and should be deferred during type-arg inference's first phase.
+    pub(super) fn is_literal_number_arg(arg: Option<&Expr>) -> bool {
+        match arg {
+            Some(Expr::Literal(lit)) => matches!(lit.value, ast::Literal::Number(_)),
+            Some(Expr::Unary(unary)) if unary.op == ast::UnaryOp::Neg => matches!(
+                &unary.expr,
+                Expr::Literal(inner) if matches!(inner.value, ast::Literal::Number(_))
+            ),
+            _ => false,
+        }
+    }
+
     /// Infer type arguments for a generic static method by looking up the method in loaded modules.
     /// Works cross-module unlike `infer_type_args_from_args` (which requires same-module data).
     fn infer_type_args_from_method(
         &mut self,
         struct_name: &str,
         method_name: &str,
+        raw_args: &[Expr],
         args: &[TirExpr],
     ) -> Vec<TypeId> {
         // Find the method in loaded modules
@@ -1514,10 +1667,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         self.trait_ctx = saved_trait_ctx;
 
-        // Unify resolved param types against actual arg types
+        // Two-phase unification: typed args first, literal-number args second.
         let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::default();
-        for (param_type, arg) in resolved_param_types.iter().zip(args.iter()) {
-            self.unify_types_for_inference(*param_type, arg.type_id, &mut type_param_map);
+        for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
+            if !Self::is_literal_number_arg(raw_args.get(i)) {
+                self.unify_types_for_inference(*param_type, arg.type_id, &mut type_param_map);
+            }
+        }
+        for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
+            if Self::is_literal_number_arg(raw_args.get(i)) {
+                self.unify_types_for_inference(*param_type, arg.type_id, &mut type_param_map);
+            }
         }
         let inferred: Vec<TypeId> = type_param_list
             .iter()

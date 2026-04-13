@@ -1,0 +1,22 @@
+// Static method `two_static<T>(a: T, b: T)` should fail to compile when both
+// arguments are already-typed values of different concrete types. Wado coercion
+// only applies to literals, so the compiler cannot reconcile `u8` with `u32`.
+
+struct Holder {
+    dummy: i32,
+}
+
+impl Holder {
+    pub fn two_static<T>(a: T, b: T) -> T {
+        let _ = b;
+        return a;
+    }
+}
+
+export fn run() {
+    let r = Holder::two_static(1 as u8, 2 as u32);
+    let _ = r;
+}
+
+__DATA__
+{"compile_error": "type mismatch"}

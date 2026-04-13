@@ -1,0 +1,30 @@
+// Helper module for cross-module type param omission tests.
+
+pub fn wrap<T>(x: T) -> T {
+    return x;
+}
+
+pub fn pair_first<T, U>(a: T, b: U) -> T {
+    return a;
+}
+
+pub struct CrossBox {
+    pub dummy: i32,
+}
+
+impl CrossBox {
+    pub fn make<T>(x: T) -> T {
+        return x;
+    }
+
+    pub fn select<T>(&self, x: T) -> T {
+        let _ = self.dummy;
+        return x;
+    }
+
+    pub fn pair<T, U>(&self, a: T, b: U) -> T {
+        let _ = self.dummy;
+        let _ = b;
+        return a;
+    }
+}
