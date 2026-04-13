@@ -1230,6 +1230,158 @@ impl TypeTable {
         }
     }
 
+    /// Substitute `TypeParam` and `TypePack` indices in `type_id` using `substitution`.
+    ///
+    /// Returns a new `TypeId` with the substitutions applied. Missing indices
+    /// are permissive: unmatched `TypeParam`s remain in place so callers can
+    /// perform partial substitution during type inference, or let downstream
+    /// code report errors.
+    ///
+    /// Handles all container forms (`Ref`, `MutRef`, `BuiltinArray`,
+    /// `Function`, `GenericInstance`, `GenericResource`) including `TypePack`
+    /// expansion inside tuple `GenericInstance`s, and `AssocTypeProjection`
+    /// resolution whenever the underlying parameter becomes fully concrete
+    /// after substitution.
+    pub fn substitute_type_params(
+        &mut self,
+        type_id: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+    ) -> TypeId {
+        if substitution.is_empty() {
+            return type_id;
+        }
+        match self.get(type_id).clone() {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                substitution.get(&index).copied().unwrap_or(type_id)
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                let new_elem = self.substitute_type_params(elem, substitution);
+                if new_elem == elem {
+                    type_id
+                } else {
+                    self.intern(ResolvedType::BuiltinArray(new_elem))
+                }
+            }
+            ResolvedType::Ref(inner) => {
+                let new_inner = self.substitute_type_params(inner, substitution);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.make_ref(new_inner)
+                }
+            }
+            ResolvedType::MutRef(inner) => {
+                let new_inner = self.substitute_type_params(inner, substitution);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.make_mut_ref(new_inner)
+                }
+            }
+            ResolvedType::Function {
+                params,
+                return_type,
+                effects,
+                stores,
+            } => {
+                let new_params: Vec<TypeId> = params
+                    .iter()
+                    .map(|&p| self.substitute_type_params(p, substitution))
+                    .collect();
+                let new_return_type = self.substitute_type_params(return_type, substitution);
+                if new_params == params && new_return_type == return_type {
+                    type_id
+                } else {
+                    self.make_function(new_params, new_return_type, effects, stores)
+                }
+            }
+            ResolvedType::GenericResource {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&a| self.substitute_type_params(a, substitution))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    self.intern(ResolvedType::GenericResource {
+                        name,
+                        module_source,
+                        type_args: new_args,
+                    })
+                }
+            }
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                if Self::is_tuple_type(&name, &module_source) {
+                    // Tuples need TypePack expansion: splice pack elements
+                    // into the tuple's type-arg list.
+                    let mut new_elems: Vec<TypeId> = Vec::new();
+                    for &e in &type_args {
+                        match self.get(e).clone() {
+                            ResolvedType::TypePack { index, .. } => {
+                                if let Some(&pack_type) = substitution.get(&index) {
+                                    if let Some(pack_elems) = self.as_tuple(pack_type) {
+                                        new_elems.extend_from_slice(&pack_elems);
+                                    } else {
+                                        new_elems.push(pack_type);
+                                    }
+                                } else {
+                                    new_elems.push(e);
+                                }
+                            }
+                            _ => {
+                                new_elems.push(self.substitute_type_params(e, substitution));
+                            }
+                        }
+                    }
+                    if new_elems == type_args {
+                        type_id
+                    } else {
+                        self.make_tuple(new_elems)
+                    }
+                } else {
+                    let new_args: Vec<TypeId> = type_args
+                        .iter()
+                        .map(|&a| self.substitute_type_params(a, substitution))
+                        .collect();
+                    if new_args == type_args {
+                        type_id
+                    } else {
+                        self.make_generic_instance(name, module_source, new_args)
+                    }
+                }
+            }
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                ..
+            } => {
+                // Substitute the parameter first; only attempt projection
+                // resolution once the underlying type is fully concrete.
+                let concrete = self.substitute_type_params(param_id, substitution);
+                if !self.contains_type_param(concrete) {
+                    if let Some(resolved) = self.resolve_assoc_type(concrete, &assoc_name) {
+                        return resolved;
+                    }
+                    if let Some(resolved) = self.resolve_generic_assoc_type(concrete, &assoc_name) {
+                        return resolved;
+                    }
+                }
+                type_id
+            }
+            // Primitives, Unit, Never, Unknown, Error, Struct, Enum, Variant,
+            // Resource, Newtype, Flags, Reactive — no embedded type params.
+            _ => type_id,
+        }
+    }
+
     /// Create a generic instance (e.g., `Box<i32>`)
     pub fn make_generic_instance(
         &mut self,

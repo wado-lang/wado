@@ -12,6 +12,7 @@ mod call;
 mod closure;
 mod coercion;
 mod expr;
+mod infer;
 mod item;
 mod method_call;
 mod method_lookup;
@@ -107,6 +108,10 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Resolved param types for generic functions (`func_name` -> `param TypeIds`)
     /// Resolved in the function's own type param scope so `TypeParams` have correct ids.
     generic_function_resolved_param_types: IndexMap<String, Vec<TypeId>>,
+    /// Resolved return type for generic functions (`func_name` -> `return TypeId`)
+    /// Resolved in the function's own type param scope; used for expected-return
+    /// driven back-inference by [`infer::InferCtx::add_expected_return`].
+    generic_function_resolved_return_types: IndexMap<String, TypeId>,
     /// Generic method type parameters (`mangled_name` -> `type_params`)
     /// Used for substituting type parameters in method return types
     generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
@@ -205,6 +210,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             generic_struct_names: IndexSet::default(),
             generic_function_params: IndexMap::default(),
             generic_function_resolved_param_types: IndexMap::default(),
+            generic_function_resolved_return_types: IndexMap::default(),
             generic_method_params: IndexMap::default(),
             generic_method_resolved_param_types: IndexMap::default(),
             wasi_registry,
@@ -452,6 +458,18 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Third pass: resolve functions
         let _resolve_funcs_span = self.logger.span("resolve/resolve_funcs");
         let mut tir_module = TirModule::new(module_source);
+
+        // Pre-populate the generic-function inference caches for every
+        // generic function in the current module. This allows same-module
+        // forward references (e.g. `outer<T>` calling `inner<T>` defined
+        // later in the file) to infer type arguments at the call site
+        // during body resolution, without relying on a later
+        // monomorphization-time fallback.
+        for item in &module.items {
+            if let Item::Function(func) = item {
+                self.precompute_generic_function_cache(func);
+            }
+        }
 
         for item in &module.items {
             match item {

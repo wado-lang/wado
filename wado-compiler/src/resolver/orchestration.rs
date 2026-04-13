@@ -273,7 +273,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             })
                             .collect();
                         // Collect TypeIds for struct's own type params in declaration order.
-                        // This allows infer_type_args_from_fields to fill phantom type params
+                        // This allows infer_struct_type_args to fill phantom type params
                         // that don't appear in any field (e.g., D in struct DirMap<D, V>).
                         let type_param_type_ids: Vec<TypeId> = type_params
                             .iter()
@@ -709,6 +709,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 generic_struct_names: IndexSet::default(),
                 generic_function_params: IndexMap::default(),
                 generic_function_resolved_param_types: IndexMap::default(),
+                generic_function_resolved_return_types: IndexMap::default(),
                 generic_method_params: IndexMap::default(),
                 generic_method_resolved_param_types: IndexMap::default(),
                 wasi_registry,

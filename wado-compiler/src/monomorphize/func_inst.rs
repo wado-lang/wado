@@ -189,7 +189,7 @@ impl Monomorphizer {
                 // Check if this is a call to a generic function with explicit type args
                 if !type_args.is_empty() && generic_functions.contains_key(&qualified_func_name) {
                     let key = InstantiationKey {
-                        name: qualified_func_name.clone(),
+                        name: qualified_func_name,
                         module_source: func.module_source.clone(),
                         impl_type_args: vec![],
                         method_type_args: type_args.clone(),
@@ -197,33 +197,6 @@ impl Monomorphizer {
                     };
                     let mangled = self.function_instantiation_name(&key, type_table);
                     self.try_queue_function(key, mangled);
-                }
-                // Handle implicit generic calls (type_args inferred from arguments)
-                // This occurs when a monomorphized generic function forwards its type
-                // parameter to another generic function call.
-                // Only for free functions — method calls have their own resolution path.
-                if type_args.is_empty()
-                    && func.method_info.is_none()
-                    && func.monomorph_info.is_none()
-                    && let Some(generic_func) = generic_functions.get(&qualified_func_name)
-                {
-                    let gf = generic_func.borrow();
-                    if gf.has_real_type_params() {
-                        let inferred = infer_type_args_from_call(&gf, args, type_table);
-                        if !inferred.is_empty()
-                            && inferred.iter().all(|t| !type_table.contains_type_param(*t))
-                        {
-                            let key = InstantiationKey {
-                                name: qualified_func_name.clone(),
-                                module_source: func.module_source.clone(),
-                                impl_type_args: vec![],
-                                method_type_args: inferred,
-                                method_info: func.method_info.clone(),
-                            };
-                            let mangled = self.function_instantiation_name(&key, type_table);
-                            self.try_queue_function(key, mangled);
-                        }
-                    }
                 }
                 // Also check if this is a static method call on a monomorphized struct
                 // (formerly StaticCall). Use method_info metadata to get struct/method name.
@@ -3811,86 +3784,5 @@ fn trait_method_to_binary_op(trait_name: Option<&str>, method_name: &str) -> Opt
         (Some("Shr"), "shr") => Some(TirBinaryOp::Shr),
         (Some("Eq"), "eq") => Some(TirBinaryOp::Eq),
         _ => None,
-    }
-}
-
-/// Infer type arguments for a generic function call from concrete argument types.
-/// Used when a monomorphized generic function calls another generic function
-/// without explicit type arguments (type params forwarded implicitly).
-fn infer_type_args_from_call(
-    generic_func: &TirFunction,
-    args: &[CallArg],
-    type_table: &TypeTable,
-) -> Vec<TypeId> {
-    let real_params: Vec<&crate::tir::TirTypeParam> = generic_func
-        .type_params
-        .iter()
-        .filter(|p| !p.is_effect)
-        .collect();
-    if real_params.is_empty() {
-        return vec![];
-    }
-
-    let mut result = vec![TypeTable::UNIT; real_params.len()];
-    let mut resolved = vec![false; real_params.len()];
-    let offset = generic_func.impl_type_params.len() as u32;
-
-    // Match each generic param against the corresponding concrete arg
-    for (param, arg) in generic_func.params.iter().zip(args.iter()) {
-        infer_from_type(
-            param.type_id,
-            arg.expr.type_id,
-            &real_params,
-            offset,
-            &mut result,
-            &mut resolved,
-            type_table,
-        );
-    }
-
-    // If all type params resolved, return them; otherwise return empty
-    if resolved.iter().all(|r| *r) {
-        result
-    } else {
-        vec![]
-    }
-}
-
-fn infer_from_type(
-    generic_type: TypeId,
-    concrete_type: TypeId,
-    real_params: &[&crate::tir::TirTypeParam],
-    offset: u32,
-    result: &mut [TypeId],
-    resolved: &mut [bool],
-    type_table: &TypeTable,
-) {
-    match type_table.get(generic_type) {
-        ResolvedType::TypeParam { index, .. } => {
-            // Find which real_param this is
-            for (i, rp) in real_params.iter().enumerate() {
-                if rp.index + offset == *index && !resolved[i] {
-                    result[i] = concrete_type;
-                    resolved[i] = true;
-                    return;
-                }
-            }
-        }
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            let concrete_inner = match type_table.get(concrete_type) {
-                ResolvedType::Ref(i) | ResolvedType::MutRef(i) => *i,
-                _ => return,
-            };
-            infer_from_type(
-                *inner,
-                concrete_inner,
-                real_params,
-                offset,
-                result,
-                resolved,
-                type_table,
-            );
-        }
-        _ => {}
     }
 }

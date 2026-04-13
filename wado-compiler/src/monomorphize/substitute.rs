@@ -179,7 +179,26 @@ impl Monomorphizer {
         }
     }
 
-    /// Substitute type parameters in a type with concrete types
+    /// Substitute type parameters in a type with concrete types.
+    ///
+    /// Walks `type_id` recursively, delegating the leaf cases (`TypeParam`,
+    /// `TypePack`, `AssocTypeProjection`, `GenericResource`) to
+    /// [`TypeTable::substitute_type_params`] and handling container /
+    /// `GenericInstance` cases inline so that a monomorphize-specific
+    /// struct-rewrite happens at every level: after recursively
+    /// substituting a `GenericInstance`'s type arguments, if an
+    /// already-monomorphized struct with the resulting mangled name exists
+    /// in the type table, the type is rewritten to that struct directly.
+    /// This keeps later phases (WIR build, variant-case registration)
+    /// looking up the same mangled name as was registered at
+    /// struct-instantiation time, including for nested references such as
+    /// `Option<&mut TreeMapNode<K>>`.
+    ///
+    /// A `GenericInstance` whose `type_args` are empty — which can occur
+    /// when e.g. `Container { .. }` inside `Container<T>::new()` is typed
+    /// as `GenericInstance` without spelling out its type arguments — is
+    /// resolved to an existing monomorphized struct using the substitution
+    /// map itself.
     pub fn substitute_type(
         &self,
         type_id: TypeId,
@@ -187,18 +206,6 @@ impl Monomorphizer {
         type_table: &mut TypeTable,
     ) -> TypeId {
         match type_table.get(type_id).clone() {
-            ResolvedType::TypeParam { index, name } => {
-                // Direct substitution
-                *substitution.get(&index).unwrap_or_else(|| {
-                    panic!("TypeParam `{name}` (index {index}) not found in substitution map")
-                })
-            }
-            ResolvedType::TypePack { index, name } => {
-                // Direct substitution (the substituted type is typically a tuple)
-                *substitution.get(&index).unwrap_or_else(|| {
-                    panic!("TypePack `..{name}` (index {index}) not found in substitution map")
-                })
-            }
             ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.substitute_type(elem, substitution, type_table);
                 type_table.intern(ResolvedType::BuiltinArray(new_elem))
@@ -217,7 +224,6 @@ impl Monomorphizer {
                 effects,
                 stores,
             } => {
-                // Substitute type parameters in function parameter types and return type
                 let new_params: Vec<TypeId> = params
                     .iter()
                     .map(|&p| self.substitute_type(p, substitution, type_table))
@@ -230,44 +236,33 @@ impl Monomorphizer {
                 module_source,
                 type_args,
             } => {
-                // Handle invalid GenericInstance with empty type_args
-                // This can occur when a generic type is referenced without type arguments in its own methods
-                // e.g., in Container<T>::new(), the return value Container { ... } has type Container<T>
-                // but may be represented as GenericInstance with empty type_args
                 if type_args.is_empty() {
-                    // If we're in a substitution context (substitution map is not empty),
-                    // try to infer the type args from the substitution
                     if !substitution.is_empty() {
-                        // Build mangled name using ALL values in substitution map
-                        // Sort by param index to get correct order
                         let mut indexed_args: Vec<(u32, TypeId)> =
                             substitution.iter().map(|(&idx, &tid)| (idx, tid)).collect();
                         indexed_args.sort_by_key(|(idx, _)| *idx);
-
-                        // Build name using new format: Name<Type1,Type2>
                         let type_names: Vec<String> = indexed_args
                             .iter()
                             .map(|(_, arg_id)| type_table.mangle_type_name(*arg_id))
                             .collect();
                         let mangled_name = mangle_generic_name(&name, &type_names);
-
-                        // Look for monomorphized struct with this name via O(1) index
                         if let Some(tid) =
                             type_table.find_struct_by_name(&mangled_name, &module_source)
                         {
                             return tid;
                         }
                     }
-
-                    // Fallback: look for plain struct by name
                     if let Some(tid) = type_table.find_struct_by_name(&name, &module_source) {
                         return tid;
                     }
-                    // If not found, just return the original type_id
                     return type_id;
                 }
 
-                // Tuples need TypePack expansion: splice pack elements into the type args
+                // Tuples need TypePack expansion: splice pack elements
+                // into the type args. Non-pack args are substituted
+                // recursively through `self.substitute_type` so that
+                // nested `GenericInstance`s inside the tuple still get
+                // their monomorphized-struct rewrite.
                 if TypeTable::is_tuple_type(&name, &module_source) {
                     let mut new_elems: Vec<TypeId> = Vec::new();
                     for &e in &type_args {
@@ -296,53 +291,29 @@ impl Monomorphizer {
                     return type_table.make_tuple(new_elems);
                 }
 
-                // Recursively substitute in nested generic instances
+                // Recursively substitute nested type args so inner
+                // GenericInstances get rewritten to their monomorphized
+                // Struct forms when available.
                 let new_args: Vec<TypeId> = type_args
                     .iter()
                     .map(|&arg| self.substitute_type(arg, substitution, type_table))
                     .collect();
 
-                // Check if there's already a monomorphized struct for this instance
-                // Build the mangled name: Container<i32> (using type names)
                 let type_names: Vec<String> = new_args
                     .iter()
                     .map(|&arg| type_table.mangle_type_name(arg))
                     .collect();
                 let mangled_name = mangle_generic_name(&name, &type_names);
-
-                // Look for existing struct with this name via O(1) index
                 if let Some(tid) = type_table.find_struct_by_name(&mangled_name, &module_source) {
                     return tid;
                 }
 
-                // Fallback to GenericInstance if no monomorphized struct found
                 type_table.make_generic_instance(name, module_source, new_args)
             }
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_name,
-                ..
-            } => {
-                // Substitute the underlying type param to get the concrete type
-                let concrete_id = self.substitute_type(param_id, substitution, type_table);
-                if concrete_id != param_id {
-                    // Direct lookup for pre-registered concrete types
-                    if let Some(resolved) = type_table.resolve_assoc_type(concrete_id, &assoc_name)
-                    {
-                        return resolved;
-                    }
-                    // Fallback for GenericInstance types: resolve using generic definitions
-                    if let Some(resolved) =
-                        type_table.resolve_generic_assoc_type(concrete_id, &assoc_name)
-                    {
-                        return resolved;
-                    }
-                }
-                // Fallback: return the original type (projection unresolved)
-                type_id
-            }
-            // Other types don't contain type parameters
-            _ => type_id,
+            // Delegate leaf cases (TypeParam, TypePack, GenericResource,
+            // AssocTypeProjection, and other non-composite types) to the
+            // shared implementation.
+            _ => type_table.substitute_type_params(type_id, substitution),
         }
     }
 
