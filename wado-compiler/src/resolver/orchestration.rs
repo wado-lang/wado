@@ -709,6 +709,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 generic_struct_names: IndexSet::default(),
                 generic_function_params: IndexMap::default(),
                 generic_function_resolved_param_types: IndexMap::default(),
+                generic_function_resolved_return_types: IndexMap::default(),
                 generic_method_params: IndexMap::default(),
                 generic_method_resolved_param_types: IndexMap::default(),
                 wasi_registry,

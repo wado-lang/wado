@@ -340,6 +340,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
             declared_return_type
         };
 
+        // Cache the type-param-scoped return type for generic-inference back-inference
+        // (see `infer::InferCtx::add_expected_return`). Stored before the `function_return_types`
+        // update below because that map is shared with non-generic callers and may be overwritten
+        // by external registrations (trait methods, etc.) over time.
+        if has_real_type_params {
+            scope
+                .generic_function_resolved_return_types
+                .insert(func.name.clone(), declared_return_type);
+        }
+
         // Update the function_return_types with the resolved return type
         // (This replaces the potentially incorrect type from static resolution)
         scope

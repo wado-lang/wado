@@ -12,6 +12,7 @@ mod call;
 mod closure;
 mod coercion;
 mod expr;
+mod infer;
 mod item;
 mod method_call;
 mod method_lookup;
@@ -107,6 +108,10 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Resolved param types for generic functions (`func_name` -> `param TypeIds`)
     /// Resolved in the function's own type param scope so `TypeParams` have correct ids.
     generic_function_resolved_param_types: IndexMap<String, Vec<TypeId>>,
+    /// Resolved return type for generic functions (`func_name` -> `return TypeId`)
+    /// Resolved in the function's own type param scope; used for expected-return
+    /// driven back-inference by [`infer::InferCtx::add_expected_return`].
+    generic_function_resolved_return_types: IndexMap<String, TypeId>,
     /// Generic method type parameters (`mangled_name` -> `type_params`)
     /// Used for substituting type parameters in method return types
     generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
@@ -205,6 +210,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             generic_struct_names: IndexSet::default(),
             generic_function_params: IndexMap::default(),
             generic_function_resolved_param_types: IndexMap::default(),
+            generic_function_resolved_return_types: IndexMap::default(),
             generic_method_params: IndexMap::default(),
             generic_method_resolved_param_types: IndexMap::default(),
             wasi_registry,

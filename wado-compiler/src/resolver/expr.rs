@@ -64,7 +64,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Expr::Closure(closure) => self.resolve_closure(closure, ctx),
             Expr::TemplateString(template) => self.resolve_template_string(template, ctx),
             Expr::Cast(cast) => self.resolve_cast(cast, ctx),
-            Expr::StructLiteral(struct_lit) => self.resolve_struct_literal(struct_lit, ctx),
+            Expr::StructLiteral(struct_lit) => {
+                self.resolve_struct_literal(struct_lit, ctx, expected_type)
+            }
             Expr::CompoundAssign(compound) => self.resolve_compound_assign(compound, ctx),
             Expr::ComparisonChain(chain) => self.resolve_comparison_chain(chain, ctx),
             Expr::TupleLiteral(tuple_lit) => {
@@ -2123,6 +2125,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Handle implicit struct literals (name is None) — anonymous struct inference
         let Some(name) = &struct_lit.name else {
@@ -2309,8 +2312,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .generic_struct_names
             .contains(&struct_name)
         {
-            // This is a generic struct - infer type arguments from field values
-            let type_args = self.infer_type_args_from_fields(&struct_name, &fields);
+            // This is a generic struct - infer type arguments from field values.
+            // `expected_type` lets the caller's annotation (e.g.
+            // `let x: Container<i32> = Container { value: 0 }`) fill phantom
+            // parameters that never appear in a field, matching the
+            // behaviour of plain function calls.
+            let type_args =
+                self.infer_type_args_from_fields(&struct_name, &fields, expected_type);
 
             // Substitute type parameters in field value types.
             // This is necessary for empty array literals in self-referential fields
@@ -2525,227 +2533,85 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
-    /// Infer type arguments for a generic struct from field values
+    /// Infer type arguments for a generic struct from its field values, with
+    /// optional expected-type driven back-inference for phantom parameters.
+    ///
+    /// Runs [`super::infer::InferCtx`] over the struct's declared field types
+    /// against the literal's resolved field values. If `expected_type` is a
+    /// `GenericInstance` of the same struct (e.g. the caller wrote
+    /// `let m: DirMap<Direction, i32> = DirMap { values: [] }`), the expected
+    /// type-arguments are unified against the struct's declaration-order
+    /// type-parameter ids so that phantom parameters (those that appear in no
+    /// field) still end up concrete.
+    ///
+    /// Unlike the function/method inference sites this returns the *partial*
+    /// result — unbound parameters fall back to their original `TypeParam`
+    /// ids, which the monomorphizer then substitutes from the surrounding
+    /// context. This matches the historical "phantoms are OK" behaviour.
     pub(super) fn infer_type_args_from_fields(
         &self,
         struct_name: &str,
         fields: &[TirStructField],
+        expected_type: Option<TypeId>,
     ) -> Vec<TypeId> {
-        // Get the generic struct's field type information
-        let Some(struct_info) = self.struct_fields.get(struct_name) else {
+        let Some(struct_info) = self.struct_fields.get(struct_name).cloned() else {
             return vec![];
         };
+        if struct_info.type_param_type_ids.is_empty() {
+            return vec![];
+        }
 
-        // Build a map from type param TypeId to concrete TypeId
-        let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::default();
+        let mut infer = super::infer::InferCtx::new(
+            &self.type_table,
+            struct_info.type_param_type_ids.clone(),
+        );
 
-        for (struct_field, (_, expected_type_id, _)) in fields.iter().zip(struct_info.fields.iter())
+        for (struct_field, (_, expected_field_type, _)) in
+            fields.iter().zip(struct_info.fields.iter())
         {
-            let actual_type_id = struct_field.value.type_id;
-
-            // Try to unify expected_type with actual_type to extract type params
-            self.unify_types_for_inference(*expected_type_id, actual_type_id, &mut type_param_map);
+            infer.add(*expected_field_type, struct_field.value.type_id);
         }
 
-        // Collect type args in order (by TypeParam index)
-        let mut type_args: Vec<(u32, TypeId)> = type_param_map
-            .iter()
-            .filter_map(|(&param_id, &concrete_id)| {
-                if let ResolvedType::TypeParam { index, .. } =
-                    self.type_table.borrow().get(param_id)
+        // Back-infer from the caller's expected type: if it's a GenericInstance
+        // of this same struct, unify its type-args against the declaration-order
+        // type params so phantoms (fields-less params) get concrete bindings.
+        if let Some(expected) = expected_type {
+            let expected_resolved = self.type_table.borrow().get(expected).clone();
+            if let ResolvedType::GenericInstance {
+                name,
+                type_args: expected_args,
+                ..
+            } = expected_resolved
+                && name == struct_info.name
+                && expected_args.len() == struct_info.type_param_type_ids.len()
+            {
+                for (&param_id, &expected_arg) in struct_info
+                    .type_param_type_ids
+                    .iter()
+                    .zip(expected_args.iter())
                 {
-                    Some((*index, concrete_id))
-                } else {
-                    None
+                    infer.add_expected_return(param_id, expected_arg);
                 }
-            })
-            .collect();
-
-        type_args.sort_by_key(|(index, _)| *index);
-
-        // If the struct has known type_param_type_ids, produce a full-length vector.
-        // This handles phantom type parameters (e.g., D in `struct DirMap<D, V>` where D
-        // is not used in any field). Without this, the inferred vector would be sparse
-        // (e.g., [V] instead of [D, V]), causing the monomorphizer to create `DirMap<i32>`
-        // instead of `DirMap<Direction,i32>`.
-        let n = struct_info.type_param_type_ids.len();
-        if n > 0 {
-            let inferred_map: IndexMap<u32, TypeId> = type_args.into_iter().collect();
-            return (0..n as u32)
-                .map(|i| {
-                    inferred_map
-                        .get(&i)
-                        .copied()
-                        .unwrap_or(struct_info.type_param_type_ids[i as usize])
-                })
-                .collect();
+            }
         }
 
-        type_args.into_iter().map(|(_, type_id)| type_id).collect()
+        let (inferred, _) = infer.solve_with_phantoms();
+        inferred
     }
 
     /// Unify expected type with actual type to extract type parameter mappings.
-    /// This handles nested generic types like Array<T> where T is a type param.
+    ///
+    /// Thin wrapper over [`super::infer::unify`] — the unifier lives in
+    /// `resolver::infer` so that all five generic-inference call sites
+    /// (function/method/struct/variant/static-method) share a single
+    /// structural matcher.
     pub(super) fn unify_types_for_inference(
         &self,
         expected: TypeId,
         actual: TypeId,
         type_param_map: &mut IndexMap<TypeId, TypeId>,
     ) {
-        let expected_type = self.type_table.borrow().get(expected).clone();
-        let actual_type = self.type_table.borrow().get(actual).clone();
-
-        match (&expected_type, &actual_type) {
-            // Direct type parameter mapping
-            (ResolvedType::TypeParam { .. }, _) => {
-                // Only insert if we don't already have a concrete mapping for this type param.
-                // This prevents later fields with self-referential types (like Array<&Node<K>>)
-                // from overwriting earlier correct mappings (like K -> String) with
-                // incorrect mappings (like K -> K).
-                type_param_map.entry(expected).or_insert(actual);
-            }
-            // Tuple types with type pack: e.g., [A, ..T, B] matched against [i32, String, f64, bool]
-            // Must come before the generic GenericInstance arm to match first.
-            (
-                ResolvedType::GenericInstance {
-                    name: expected_name,
-                    module_source: expected_module_source,
-                    type_args: expected_elems,
-                },
-                ResolvedType::GenericInstance {
-                    name: actual_name,
-                    module_source: actual_module_source,
-                    type_args: actual_elems,
-                },
-            ) if TypeTable::is_tuple_type(expected_name, expected_module_source)
-                && TypeTable::is_tuple_type(actual_name, actual_module_source)
-                && expected_elems.iter().any(|e| {
-                    matches!(
-                        self.type_table.borrow().get(*e),
-                        ResolvedType::TypePack { .. }
-                    )
-                }) =>
-            {
-                // Find the pack index
-                let pack_idx = expected_elems
-                    .iter()
-                    .position(|e| {
-                        matches!(
-                            self.type_table.borrow().get(*e),
-                            ResolvedType::TypePack { .. }
-                        )
-                    })
-                    .unwrap();
-
-                let fixed_before = pack_idx;
-                let fixed_after = expected_elems.len() - pack_idx - 1;
-                let total_fixed = fixed_before + fixed_after;
-
-                if actual_elems.len() >= total_fixed {
-                    // Unify fixed elements before the pack
-                    for i in 0..fixed_before {
-                        self.unify_types_for_inference(
-                            expected_elems[i],
-                            actual_elems[i],
-                            type_param_map,
-                        );
-                    }
-                    // Unify fixed elements after the pack
-                    for i in 0..fixed_after {
-                        self.unify_types_for_inference(
-                            expected_elems[pack_idx + 1 + i],
-                            actual_elems[actual_elems.len() - fixed_after + i],
-                            type_param_map,
-                        );
-                    }
-                    // Map the TypePack to a tuple of the middle elements
-                    let pack_elements: Vec<TypeId> =
-                        actual_elems[fixed_before..actual_elems.len() - fixed_after].to_vec();
-                    let pack_tuple = self.type_table.borrow_mut().make_tuple(pack_elements);
-                    type_param_map
-                        .entry(expected_elems[pack_idx])
-                        .or_insert(pack_tuple);
-                }
-            }
-            // Generic instance (including tuples): unify type arguments recursively
-            (
-                ResolvedType::GenericInstance {
-                    name: expected_name,
-                    type_args: expected_args,
-                    ..
-                },
-                ResolvedType::GenericInstance {
-                    name: actual_name,
-                    type_args: actual_args,
-                    ..
-                },
-            ) if expected_name == actual_name && expected_args.len() == actual_args.len() => {
-                for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
-                    self.unify_types_for_inference(exp_arg, act_arg, type_param_map);
-                }
-            }
-            // Array<K> (GenericInstance) with Tuple (homogeneous) - infer K from tuple element type
-            (
-                ResolvedType::GenericInstance {
-                    name,
-                    type_args: expected_args,
-                    ..
-                },
-                ResolvedType::GenericInstance {
-                    name: actual_name,
-                    module_source: actual_module_source,
-                    type_args: actual_elems,
-                },
-            ) if name == "Array"
-                && TypeTable::is_tuple_type(actual_name, actual_module_source)
-                && expected_args.len() == 1
-                && !actual_elems.is_empty() =>
-            {
-                // Check if all tuple elements have the same type
-                let first_elem_type = actual_elems[0];
-                let all_same = actual_elems.iter().all(|&e| e == first_elem_type);
-                if all_same {
-                    // Unify Array's element type param with the tuple's element type
-                    self.unify_types_for_inference(
-                        expected_args[0],
-                        first_elem_type,
-                        type_param_map,
-                    );
-                }
-            }
-            // Array types (Wado's Array<T>)
-            (
-                ResolvedType::BuiltinArray(expected_elem),
-                ResolvedType::BuiltinArray(actual_elem),
-            ) => {
-                self.unify_types_for_inference(*expected_elem, *actual_elem, type_param_map);
-            }
-            // Ref types
-            (ResolvedType::Ref(expected_inner), ResolvedType::Ref(actual_inner))
-            | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
-                self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
-            }
-            // Function types: unify param types and return type
-            (
-                ResolvedType::Function {
-                    params: expected_params,
-                    return_type: expected_ret,
-                    ..
-                },
-                ResolvedType::Function {
-                    params: actual_params,
-                    return_type: actual_ret,
-                    ..
-                },
-            ) if expected_params.len() == actual_params.len() => {
-                for (&exp, &act) in expected_params.iter().zip(actual_params.iter()) {
-                    self.unify_types_for_inference(exp, act, type_param_map);
-                }
-                self.unify_types_for_inference(*expected_ret, *actual_ret, type_param_map);
-            }
-            // Other cases: no type params to extract
-            _ => {}
-        }
+        super::infer::unify(&self.type_table, expected, actual, type_param_map);
     }
 
     /// Check if a type contains a `TypePack` (variadic pack parameter).
