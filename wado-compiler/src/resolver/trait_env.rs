@@ -4,13 +4,16 @@
 //! It provides O(1) lookup of trait implementations by type name and trait name,
 //! replacing linear scans across all modules.
 
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
+use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
 
+use super::Resolver;
 use super::types::TypeError;
 
 /// Pre-built index: type name → list of (`ModuleSource`, item index) for trait impl blocks.
@@ -390,9 +393,9 @@ fn check_all_orphan_rules(
 /// Mutable trait resolution context scoped to the current resolution site.
 ///
 /// Groups all state that changes when entering/leaving generic scopes
-/// (impl blocks, trait method lookups, etc). By cloning this struct before
-/// entering a scope and restoring it afterward, we avoid scattered save/restore
-/// patterns and make the scope boundary explicit.
+/// (impl blocks, trait method lookups, etc). Use [`Resolver::enter_fresh_type_param_scope`]
+/// or [`Resolver::enter_inherited_type_param_scope`] to mutate this safely with RAII
+/// restore on drop.
 #[derive(Clone, Default)]
 pub(super) struct TraitContext {
     /// Type parameters currently in scope (name → (index, `TypeId`)).
@@ -406,6 +409,105 @@ pub(super) struct TraitContext {
     pub(super) assoc_type_bindings: IndexMap<String, TypeId>,
     /// Current `Self` type in scope (the type being implemented in an impl block).
     pub(super) self_type: Option<TypeId>,
+}
+
+/// RAII guard that restores `Resolver::trait_ctx` to its saved value on drop.
+///
+/// Implements `Deref<Target = Resolver>` so it can be used as a transparent
+/// resolver handle inside the scope. Restoration is panic-safe: even if the
+/// scope body panics, drop still runs and the parent context is reinstated.
+///
+/// Use [`Resolver::enter_inherited_type_param_scope`] to enter a new scope.
+/// It preserves the current `trait_ctx` so the child scope can register new
+/// entries on top of the parent's. Callers that want a clean slate for a
+/// specific field (matching the legacy `mem::take` pattern) should clear that
+/// field on `scope.trait_ctx` after entering.
+pub(super) struct TypeParamScope<'r, 'a, H: CompilerHost> {
+    resolver: &'r mut Resolver<'a, H>,
+    saved: TraitContext,
+}
+
+impl<'a, H: CompilerHost> Deref for TypeParamScope<'_, 'a, H> {
+    type Target = Resolver<'a, H>;
+    fn deref(&self) -> &Resolver<'a, H> {
+        self.resolver
+    }
+}
+
+impl<'a, H: CompilerHost> DerefMut for TypeParamScope<'_, 'a, H> {
+    fn deref_mut(&mut self) -> &mut Resolver<'a, H> {
+        self.resolver
+    }
+}
+
+impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
+    /// Access the saved (parent) `TraitContext`. Useful when setting up an
+    /// inner scope for an impl block whose impl type refers to one of the
+    /// parent's type params (blanket impl / `&T` impl / variadic impl).
+    pub(super) fn saved(&self) -> &TraitContext {
+        &self.saved
+    }
+}
+
+impl<H: CompilerHost> Drop for TypeParamScope<'_, '_, H> {
+    fn drop(&mut self) {
+        self.resolver.trait_ctx = std::mem::take(&mut self.saved);
+    }
+}
+
+impl<'a, H: CompilerHost> Resolver<'a, H> {
+    /// Enter an inherited type-param scope. The current `trait_ctx` is cloned
+    /// into the saved slot, but left in place so the inner work can register
+    /// additional type params on top of what the parent already had. The
+    /// original context is restored when the returned guard is dropped.
+    ///
+    /// Callers that want a clean slate (matching the legacy
+    /// `mem::take(&mut self.trait_ctx.type_params)` pattern) should clear the
+    /// specific fields they want to reset on `scope.trait_ctx` after entering
+    /// the scope — only the fields they touch need to be cleared, all others
+    /// are inherited from the parent scope.
+    pub(super) fn enter_inherited_type_param_scope(&mut self) -> TypeParamScope<'_, 'a, H> {
+        let saved = self.trait_ctx.clone();
+        TypeParamScope {
+            resolver: self,
+            saved,
+        }
+    }
+
+    /// Register a list of generic parameters as `TypeParam` / `TypePack` ids
+    /// in the current `trait_ctx`, starting from `offset`. Skips effect params.
+    /// Returns the next free index (i.e. `offset + non_effect_count`).
+    ///
+    /// Trait bounds attached to each parameter are also recorded in
+    /// `type_param_bounds` so trait-method lookups on the parameter work.
+    pub(super) fn register_generic_params(
+        &mut self,
+        params: &[ast::GenericParam],
+        offset: u32,
+    ) -> u32 {
+        let mut idx = offset;
+        for tp in params.iter().filter(|p| !p.is_effect) {
+            let type_id = if tp.is_pack {
+                self.type_table
+                    .borrow_mut()
+                    .make_type_pack(tp.name.clone(), idx)
+            } else {
+                self.type_table
+                    .borrow_mut()
+                    .make_type_param(tp.name.clone(), idx)
+            };
+            self.trait_ctx
+                .type_params
+                .insert(tp.name.clone(), (idx, type_id));
+            if !tp.bounds.is_empty() {
+                self.trait_ctx
+                    .type_param_bounds
+                    .insert(tp.name.clone(), tp.bounds.clone());
+            }
+            idx += 1;
+        }
+        idx
+    }
 }
 
 /// Extract a type name from an AST type without needing a Resolver instance.

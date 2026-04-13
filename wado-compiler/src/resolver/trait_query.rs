@@ -451,9 +451,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let Some((method, trait_assoc_types, _module_source)) = found_trait_method {
                 // Save the entire trait context; we'll modify self_type, assoc_type_bindings,
                 // type_params, and type_param_bounds during this resolution scope.
-                let saved_trait_ctx = self.trait_ctx.clone();
-                self.trait_ctx.self_type = Some(self_type_id);
-                self.trait_ctx.assoc_type_bindings.clear();
+                let mut scope = self.enter_inherited_type_param_scope();
+                scope.trait_ctx.self_type = Some(self_type_id);
+                scope.trait_ctx.assoc_type_bindings.clear();
 
                 // Set up associated type bindings as projections so that
                 // Self::AssocType resolves to AssocTypeProjection(self_type_id, "AssocType").
@@ -461,7 +461,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // associated type chains.
                 // Determine the TypeParam name for Self, if self_type is a TypeParam.
                 let self_type_param_name = {
-                    let resolved = self.type_table.borrow().get(self_type_id).clone();
+                    let resolved = scope.type_table.borrow().get(self_type_id).clone();
                     if let ResolvedType::TypeParam { name, .. } = resolved {
                         Some(name)
                     } else {
@@ -472,7 +472,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Check if self_type has a direct assoc_type_binding for this name.
                     // This handles the case: self_type = I::Iter which has ("Item", u8_typeid).
                     let directly_bound = {
-                        let resolved = self.type_table.borrow().get(self_type_id).clone();
+                        let resolved = scope.type_table.borrow().get(self_type_id).clone();
                         if let ResolvedType::AssocTypeProjection {
                             assoc_type_bindings,
                             ..
@@ -492,19 +492,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         // Compute assoc_type_bindings by resolving Self::X references in the
                         // assoc type's bounds. e.g., Iterator<Item = Self::Item> with Self = I
                         // and I: IntoIterator<Item = u8> gives [("Item", u8)].
-                        let atb = self.compute_assoc_type_bindings_from_trait_bounds(
+                        let atb = scope.compute_assoc_type_bindings_from_trait_bounds(
                             self_type_id,
                             self_type_param_name.as_deref(),
                             &assoc_decl.bounds,
                         );
-                        self.type_table.borrow_mut().make_assoc_type_projection(
+                        scope.type_table.borrow_mut().make_assoc_type_projection(
                             self_type_id,
                             assoc_decl.name.clone(),
                             bound_names,
                             atb,
                         )
                     });
-                    self.trait_ctx
+                    scope
+                        .trait_ctx
                         .assoc_type_bindings
                         .insert(assoc_decl.name.clone(), projection);
                 }
@@ -516,15 +517,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // We use index 0, 1, ... because find_method_in_trait_bounds is only called
                 // for TypeParam/AssocTypeProjection receivers, where impl_offset = 0.
                 for (index, param) in method.type_params.iter().enumerate() {
-                    let type_id = self
+                    let type_id = scope
                         .type_table
                         .borrow_mut()
                         .make_type_param(param.name.clone(), index as u32);
-                    self.trait_ctx
+                    scope
+                        .trait_ctx
                         .type_params
                         .insert(param.name.clone(), (index as u32, type_id));
                     if !param.bounds.is_empty() {
-                        self.trait_ctx
+                        scope
+                            .trait_ctx
                             .type_param_bounds
                             .insert(param.name.clone(), param.bounds.clone());
                     }
@@ -533,14 +536,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let return_type = method
                     .return_type
                     .as_ref()
-                    .map(|t| self.resolve_type(t))
+                    .map(|t| scope.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
                 let self_kind = method
                     .params
                     .first()
                     .map(|p| p.self_kind)
                     .unwrap_or(ast::SelfKind::None);
-                let param_types = self.extract_param_types(&method.params);
+                let param_types = scope.extract_param_types(&method.params);
                 let param_is_mut: Vec<bool> = method
                     .params
                     .iter()
@@ -548,7 +551,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|p| p.is_mut)
                     .collect();
 
-                self.trait_ctx = saved_trait_ctx;
+                drop(scope);
 
                 return Some((
                     trait_name.clone(),
@@ -759,7 +762,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         for info in impl_infos {
-            let saved_trait_ctx = self.trait_ctx.clone();
+            let mut scope = self.enter_inherited_type_param_scope();
 
             // Bind impl type params to concrete type args.
             // For `impl<T> IntoIterator for Array<T>` with Array<u8>:
@@ -767,7 +770,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // → set current_type_params["T"] = (0, u8_typeid)
             for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {
                 if let Some(&concrete_arg) = concrete_type_args.get(i) {
-                    self.trait_ctx
+                    scope
+                        .trait_ctx
                         .type_params
                         .insert(tp_name.clone(), (i as u32, concrete_arg));
                 }
@@ -775,7 +779,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Add bounds from type param declarations
             for param in &info.type_params {
                 if !param.bounds.is_empty() {
-                    self.trait_ctx
+                    scope
+                        .trait_ctx
                         .type_param_bounds
                         .entry(param.name.clone())
                         .or_default()
@@ -785,17 +790,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Resolve and register each associated type in this substituted context
             for binding in &info.assoc_types {
-                let resolved_id = self.resolve_type(&binding.ty);
-                if !self.type_table.borrow().contains_type_param(resolved_id) {
-                    self.type_table.borrow_mut().register_assoc_type_resolution(
-                        concrete_type_id,
-                        binding.name.clone(),
-                        resolved_id,
-                    );
+                let resolved_id = scope.resolve_type(&binding.ty);
+                if !scope.type_table.borrow().contains_type_param(resolved_id) {
+                    scope
+                        .type_table
+                        .borrow_mut()
+                        .register_assoc_type_resolution(
+                            concrete_type_id,
+                            binding.name.clone(),
+                            resolved_id,
+                        );
                 }
             }
 
-            self.trait_ctx = saved_trait_ctx;
+            drop(scope);
         }
 
         // Also check blanket impls: `impl<I: Trait> OtherTrait for I`.
@@ -839,31 +847,36 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         for info in blanket_infos {
-            let saved_trait_ctx = self.trait_ctx.clone();
+            let mut scope = self.enter_inherited_type_param_scope();
 
             // Bind the blanket type param to the concrete type
             // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
             // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
-            self.trait_ctx
+            scope
+                .trait_ctx
                 .type_params
                 .insert(info.blanket_param_name.clone(), (0, concrete_type_id));
-            self.trait_ctx
+            scope
+                .trait_ctx
                 .type_param_bounds
                 .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
 
             // Resolve and register each associated type
             for binding in &info.assoc_types {
-                let resolved_id = self.resolve_type(&binding.ty);
-                if !self.type_table.borrow().contains_type_param(resolved_id) {
-                    self.type_table.borrow_mut().register_assoc_type_resolution(
-                        concrete_type_id,
-                        binding.name.clone(),
-                        resolved_id,
-                    );
+                let resolved_id = scope.resolve_type(&binding.ty);
+                if !scope.type_table.borrow().contains_type_param(resolved_id) {
+                    scope
+                        .type_table
+                        .borrow_mut()
+                        .register_assoc_type_resolution(
+                            concrete_type_id,
+                            binding.name.clone(),
+                            resolved_id,
+                        );
                 }
             }
 
-            self.trait_ctx = saved_trait_ctx;
+            drop(scope);
         }
     }
 

@@ -861,32 +861,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if let Some((ty, type_params)) = func_info
                 && let Some(return_type_ast) = ty
             {
-                // Set up the function's type parameters in scope so we can resolve
-                // type parameter references (like T -> TypeParam { index: 0 })
-                let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
-                let mut real_idx = 0u32;
-                for type_param in &type_params {
-                    if type_param.is_effect {
-                        continue;
-                    }
-                    let type_id = if type_param.is_pack {
-                        self.type_table
-                            .borrow_mut()
-                            .make_type_pack(type_param.name.clone(), real_idx)
-                    } else {
-                        self.type_table
-                            .borrow_mut()
-                            .make_type_param(type_param.name.clone(), real_idx)
-                    };
-                    self.trait_ctx
-                        .type_params
-                        .insert(type_param.name.clone(), (real_idx, type_id));
-                    real_idx += 1;
-                }
-
-                // Resolve the return type in the callee module's context, not the caller's.
                 // Build the callee module's flat maps so that type names resolve to the
                 // callee's types, not the caller's (which may have same-named different types).
+                // These reads only borrow immutable fields, so they happen before the scope
+                // guard which mutably borrows `self`.
                 let callee_module_ast = self.loaded_modules.get(callee_module);
                 let (callee_imported, callee_original_names) = callee_module_ast.map_or_else(
                     || (IndexMap::default(), IndexMap::default()),
@@ -935,27 +913,36 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     &callee_original_names,
                 );
 
+                // Set up the function's type parameters in an inherited scope so we
+                // can resolve type parameter references (like T -> TypeParam { index: 0 }).
+                // Only `type_params` is replaced, matching the original
+                // `mem::take(&mut self.trait_ctx.type_params)` semantics.
+                let mut scope = self.enter_inherited_type_param_scope();
+                scope.trait_ctx.type_params.clear();
+                scope.register_generic_params(&type_params, 0);
+
                 // Temporarily swap in callee's flat maps
-                let old_newtypes = std::mem::replace(&mut self.newtypes, callee_newtypes);
+                let old_newtypes = std::mem::replace(&mut scope.newtypes, callee_newtypes);
                 let old_struct_fields =
-                    std::mem::replace(&mut self.struct_fields, callee_struct_fields);
+                    std::mem::replace(&mut scope.struct_fields, callee_struct_fields);
                 let old_variant_cases =
-                    std::mem::replace(&mut self.variant_cases, callee_variant_cases);
-                let old_enum_cases = std::mem::replace(&mut self.enum_cases, callee_enum_cases);
-                let old_flags_cases = std::mem::replace(&mut self.flags_cases, callee_flags_cases);
+                    std::mem::replace(&mut scope.variant_cases, callee_variant_cases);
+                let old_enum_cases = std::mem::replace(&mut scope.enum_cases, callee_enum_cases);
+                let old_flags_cases = std::mem::replace(&mut scope.flags_cases, callee_flags_cases);
                 let old_resource_types =
-                    std::mem::replace(&mut self.resource_types, callee_resource_types);
+                    std::mem::replace(&mut scope.resource_types, callee_resource_types);
 
-                let resolved = self.resolve_type(&return_type_ast);
+                let resolved = scope.resolve_type(&return_type_ast);
 
-                // Restore caller's flat maps and type params
-                self.newtypes = old_newtypes;
-                self.struct_fields = old_struct_fields;
-                self.variant_cases = old_variant_cases;
-                self.enum_cases = old_enum_cases;
-                self.flags_cases = old_flags_cases;
-                self.resource_types = old_resource_types;
-                self.trait_ctx.type_params = old_type_params;
+                // Restore caller's flat maps; trait_ctx is restored by the scope
+                // guard's Drop impl when `scope` goes out of scope below.
+                scope.newtypes = old_newtypes;
+                scope.struct_fields = old_struct_fields;
+                scope.variant_cases = old_variant_cases;
+                scope.enum_cases = old_enum_cases;
+                scope.flags_cases = old_flags_cases;
+                scope.resource_types = old_resource_types;
+                drop(scope);
 
                 return resolved;
             }
@@ -1279,24 +1266,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     if let Some((params, type_params)) = func_info {
                         // Set up type params so resolve_type can find pack params
-                        let saved = std::mem::take(&mut self.trait_ctx.type_params);
-                        for (i, tp) in type_params.iter().filter(|p| !p.is_effect).enumerate() {
-                            let idx = i as u32;
-                            let type_id = if tp.is_pack {
-                                self.type_table
-                                    .borrow_mut()
-                                    .make_type_pack(tp.name.clone(), idx)
-                            } else {
-                                self.type_table
-                                    .borrow_mut()
-                                    .make_type_param(tp.name.clone(), idx)
-                            };
-                            self.trait_ctx
-                                .type_params
-                                .insert(tp.name.clone(), (idx, type_id));
-                        }
-                        let result = params.iter().map(|p| self.resolve_type(&p.ty)).collect();
-                        self.trait_ctx.type_params = saved;
+                        // (inherited scope; only `type_params` is replaced, matching
+                        // the original `mem::take` semantics).
+                        let mut scope = self.enter_inherited_type_param_scope();
+                        scope.trait_ctx.type_params.clear();
+                        scope.register_generic_params(&type_params, 0);
+                        let result = params.iter().map(|p| scope.resolve_type(&p.ty)).collect();
+                        drop(scope);
                         return result;
                     }
                 }
@@ -1544,37 +1520,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Temporarily register the function's type params so resolve_type produces
-        // TypeParam ids for parameter types like `T`.
-        let saved = std::mem::take(&mut self.trait_ctx.type_params);
-        let mut type_param_list: Vec<(String, TypeId)> = vec![];
-        let mut idx = 0u32;
-        for tp in &type_params {
-            if tp.is_effect {
-                continue;
-            }
-            let type_id = if tp.is_pack {
-                self.type_table
-                    .borrow_mut()
-                    .make_type_pack(tp.name.clone(), idx)
-            } else {
-                self.type_table
-                    .borrow_mut()
-                    .make_type_param(tp.name.clone(), idx)
-            };
-            self.trait_ctx
-                .type_params
-                .insert(tp.name.clone(), (idx, type_id));
-            type_param_list.push((tp.name.clone(), type_id));
-            idx += 1;
-        }
+        // TypeParam ids for parameter types like `T`. Inherited scope; only
+        // `type_params` is replaced, matching the original `mem::take` semantics.
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.trait_ctx.type_params.clear();
+        scope.register_generic_params(&type_params, 0);
+        let type_param_list: Vec<(String, TypeId)> = scope
+            .trait_ctx
+            .type_params
+            .iter()
+            .map(|(name, &(_, id))| (name.clone(), id))
+            .collect();
 
         let resolved_param_types: Vec<TypeId> = params
             .iter()
             .filter(|p| p.self_kind == ast::SelfKind::None)
-            .map(|p| self.resolve_type(&p.ty))
+            .map(|p| scope.resolve_type(&p.ty))
             .collect();
 
-        self.trait_ctx.type_params = saved;
+        drop(scope);
         Some((type_param_list, resolved_param_types))
     }
 
@@ -1639,33 +1603,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return vec![];
         };
 
-        // Temporarily create TypeParam TypeIds for this method's type params
-        let saved_trait_ctx = self.trait_ctx.clone();
-        let mut type_param_list: Vec<(String, TypeId)> = vec![];
-        for (i, tp) in type_params.iter().enumerate() {
-            let type_id = self
-                .type_table
-                .borrow_mut()
-                .make_type_param(tp.name.clone(), i as u32);
-            self.trait_ctx
-                .type_params
-                .insert(tp.name.clone(), (i as u32, type_id));
-            if !tp.bounds.is_empty() {
-                self.trait_ctx
-                    .type_param_bounds
-                    .insert(tp.name.clone(), tp.bounds.clone());
-            }
-            type_param_list.push((tp.name.clone(), type_id));
-        }
+        // Temporarily create TypeParam TypeIds for this method's type params on
+        // top of the caller's trait context (so outer-scope type params remain
+        // visible while we resolve the method's signature).
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.register_generic_params(&type_params, 0);
+        let type_param_list: Vec<(String, TypeId)> = type_params
+            .iter()
+            .filter_map(|tp| {
+                scope
+                    .trait_ctx
+                    .type_params
+                    .get(&tp.name)
+                    .map(|&(_, id)| (tp.name.clone(), id))
+            })
+            .collect();
 
         // Resolve non-self param types in the context of the method's type params
         let resolved_param_types: Vec<TypeId> = params
             .iter()
             .filter(|p| p.self_kind == ast::SelfKind::None)
-            .map(|p| self.resolve_type(&p.ty))
+            .map(|p| scope.resolve_type(&p.ty))
             .collect();
 
-        self.trait_ctx = saved_trait_ctx;
+        drop(scope);
 
         // Two-phase unification: typed args first, literal-number args second.
         let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::default();
@@ -1732,26 +1693,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Temporarily register type params so resolve_type can find them
-        let saved = std::mem::take(&mut self.trait_ctx.type_params);
-        for (i, tp) in fn_type_params.iter().filter(|p| !p.is_effect).enumerate() {
-            let idx = i as u32;
-            let type_id = if tp.is_pack {
-                self.type_table
-                    .borrow_mut()
-                    .make_type_pack(tp.name.clone(), idx)
-            } else {
-                self.type_table
-                    .borrow_mut()
-                    .make_type_param(tp.name.clone(), idx)
-            };
-            self.trait_ctx
-                .type_params
-                .insert(tp.name.clone(), (idx, type_id));
-        }
-
-        let param_types: Vec<TypeId> = fn_params.iter().map(|p| self.resolve_type(&p.ty)).collect();
-
-        self.trait_ctx.type_params = saved;
+        // (inherited scope; only `type_params` is replaced, matching the
+        // original `mem::take` semantics).
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.trait_ctx.type_params.clear();
+        scope.register_generic_params(&fn_type_params, 0);
+        let param_types: Vec<TypeId> = fn_params
+            .iter()
+            .map(|p| scope.resolve_type(&p.ty))
+            .collect();
+        drop(scope);
 
         // Substitute type params with explicit type args
         param_types

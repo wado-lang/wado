@@ -711,10 +711,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     };
 
                     // Temporarily map type param names directly to concrete types
-                    let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+                    // (inherited scope; only `type_params` is replaced).
+                    let mut scope = self.enter_inherited_type_param_scope();
+                    scope.trait_ctx.type_params.clear();
                     for (i, name) in impl_type_param_names.iter().enumerate() {
                         if let Some(&concrete) = call_site_impl_args.get(i) {
-                            self.trait_ctx
+                            scope
+                                .trait_ctx
                                 .type_params
                                 .insert(name.clone(), (i as u32, concrete));
                         }
@@ -722,7 +725,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let impl_offset = impl_type_param_names.len();
                     for (i, tp) in method_def.type_params.iter().enumerate() {
                         if let Some(&concrete) = method_type_args.get(i) {
-                            self.trait_ctx
+                            scope
+                                .trait_ctx
                                 .type_params
                                 .insert(tp.name.clone(), ((impl_offset + i) as u32, concrete));
                         }
@@ -736,11 +740,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .collect();
                     for (i, param_type) in param_types.iter_mut().enumerate() {
                         if let Some(param) = non_self_params.get(i) {
-                            *param_type = self.resolve_type(&param.ty);
+                            *param_type = scope.resolve_type(&param.ty);
                         }
                     }
 
-                    self.trait_ctx.type_params = old_type_params;
+                    drop(scope);
                 }
             }
         }
@@ -1389,21 +1393,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .iter()
                                 .any(|p| p.self_kind != ast::SelfKind::None);
                             if method.name == method_name && !has_self {
-                                // Set up type parameters from impl block before resolving
-                                let old_type_params =
-                                    std::mem::take(&mut self.trait_ctx.type_params);
+                                // Set up type parameters from impl block before resolving.
+                                // Inherited scope; only `type_params` is replaced.
+                                let mut scope = self.enter_inherited_type_param_scope();
+                                scope.trait_ctx.type_params.clear();
 
                                 // Extract type params from impl block type (e.g., impl Array<T>)
                                 if let ast::Type::Generic(generic) = &impl_block.ty {
                                     for (i, arg) in generic.args.iter().enumerate() {
                                         if let ast::Type::Named(named) = arg {
                                             let name = &named.name;
-                                            if !self.trait_ctx.type_params.contains_key(name) {
-                                                let type_id = self
+                                            if !scope.trait_ctx.type_params.contains_key(name) {
+                                                let type_id = scope
                                                     .type_table
                                                     .borrow_mut()
                                                     .make_type_param(name.clone(), i as u32);
-                                                self.trait_ctx
+                                                scope
+                                                    .trait_ctx
                                                     .type_params
                                                     .insert(name.clone(), (i as u32, type_id));
                                             }
@@ -1412,38 +1418,40 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 }
 
                                 // Method-level type params (e.g. fn make<T>(...) -> T)
-                                let m_offset = self.trait_ctx.type_params.len();
+                                let m_offset = scope.trait_ctx.type_params.len();
                                 for (i, tp) in method
                                     .type_params
                                     .iter()
                                     .filter(|p| !p.is_effect)
                                     .enumerate()
                                 {
-                                    if self.trait_ctx.type_params.contains_key(&tp.name) {
+                                    if scope.trait_ctx.type_params.contains_key(&tp.name) {
                                         continue;
                                     }
                                     let idx = (m_offset + i) as u32;
                                     let type_id = if tp.is_pack {
-                                        self.type_table
+                                        scope
+                                            .type_table
                                             .borrow_mut()
                                             .make_type_pack(tp.name.clone(), idx)
                                     } else {
-                                        self.type_table
+                                        scope
+                                            .type_table
                                             .borrow_mut()
                                             .make_type_param(tp.name.clone(), idx)
                                     };
-                                    self.trait_ctx
+                                    scope
+                                        .trait_ctx
                                         .type_params
                                         .insert(tp.name.clone(), (idx, type_id));
                                 }
 
-                                let result = self.resolve_return_type_in_module(
+                                let result = scope.resolve_return_type_in_module(
                                     struct_module,
                                     method.return_type.as_ref(),
                                 );
 
-                                // Restore type parameters
-                                self.trait_ctx.type_params = old_type_params;
+                                drop(scope);
 
                                 return result;
                             }
@@ -1463,29 +1471,31 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
                             });
                         if method.name == method_name && !has_self {
-                            // Set up type parameters from resource declaration before resolving
-                            let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+                            // Set up type parameters from resource declaration before resolving.
+                            // Inherited scope; only `type_params` is replaced.
+                            let mut scope = self.enter_inherited_type_param_scope();
+                            scope.trait_ctx.type_params.clear();
 
                             for (i, param) in resource.type_params.iter().enumerate() {
                                 let name = &param.name;
-                                if !self.trait_ctx.type_params.contains_key(name) {
-                                    let type_id = self
+                                if !scope.trait_ctx.type_params.contains_key(name) {
+                                    let type_id = scope
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
-                                    self.trait_ctx
+                                    scope
+                                        .trait_ctx
                                         .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
                             }
 
-                            let result = self.resolve_return_type_in_module(
+                            let result = scope.resolve_return_type_in_module(
                                 struct_module,
                                 method.return_type.as_ref(),
                             );
 
-                            // Restore type parameters
-                            self.trait_ctx.type_params = old_type_params;
+                            drop(scope);
 
                             return result;
                         }
@@ -1503,18 +1513,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 {
                     let method = &impl_block.methods[*method_idx];
 
-                    let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+                    // Inherited scope; only `type_params` is replaced.
+                    let mut scope = self.enter_inherited_type_param_scope();
+                    scope.trait_ctx.type_params.clear();
 
                     if let ast::Type::Generic(generic) = &impl_block.ty {
                         for (i, arg) in generic.args.iter().enumerate() {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;
-                                if !self.trait_ctx.type_params.contains_key(name) {
-                                    let type_id = self
+                                if !scope.trait_ctx.type_params.contains_key(name) {
+                                    let type_id = scope
                                         .type_table
                                         .borrow_mut()
                                         .make_type_param(name.clone(), i as u32);
-                                    self.trait_ctx
+                                    scope
+                                        .trait_ctx
                                         .type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
@@ -1523,27 +1536,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
 
                     // Method-level type params (e.g. fn make<T>(...) -> T)
-                    let m_offset = self.trait_ctx.type_params.len();
+                    let m_offset = scope.trait_ctx.type_params.len();
                     for (i, tp) in method
                         .type_params
                         .iter()
                         .filter(|p| !p.is_effect)
                         .enumerate()
                     {
-                        if self.trait_ctx.type_params.contains_key(&tp.name) {
+                        if scope.trait_ctx.type_params.contains_key(&tp.name) {
                             continue;
                         }
                         let idx = (m_offset + i) as u32;
                         let type_id = if tp.is_pack {
-                            self.type_table
+                            scope
+                                .type_table
                                 .borrow_mut()
                                 .make_type_pack(tp.name.clone(), idx)
                         } else {
-                            self.type_table
+                            scope
+                                .type_table
                                 .borrow_mut()
                                 .make_type_param(tp.name.clone(), idx)
                         };
-                        self.trait_ctx
+                        scope
+                            .trait_ctx
                             .type_params
                             .insert(tp.name.clone(), (idx, type_id));
                     }
@@ -1551,10 +1567,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let result = method
                         .return_type
                         .as_ref()
-                        .map(|t| self.resolve_type(t))
+                        .map(|t| scope.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
 
-                    self.trait_ctx.type_params = old_type_params;
+                    drop(scope);
                     return result;
                 }
             }
@@ -1569,16 +1585,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 {
                     let method = &resource.methods[*method_idx];
 
-                    let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+                    // Inherited scope; only `type_params` is replaced.
+                    let mut scope = self.enter_inherited_type_param_scope();
+                    scope.trait_ctx.type_params.clear();
 
                     for (i, param) in resource.type_params.iter().enumerate() {
                         let name = &param.name;
-                        if !self.trait_ctx.type_params.contains_key(name) {
-                            let type_id = self
+                        if !scope.trait_ctx.type_params.contains_key(name) {
+                            let type_id = scope
                                 .type_table
                                 .borrow_mut()
                                 .make_type_param(name.clone(), i as u32);
-                            self.trait_ctx
+                            scope
+                                .trait_ctx
                                 .type_params
                                 .insert(name.clone(), (i as u32, type_id));
                         }
@@ -1587,11 +1606,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let result = method
                         .return_type
                         .as_ref()
-                        .map(|t| self.resolve_type(t))
+                        .map(|t| scope.resolve_type(t))
                         .unwrap_or(TypeTable::UNIT);
 
-                    // Restore type parameters
-                    self.trait_ctx.type_params = old_type_params;
+                    drop(scope);
 
                     return result;
                 }
@@ -1668,19 +1686,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
         impl_ty: &ast::Type,
         method: &ast::Function,
     ) -> Vec<TypeId> {
-        let saved_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+        // Inherited scope; only `type_params` is replaced.
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.trait_ctx.type_params.clear();
 
         // Impl-level type params (e.g. `impl Box<T>` -> register T)
         if let ast::Type::Generic(generic) = impl_ty {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg
-                    && !self.trait_ctx.type_params.contains_key(&named.name)
+                    && !scope.trait_ctx.type_params.contains_key(&named.name)
                 {
-                    let type_id = self
+                    let type_id = scope
                         .type_table
                         .borrow_mut()
                         .make_type_param(named.name.clone(), i as u32);
-                    self.trait_ctx
+                    scope
+                        .trait_ctx
                         .type_params
                         .insert(named.name.clone(), (i as u32, type_id));
                 }
@@ -1688,27 +1709,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Method-level type params (e.g. `fn make<T>(x: T)` -> register T)
-        let offset = self.trait_ctx.type_params.len();
+        let offset = scope.trait_ctx.type_params.len();
         for (i, tp) in method
             .type_params
             .iter()
             .filter(|p| !p.is_effect)
             .enumerate()
         {
-            if self.trait_ctx.type_params.contains_key(&tp.name) {
+            if scope.trait_ctx.type_params.contains_key(&tp.name) {
                 continue;
             }
             let idx = (offset + i) as u32;
             let type_id = if tp.is_pack {
-                self.type_table
+                scope
+                    .type_table
                     .borrow_mut()
                     .make_type_pack(tp.name.clone(), idx)
             } else {
-                self.type_table
+                scope
+                    .type_table
                     .borrow_mut()
                     .make_type_param(tp.name.clone(), idx)
             };
-            self.trait_ctx
+            scope
+                .trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, type_id));
         }
@@ -1716,10 +1740,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let result: Vec<TypeId> = method
             .params
             .iter()
-            .map(|p| self.resolve_type(&p.ty))
+            .map(|p| scope.resolve_type(&p.ty))
             .collect();
 
-        self.trait_ctx.type_params = saved_type_params;
+        drop(scope);
         result
     }
 

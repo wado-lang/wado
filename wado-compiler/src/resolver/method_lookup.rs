@@ -518,9 +518,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         {
                             for method in &impl_block.methods {
                                 if method.name == method_name {
-                                    // Set up type params for generic impls (e.g., impl Array<T>)
-                                    let old_type_params =
-                                        std::mem::take(&mut self.trait_ctx.type_params);
+                                    // Set up type params for generic impls (e.g., impl Array<T>).
+                                    // Inherited scope; only `type_params` is replaced.
+                                    let mut scope = self.enter_inherited_type_param_scope();
+                                    scope.trait_ctx.type_params.clear();
                                     let mut impl_offset = 0u32;
                                     if let Some(ref type_args) = receiver_type_args
                                         && let Type::Generic(generic) = &impl_block.ty
@@ -530,7 +531,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                             if let Type::Named(named) = arg
                                                 && i < type_args.len()
                                             {
-                                                self.trait_ctx.type_params.insert(
+                                                scope.trait_ctx.type_params.insert(
                                                     named.name.clone(),
                                                     (i as u32, type_args[i]),
                                                 );
@@ -542,13 +543,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     // These get TypeParam types that will be substituted at call sites
                                     for (i, type_param) in method.type_params.iter().enumerate() {
                                         let index = impl_offset + i as u32;
-                                        let type_param_id = self.type_table.borrow_mut().intern(
+                                        let type_param_id = scope.type_table.borrow_mut().intern(
                                             ResolvedType::TypeParam {
                                                 name: type_param.name.clone(),
                                                 index,
                                             },
                                         );
-                                        self.trait_ctx.type_params.insert(
+                                        scope.trait_ctx.type_params.insert(
                                             type_param.name.clone(),
                                             (index, type_param_id),
                                         );
@@ -560,37 +561,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     // define "Config" with different fields).
                                     // Use cached module type maps (O(1) swap) instead of
                                     // rebuilding maps from scratch on every call.
-                                    let mut cached = self
+                                    let mut cached = scope
                                         .module_type_maps_cache
                                         .shift_remove(module_source)
                                         .expect("cache populated by ensure_module_maps_cached");
                                     std::mem::swap(
-                                        &mut self.struct_fields,
+                                        &mut scope.struct_fields,
                                         &mut cached.struct_fields,
                                     );
                                     std::mem::swap(
-                                        &mut self.variant_cases,
+                                        &mut scope.variant_cases,
                                         &mut cached.variant_cases,
                                     );
-                                    std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-                                    std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
-                                    std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
+                                    std::mem::swap(&mut scope.enum_cases, &mut cached.enum_cases);
+                                    std::mem::swap(&mut scope.flags_cases, &mut cached.flags_cases);
+                                    std::mem::swap(&mut scope.newtypes, &mut cached.newtypes);
                                     std::mem::swap(
-                                        &mut self.resource_types,
+                                        &mut scope.resource_types,
                                         &mut cached.resource_types,
                                     );
 
                                     let return_type = method
                                         .return_type
                                         .as_ref()
-                                        .map(|t| self.resolve_type(t))
+                                        .map(|t| scope.resolve_type(t))
                                         .unwrap_or(TypeTable::UNIT);
                                     let self_kind = method
                                         .params
                                         .first()
                                         .map(|p| p.self_kind)
                                         .unwrap_or(ast::SelfKind::None);
-                                    let param_types = self.extract_param_types(&method.params);
+                                    let param_types = scope.extract_param_types(&method.params);
                                     let param_is_mut: Vec<bool> = method
                                         .params
                                         .iter()
@@ -599,23 +600,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .collect();
 
                                     std::mem::swap(
-                                        &mut self.struct_fields,
+                                        &mut scope.struct_fields,
                                         &mut cached.struct_fields,
                                     );
                                     std::mem::swap(
-                                        &mut self.variant_cases,
+                                        &mut scope.variant_cases,
                                         &mut cached.variant_cases,
                                     );
-                                    std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-                                    std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
-                                    std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
+                                    std::mem::swap(&mut scope.enum_cases, &mut cached.enum_cases);
+                                    std::mem::swap(&mut scope.flags_cases, &mut cached.flags_cases);
+                                    std::mem::swap(&mut scope.newtypes, &mut cached.newtypes);
                                     std::mem::swap(
-                                        &mut self.resource_types,
+                                        &mut scope.resource_types,
                                         &mut cached.resource_types,
                                     );
-                                    self.module_type_maps_cache
+                                    scope
+                                        .module_type_maps_cache
                                         .insert(module_source.clone(), cached);
-                                    self.trait_ctx.type_params = old_type_params;
+                                    drop(scope);
 
                                     return Some(MethodInfo {
                                         return_type,
@@ -651,9 +653,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         {
                             for method in &impl_block.methods {
                                 if method.name == method_name {
-                                    // Set up type params for generic impls (e.g., impl Array<T>)
-                                    let old_type_params =
-                                        std::mem::take(&mut self.trait_ctx.type_params);
+                                    // Set up type params for generic impls (e.g., impl Array<T>).
+                                    // Inherited scope; only `type_params` is replaced.
+                                    let mut scope = self.enter_inherited_type_param_scope();
+                                    scope.trait_ctx.type_params.clear();
                                     let mut impl_offset = 0u32;
                                     if let Some(ref type_args) = receiver_type_args
                                         && let Type::Generic(generic) = &impl_block.ty
@@ -663,7 +666,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                             if let Type::Named(named) = arg
                                                 && i < type_args.len()
                                             {
-                                                self.trait_ctx.type_params.insert(
+                                                scope.trait_ctx.type_params.insert(
                                                     named.name.clone(),
                                                     (i as u32, type_args[i]),
                                                 );
@@ -675,13 +678,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     // These get TypeParam types that will be substituted at call sites
                                     for (i, type_param) in method.type_params.iter().enumerate() {
                                         let index = impl_offset + i as u32;
-                                        let type_param_id = self.type_table.borrow_mut().intern(
+                                        let type_param_id = scope.type_table.borrow_mut().intern(
                                             ResolvedType::TypeParam {
                                                 name: type_param.name.clone(),
                                                 index,
                                             },
                                         );
-                                        self.trait_ctx.type_params.insert(
+                                        scope.trait_ctx.type_params.insert(
                                             type_param.name.clone(),
                                             (index, type_param_id),
                                         );
@@ -690,14 +693,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     let return_type = method
                                         .return_type
                                         .as_ref()
-                                        .map(|t| self.resolve_type(t))
+                                        .map(|t| scope.resolve_type(t))
                                         .unwrap_or(TypeTable::UNIT);
                                     let self_kind = method
                                         .params
                                         .first()
                                         .map(|p| p.self_kind)
                                         .unwrap_or(ast::SelfKind::None);
-                                    let param_types = self.extract_param_types(&method.params);
+                                    let param_types = scope.extract_param_types(&method.params);
                                     let param_is_mut: Vec<bool> = method
                                         .params
                                         .iter()
@@ -705,7 +708,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .map(|p| p.is_mut)
                                         .collect();
 
-                                    self.trait_ctx.type_params = old_type_params;
+                                    drop(scope);
 
                                     return Some(MethodInfo {
                                         return_type,
@@ -801,12 +804,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 continue;
             }
 
-            // Set up type params for generic resources (e.g., resource Stream<T>)
-            let old_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+            // Set up type params for generic resources (e.g., resource Stream<T>).
+            // Inherited scope; only `type_params` is replaced.
+            let mut scope = self.enter_inherited_type_param_scope();
+            scope.trait_ctx.type_params.clear();
             if let Some(type_args) = receiver_type_args {
                 for (i, param) in resource.type_params.iter().enumerate() {
                     if i < type_args.len() {
-                        self.trait_ctx
+                        scope
+                            .trait_ctx
                             .type_params
                             .insert(param.name.clone(), (i as u32, type_args[i]));
                     }
@@ -816,9 +822,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let return_type = method
                 .return_type
                 .as_ref()
-                .map(|t| self.resolve_type(t))
+                .map(|t| scope.resolve_type(t))
                 .unwrap_or(TypeTable::UNIT);
-            let param_types = self.extract_param_types(&method.params);
+            let param_types = scope.extract_param_types(&method.params);
             let param_is_mut: Vec<bool> = method
                 .params
                 .iter()
@@ -826,7 +832,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .map(|p| p.is_mut)
                 .collect();
 
-            self.trait_ctx.type_params = old_type_params;
+            drop(scope);
 
             // Extract CM canonical name from #[cm("...")] attribute
             let cm_name = method
@@ -915,20 +921,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // to `TypeParam` rather than `UNKNOWN`.
         found_method.map(
             |(self_kind, param_types_ast, param_is_mut, impl_ty, method_type_params)| {
-                let saved_type_params = std::mem::take(&mut self.trait_ctx.type_params);
+                // Inherited scope; only `type_params` is replaced.
+                let mut scope = self.enter_inherited_type_param_scope();
+                scope.trait_ctx.type_params.clear();
 
                 // Impl-level type params (e.g. `impl Box<T>` -> register T at index 0)
                 let mut impl_offset = 0u32;
                 if let ast::Type::Generic(generic) = &impl_ty {
                     for (i, arg) in generic.args.iter().enumerate() {
                         if let ast::Type::Named(named) = arg
-                            && !self.trait_ctx.type_params.contains_key(&named.name)
+                            && !scope.trait_ctx.type_params.contains_key(&named.name)
                         {
-                            let type_id = self
+                            let type_id = scope
                                 .type_table
                                 .borrow_mut()
                                 .make_type_param(named.name.clone(), i as u32);
-                            self.trait_ctx
+                            scope
+                                .trait_ctx
                                 .type_params
                                 .insert(named.name.clone(), (i as u32, type_id));
                             impl_offset = (i as u32) + 1;
@@ -942,30 +951,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .filter(|p| !p.is_effect)
                     .enumerate()
                 {
-                    if self.trait_ctx.type_params.contains_key(&tp.name) {
+                    if scope.trait_ctx.type_params.contains_key(&tp.name) {
                         continue;
                     }
                     let idx = impl_offset + i as u32;
                     let type_id = if tp.is_pack {
-                        self.type_table
+                        scope
+                            .type_table
                             .borrow_mut()
                             .make_type_pack(tp.name.clone(), idx)
                     } else {
-                        self.type_table
+                        scope
+                            .type_table
                             .borrow_mut()
                             .make_type_param(tp.name.clone(), idx)
                     };
-                    self.trait_ctx
+                    scope
+                        .trait_ctx
                         .type_params
                         .insert(tp.name.clone(), (idx, type_id));
                 }
 
                 let param_types: Vec<TypeId> = param_types_ast
                     .iter()
-                    .map(|ty| self.resolve_type(ty))
+                    .map(|ty| scope.resolve_type(ty))
                     .collect();
 
-                self.trait_ctx.type_params = saved_type_params;
+                drop(scope);
 
                 (self_kind, param_types, param_is_mut)
             },
@@ -1632,17 +1644,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .collect();
             let impl_module_source = self.impl_block_module_source(impl_ref);
 
-            // Save trait context for this impl block scope
-            let saved_trait_ctx = self.trait_ctx.clone();
-            self.trait_ctx.type_params.clear();
-            self.trait_ctx.assoc_type_bindings.clear();
+            // Save trait context for this impl block scope. We use an inherited
+            // scope (saves the full ctx via clone) and then selectively clear
+            // just type_params and assoc_type_bindings — other parts (bounds,
+            // self_type, …) are kept from the parent for this lookup.
+            let mut scope = self.enter_inherited_type_param_scope();
+            scope.trait_ctx.type_params.clear();
+            scope.trait_ctx.assoc_type_bindings.clear();
 
             // Set up type parameters for resolving generic associated types
             if let Some(type_args) = receiver_type_args {
                 for (name, idx) in &type_param_entries {
                     let i = *idx as usize;
                     if i < type_args.len() {
-                        self.trait_ctx
+                        scope
+                            .trait_ctx
                             .type_params
                             .insert(name.clone(), (*idx, type_args[i]));
                     }
@@ -1650,8 +1666,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // For variadic pack params (..T in impl<..T> Trait for [..T]),
                 // map the pack to a TypePack so that the method body can reference it.
                 if let Some((pack_name, pack_idx)) = &variadic_pack_entry {
-                    let pack_type = self.type_table.borrow_mut().make_tuple(type_args.to_vec());
-                    self.trait_ctx
+                    let pack_type = scope.type_table.borrow_mut().make_tuple(type_args.to_vec());
+                    scope
+                        .trait_ctx
                         .type_params
                         .insert(pack_name.clone(), (*pack_idx, pack_type));
                 }
@@ -1659,19 +1676,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // For blanket impls where impl_ty is a free type parameter
             if let Some(ref name) = blanket_name
-                && !self.trait_ctx.type_params.contains_key(name)
-                && !self.is_known_type_name(name)
+                && !scope.trait_ctx.type_params.contains_key(name)
+                && !scope.is_known_type_name(name)
             {
                 if let Some(recv_id) = receiver_type_id {
-                    self.trait_ctx
+                    scope
+                        .trait_ctx
                         .type_params
                         .insert(name.clone(), (0, recv_id));
                 } else {
-                    let type_id = self
+                    let type_id = scope
                         .type_table
                         .borrow_mut()
                         .make_type_param(name.clone(), 0);
-                    self.trait_ctx
+                    scope
+                        .trait_ctx
                         .type_params
                         .insert(name.clone(), (0, type_id));
                 }
@@ -1679,8 +1698,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Set up associated type bindings for resolving Self::* types
             for (name, ty) in &assoc_bindings {
-                let type_id = self.resolve_type(ty);
-                self.trait_ctx
+                let type_id = scope.resolve_type(ty);
+                scope
+                    .trait_ctx
                     .assoc_type_bindings
                     .insert(name.clone(), type_id);
             }
@@ -1694,7 +1714,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
             // is a type parameter. These should NOT override base-type methods.
             let is_blanket_ref_impl = {
-                let impl_block = self.get_impl_block(impl_ref);
+                let impl_block = scope.get_impl_block(impl_ref);
                 match &impl_block.ty {
                     Type::Reference(inner) | Type::MutReference(inner) => {
                         if let Type::Named(named) = inner.as_ref() {
@@ -1712,7 +1732,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
 
             // Extract method info from impl block before calling &mut self methods
-            let impl_block = self.get_impl_block(impl_ref);
+            let impl_block = scope.get_impl_block(impl_ref);
             let method_data: Option<(
                 Option<ast::Type>,
                 ast::SelfKind,
@@ -1737,24 +1757,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             let mut method_found = false;
             if let Some((return_type_ast, self_kind, params, method_type_params)) = method_data {
-                let trait_name = self.get_type_name_full(&trait_type_for_name);
+                let trait_name = scope.get_type_name_full(&trait_type_for_name);
 
                 // Set up method-level type params (e.g., V in deserialize_any<V: Visitor>)
-                let impl_offset = self.trait_ctx.type_params.len() as u32;
+                let impl_offset = scope.trait_ctx.type_params.len() as u32;
                 for (i, type_param) in method_type_params.iter().enumerate() {
                     let index = impl_offset + i as u32;
                     let type_param_id =
-                        self.type_table
+                        scope
+                            .type_table
                             .borrow_mut()
                             .intern(ResolvedType::TypeParam {
                                 name: type_param.name.clone(),
                                 index,
                             });
-                    self.trait_ctx
+                    scope
+                        .trait_ctx
                         .type_params
                         .insert(type_param.name.clone(), (index, type_param_id));
                     if !type_param.bounds.is_empty() {
-                        self.trait_ctx
+                        scope
+                            .trait_ctx
                             .type_param_bounds
                             .insert(type_param.name.clone(), type_param.bounds.clone());
                     }
@@ -1762,17 +1785,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 let return_type = return_type_ast
                     .as_ref()
-                    .map(|t| self.resolve_type(t))
+                    .map(|t| scope.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
 
                 // Remove method-level type params from scope
                 for type_param in &method_type_params {
-                    self.trait_ctx.type_params.shift_remove(&type_param.name);
-                    self.trait_ctx
+                    scope.trait_ctx.type_params.shift_remove(&type_param.name);
+                    scope
+                        .trait_ctx
                         .type_param_bounds
                         .shift_remove(&type_param.name);
                 }
-                let param_types = self.extract_param_types(&params);
+                let param_types = scope.extract_param_types(&params);
                 let param_is_mut: Vec<bool> = params
                     .iter()
                     .filter(|p| p.name != "self")
@@ -1800,34 +1824,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // If the method wasn't found in the impl block, check the trait
             // declaration for a default method with that name
             if !method_found {
-                let trait_name_base = self.get_type_name(&trait_type_for_name);
-                let trait_name_str = self.get_type_name_full(&trait_type_for_name);
-                if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_base) {
+                let trait_name_base = scope.get_type_name(&trait_type_for_name);
+                let trait_name_str = scope.get_type_name_full(&trait_type_for_name);
+                if let Some(trait_methods) = scope.find_trait_decl_methods(&trait_name_base) {
                     for default_method in &trait_methods {
                         if default_method.name == method_name && default_method.body.is_some() {
                             // Set up Self type so that `Self` in the default method's
                             // return type resolves to the concrete receiver type
-                            let old_self_type = self.trait_ctx.self_type;
+                            let old_self_type = scope.trait_ctx.self_type;
                             if let Some(recv_id) = receiver_type_id {
-                                self.trait_ctx.self_type = Some(recv_id);
+                                scope.trait_ctx.self_type = Some(recv_id);
                             }
 
                             // Set up method-level type params (e.g., U in map<U>)
-                            let impl_offset = self.trait_ctx.type_params.len() as u32;
+                            let impl_offset = scope.trait_ctx.type_params.len() as u32;
                             for (i, type_param) in default_method.type_params.iter().enumerate() {
                                 let index = impl_offset + i as u32;
                                 let type_param_id =
-                                    self.type_table
+                                    scope
+                                        .type_table
                                         .borrow_mut()
                                         .intern(ResolvedType::TypeParam {
                                             name: type_param.name.clone(),
                                             index,
                                         });
-                                self.trait_ctx
+                                scope
+                                    .trait_ctx
                                     .type_params
                                     .insert(type_param.name.clone(), (index, type_param_id));
                                 if !type_param.bounds.is_empty() {
-                                    self.trait_ctx
+                                    scope
+                                        .trait_ctx
                                         .type_param_bounds
                                         .insert(type_param.name.clone(), type_param.bounds.clone());
                                 }
@@ -1836,14 +1863,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             let return_type = default_method
                                 .return_type
                                 .as_ref()
-                                .map(|t| self.resolve_type(t))
+                                .map(|t| scope.resolve_type(t))
                                 .unwrap_or(TypeTable::UNIT);
                             let self_kind = default_method
                                 .params
                                 .first()
                                 .map(|p| p.self_kind)
                                 .unwrap_or(ast::SelfKind::None);
-                            let param_types = self.extract_param_types(&default_method.params);
+                            let param_types = scope.extract_param_types(&default_method.params);
                             let param_is_mut: Vec<bool> = default_method
                                 .params
                                 .iter()
@@ -1853,12 +1880,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                             // Remove method-level type params from scope
                             for type_param in &default_method.type_params {
-                                self.trait_ctx.type_params.shift_remove(&type_param.name);
-                                self.trait_ctx
+                                scope.trait_ctx.type_params.shift_remove(&type_param.name);
+                                scope
+                                    .trait_ctx
                                     .type_param_bounds
                                     .shift_remove(&type_param.name);
                             }
-                            self.trait_ctx.self_type = old_self_type;
+                            scope.trait_ctx.self_type = old_self_type;
 
                             found_traits.push(TraitMethodMatch {
                                 trait_name: trait_name_str.clone(),
@@ -1881,8 +1909,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
 
-            // Restore trait context
-            self.trait_ctx = saved_trait_ctx;
+            // Trait context is auto-restored on drop(scope).
+            drop(scope);
         }
 
         // Prefer trait from the current module over cross-module traits.
@@ -2628,25 +2656,26 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .collect();
                 let impl_source = self.impl_block_module_source(impl_ref);
 
-                // Set up associated type bindings
-                let old_bindings = std::mem::take(&mut self.trait_ctx.assoc_type_bindings);
+                // Set up associated type bindings (auto-restored on scope drop)
+                let mut scope = self.enter_inherited_type_param_scope();
+                scope.trait_ctx.assoc_type_bindings.clear();
                 for (name, ty) in &assoc_bindings {
-                    let type_id = self.resolve_type_with_param_mapping(ty, &type_param_mapping);
-                    self.trait_ctx
+                    let type_id = scope.resolve_type_with_param_mapping(ty, &type_param_mapping);
+                    scope
+                        .trait_ctx
                         .assoc_type_bindings
                         .insert(name.clone(), type_id);
                 }
 
                 // Get the associated type (Output or Input)
-                let assoc_type = self
+                let assoc_type = scope
                     .trait_ctx
                     .assoc_type_bindings
                     .get(assoc_type_name)
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 
-                // Restore associated type bindings
-                self.trait_ctx.assoc_type_bindings = old_bindings;
+                drop(scope);
 
                 let result = Some((assoc_type, self_kind, trait_name, impl_source));
                 self.indexing_trait_cache.insert(cache_key, result.clone());
