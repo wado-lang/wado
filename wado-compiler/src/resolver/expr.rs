@@ -772,123 +772,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Substitute type parameters in a type with concrete type arguments
+    /// Substitute type parameters in a type with concrete type arguments.
+    ///
+    /// Treats `type_args` as a dense substitution map keyed by `TypeParam`
+    /// index (i.e. `TypeParam { index: i }` is replaced by `type_args[i]`),
+    /// delegating the heavy lifting to
+    /// [`TypeTable::substitute_type_params`].
     pub(super) fn substitute_type_params(
         &mut self,
         type_id: TypeId,
         type_args: &[TypeId],
     ) -> TypeId {
-        let resolved_type = self.type_table.borrow().get(type_id).clone();
-        match resolved_type {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                // Direct substitution: T -> type_args[index]
-                type_args.get(index as usize).copied().unwrap_or(type_id)
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                let new_elem = self.substitute_type_params(elem, type_args);
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::BuiltinArray(new_elem))
-            }
-            ResolvedType::Ref(inner) => {
-                let new_inner = self.substitute_type_params(inner, type_args);
-                self.type_table.borrow_mut().make_ref(new_inner)
-            }
-            ResolvedType::MutRef(inner) => {
-                let new_inner = self.substitute_type_params(inner, type_args);
-                self.type_table.borrow_mut().make_mut_ref(new_inner)
-            }
-            ResolvedType::GenericResource {
-                name,
-                module_source,
-                type_args: inner_args,
-            } => {
-                let new_args: Vec<TypeId> = inner_args
-                    .iter()
-                    .map(|&arg| self.substitute_type_params(arg, type_args))
-                    .collect();
-                self.type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::GenericResource {
-                        name,
-                        module_source,
-                        type_args: new_args,
-                    })
-            }
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args: inner_args,
-            } => {
-                if TypeTable::is_tuple_type(&name, &module_source) {
-                    // Expand TypePack elements: splice the pack's concrete types into the tuple
-                    let mut new_elems: Vec<TypeId> = Vec::new();
-                    for &e in &inner_args {
-                        let e_type = self.type_table.borrow().get(e).clone();
-                        if let ResolvedType::TypePack { index, .. } = e_type {
-                            if let Some(&pack_type) = type_args.get(index as usize) {
-                                if let Some(pack_elems) =
-                                    self.type_table.borrow().as_tuple(pack_type)
-                                {
-                                    new_elems.extend_from_slice(&pack_elems);
-                                } else {
-                                    new_elems.push(pack_type);
-                                }
-                            } else {
-                                new_elems.push(e);
-                            }
-                        } else {
-                            new_elems.push(self.substitute_type_params(e, type_args));
-                        }
-                    }
-                    self.type_table.borrow_mut().make_tuple(new_elems)
-                } else {
-                    // Recursively substitute in nested generic instances
-                    let new_args: Vec<TypeId> = inner_args
-                        .iter()
-                        .map(|&arg| self.substitute_type_params(arg, type_args))
-                        .collect();
-                    self.type_table.borrow_mut().make_generic_instance(
-                        name,
-                        module_source,
-                        new_args,
-                    )
-                }
-            }
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_name,
-                ..
-            } => {
-                // Substitute the type parameter into a concrete type, then resolve.
-                let concrete = self.substitute_type_params(param_id, type_args);
-                if !self.type_table.borrow().contains_type_param(concrete) {
-                    // First try direct lookup for concrete types.
-                    if let Some(resolved) = self
-                        .type_table
-                        .borrow()
-                        .resolve_assoc_type(concrete, &assoc_name)
-                    {
-                        return resolved;
-                    }
-                    // Fallback: resolve via generic associated type definitions.
-                    // This handles GenericInstance types like ArrayIter<i32> whose Iterator impl
-                    // is generic — resolve_assoc_type won't find a pre-registered entry, but
-                    // resolve_generic_assoc_type can derive i32 from ("ArrayIter", "Item").
-                    if let Some(resolved) = self
-                        .type_table
-                        .borrow()
-                        .resolve_generic_assoc_type(concrete, &assoc_name)
-                    {
-                        return resolved;
-                    }
-                }
-                // Type param still generic or assoc type not yet registered — leave as-is.
-                type_id
-            }
-            // Other types don't contain type parameters
-            _ => type_id,
+        if type_args.is_empty() {
+            return type_id;
         }
+        let substitution: IndexMap<u32, TypeId> = type_args
+            .iter()
+            .enumerate()
+            .map(|(i, &t)| (i as u32, t))
+            .collect();
+        self.type_table
+            .borrow_mut()
+            .substitute_type_params(type_id, &substitution)
     }
 
     /// Substitute type parameters using a TypeId-to-TypeId map.
