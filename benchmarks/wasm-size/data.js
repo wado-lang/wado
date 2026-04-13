@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776038421918,
+  "lastUpdate": 1776072025649,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12581,6 +12581,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/be7a6a8980b3bac2dedddb8404e413bb42c12091"
         },
         "date": 1776038421631,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "273672e357643c5245c6c98b6b8491c5d85ba666",
+          "message": "Merge pull request #833 from wado-lang/claude/refactor-http-bin-ZD4ow\n\nhttp-bin: refactor for type safety, observability, and correctness",
+          "timestamp": "2026-04-13T18:16:58+09:00",
+          "tree_id": "e4dd8182eb7d50d6bf98f707c36aecd15f1fcc5b",
+          "url": "https://github.com/wado-lang/wado/commit/273672e357643c5245c6c98b6b8491c5d85ba666"
+        },
+        "date": 1776072025371,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
