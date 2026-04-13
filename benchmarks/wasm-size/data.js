@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776030314717,
+  "lastUpdate": 1776038421918,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12542,6 +12542,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c1a9e04cb67b25f257a541deaaf893f764dbf1da"
         },
         "date": 1776030314443,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "be7a6a8980b3bac2dedddb8404e413bb42c12091",
+          "message": "Merge pull request #832 from wado-lang/claude/add-metadata-storage-WdxOq\n\nfeat(attr): add sources = [...] metadata to #![generated]",
+          "timestamp": "2026-04-13T08:57:06+09:00",
+          "tree_id": "c605cc9bee6f1e692b74300a9e0df805265c5feb",
+          "url": "https://github.com/wado-lang/wado/commit/be7a6a8980b3bac2dedddb8404e413bb42c12091"
+        },
+        "date": 1776038421631,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
