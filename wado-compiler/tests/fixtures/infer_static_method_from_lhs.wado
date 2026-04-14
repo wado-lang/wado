@@ -1,23 +1,17 @@
-// SKIPPED: inference engine cannot back-infer the generic type parameter
-// of a static method on a generic struct from the LHS variable type
-// annotation when no argument constrains it.
+// Inference: a static method on a generic struct should back-infer its
+// generic type parameter from the LHS variable type annotation when no
+// argument constrains it.
 //
-// Example used in `core:base64`:
+// Pattern used (before fix) in `core:base64` and friends:
 //     let mut out: Array<u8> = Array::<u8>::with_capacity(out_len);
 //
 // We want to write:
 //     let mut out: Array<u8> = Array::with_capacity(out_len);
-// but the compiler reports:
-//     type mismatch: expected 'Array<u8>', found 'Array<T>'
 //
 // Note: instance methods do back-infer correctly, and free functions on
 // generic structs back-infer correctly when the result has no
 // argument-derived constraint. The limitation is specific to static
 // (associated) methods on generic structs.
-//
-// Once the inference engine supports back-inference for static methods on
-// generic structs, remove this fixture and the corresponding turbofishes
-// in `wado-compiler/lib/core/`.
 
 struct Container<T> {
     _phantom: i32,
@@ -35,4 +29,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "type mismatch: expected 'Container<i32>', found 'Container<T>'"}
+{"stdout": ""}

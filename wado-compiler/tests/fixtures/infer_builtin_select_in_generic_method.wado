@@ -1,0 +1,42 @@
+// Inference: `builtin::select` should infer its generic type parameter
+// from concretely-typed arguments even when the call site is reached via
+// a non-generic helper that is invoked inline inside a struct literal
+// field initializer in a method on a generic struct.
+//
+// Trigger conditions (all required):
+//   1. Generic struct with a method that returns a struct literal.
+//   2. A non-generic helper that calls `builtin::select` with no
+//      turbofish and is called inline inside one of those field
+//      initializers.
+//
+// Without the inline call (e.g. binding the helper result to a `let`
+// first), inference succeeds. With the inline call, the compiler
+// panics:
+//     unsubstituted TypeParam `T` (index 0) reached codegen
+//
+// `prelude/array.wado` keeps `builtin::select::<i32>` turbofishes in
+// the `i32_min`/`i32_max` helpers because of this exact pattern in
+// `Array<T>::slice`.
+
+fn helper(a: i32, b: i32) -> i32 {
+    return builtin::select(a < b, a, b);
+}
+
+struct Container<T> {
+    n: i32,
+}
+
+impl Container<T> {
+    pub fn slice(&self) -> Container<T> {
+        return Container { n: helper(self.n, 0) };
+    }
+}
+
+export fn run() {
+    let c: Container<i32> = Container { n: 5 };
+    let s = c.slice();
+    assert s.n == 0;
+}
+
+__DATA__
+{"stdout": ""}

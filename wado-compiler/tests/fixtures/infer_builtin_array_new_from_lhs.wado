@@ -1,0 +1,20 @@
+// Inference: `builtin::array_new` should back-infer its generic type
+// parameter `T` from the LHS variable type annotation when no argument
+// constrains it.
+//
+// Pattern used (before fix) in `core:prelude/format.wado`:
+//     let arr = builtin::array_new::<u8>(len);
+//
+// We want to write:
+//     let arr: builtin::array<u8> = builtin::array_new(len);
+//
+// Until inference handles this, the call still requires turbofish.
+
+export fn run() {
+    let arr: builtin::array<u8> = builtin::array_new(8);
+    builtin::array_set_u8(arr, 0, 42);
+    assert builtin::array_get_u8(arr, 0) == 42;
+}
+
+__DATA__
+{"stdout": ""}

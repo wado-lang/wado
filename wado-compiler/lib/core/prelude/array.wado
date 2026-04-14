@@ -19,16 +19,11 @@ use { Formatter } from "core:prelude/format.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { panic } from "core:internal";
 
-// TODO: drop the turbofish once inference handles `builtin::select` calls
-// inside non-generic helpers that are called from generic `impl Array<T>`
-// methods. Removing `::<i32>` here causes
-// `unsubstituted TypeParam T (index 0) reached codegen` when compiling
-// `prelude/array_test.wado`.
 fn i32_min(a: i32, b: i32) -> i32 {
-    return builtin::select::<i32>(a < b, a, b);
+    return builtin::select(a < b, a, b);
 }
 fn i32_max(a: i32, b: i32) -> i32 {
-    return builtin::select::<i32>(a > b, a, b);
+    return builtin::select(a > b, a, b);
 }
 
 pub struct Array<T> {
