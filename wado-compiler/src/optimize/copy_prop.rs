@@ -259,8 +259,6 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
                 if arg.is_mut {
                     mark_potentially_mutated_local(&arg.expr, result);
                 }
-            }
-            for arg in args {
                 analyze_expr(&arg.expr, result, type_table);
             }
         }
@@ -273,13 +271,11 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
             if matches!(type_table.get(receiver.type_id), ResolvedType::MutRef(_)) {
                 mark_potentially_mutated_local(receiver, result);
             }
+            analyze_expr(receiver, result, type_table);
             for arg in args {
                 if arg.is_mut {
                     mark_potentially_mutated_local(&arg.expr, result);
                 }
-            }
-            analyze_expr(receiver, result, type_table);
-            for arg in args {
                 analyze_expr(&arg.expr, result, type_table);
             }
         }
