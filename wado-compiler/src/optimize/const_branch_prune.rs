@@ -345,6 +345,28 @@ impl TirRefVisitor for MutationChecker {
                     return;
                 }
             }
+            // Method call receiver may be mutated by the callee (`s.push_str(...)`).
+            // Be conservative and treat receiver use as a potential mutation.
+            TirExprKind::MethodCall { receiver, .. } => {
+                if let TirExprKind::Local { index, .. } = &receiver.kind
+                    && self.locals.contains(index)
+                {
+                    self.found = true;
+                    return;
+                }
+            }
+            // Mutable call arguments can mutate the tracked local.
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    if arg.is_mut
+                        && let TirExprKind::Local { index, .. } = &arg.expr.kind
+                        && self.locals.contains(index)
+                    {
+                        self.found = true;
+                        return;
+                    }
+                }
+            }
             _ => {}
         }
         self.walk_expr(expr);

@@ -265,6 +265,12 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult) {
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
+            // Conservatively treat method calls as mutating the receiver local.
+            // This prevents unsound propagation of snapshot copies like:
+            // `let x = s; s.push_str("!"); use(x)`.
+            if let TirExprKind::Local { index, .. } = &receiver.kind {
+                result.usage.entry(*index).or_default().is_assigned = true;
+            }
             analyze_expr(receiver, result);
             for arg in args {
                 analyze_expr(&arg.expr, result);

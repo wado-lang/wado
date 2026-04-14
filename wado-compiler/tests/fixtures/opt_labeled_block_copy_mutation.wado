@@ -1,0 +1,17 @@
+// Regression: labeled-block copy propagation must not rewrite a snapshot copy
+// when the source local is mutated via method call inside the block.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut s = "a";
+    let t = l: {
+        let x = s;
+        s.push_str("b");
+        break l: x;
+    };
+    println(`s={s}`);
+    println(`t={t}`);
+}
+
+__DATA__
+{"stdout": "s=ab\nt=a\n"}
