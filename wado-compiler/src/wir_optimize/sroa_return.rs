@@ -2117,7 +2117,11 @@ fn recurse_rewrite_call_sites(
         WirInstr::Seq(body) => {
             rewrite_call_sites(body, candidate_map, types);
         }
-        _ => {}
+        _ => {
+            instr.for_each_boxed_child_mut(&mut |child| {
+                recurse_rewrite_call_sites(child, candidate_map, types);
+            });
+        }
     }
 }
 
