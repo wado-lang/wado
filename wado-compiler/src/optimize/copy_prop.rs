@@ -256,7 +256,7 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                if arg.is_mut {
+                if may_mutate_caller_state(&arg.expr, type_table) {
                     mark_potentially_mutated_local(&arg.expr, result);
                 }
                 analyze_expr(&arg.expr, result, type_table);
@@ -268,12 +268,12 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            if matches!(type_table.get(receiver.type_id), ResolvedType::MutRef(_)) {
+            if may_mutate_caller_state(receiver, type_table) {
                 mark_potentially_mutated_local(receiver, result);
             }
             analyze_expr(receiver, result, type_table);
             for arg in args {
-                if arg.is_mut {
+                if may_mutate_caller_state(&arg.expr, type_table) {
                     mark_potentially_mutated_local(&arg.expr, result);
                 }
                 analyze_expr(&arg.expr, result, type_table);
@@ -411,6 +411,10 @@ fn mark_potentially_mutated_local(expr: &TirExpr, result: &mut AnalysisResult) {
         }
         _ => {}
     }
+}
+
+fn may_mutate_caller_state(expr: &TirExpr, type_table: &TypeTable) -> bool {
+    matches!(type_table.get(expr.type_id), ResolvedType::MutRef(_))
 }
 
 /// Check if a type requires value copying (composite types with value semantics).

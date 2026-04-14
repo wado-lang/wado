@@ -1,0 +1,35 @@
+// Regression: a callee `mut` parameter must not be treated as caller-local mutation.
+// `mut n` allows rebinding inside the callee only.
+
+#[inline("never")]
+fn rebind(mut n: i32) {
+    n = n + 1;
+}
+
+#[inline("never")]
+fn use_copy(n: i32) -> i32 {
+    let copy = n;
+    rebind(n);
+    return copy + 1;
+}
+
+#[inline("never")]
+fn id(n: i32) -> i32 {
+    return n;
+}
+
+export fn run() {
+    let x = id(41);
+    assert use_copy(x) == 42;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": [
+        "let copy: i32;"
+    ],
+    "wir_expect:O2": [
+        "return n + 1;"
+    ]
+}
