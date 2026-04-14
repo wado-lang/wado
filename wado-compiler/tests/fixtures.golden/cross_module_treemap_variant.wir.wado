@@ -176,15 +176,17 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run"() with Stdout {
     let map: ref "core:collections//TreeMap<String,Value>";
     let __local_3: ref "core:prelude//Array<TreeMapEntry<String,Value>>";
+    let self: ref "core:collections//TreeMap<String,Value>";
     let key: ref "core:prelude/string.wado//String";
     let value: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
     map = struct.new "core:collections//TreeMap<String,Value>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,Value>>" {
         __local_3 = struct.new "core:prelude//Array<TreeMapEntry<String,Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,Value>">(0), used: 0 };
         break __seq_lit: __local_3;
     }), size: 0, deleted_count: 0 };
+    self = map;
     key = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     value = struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Str" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
-    "core:collections/TreeMap<String,Value>::insert"(map, key, value);
+    "core:collections/TreeMap<String,Value>::insert"(self, key, value);
     "core:cli/println"("./sub/cross_module_treemap_variant_helper.wado/stringify"(struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Obj" { discriminant: 1, payload_0: map }));
 }
 

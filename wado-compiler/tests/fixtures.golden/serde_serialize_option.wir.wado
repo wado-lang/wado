@@ -120,7 +120,9 @@ fn "wado-compiler/tests/fixtures/serde_serialize_option.wado/run"() with Stdout 
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_7: ref "wado-compiler/tests/fixtures/serde_serialize_option.wado//JsonSerializer";
+    let __local_11: ref "wado-compiler/tests/fixtures/serde_serialize_option.wado//JsonSerializer";
     let __local_15: ref "wado-compiler/tests/fixtures/serde_serialize_option.wado//JsonSerializer";
+    let __local_19: ref "wado-compiler/tests/fixtures/serde_serialize_option.wado//JsonSerializer";
     let __local_24: i32;
     let __local_25: i32;
     ser = struct.new "wado-compiler/tests/fixtures/serde_serialize_option.wado//JsonSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -129,7 +131,11 @@ fn "wado-compiler/tests/fixtures/serde_serialize_option.wado/run"() with Stdout 
         __local_7 = ser;
         if ref.test "core:prelude/types.wado//Option<i32>::Some"(some_val) {
             __local_24 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(some_val).payload_0;
-            break __inline_Option_i32__Serialize__serialize_JsonSerializer__2: "wado-compiler/tests/fixtures/serde_serialize_option.wado/JsonSerializer^Serializer::serialize_i32"(__local_7.buf, __local_24);
+            __inline_i32_Serialize__serialize_JsonSerializer__3: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_option.wado//SerializeError" {
+                __local_11 = __local_7;
+                break __inline_i32_Serialize__serialize_JsonSerializer__3: "wado-compiler/tests/fixtures/serde_serialize_option.wado/JsonSerializer^Serializer::serialize_i32"(__local_11.buf, __local_24);
+            };
+            break __inline_Option_i32__Serialize__serialize_JsonSerializer__2;
         }
         __inline_JsonSerializer_Serializer__serialize_null_4: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_option.wado//SerializeError" {
             "core:prelude/string.wado/String::push"(__local_7.buf, 110);
@@ -157,7 +163,11 @@ fn "wado-compiler/tests/fixtures/serde_serialize_option.wado/run"() with Stdout 
         __local_15 = ser;
         if ref.test "core:prelude/types.wado//Option<i32>::Some"(none_val) {
             __local_25 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(none_val).payload_0;
-            break __inline_Option_i32__Serialize__serialize_JsonSerializer__6: "wado-compiler/tests/fixtures/serde_serialize_option.wado/JsonSerializer^Serializer::serialize_i32"(__local_15.buf, __local_25);
+            __inline_i32_Serialize__serialize_JsonSerializer__7: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_option.wado//SerializeError" {
+                __local_19 = __local_15;
+                break __inline_i32_Serialize__serialize_JsonSerializer__7: "wado-compiler/tests/fixtures/serde_serialize_option.wado/JsonSerializer^Serializer::serialize_i32"(__local_19.buf, __local_25);
+            };
+            break __inline_Option_i32__Serialize__serialize_JsonSerializer__6;
         }
         __inline_JsonSerializer_Serializer__serialize_null_8: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_option.wado//SerializeError" {
             "core:prelude/string.wado/String::push"(__local_15.buf, 110);

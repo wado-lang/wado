@@ -185,13 +185,17 @@ fn "wado-compiler/tests/fixtures/treemap-literal-mutable.wado/run"() with Stdout
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let __local_16: ref "core:prelude//Array<TreeMapEntry<String,i32>>";
+    let __local_17: ref "core:collections//TreeMap<String,i32>";
     let __local_18: ref "core:prelude/string.wado//String";
+    let __local_20: ref "core:collections//TreeMap<String,i32>";
     let __local_21: ref "core:prelude/string.wado//String";
     let __local_28: ref "core:prelude/format.wado//Formatter";
     let __local_33: ref "core:prelude/format.wado//Formatter";
+    let self_36: ref "core:collections//TreeMap<String,i32>";
     let key_37: ref "core:prelude/string.wado//String";
     let __local_43: ref "core:prelude/format.wado//Formatter";
     let __local_48: ref "core:prelude/format.wado//Formatter";
+    let self_51: ref "core:collections//TreeMap<String,i32>";
     let key_52: ref "core:prelude/string.wado//String";
     let __local_57: ref "core:prelude/format.wado//Formatter";
     let __local_62: ref "core:prelude/format.wado//Formatter";
@@ -200,10 +204,12 @@ fn "wado-compiler/tests/fixtures/treemap-literal-mutable.wado/run"() with Stdout
             __local_16 = struct.new "core:prelude//Array<TreeMapEntry<String,i32>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,i32>">(0), used: 0 };
             break __seq_lit: __local_16;
         }), size: 0, deleted_count: 0 };
+        __local_17 = __local_0;
         __local_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 };
-        "core:collections/TreeMap<String,i32>::insert"(__local_0, __local_18, 1);
+        "core:collections/TreeMap<String,i32>::insert"(__local_17, __local_18, 1);
+        __local_20 = __local_0;
         __local_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y"), used: 1 };
-        "core:collections/TreeMap<String,i32>::insert"(__local_0, __local_21, 2);
+        "core:collections/TreeMap<String,i32>::insert"(__local_20, __local_21, 2);
         break __kv_lit: __local_0;
     };
     __v0_2 = m.size;
@@ -236,8 +242,9 @@ condition: m.len() == 2
         });
         unreachable;
     }
+    self_36 = m;
     key_37 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("z"), used: 1 };
-    "core:collections/TreeMap<String,i32>::insert"(m, key_37, 3);
+    "core:collections/TreeMap<String,i32>::insert"(self_36, key_37, 3);
     __v0_4 = m.size;
     __cond_5 = __v0_4 == 3;
     if __cond_5 == 0 {
@@ -268,8 +275,9 @@ condition: m.len() == 3
         });
         unreachable;
     }
+    self_51 = m;
     key_52 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 };
-    "core:collections/TreeMap<String,i32>::insert"(m, key_52, 100);
+    "core:collections/TreeMap<String,i32>::insert"(self_51, key_52, 100);
     __v0_6 = "core:collections/TreeMap<String,i32>^IndexValue<K>::index_value"(m, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 });
     __cond_7 = __v0_6 == 100;
     if __cond_7 == 0 {

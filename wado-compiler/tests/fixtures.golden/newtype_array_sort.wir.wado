@@ -135,6 +135,7 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/run"() with Stdout {
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
+    let self: ref "core:prelude//Array<i32>";
     let __local_25: ref "core:prelude/format.wado//Formatter";
     let __local_32: ref "core:prelude/format.wado//Formatter";
     let __local_39: ref "core:prelude/format.wado//Formatter";
@@ -146,7 +147,8 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/run"() with Stdout {
         __local_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(50, 10, 90, 30), used: 4 };
         break __seq_lit: __local_0;
     };
-    "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2"(scores);
+    self = scores;
+    "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2"(self);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(70), used: 0 };
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
@@ -630,11 +632,13 @@ fn "core:prelude/array.wado/Array<Score>::sorted"(self) {
     let n: i32;
     let new_repr: ref builtin::array<i32>;
     let copy: ref "core:prelude//Array<i32>";
+    let self_4: ref "core:prelude//Array<i32>";
     n = self.used;
     new_repr = builtin::array_new<i32>(n);
     builtin::array_copy<i32>(new_repr, 0, self.repr, 0, n);
     copy = struct.new "core:prelude//Array<i32>" { repr: new_repr, used: n };
-    "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2"(copy);
+    self_4 = copy;
+    "wado-compiler/tests/fixtures/newtype_array_sort.wado/Array<Score>::sort_by$__Closure_2"(self_4);
     return copy;
 }
 

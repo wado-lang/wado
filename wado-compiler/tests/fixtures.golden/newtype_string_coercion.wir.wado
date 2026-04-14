@@ -128,6 +128,7 @@ fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/run"() with Stdout
     let label2: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __local_10: ref "core:prelude/format.wado//Formatter";
     label = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     greeting = "wado-compiler/tests/fixtures/newtype_string_coercion.wado/greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 });
     x = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
@@ -140,7 +141,8 @@ fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/run"() with Stdout
         "core:prelude/string.wado/String::push"(__local_4, 111);
         "core:prelude/string.wado/String::push"(__local_4, 32);
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        "core:prelude/format.wado/Formatter::pad"(__local_5, x);
+        __local_10 = __local_5;
+        "core:prelude/format.wado/Formatter::pad"(__local_10, x);
         break __tmpl: __local_4;
     };
     "core:cli/println"(label);

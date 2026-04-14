@@ -2157,11 +2157,16 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<String>"(self) {
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/String^Deserialize::deserialize<JsonDeserializer>"(d) {
-    return "core:json/JsonDeserializer::read_json_string"(d);
+    let __local_1: ref "core:json//JsonDeserializer";
+    return __inline_JsonDeserializer_Deserializer__deserialize_string_0: block -> ref "core:prelude/types.wado//Result<String,DeserializeError>" {
+        __local_1 = d;
+        break __inline_JsonDeserializer_Deserializer__deserialize_string_0: "core:json/JsonDeserializer::read_json_string"(__local_1);
+    };
 }
 
 fn "core:json/Perms^Serialize::serialize<JsonSerializer>"(self, s) {
     let count: i32;
+    let seq: ref "core:json//JsonSeqSerializer";
     let __fused_payload_9: ref "core:json//JsonSeqSerializer";
     count = 0;
     if (self & 1) != 0 {
@@ -2171,17 +2176,18 @@ fn "core:json/Perms^Serialize::serialize<JsonSerializer>"(self, s) {
     count = count + ((self & 4) != 0);
     "core:prelude/string.wado/String::push"(s, 91);
     __fused_payload_9 = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
+    seq = __fused_payload_9;
     if (self & 1) != 0 {
-        drop("core:json/JsonSeqSerializer^SerializeSeq::element<String>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Read"), used: 4 }));
+        drop("core:json/JsonSeqSerializer^SerializeSeq::element<String>"(seq, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Read"), used: 4 }));
     }
     if (self & 2) != 0 {
-        drop("core:json/JsonSeqSerializer^SerializeSeq::element<String>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 }));
+        drop("core:json/JsonSeqSerializer^SerializeSeq::element<String>"(seq, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 }));
     }
     if (self & 4) != 0 {
-        drop("core:json/JsonSeqSerializer^SerializeSeq::element<String>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 }));
+        drop("core:json/JsonSeqSerializer^SerializeSeq::element<String>"(seq, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 }));
     }
     return __inline_JsonSeqSerializer_SerializeSeq__end_1: block -> ref null "core:serde//SerializeError" {
-        "core:prelude/string.wado/String::push"(__fused_payload_9.buf, 93);
+        "core:prelude/string.wado/String::push"(seq.buf, 93);
         break __inline_JsonSeqSerializer_SerializeSeq__end_1: ref.null none;
     };
 }

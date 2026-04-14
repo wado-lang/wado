@@ -194,6 +194,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_unsafe.wado/run"() with Stdou
     let __local_21: ref "core:prelude/string.wado//String";
     let __local_22: ref "core:prelude/format.wado//Formatter";
     let __local_36: ref "core:prelude//Array<TreeMapEntry<String,i32>>";
+    let self: ref "core:collections//TreeMap<String,i32>";
     let key: ref "core:prelude/string.wado//String";
     let value: i32;
     let __local_53: ref "core:prelude/format.wado//Formatter";
@@ -254,6 +255,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_unsafe.wado/run"() with Stdou
                 if i_4 >= 5 {
                     break __for_2;
                 }
+                self = map;
                 key = __tmpl: block -> ref "core:prelude/string.wado//String" {
                     __local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
                     "core:prelude/string.wado/String::push"(__local_15, 107);
@@ -262,7 +264,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_unsafe.wado/run"() with Stdou
                     break __tmpl: __local_15;
                 };
                 value = i_4;
-                "core:collections/TreeMap<String,i32>::insert"(map, key, value);
+                "core:collections/TreeMap<String,i32>::insert"(self, key, value);
                 i_4 = i_4 + 1;
                 continue l7;
             };

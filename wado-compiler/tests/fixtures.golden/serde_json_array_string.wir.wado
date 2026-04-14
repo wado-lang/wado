@@ -1070,9 +1070,13 @@ fn "core:json/core/json/from_string<i32>"(input) {
 fn "core:json/core/json/to_string<i32>"(value) {
     let ser: ref "core:json//JsonSerializer";
     let __local_3: ref "core:serde//SerializeError";
+    let __local_5: ref "core:json//JsonSerializer";
     ser = struct.new "core:json//JsonSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     let __match_scrut_0: ref null "core:serde//SerializeError";
-    __match_scrut_0 = "core:json/JsonSerializer^Serializer::serialize_i32"(ser.buf, value);
+    __match_scrut_0 = __inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref null "core:serde//SerializeError" {
+        __local_5 = ser;
+        break __inline_i32_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i32"(__local_5.buf, value);
+    };
     if ref.is_null(__match_scrut_0) {
     } else if ref.is_null(__match_scrut_0) == 0 {
         let __cast_1: ref null "core:serde//SerializeError";
@@ -1768,7 +1772,11 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_array_string.wado/i32^Deserialize::deserialize<JsonDeserializer>"(d) {
-    return "core:json/JsonDeserializer::parse_i32_direct"(d);
+    let __local_1: ref "core:json//JsonDeserializer";
+    return __inline_JsonDeserializer_Deserializer__deserialize_i32_0: block -> ref "core:prelude/types.wado//Result<i32,DeserializeError>" {
+        __local_1 = d;
+        break __inline_JsonDeserializer_Deserializer__deserialize_i32_0: "core:json/JsonDeserializer::parse_i32_direct"(__local_1);
+    };
 }
 
 fn "core:prelude/array.wado/Array<i32>^Serialize::serialize<JsonSerializer>"(self, s) {
@@ -1823,11 +1831,15 @@ fn "core:prelude/array.wado/Array<i32>^Serialize::serialize<JsonSerializer>"(sel
 fn "core:json/JsonSeqSerializer^SerializeSeq::element<i32>"(self, value) {
     let ser: ref "core:json//JsonSerializer";
     let r: ref null "core:serde//SerializeError";
+    let __local_5: ref "core:json//JsonSerializer";
     if self.count > 0 {
         "core:prelude/string.wado/String::push"(self.buf, 44);
     }
     ser = struct.new "core:json//JsonSerializer" { buf: self.buf };
-    r = "core:json/JsonSerializer^Serializer::serialize_i32"(ser.buf, value);
+    r = __inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref null "core:serde//SerializeError" {
+        __local_5 = ser;
+        break __inline_i32_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i32"(__local_5.buf, value);
+    };
     self.buf = ser.buf;
     self.count = self.count + 1;
     return r;

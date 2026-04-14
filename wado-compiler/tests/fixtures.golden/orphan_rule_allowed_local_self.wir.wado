@@ -120,6 +120,7 @@ fn "wado-compiler/tests/fixtures/orphan_rule_allowed_local_self.wado/run"() {
     let __local_20: ref "core:prelude/format.wado//Formatter";
     let __local_30: ref "core:prelude/format.wado//Formatter";
     let __local_37: ref "core:prelude/format.wado//Formatter";
+    let __local_39: ref "core:prelude/format.wado//Formatter";
     a = struct.new "wado-compiler/tests/fixtures/orphan_rule_allowed_local_self.wado//MyPoint" { x: 1, y: 2 };
     b = struct.new "wado-compiler/tests/fixtures/orphan_rule_allowed_local_self.wado//MyPoint" { x: 1, y: 2 };
     c = struct.new "wado-compiler/tests/fixtures/orphan_rule_allowed_local_self.wado//MyPoint" { x: 3, y: 4 };
@@ -214,7 +215,8 @@ condition: !a == c
             "core:prelude/string.wado/String::push"(__local_12, 32);
             __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
             __local_37 = __local_13;
-            "core:prelude/format.wado/Formatter::pad"(__local_37, (if __v2 -> ref "core:prelude/string.wado//String" {
+            __local_39 = __local_37;
+            "core:prelude/format.wado/Formatter::pad"(__local_39, (if __v2 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
