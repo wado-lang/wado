@@ -7,6 +7,11 @@ struct Message {
 }
 impl Serialize for Message;
 
+struct ErrorMessage {
+    error: String,
+}
+impl Serialize for ErrorMessage;
+
 fn stringify<T: Serialize>(value: &T) -> String {
     return match to_string(value) {
         Ok(s) => s,
@@ -18,8 +23,18 @@ fn ndjson<T: Serialize>(value: &T) -> String {
     return stringify(value) + "\n";
 }
 
-export fn run() {
-    println(ndjson(&Message { ok: true }));
+fn response_body(ok: bool) -> String {
+    let mut body: String;
+    if ok {
+        body = ndjson(&Message { ok: true });
+    } else {
+        body = ndjson(&ErrorMessage { error: "nope" });
+    }
+    return body;
+}
+
+export fn run() with Stdout {
+    println(response_body(true));
 }
 
 __DATA__
