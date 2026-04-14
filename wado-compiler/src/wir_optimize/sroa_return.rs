@@ -2105,10 +2105,12 @@ fn recurse_rewrite_call_sites(
             rewrite_call_sites(body, candidate_map, types);
         }
         WirInstr::If {
+            condition,
             then_body,
             else_body,
             ..
         } => {
+            recurse_rewrite_call_sites(condition, candidate_map, types);
             rewrite_call_sites(then_body, candidate_map, types);
             if let Some(eb) = else_body {
                 rewrite_call_sites(eb, candidate_map, types);
@@ -2117,7 +2119,11 @@ fn recurse_rewrite_call_sites(
         WirInstr::Seq(body) => {
             rewrite_call_sites(body, candidate_map, types);
         }
-        _ => {}
+        _ => {
+            instr.for_each_boxed_child_mut(&mut |child| {
+                recurse_rewrite_call_sites(child, candidate_map, types);
+            });
+        }
     }
 }
 

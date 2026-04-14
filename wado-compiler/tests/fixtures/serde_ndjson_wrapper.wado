@@ -1,0 +1,43 @@
+use { println } from "core:cli";
+use { Serialize } from "core:serde";
+use { to_string } from "core:json";
+
+struct Message {
+    ok: bool,
+}
+impl Serialize for Message;
+
+struct ErrorMessage {
+    error: String,
+}
+impl Serialize for ErrorMessage;
+
+fn stringify<T: Serialize>(value: &T) -> String {
+    return match to_string(value) {
+        Ok(s) => s,
+        Err(_) => "null",
+    };
+}
+
+fn ndjson<T: Serialize>(value: &T) -> String {
+    return stringify(value) + "\n";
+}
+
+fn response_body(ok: bool) -> String {
+    let mut body: String;
+    if ok {
+        body = ndjson(&Message { ok: true });
+    } else {
+        body = ndjson(&ErrorMessage { error: "nope" });
+    }
+    return body;
+}
+
+export fn run() with Stdout {
+    println(response_body(true));
+}
+
+__DATA__
+{
+    "stdout": "{\"ok\":true}\n\n"
+}
