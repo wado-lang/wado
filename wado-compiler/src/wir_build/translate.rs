@@ -1504,10 +1504,25 @@ impl FunctionTranslator<'_, '_> {
                     is_loop_break: false,
                     is_loop_continue: false,
                 });
-                let body = if has_result {
-                    self.translate_stmts_as_value(&block.stmts)
+                let block_stmts = if has_result
+                    && let Some(TirStmt {
+                        kind:
+                            TirStmtKind::Break {
+                                label: Some(break_label),
+                                value: None,
+                            },
+                        ..
+                    }) = block.stmts.last()
+                    && break_label == label
+                {
+                    &block.stmts[..block.stmts.len() - 1]
                 } else {
-                    self.translate_stmts(&block.stmts)
+                    &block.stmts
+                };
+                let body = if has_result {
+                    self.translate_stmts_as_value(block_stmts)
+                } else {
+                    self.translate_stmts(block_stmts)
                 };
                 self.label_stack.pop();
                 let result_type = if expr.type_id == TypeTable::UNIT {
