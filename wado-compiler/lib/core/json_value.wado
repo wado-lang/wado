@@ -166,7 +166,7 @@ impl Visitor for ValueVisitor {
     }
 
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Value, DeserializeError> {
-        let mut obj = TreeMap::<String, Value>::new();
+        let mut obj: TreeMap<String, Value> = TreeMap::new();
         loop {
             let key_r: Result<Option<String>, DeserializeError> = map.next_key_string();
             match key_r {

@@ -204,7 +204,7 @@ pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32 {
 global CRC_TABLE: Array<u32> = build_crc_table();
 
 fn build_crc_table() -> Array<u32> {
-    let mut table = Array::<u32>::filled(256, 0);
+    let mut table: Array<u32> = Array::filled(256, 0);
     for let mut i = 0; i < 256; i += 1 {
         let mut c = i as u32;
         for let mut j = 0; j < 8; j += 1 {
@@ -264,8 +264,8 @@ pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
         return crc1;
     }
 
-    let mut even: Array<u32> = Array::<u32>::filled(32, 0);
-    let mut odd: Array<u32> = Array::<u32>::filled(32, 0);
+    let mut even: Array<u32> = Array::filled(32, 0);
+    let mut odd: Array<u32> = Array::filled(32, 0);
 
     // Put operator for one zero bit in odd
     odd[0] = 0xEDB88320;  // CRC-32 polynomial
@@ -373,8 +373,8 @@ fn inflate_table(codetype: i32, lens: &Array<u16>, lens_offset: i32, codes_count
     let dext: Array<u16> = [16, 16, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 24, 25, 25, 26,
         26, 27, 27, 28, 28, 29, 29, 64, 64];
 
-    let mut count: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0);
-    let mut offs: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0);
+    let mut count: Array<u16> = Array::filled(MAXBITS + 1, 0);
+    let mut offs: Array<u16> = Array::filled(MAXBITS + 1, 0);
 
     // accumulate lengths for codes
     for let mut sym = 0; sym < codes_count; sym += 1 {
@@ -662,13 +662,13 @@ impl InflateState {
             wsize: 0,
             whave: 0,
             wnext: 0,
-            window: Array::<u8>::filled(1 << wbits, 0),
+            window: Array::filled(1 << wbits, 0),
             hold: 0,
             bits: 0,
             length: 0,
             offset: 0,
             extra: 0,
-            codes: Array::<Code>::filled(ENOUGH, Code::new(0, 0, 0)),
+            codes: Array::filled(ENOUGH, Code::new(0, 0, 0)),
             lencode_off: 0,
             distcode_off: 0,
             lenbits: 0,
@@ -677,8 +677,8 @@ impl InflateState {
             nlen: 0,
             ndist: 0,
             have_count: 0,
-            lens: Array::<u16>::filled(320, 0),
-            work: Array::<u16>::filled(288, 0),
+            lens: Array::filled(320, 0),
+            work: Array::filled(288, 0),
             check: 0,
             total: 0,
             sane: true,
@@ -1441,7 +1441,7 @@ pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
 /// Compresses data using DEFLATE stored blocks (no compression, raw).
 pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
     let total = input.len();
-    let mut output: Array<u8> = Array::<u8>::with_capacity(total + (total / 65535 + 1) * 5);
+    let mut output: Array<u8> = Array::with_capacity(total + (total / 65535 + 1) * 5);
     let mut pos = 0;
 
     while pos < total {
@@ -1480,7 +1480,7 @@ pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
 // Wrap raw deflate data in zlib format (stored blocks)
 /// Wraps data in zlib format using stored blocks (no actual compression).
 pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8> {
-    let mut output: Array<u8> = Array::<u8>::with_capacity(input.len() + 12);
+    let mut output: Array<u8> = Array::with_capacity(input.len() + 12);
 
     // zlib header: CMF=0x78 (deflate, 32K window), FLG=0x01 (check bits)
     output.push(0x78);
@@ -1567,8 +1567,8 @@ struct EncCode {
 
 // Build fixed Huffman literal/length encoding table (288 symbols)
 fn build_fixed_ltree() -> Array<EncCode> {
-    let mut bl_count: Array<i32> = Array::<i32>::filled(16, 0);
-    let mut tree: Array<EncCode> = Array::<EncCode>::filled(288, EncCode { code: 0, len: 0 });
+    let mut bl_count: Array<i32> = Array::filled(16, 0);
+    let mut tree: Array<EncCode> = Array::filled(288, EncCode { code: 0, len: 0 });
 
     let mut n = 0;
     while n <= 143 {
@@ -1593,7 +1593,7 @@ fn build_fixed_ltree() -> Array<EncCode> {
     }
 
     // Generate canonical codes (gen_codes from trees.c)
-    let mut next_code: Array<u32> = Array::<u32>::filled(16, 0);
+    let mut next_code: Array<u32> = Array::filled(16, 0);
     let mut code: u32 = 0;
     for let mut bits = 1; bits <= 15; bits += 1 {
         code = code + bl_count[bits - 1] as u32 << 1;
@@ -1613,7 +1613,7 @@ fn build_fixed_ltree() -> Array<EncCode> {
 
 // Build fixed distance encoding table (30 codes, all 5 bits)
 fn build_fixed_dtree() -> Array<EncCode> {
-    let mut tree: Array<EncCode> = Array::<EncCode>::filled(30, EncCode { code: 0, len: 5 });
+    let mut tree: Array<EncCode> = Array::filled(30, EncCode { code: 0, len: 5 });
     for let mut i = 0; i < 30; i += 1 {
         tree[i] = EncCode { code: bi_reverse(i as u32, 5) as u16, len: 5 };
     }
@@ -1623,7 +1623,7 @@ fn build_fixed_dtree() -> Array<EncCode> {
 // Direct lookup table: length_codes[length - 3] = code index (0..28)
 // Built using the zlib tr_static_init algorithm
 fn build_length_codes(extra_lbits: &Array<i32>) -> Array<u8> {
-    let mut table = Array::<u8>::filled(256, 0);
+    let mut table: Array<u8> = Array::filled(256, 0);
     let mut length = 0;
     for let mut code = 0; code < 28; code += 1 {
         let count = 1 << extra_lbits[code];
@@ -1640,7 +1640,7 @@ fn build_length_codes(extra_lbits: &Array<i32>) -> Array<u8> {
 // First 256: direct lookup for dist-1 < 256
 // Next 256: shifted lookup for (dist-1) >> 7 when dist > 256
 fn build_dist_codes(extra_dbits: &Array<i32>) -> Array<u8> {
-    let mut table = Array::<u8>::filled(512, 0);
+    let mut table: Array<u8> = Array::filled(512, 0);
     let mut dist = 0;
     // First 16 codes: direct entries (covers dist 1..256)
     for let mut code = 0; code < 16; code += 1 {
@@ -1693,8 +1693,8 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
     }
 
     // Hash table for LZ77
-    let mut head: Array<i32> = Array::<i32>::filled(32768, -1);
-    let mut prev: Array<i32> = Array::<i32>::filled(32768, -1);
+    let mut head: Array<i32> = Array::filled(32768, -1);
+    let mut prev: Array<i32> = Array::filled(32768, -1);
 
     let mut pos = 0;
     while pos < input_len {
@@ -1818,13 +1818,13 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
     // output: code length for each symbol
 
     // Build min-heap of symbols with non-zero frequency
-    let mut heap: Array<i32> = Array::<i32>::with_capacity(max_sym + 1);
+    let mut heap: Array<i32> = Array::with_capacity(max_sym + 1);
     let mut heap_len = 0;
 
     // Track tree structure for depth computation
-    let mut depth: Array<i32> = Array::<i32>::filled(2 * max_sym + 1, 0);
-    let mut dad: Array<i32> = Array::<i32>::filled(2 * max_sym + 1, -1);
-    let mut node_freq: Array<i32> = Array::<i32>::filled(2 * max_sym + 1, 0);
+    let mut depth: Array<i32> = Array::filled(2 * max_sym + 1, 0);
+    let mut dad: Array<i32> = Array::filled(2 * max_sym + 1, -1);
+    let mut node_freq: Array<i32> = Array::filled(2 * max_sym + 1, 0);
 
     // Initialize leaf nodes
     for let mut i = 0; i < max_sym; i += 1 {
@@ -1978,7 +1978,7 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
     }
 
     // Enforce max_bits limit: clamp overflow depths to max_bits, then fix Kraft inequality
-    let mut raw_count: Array<i32> = Array::<i32>::filled(max_bits + 2, 0);
+    let mut raw_count: Array<i32> = Array::filled(max_bits + 2, 0);
     for let mut i = 0; i < max_sym; i += 1 {
         if freqs[i] > 0 {
             let d = depth[i];
@@ -2079,12 +2079,12 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
 
 // Generate canonical Huffman codes from code lengths
 fn gen_huffman_codes(lengths: &Array<u8>, max_sym: i32, max_bits: i32) -> Array<EncCode> {
-    let mut bl_count: Array<i32> = Array::<i32>::filled(max_bits + 1, 0);
+    let mut bl_count: Array<i32> = Array::filled(max_bits + 1, 0);
     for let mut i = 0; i < max_sym; i += 1 {
         bl_count[lengths[i] as i32] += 1;
     }
 
-    let mut next_code: Array<u32> = Array::<u32>::filled(max_bits + 1, 0);
+    let mut next_code: Array<u32> = Array::filled(max_bits + 1, 0);
     let mut code: u32 = 0;
     bl_count[0] = 0;
     for let mut bits = 1; bits <= max_bits; bits += 1 {
@@ -2092,7 +2092,7 @@ fn gen_huffman_codes(lengths: &Array<u8>, max_sym: i32, max_bits: i32) -> Array<
         next_code[bits] = code;
     }
 
-    let mut tree: Array<EncCode> = Array::<EncCode>::filled(max_sym, EncCode { code: 0, len: 0 });
+    let mut tree: Array<EncCode> = Array::filled(max_sym, EncCode { code: 0, len: 0 });
     for let mut i = 0; i < max_sym; i += 1 {
         let len = lengths[i] as i32;
         if len != 0 {
@@ -2110,8 +2110,8 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
 
 
     // Count frequencies
-    let mut lit_freq: Array<i32> = Array::<i32>::filled(286, 0);
-    let mut dist_freq: Array<i32> = Array::<i32>::filled(30, 0);
+    let mut lit_freq: Array<i32> = Array::filled(286, 0);
+    let mut dist_freq: Array<i32> = Array::filled(30, 0);
 
     for let mut i = 0; i < sym_count; i += 1 {
         let sym = symbols[i];
@@ -2149,12 +2149,12 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
     }
 
     // Build trees
-    let mut lit_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
-    let mut lit_lengths: Array<u8> = Array::<u8>::filled(286, 0);
+    let mut lit_bl_count: Array<i32> = Array::filled(16, 0);
+    let mut lit_lengths: Array<u8> = Array::filled(286, 0);
     build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
 
-    let mut dist_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
-    let mut dist_lengths: Array<u8> = Array::<u8>::filled(30, 0);
+    let mut dist_bl_count: Array<i32> = Array::filled(16, 0);
+    let mut dist_lengths: Array<u8> = Array::filled(30, 0);
     build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
 
     // Generate codes
@@ -2173,7 +2173,7 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
 
     // RLE encode the combined code lengths
     let total_codes = nlit + ndist;
-    let mut combined: Array<u8> = Array::<u8>::filled(total_codes, 0);
+    let mut combined: Array<u8> = Array::filled(total_codes, 0);
     for let mut i = 0; i < nlit; i += 1 {
         combined[i] = lit_lengths[i];
     }
@@ -2230,12 +2230,12 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
     }
 
     // Build bit-length tree
-    let mut bl_freq: Array<i32> = Array::<i32>::filled(19, 0);
+    let mut bl_freq: Array<i32> = Array::filled(19, 0);
     for let mut j = 0; j < rle.len(); j += 1 {
         bl_freq[rle[j] as i32] += 1;
     }
-    let mut bl_bl_count: Array<i32> = Array::<i32>::filled(MAX_BL_BITS + 1, 0);
-    let mut bl_lengths: Array<u8> = Array::<u8>::filled(19, 0);
+    let mut bl_bl_count: Array<i32> = Array::filled(MAX_BL_BITS + 1, 0);
+    let mut bl_lengths: Array<u8> = Array::filled(19, 0);
     build_huffman_tree(&bl_freq, 19, MAX_BL_BITS, &mut bl_bl_count, &mut bl_lengths);
     let bl_tree = gen_huffman_codes(&bl_lengths, 19, MAX_BL_BITS);
 
@@ -2408,8 +2408,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
     let dist_codes_table = build_dist_codes(&DIST_EXTRA);
 
     // Collect symbols using LZ77
-    let mut symbols: Array<i32> = Array::<i32>::with_capacity(input_len);
-    let mut distances: Array<i32> = Array::<i32>::with_capacity(input_len);
+    let mut symbols: Array<i32> = Array::with_capacity(input_len);
+    let mut distances: Array<i32> = Array::with_capacity(input_len);
 
     if input_len == 0 {
         // Empty input: just write empty block
@@ -2457,8 +2457,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
         }
     } else {
         // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching
-        let mut head: Array<i32> = Array::<i32>::filled(32768, -1);
-        let mut prev: Array<i32> = Array::<i32>::filled(32768, -1);
+        let mut head: Array<i32> = Array::filled(32768, -1);
+        let mut prev: Array<i32> = Array::filled(32768, -1);
 
         if config.use_lazy {
             // Lazy matching (levels 4-9)
@@ -2669,8 +2669,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
     fixed_bits += ltree[256].len as i32;  // EOB
 
     // Compute cost of dynamic encoding (approximate)
-    let mut lit_freq: Array<i32> = Array::<i32>::filled(286, 0);
-    let mut dist_freq: Array<i32> = Array::<i32>::filled(30, 0);
+    let mut lit_freq: Array<i32> = Array::filled(286, 0);
+    let mut dist_freq: Array<i32> = Array::filled(30, 0);
     for let mut i = 0; i < sym_count; i += 1 {
         let sym = symbols[i];
         if sym < 256 {
@@ -2699,11 +2699,11 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
     }
 
     // Build optimal trees to estimate dynamic cost
-    let mut lit_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
-    let mut lit_lengths: Array<u8> = Array::<u8>::filled(286, 0);
+    let mut lit_bl_count: Array<i32> = Array::filled(16, 0);
+    let mut lit_lengths: Array<u8> = Array::filled(286, 0);
     build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
-    let mut dist_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
-    let mut dist_lengths: Array<u8> = Array::<u8>::filled(30, 0);
+    let mut dist_bl_count: Array<i32> = Array::filled(16, 0);
+    let mut dist_lengths: Array<u8> = Array::filled(30, 0);
     build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
 
     let mut dynamic_data_bits = 0;
@@ -2737,7 +2737,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
 
     // RLE-encode the combined code lengths to count header bits
     let total_codes = nlit + ndist;
-    let mut hdr_combined: Array<u8> = Array::<u8>::filled(total_codes, 0);
+    let mut hdr_combined: Array<u8> = Array::filled(total_codes, 0);
     for let mut hi = 0; hi < nlit; hi += 1 {
         hdr_combined[hi] = lit_lengths[hi];
     }
@@ -2793,12 +2793,12 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
     }
 
     // Build BL tree for header cost
-    let mut hdr_bl_freq: Array<i32> = Array::<i32>::filled(19, 0);
+    let mut hdr_bl_freq: Array<i32> = Array::filled(19, 0);
     for let mut hj = 0; hj < hdr_rle.len(); hj += 1 {
         hdr_bl_freq[hdr_rle[hj] as i32] += 1;
     }
-    let mut hdr_bl_bl_count: Array<i32> = Array::<i32>::filled(MAX_BL_BITS + 1, 0);
-    let mut hdr_bl_lengths: Array<u8> = Array::<u8>::filled(19, 0);
+    let mut hdr_bl_bl_count: Array<i32> = Array::filled(MAX_BL_BITS + 1, 0);
+    let mut hdr_bl_lengths: Array<u8> = Array::filled(19, 0);
     build_huffman_tree(&hdr_bl_freq, 19, MAX_BL_BITS, &mut hdr_bl_bl_count, &mut hdr_bl_lengths);
     let hdr_bl_tree = gen_huffman_codes(&hdr_bl_lengths, 19, MAX_BL_BITS);
 
@@ -2864,7 +2864,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
 
 // Wrap raw deflate data in zlib format
 fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
-    let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 6);
+    let mut output: Array<u8> = Array::with_capacity(deflated.len() + 6);
 
     // zlib header: CMF=0x78 (deflate, 32K window)
     // FLG: FCHECK + FLEVEL
@@ -3056,7 +3056,7 @@ pub fn gzip_compress(input: &Array<u8>) -> Array<u8> {
 /// Compresses data in gzip format with the specified compression level.
 pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
     let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
-    let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 18);
+    let mut output: Array<u8> = Array::with_capacity(deflated.len() + 18);
 
     // Gzip header (10 bytes)
     output.push(GZIP_MAGIC1);  // ID1
@@ -3205,7 +3205,7 @@ impl GzipHeader {
 /// Compresses data in gzip format with a custom header and compression level.
 pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8> {
     let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
-    let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 64);
+    let mut output: Array<u8> = Array::with_capacity(deflated.len() + 64);
 
     // Gzip header
     output.push(GZIP_MAGIC1);
@@ -3511,7 +3511,7 @@ impl DeflateStream {
 
     /// Creates a copy of this stream.
     pub fn copy(&self) -> DeflateStream {
-        let mut buf_copy: Array<u8> = Array::<u8>::with_capacity(self.buffer.len());
+        let mut buf_copy: Array<u8> = Array::with_capacity(self.buffer.len());
         for let mut i = 0; i < self.buffer.len(); i += 1 {
             buf_copy.push(self.buffer[i]);
         }
@@ -3647,7 +3647,7 @@ impl InflateStream {
 
     /// Creates a copy of this stream.
     pub fn copy(&self) -> InflateStream {
-        let mut buf_copy: Array<u8> = Array::<u8>::with_capacity(self.buffer.len());
+        let mut buf_copy: Array<u8> = Array::with_capacity(self.buffer.len());
         for let mut i = 0; i < self.buffer.len(); i += 1 {
             buf_copy.push(self.buffer[i]);
         }

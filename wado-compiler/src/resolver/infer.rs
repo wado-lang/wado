@@ -193,19 +193,22 @@ pub(super) fn unify(
 /// 1. **Strong (argument-derived)** constraints — added via [`add`]. These
 ///    are unified immediately into the shared bindings map, so the first
 ///    typed argument to mention a type parameter pins its binding.
-/// 2. **Weak (literal-number)** constraints — added via [`add_deferred`].
-///    These are queued and only unified after every strong constraint has
-///    been processed. Because [`unify`] uses `or_insert`, a literal `0`
-///    cannot clobber a binding already produced from a neighbouring typed
-///    argument. This preserves the `fn two<T>(x: T, y: T); two(1, 2 as u8)`
-///    ⇒ `T = u8` behaviour historically only supported for plain
-///    function calls.
-/// 3. **Weaker (expected-return)** constraints — added via
+/// 2. **Medium (expected-return)** constraints — added via
 ///    [`add_expected_return`]. The declaration's return type is unified
-///    against the caller's expected type, but only *after* both argument
-///    tiers have run so that a caller annotation can fill otherwise
-///    unbound parameters without contradicting what the arguments
-///    asserted.
+///    against the caller's expected type after every strong argument
+///    constraint has run. An LHS type annotation
+///    (`let x: Array<u16> = Array::filled(n, 0)`) is more precise than
+///    the default type of a numeric literal argument, so it is processed
+///    before the literal-deferred pass and pins type parameters that no
+///    typed argument constrains.
+/// 3. **Weak (literal-number)** constraints — added via [`add_deferred`].
+///    These are queued and only unified after both stronger tiers have
+///    run. Because [`unify`] uses `or_insert`, a literal `0` cannot
+///    clobber a binding already produced from a neighbouring typed
+///    argument or an LHS annotation. This preserves the
+///    `fn two<T>(x: T, y: T); two(1, 2 as u8)` ⇒ `T = u8` behaviour
+///    historically only supported for plain function calls and only kicks
+///    in when nothing stronger pinned the parameter.
 ///
 /// Use [`solve`](Self::solve) to get the final type arguments in
 /// declaration order. Unbound parameters fall back to their original
@@ -294,13 +297,17 @@ impl<'a> InferCtx<'a> {
     }
 
     fn run_deferred_passes(&mut self) {
-        // Pass 2: literal-number args.
-        for (expected, actual) in std::mem::take(&mut self.deferred_args) {
-            unify(self.type_table, expected, actual, &mut self.bindings);
-        }
-        // Pass 3: expected-return driven back-inference.
+        // Pass 2: expected-return driven back-inference. An LHS annotation
+        // is more precise than the default type of a numeric literal
+        // argument, so it pins type parameters before the literal-deferred
+        // pass clobbers them with i32 / f64.
         for (decl_return, expected) in std::mem::take(&mut self.expected_returns) {
             unify(self.type_table, decl_return, expected, &mut self.bindings);
+        }
+        // Pass 3: literal-number args. Only fills parameters that no
+        // stronger constraint already pinned.
+        for (expected, actual) in std::mem::take(&mut self.deferred_args) {
+            unify(self.type_table, expected, actual, &mut self.bindings);
         }
     }
 

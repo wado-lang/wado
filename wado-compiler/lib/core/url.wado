@@ -120,7 +120,7 @@ pub fn percent_encode(input: String) -> String {
 /// Returns Err if the input contains invalid percent-encoding or invalid UTF-8.
 pub fn percent_decode(input: String) -> Result<String, ParseError> {
     let len = input.len();
-    let mut bytes: Array<u8> = Array::<u8>::with_capacity(len);
+    let mut bytes: Array<u8> = Array::with_capacity(len);
     let mut i = 0;
     while i < len {
         let c = input.get_byte(i) as char;
@@ -165,7 +165,7 @@ fn percent_encode_query_component(input: &String) -> String {
 
 fn percent_decode_query_component(input: &String) -> String {
     let len = input.len();
-    let mut bytes: Array<u8> = Array::<u8>::with_capacity(len);
+    let mut bytes: Array<u8> = Array::with_capacity(len);
     let mut i = 0;
     while i < len {
         let c = input.get_byte(i) as char;
@@ -198,7 +198,7 @@ fn percent_decode_query_component(input: &String) -> String {
 /// Handles "+" as space and decodes percent-encoding.
 /// Duplicate keys use last-value-wins semantics.
 pub fn parse_query(query: String) -> TreeMap<String, String> {
-    let mut result = TreeMap::<String, String>::new();
+    let mut result: TreeMap<String, String> = TreeMap::new();
     if query.is_empty() {
         return result;
     }
@@ -491,7 +491,7 @@ impl Url {
         if let Some(q) = self.query {
             return parse_query(q);
         }
-        return TreeMap::<String, String>::new();
+        return TreeMap::new();
     }
 
     /// Serializes the URL back to a string.
@@ -672,7 +672,7 @@ impl Url {
     pub fn query_pairs(&self) -> TreeMap<String, String> {
         return match self.query {
             Some(q) => parse_query(q),
-            None => TreeMap::<String, String>::new(),
+            None => TreeMap::new(),
         };
     }
 

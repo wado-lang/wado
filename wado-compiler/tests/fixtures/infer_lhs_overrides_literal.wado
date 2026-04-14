@@ -1,0 +1,46 @@
+// Inference: an LHS type annotation should back-infer a generic type
+// parameter even when the call also has a numeric literal argument that
+// would otherwise default-bind the parameter.
+//
+// Pattern used (before fix) in `core:zlib`:
+//     let mut count: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0);
+//
+// We want to write:
+//     let mut count: Array<u16> = Array::filled(MAXBITS + 1, 0);
+//
+// The literal `0` would normally deferred-bind T to i32, but because the
+// LHS annotation provides a stronger expected type, T should resolve to
+// u16 instead.
+//
+// The same logic applies to free generic functions and instance methods
+// whose return type carries a type parameter.
+
+fn make_pair<T>(a: T, b: T) -> [T, T] {
+    return [a, b];
+}
+
+struct Container<T> {
+    a: T,
+    b: T,
+}
+
+impl<T> Container<T> {
+    pub fn filled(a: T, b: T) -> Container<T> {
+        return Container { a, b };
+    }
+}
+
+export fn run() {
+    // Free generic function: literals + LHS annotation.
+    let pair: [u16, u16] = make_pair(1, 2);
+    assert pair.0 == 1;
+    assert pair.1 == 2;
+
+    // Static method on generic struct: literals + LHS annotation.
+    let c: Container<u16> = Container::filled(3, 4);
+    assert c.a == 3;
+    assert c.b == 4;
+}
+
+__DATA__
+{"stdout": ""}

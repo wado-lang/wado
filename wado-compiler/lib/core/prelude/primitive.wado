@@ -27,7 +27,7 @@ use {
 
 /// Copy bytes from linear memory to a new GC array (internal helper)
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
-    let arr = builtin::array_new::<u8>(len);
+    let arr: builtin::array<u8> = builtin::array_new(len);
     for let mut i = 0; i < len; i += 1 {
         builtin::array_set_u8(arr, i, builtin::i32_load8_u(ptr + i) as u8);
     }
@@ -335,19 +335,19 @@ impl char {
             return [cp as u8] as Array<u8>;
         }
         if cp < 0x800 {
-            let mut buf: Array<u8> = Array::<u8>::with_capacity(2);
+            let mut buf: Array<u8> = Array::with_capacity(2);
             buf.push((0xC0 | cp >> 6) as u8);
             buf.push((0x80 | cp & 0x3F) as u8);
             return buf;
         }
         if cp < 0x10000 {
-            let mut buf: Array<u8> = Array::<u8>::with_capacity(3);
+            let mut buf: Array<u8> = Array::with_capacity(3);
             buf.push((0xE0 | cp >> 12) as u8);
             buf.push((0x80 | cp >> 6 & 0x3F) as u8);
             buf.push((0x80 | cp & 0x3F) as u8);
             return buf;
         }
-        let mut buf: Array<u8> = Array::<u8>::with_capacity(4);
+        let mut buf: Array<u8> = Array::with_capacity(4);
         buf.push((0xF0 | cp >> 18) as u8);
         buf.push((0x80 | cp >> 12 & 0x3F) as u8);
         buf.push((0x80 | cp >> 6 & 0x3F) as u8);

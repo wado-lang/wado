@@ -523,7 +523,7 @@ impl<T: Deserialize> Deserialize for Array<T> {
             let first = seq.next_element::<T>();
             if let Ok(first_opt) = first {
                 if let Some(first_elem) = first_opt {
-                    let mut items = Array::<T>::with_capacity(2);
+                    let mut items: Array<T> = Array::with_capacity(2);
                     items.push(first_elem);
                     loop {
                         let next = seq.next_element::<T>();

@@ -2089,6 +2089,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         mangled_func_name: &str,
         args: &[TirExpr],
+        impl_type_args: &[TypeId],
         method_type_args: &[TypeId],
         span: Span,
         _ctx: &mut FunctionContext,
@@ -2152,18 +2153,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
             &final_mangled_name,
         );
 
-        // Substitute method-level type parameters in return type
-        if !method_type_args.is_empty() {
-            return_type = self.substitute_type_params(return_type, method_type_args);
+        // Substitute impl-level + method-level type parameters in return type.
+        // `lookup_static_method_return_type` registers impl params at indices
+        // 0..impl_count and method params at indices impl_count..total, so a
+        // single flat substitution list `[impl_args.., method_args..]` lines
+        // up correctly with `substitute_type_params` (which substitutes by index).
+        if !impl_type_args.is_empty() || !method_type_args.is_empty() {
+            let mut combined = impl_type_args.to_vec();
+            combined.extend_from_slice(method_type_args);
+            return_type = self.substitute_type_params(return_type, &combined);
         }
 
-        // Build monomorph_info for method-level generic instantiation
-        let monomorph_info = if method_type_args.is_empty() {
+        // Build monomorph_info for impl-level and/or method-level generic instantiation
+        let monomorph_info = if impl_type_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
             Some(MonomorphInfo {
                 generic_name: final_mangled_name.clone(),
-                impl_type_args: vec![],
+                impl_type_args: impl_type_args.to_vec(),
                 method_type_args: method_type_args.to_vec(),
                 is_blanket: false,
             })

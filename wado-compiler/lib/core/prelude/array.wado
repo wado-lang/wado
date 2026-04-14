@@ -33,16 +33,13 @@ pub struct Array<T> {
 
 impl Array<T> {
     pub fn with_capacity(capacity: i32) -> Array<T> {
-        return Array {
-            repr: builtin::array_new::<T>(capacity),
-            used: 0,
-        };
+        return Array { repr: builtin::array_new(capacity), used: 0 };
     }
 
     pub fn grow(&mut self) {
         let capacity = builtin::array_len(self.repr);
         let new_capacity = i32_max(capacity * 2, 4);
-        let new_repr = builtin::array_new::<T>(new_capacity);
+        let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
         let old_repr = self.repr;
         let used = self.used;
         for let mut i = 0; i < used; i += 1 {
@@ -57,7 +54,7 @@ impl Array<T> {
             return;
         }
         let new_capacity = i32_max(i32_max(capacity * 2, min_capacity), 4);
-        let new_repr = builtin::array_new::<T>(new_capacity);
+        let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
         let old_repr = self.repr;
         let used = self.used;
         for let mut i = 0; i < used; i += 1 {
@@ -67,7 +64,7 @@ impl Array<T> {
     }
 
     pub fn filled(n: i32, element: T) -> Array<T> {
-        let repr = builtin::array_new::<T>(n);
+        let repr: builtin::array<T> = builtin::array_new(n);
         builtin::array_fill(repr, 0, element, n);
         return Array { repr, used: n };
     }
@@ -197,7 +194,7 @@ impl Array<T> {
     pub fn shrink_to_fit(&mut self) {
         let capacity = builtin::array_len(self.repr);
         if capacity > self.used {
-            let new_repr = builtin::array_new::<T>(self.used);
+            let new_repr: builtin::array<T> = builtin::array_new(self.used);
             for let mut i = 0; i < self.used; i += 1 {
                 builtin::array_set(new_repr, i, builtin::array_get(self.repr, i));
             }
@@ -235,7 +232,7 @@ impl Array<T> {
     /// Returns a new array containing this array's elements repeated `n` times.
     pub fn repeat(&self, n: i32) -> Array<T> {
         let total = self.used * n;
-        let new_repr = builtin::array_new::<T>(total);
+        let new_repr: builtin::array<T> = builtin::array_new(total);
         let mut offset = 0;
         for let mut r = 0; r < n; r += 1 {
             for let mut i = 0; i < self.used; i += 1 {
@@ -255,7 +252,7 @@ impl Array<T> {
         let capacity = builtin::array_len(self.repr);
         if builtin::unlikely(new_used > capacity) {
             let new_capacity = i32_max(new_used, capacity * 2);
-            let new_repr = builtin::array_new::<T>(new_capacity);
+            let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
             // Use element-by-element loop: Wasm array.copy is a libcall in wasmtime
             // (~3μs/element), while a JIT-compiled loop runs at ~1ns/element.
             let old_repr = self.repr;
@@ -381,9 +378,9 @@ impl ArraySlice<T> {
     pub fn to_array(&self) -> Array<T> {
         let len = self.end - self.start;
         if len <= 0 {
-            return Array::<T>::with_capacity(0);
+            return Array::with_capacity(0);
         }
-        let new_repr = builtin::array_new::<T>(len);
+        let new_repr: builtin::array<T> = builtin::array_new(len);
         builtin::array_copy(new_repr, 0, self.repr, self.start, len);
         return Array { repr: new_repr, used: len };
     }
@@ -552,7 +549,7 @@ impl Array<T> {
             return;
         }
         let src = self.repr;
-        let buf = builtin::array_new::<T>(n);
+        let buf: builtin::array<T> = builtin::array_new(n);
         let mut width = 1;
         for ; width < n; width = width * 2 {
             for let mut start = 0; start < n; start += width * 2 {
@@ -590,7 +587,7 @@ impl Array<T> {
 
     pub fn sorted_by(&self, cmp: fn(&T, &T) -> Ordering) -> Array<T> {
         let n = self.used;
-        let new_repr = builtin::array_new::<T>(n);
+        let new_repr: builtin::array<T> = builtin::array_new(n);
         builtin::array_copy(new_repr, 0, self.repr, 0, n);
         let mut copy = Array { repr: new_repr, used: n };
         copy.sort_by(cmp);
@@ -701,7 +698,7 @@ impl<T: Ord> Array<T> {
 
     pub fn sorted(&self) -> Array<T> {
         let n = self.used;
-        let new_repr = builtin::array_new::<T>(n);
+        let new_repr: builtin::array<T> = builtin::array_new(n);
         builtin::array_copy(new_repr, 0, self.repr, 0, n);
         let mut copy = Array { repr: new_repr, used: n };
         copy.sort();
@@ -744,7 +741,7 @@ impl SequenceLiteralBuilder for Array<T> {
     type Output = Array<T>;
 
     fn new_literal(capacity: i32) -> Array<T> {
-        return Array::<T>::with_capacity(capacity);
+        return Array::with_capacity(capacity);
     }
 
     fn push_literal(&mut self, value: T) with stores[value] {
@@ -759,7 +756,7 @@ impl SequenceLiteralBuilder for Array<T> {
 impl ArrayIter<T> {
     pub fn collect(&mut self) -> Array<T> {
         let remaining = self.used - self.index;
-        let mut repr = builtin::array_new::<T>(remaining);
+        let mut repr: builtin::array<T> = builtin::array_new(remaining);
         let mut result_used = 0;
         for let mut i = self.index; i < self.used; i += 1 {
             let item = builtin::array_get(self.repr, i);
