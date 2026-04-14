@@ -37,7 +37,7 @@ global URL_SAFE_TABLE: Array<u8> = ['A' as u8, 'B' as u8, 'C' as u8, 'D' as u8, 
     '5' as u8, '6' as u8, '7' as u8, '8' as u8, '9' as u8, '-' as u8, '_' as u8] as Array<u8>;
 
 fn build_decode_table() -> Array<u8> {
-    let mut table: Array<u8> = Array::<u8>::filled(256, 255);
+    let mut table: Array<u8> = Array::filled(256, 255);
 
     for let mut i = 0; i < 26; i += 1 {
         table['A' as i32 + i] = i as u8;
@@ -141,7 +141,7 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
         out_len = out_len + 2;
     }
 
-    let mut out: Array<u8> = Array::<u8>::with_capacity(out_len);
+    let mut out: Array<u8> = Array::with_capacity(out_len);
     let table = &DECODE_TABLE;
 
     let mut i = 0;

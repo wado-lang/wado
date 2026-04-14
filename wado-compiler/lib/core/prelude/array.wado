@@ -20,10 +20,10 @@ use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { panic } from "core:internal";
 
 fn i32_min(a: i32, b: i32) -> i32 {
-    return builtin::select::<i32>(a < b, a, b);
+    return builtin::select(a < b, a, b);
 }
 fn i32_max(a: i32, b: i32) -> i32 {
-    return builtin::select::<i32>(a > b, a, b);
+    return builtin::select(a > b, a, b);
 }
 
 pub struct Array<T> {
@@ -33,20 +33,17 @@ pub struct Array<T> {
 
 impl Array<T> {
     pub fn with_capacity(capacity: i32) -> Array<T> {
-        return Array {
-            repr: builtin::array_new::<T>(capacity),
-            used: 0,
-        };
+        return Array { repr: builtin::array_new(capacity), used: 0 };
     }
 
     pub fn grow(&mut self) {
         let capacity = builtin::array_len(self.repr);
         let new_capacity = i32_max(capacity * 2, 4);
-        let new_repr = builtin::array_new::<T>(new_capacity);
+        let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
         let old_repr = self.repr;
         let used = self.used;
         for let mut i = 0; i < used; i += 1 {
-            builtin::array_set::<T>(new_repr, i, builtin::array_get::<T>(old_repr, i));
+            builtin::array_set(new_repr, i, builtin::array_get(old_repr, i));
         }
         self.repr = new_repr;
     }
@@ -57,18 +54,18 @@ impl Array<T> {
             return;
         }
         let new_capacity = i32_max(i32_max(capacity * 2, min_capacity), 4);
-        let new_repr = builtin::array_new::<T>(new_capacity);
+        let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
         let old_repr = self.repr;
         let used = self.used;
         for let mut i = 0; i < used; i += 1 {
-            builtin::array_set::<T>(new_repr, i, builtin::array_get::<T>(old_repr, i));
+            builtin::array_set(new_repr, i, builtin::array_get(old_repr, i));
         }
         self.repr = new_repr;
     }
 
     pub fn filled(n: i32, element: T) -> Array<T> {
-        let repr = builtin::array_new::<T>(n);
-        builtin::array_fill::<T>(repr, 0, element, n);
+        let repr: builtin::array<T> = builtin::array_new(n);
+        builtin::array_fill(repr, 0, element, n);
         return Array { repr, used: n };
     }
 
@@ -100,7 +97,7 @@ impl Array<T> {
         if builtin::unlikely(used >= builtin::array_len(self.repr)) {
             self.grow();
         }
-        builtin::array_set::<T>(self.repr, used, value);
+        builtin::array_set(self.repr, used, value);
         self.used = used + 1;
     }
 
@@ -109,7 +106,7 @@ impl Array<T> {
             return null;
         }
         self.used -= 1;
-        return Option::Some(builtin::array_get::<T>(self.repr, self.used));
+        return Option::Some(builtin::array_get(self.repr, self.used));
     }
 
     /// Returns the first element, or None if empty.
@@ -117,21 +114,21 @@ impl Array<T> {
         if self.used == 0 {
             return null;
         }
-        return Option::Some(builtin::array_get::<T>(self.repr, 0));
+        return Option::Some(builtin::array_get(self.repr, 0));
     }
 
     pub fn last(&self) -> Option<T> {
         if self.used == 0 {
             return null;
         }
-        return Option::Some(builtin::array_get::<T>(self.repr, self.used - 1));
+        return Option::Some(builtin::array_get(self.repr, self.used - 1));
     }
 
     pub fn get(&self, index: i32) -> Option<T> {
         if index < 0 || index >= self.used {
             return null;
         }
-        return Option::Some(builtin::array_get::<T>(self.repr, index));
+        return Option::Some(builtin::array_get(self.repr, index));
     }
 
     /// Inserts an element at the given index, shifting all elements after it to the right.
@@ -144,10 +141,10 @@ impl Array<T> {
         // Shift elements right
         let mut i = self.used;
         while i > index {
-            builtin::array_set::<T>(self.repr, i, builtin::array_get::<T>(self.repr, i - 1));
+            builtin::array_set(self.repr, i, builtin::array_get(self.repr, i - 1));
             i -= 1;
         }
-        builtin::array_set::<T>(self.repr, index, value);
+        builtin::array_set(self.repr, index, value);
         self.used += 1;
     }
 
@@ -155,10 +152,10 @@ impl Array<T> {
     /// Panics if `index >= len()`.
     pub fn remove(&mut self, index: i32) -> T {
         assert index >= 0 && index < self.used, "index out of bounds";
-        let value = builtin::array_get::<T>(self.repr, index);
+        let value = builtin::array_get(self.repr, index);
         // Shift elements left
         for let mut i = index; i < self.used - 1; i += 1 {
-            builtin::array_set::<T>(self.repr, i, builtin::array_get::<T>(self.repr, i + 1));
+            builtin::array_set(self.repr, i, builtin::array_get(self.repr, i + 1));
         }
         self.used -= 1;
         return value;
@@ -169,9 +166,9 @@ impl Array<T> {
     pub fn swap(&mut self, a: i32, b: i32) {
         assert a >= 0 && a < self.used, "index out of bounds";
         assert b >= 0 && b < self.used, "index out of bounds";
-        let tmp = builtin::array_get::<T>(self.repr, a);
-        builtin::array_set::<T>(self.repr, a, builtin::array_get::<T>(self.repr, b));
-        builtin::array_set::<T>(self.repr, b, tmp);
+        let tmp = builtin::array_get(self.repr, a);
+        builtin::array_set(self.repr, a, builtin::array_get(self.repr, b));
+        builtin::array_set(self.repr, b, tmp);
     }
 
     pub fn truncate(&mut self, len: i32) {
@@ -197,9 +194,9 @@ impl Array<T> {
     pub fn shrink_to_fit(&mut self) {
         let capacity = builtin::array_len(self.repr);
         if capacity > self.used {
-            let new_repr = builtin::array_new::<T>(self.used);
+            let new_repr: builtin::array<T> = builtin::array_new(self.used);
             for let mut i = 0; i < self.used; i += 1 {
-                builtin::array_set::<T>(new_repr, i, builtin::array_get::<T>(self.repr, i));
+                builtin::array_set(new_repr, i, builtin::array_get(self.repr, i));
             }
             self.repr = new_repr;
         }
@@ -215,7 +212,7 @@ impl Array<T> {
         if new_used > builtin::array_len(self.repr) {
             self.grow_to(new_used);
         }
-        builtin::array_copy::<T>(self.repr, self.used, other.repr, 0, other_len);
+        builtin::array_copy(self.repr, self.used, other.repr, 0, other_len);
         self.used = new_used;
     }
 
@@ -224,9 +221,9 @@ impl Array<T> {
         let mut lo = 0;
         let mut hi = self.used - 1;
         while lo < hi {
-            let tmp = builtin::array_get::<T>(self.repr, lo);
-            builtin::array_set::<T>(self.repr, lo, builtin::array_get::<T>(self.repr, hi));
-            builtin::array_set::<T>(self.repr, hi, tmp);
+            let tmp = builtin::array_get(self.repr, lo);
+            builtin::array_set(self.repr, lo, builtin::array_get(self.repr, hi));
+            builtin::array_set(self.repr, hi, tmp);
             lo += 1;
             hi -= 1;
         }
@@ -235,11 +232,11 @@ impl Array<T> {
     /// Returns a new array containing this array's elements repeated `n` times.
     pub fn repeat(&self, n: i32) -> Array<T> {
         let total = self.used * n;
-        let new_repr = builtin::array_new::<T>(total);
+        let new_repr: builtin::array<T> = builtin::array_new(total);
         let mut offset = 0;
         for let mut r = 0; r < n; r += 1 {
             for let mut i = 0; i < self.used; i += 1 {
-                builtin::array_set::<T>(new_repr, offset, builtin::array_get::<T>(self.repr, i));
+                builtin::array_set(new_repr, offset, builtin::array_get(self.repr, i));
                 offset += 1;
             }
         }
@@ -255,13 +252,13 @@ impl Array<T> {
         let capacity = builtin::array_len(self.repr);
         if builtin::unlikely(new_used > capacity) {
             let new_capacity = i32_max(new_used, capacity * 2);
-            let new_repr = builtin::array_new::<T>(new_capacity);
+            let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
             // Use element-by-element loop: Wasm array.copy is a libcall in wasmtime
             // (~3μs/element), while a JIT-compiled loop runs at ~1ns/element.
             let old_repr = self.repr;
             let old_used = self.used;
             for let mut i = 0; i < old_used; i += 1 {
-                builtin::array_set::<T>(new_repr, i, builtin::array_get::<T>(old_repr, i));
+                builtin::array_set(new_repr, i, builtin::array_get(old_repr, i));
             }
             self.repr = new_repr;
         }
@@ -270,7 +267,7 @@ impl Array<T> {
         // Forward copy is correct for non-overlapping (any order works) and for
         // overlapping back-references where src < dst (DEFLATE run-length expansion).
         for let mut i = 0; i < count; i += 1 {
-            builtin::array_set::<T>(raw, base + i, builtin::array_get::<T>(raw, src_start + i));
+            builtin::array_set(raw, base + i, builtin::array_get(raw, src_start + i));
         }
         self.used = new_used;
     }
@@ -280,7 +277,7 @@ impl<T: Eq> Array<T> {
     /// Returns true if the array contains the given value.
     pub fn contains(&self, value: &T) -> bool {
         for let mut i = 0; i < self.used; i += 1 {
-            if builtin::array_get::<T>(self.repr, i) == *value {
+            if builtin::array_get(self.repr, i) == *value {
                 return true;
             }
         }
@@ -295,7 +292,7 @@ impl IndexValue<i32> for Array<T> {
         if index >= self.used {
             panic("index out of bounds");
         }
-        return builtin::array_get::<T>(self.repr, index);
+        return builtin::array_get(self.repr, index);
     }
 }
 
@@ -306,7 +303,7 @@ impl IndexAssign<i32> for Array<T> {
         if index >= self.used {
             panic("index out of bounds");
         }
-        builtin::array_set::<T>(self.repr, index, value);
+        builtin::array_set(self.repr, index, value);
     }
 }
 
@@ -316,7 +313,7 @@ impl<T: Eq> Eq for Array<T> {
             return false;
         }
         for let mut i = 0; i < self.used; i += 1 {
-            if builtin::array_get::<T>(self.repr, i) != builtin::array_get::<T>(other.repr, i) {
+            if builtin::array_get(self.repr, i) != builtin::array_get(other.repr, i) {
                 return false;
             }
         }
@@ -328,8 +325,8 @@ impl<T: Ord> Ord for Array<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let min_len = i32_min(self.used, other.used);
         for let mut i = 0; i < min_len; i += 1 {
-            let a = builtin::array_get::<T>(self.repr, i);
-            let b = builtin::array_get::<T>(other.repr, i);
+            let a = builtin::array_get(self.repr, i);
+            let b = builtin::array_get(other.repr, i);
             if a < b {
                 return Ordering::Less;
             }
@@ -365,7 +362,7 @@ impl ArraySlice<T> {
         if index < 0 || index >= self.end - self.start {
             return null;
         }
-        return Option::Some(builtin::array_get::<T>(self.repr, self.start + index));
+        return Option::Some(builtin::array_get(self.repr, self.start + index));
     }
 
     pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
@@ -381,10 +378,10 @@ impl ArraySlice<T> {
     pub fn to_array(&self) -> Array<T> {
         let len = self.end - self.start;
         if len <= 0 {
-            return Array::<T>::with_capacity(0);
+            return Array::with_capacity(0);
         }
-        let new_repr = builtin::array_new::<T>(len);
-        builtin::array_copy::<T>(new_repr, 0, self.repr, self.start, len);
+        let new_repr: builtin::array<T> = builtin::array_new(len);
+        builtin::array_copy(new_repr, 0, self.repr, self.start, len);
         return Array { repr: new_repr, used: len };
     }
 
@@ -404,7 +401,7 @@ impl IndexValue<i32> for ArraySlice<T> {
         if index < 0 || index >= self.end - self.start {
             panic("index out of bounds");
         }
-        return builtin::array_get::<T>(self.repr, self.start + index);
+        return builtin::array_get(self.repr, self.start + index);
     }
 }
 
@@ -458,7 +455,7 @@ impl<T> Iterator for ArrayIter<T> {
         if self.index >= self.used {
             return null;
         }
-        let item = builtin::array_get::<T>(self.repr, self.index);
+        let item = builtin::array_get(self.repr, self.index);
         self.index += 1;
         return Option::Some(item);
     }
@@ -501,7 +498,7 @@ impl<T> Iterator for ArrayRefIter<T> {
         if self.index >= self.used {
             return null;
         }
-        let val = builtin::array_get::<T>(self.repr, self.index);
+        let val = builtin::array_get(self.repr, self.index);
         let ref_val = &val;
         self.index += 1;
         return Option::Some(ref_val);
@@ -552,7 +549,7 @@ impl Array<T> {
             return;
         }
         let src = self.repr;
-        let buf = builtin::array_new::<T>(n);
+        let buf: builtin::array<T> = builtin::array_new(n);
         let mut width = 1;
         for ; width < n; width = width * 2 {
             for let mut start = 0; start < n; start += width * 2 {
@@ -564,25 +561,25 @@ impl Array<T> {
                     for let mut k = start; k < end; k += 1 {
                         if i < mid {
                             if j < end {
-                                let a = builtin::array_get::<T>(src, i);
-                                let b = builtin::array_get::<T>(src, j);
+                                let a = builtin::array_get(src, i);
+                                let b = builtin::array_get(src, j);
                                 if let Greater = cmp(&a, &b) {
-                                    builtin::array_set::<T>(buf, k, b);
+                                    builtin::array_set(buf, k, b);
                                     j += 1;
                                 } else {
-                                    builtin::array_set::<T>(buf, k, a);
+                                    builtin::array_set(buf, k, a);
                                     i += 1;
                                 }
                             } else {
-                                builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, i));
+                                builtin::array_set(buf, k, builtin::array_get(src, i));
                                 i += 1;
                             }
                         } else {
-                            builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, j));
+                            builtin::array_set(buf, k, builtin::array_get(src, j));
                             j += 1;
                         }
                     }
-                    builtin::array_copy::<T>(src, start, buf, start, end - start);
+                    builtin::array_copy(src, start, buf, start, end - start);
                 }
             }
         }
@@ -590,8 +587,8 @@ impl Array<T> {
 
     pub fn sorted_by(&self, cmp: fn(&T, &T) -> Ordering) -> Array<T> {
         let n = self.used;
-        let new_repr = builtin::array_new::<T>(n);
-        builtin::array_copy::<T>(new_repr, 0, self.repr, 0, n);
+        let new_repr: builtin::array<T> = builtin::array_new(n);
+        builtin::array_copy(new_repr, 0, self.repr, 0, n);
         let mut copy = Array { repr: new_repr, used: n };
         copy.sort_by(cmp);
         return copy;
@@ -701,8 +698,8 @@ impl<T: Ord> Array<T> {
 
     pub fn sorted(&self) -> Array<T> {
         let n = self.used;
-        let new_repr = builtin::array_new::<T>(n);
-        builtin::array_copy::<T>(new_repr, 0, self.repr, 0, n);
+        let new_repr: builtin::array<T> = builtin::array_new(n);
+        builtin::array_copy(new_repr, 0, self.repr, 0, n);
         let mut copy = Array { repr: new_repr, used: n };
         copy.sort();
         return copy;
@@ -718,7 +715,7 @@ impl<T: Display> Array<T> {
             if i > 0 {
                 f.write_str(separator);
             }
-            let item = builtin::array_get::<T>(self.repr, i);
+            let item = builtin::array_get(self.repr, i);
             item.fmt(&mut f);
         }
         return buf;
@@ -744,7 +741,7 @@ impl SequenceLiteralBuilder for Array<T> {
     type Output = Array<T>;
 
     fn new_literal(capacity: i32) -> Array<T> {
-        return Array::<T>::with_capacity(capacity);
+        return Array::with_capacity(capacity);
     }
 
     fn push_literal(&mut self, value: T) with stores[value] {
@@ -759,11 +756,11 @@ impl SequenceLiteralBuilder for Array<T> {
 impl ArrayIter<T> {
     pub fn collect(&mut self) -> Array<T> {
         let remaining = self.used - self.index;
-        let mut repr = builtin::array_new::<T>(remaining);
+        let mut repr: builtin::array<T> = builtin::array_new(remaining);
         let mut result_used = 0;
         for let mut i = self.index; i < self.used; i += 1 {
-            let item = builtin::array_get::<T>(self.repr, i);
-            builtin::array_set::<T>(repr, result_used, item);
+            let item = builtin::array_get(self.repr, i);
+            builtin::array_set(repr, result_used, item);
             result_used += 1;
         }
         self.index = self.used;

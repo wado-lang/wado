@@ -358,7 +358,7 @@ test "query_pairs empty query" {
 
 test "with_query_pairs" {
     if let Ok(url) = Url::parse("http://example.com/path") {
-        let mut params = TreeMap::<String, String>::new();
+        let mut params: TreeMap<String, String> = TreeMap::new();
         params["key"] = "val";
         params["name"] = "Alice";
         let updated = url.with_query_pairs(params);
@@ -741,25 +741,25 @@ test "parse_query duplicate keys last wins" {
 }
 
 test "format_query simple" {
-    let mut params = TreeMap::<String, String>::new();
+    let mut params: TreeMap<String, String> = TreeMap::new();
     params["a"] = "1";
     params["b"] = "2";
     assert format_query(params) == "a=1&b=2";
 }
 
 test "format_query encodes spaces" {
-    let mut params = TreeMap::<String, String>::new();
+    let mut params: TreeMap<String, String> = TreeMap::new();
     params["name"] = "hello world";
     assert format_query(params) == "name=hello+world";
 }
 
 test "format_query empty" {
-    let params = TreeMap::<String, String>::new();
+    let params: TreeMap<String, String> = TreeMap::new();
     assert format_query(params) == "";
 }
 
 test "parse_query format_query roundtrip" {
-    let mut original = TreeMap::<String, String>::new();
+    let mut original: TreeMap<String, String> = TreeMap::new();
     original["key"] = "value";
     original["name"] = "Alice Bob";
     let formatted = format_query(original);
@@ -840,7 +840,7 @@ test "parse_query with non-ASCII value" {
 }
 
 test "format_query with non-ASCII value" {
-    let mut params = TreeMap::<String, String>::new();
+    let mut params: TreeMap<String, String> = TreeMap::new();
     params["city"] = "東京";
     let formatted = format_query(params);
     let parsed = parse_query(formatted);
@@ -871,7 +871,7 @@ test "char encode_utf8" {
 
 test "serialize Url to JSON" {
     if let Ok(url) = Url::parse("https://example.com/path?q=1") {
-        let r = to_string::<Url>(&url);
+        let r = to_string(&url);
         assert r matches { Ok(s) && s == `"https://example.com/path?q=1"` };
     } else {
         panic("parse failed");
@@ -892,7 +892,7 @@ test "deserialize Url from JSON" {
 
 test "serialize deserialize Url roundtrip" {
     if let Ok(original) = Url::parse("https://user:pass@example.com:8443/api/v1?key=val#frag") {
-        let json = to_string::<Url>(&original);
+        let json = to_string(&original);
         if let Ok(json_str) = json {
             let restored = from_string::<Url>(json_str);
             if let Ok(url) = restored {

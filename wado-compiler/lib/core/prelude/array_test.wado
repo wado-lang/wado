@@ -24,14 +24,14 @@ test "push triggers growth" {
 }
 
 test "filled creates array with repeated value" {
-    let arr = Array::<i32>::filled(5, 42);
+    let arr = Array::filled(5, 42);
     assert arr.len() == 5;
     assert arr[0] == 42;
     assert arr[4] == 42;
 }
 
 test "filled with booleans" {
-    let arr = Array::<bool>::filled(3, true);
+    let arr = Array::filled(3, true);
     assert arr.len() == 3;
     assert arr[0];
     assert arr[1];
@@ -39,7 +39,7 @@ test "filled with booleans" {
 }
 
 test "filled with zero length" {
-    let arr = Array::<i32>::filled(0, 99);
+    let arr = Array::filled(0, 99);
     assert arr.len() == 0;
     assert arr.is_empty();
 }
@@ -385,7 +385,7 @@ test "clear" {
 }
 
 test "capacity and reserve" {
-    let mut arr = Array::<i32>::with_capacity(2);
+    let mut arr: Array<i32> = Array::with_capacity(2);
     assert arr.capacity() >= 2;
     arr.push(1);
     arr.push(2);
@@ -396,7 +396,7 @@ test "capacity and reserve" {
 }
 
 test "shrink_to_fit" {
-    let mut arr = Array::<i32>::with_capacity(100);
+    let mut arr: Array<i32> = Array::with_capacity(100);
     arr.push(1);
     arr.push(2);
     arr.shrink_to_fit();

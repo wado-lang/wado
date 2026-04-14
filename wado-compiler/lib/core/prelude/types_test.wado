@@ -1,5 +1,5 @@
 test "Option::unwrap on Some" {
-    let x = Option::<i32>::Some(42);
+    let x: Option<i32> = Option::Some(42);
     assert x.unwrap() == 42;
 }
 
@@ -11,20 +11,20 @@ test "Option::unwrap on None traps" {
 }
 
 test "Result::unwrap on Ok" {
-    let x = Result::<i32, String>::Ok(42);
+    let x: Result<i32, String> = Result::Ok(42);
     assert x.unwrap() == 42;
 }
 
 
 #[expect_trap]
 test "Result::unwrap on Err traps" {
-    let x = Result::<i32, String>::Err("error");
+    let x: Result<i32, String> = Result::Err("error");
     x.unwrap();
 }
 
 test "Result::is_ok" {
-    let ok = Result::<i32, String>::Ok(1);
-    let err = Result::<i32, String>::Err("e");
+    let ok: Result<i32, String> = Result::Ok(1);
+    let err: Result<i32, String> = Result::Err("e");
     assert ok.is_ok();
     assert !ok.is_err();
     assert err.is_err();

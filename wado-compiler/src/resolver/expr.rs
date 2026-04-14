@@ -2118,10 +2118,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 let is_tuple_literal = matches!(&field.value, ast::Expr::TupleLiteral(_));
 
+                // Generic call expressions (e.g. `Array::filled(n, 0)` inside
+                // a struct literal field) need the expected field type so the
+                // call's type-parameter inference can back-infer from it. Without
+                // this, the call falls back to literal defaults.
+                let is_call = matches!(&field.value, ast::Expr::Call(_));
+
                 let expected_field_type = if is_numeric_literal
                     || is_null_literal
                     || is_anonymous_struct_literal
                     || is_tuple_literal
+                    || is_call
                 {
                     struct_field_types
                         .iter()

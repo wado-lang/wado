@@ -6,55 +6,55 @@ use { to_string, from_string } from "core:json_nsd";
 
 test "serialize i32" {
     let n = 42;
-    let r = to_string::<i32>(&n);
+    let r = to_string(&n);
     assert r matches { Ok(s) && s == "42" };
 }
 
 test "serialize negative i32" {
     let n = -123;
-    let r = to_string::<i32>(&n);
+    let r = to_string(&n);
     assert r matches { Ok(s) && s == "-123" };
 }
 
 test "serialize i64" {
     let n: i64 = 1000000000000;
-    let r = to_string::<i64>(&n);
+    let r = to_string(&n);
     assert r matches { Ok(s) && s == "1000000000000" };
 }
 
 test "serialize u32" {
     let n: u32 = 255;
-    let r = to_string::<u32>(&n);
+    let r = to_string(&n);
     assert r matches { Ok(s) && s == "255" };
 }
 
 test "serialize f64" {
     let n = 3.14;
-    let r = to_string::<f64>(&n);
+    let r = to_string(&n);
     assert r matches { Ok(s) && s == "3.14" };
 }
 
 test "serialize bool" {
     let v = true;
-    let r = to_string::<bool>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "true" };
 }
 
 test "serialize string" {
     let v = "hello";
-    let r = to_string::<String>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == `"hello"` };
 }
 
 test "serialize string with escapes" {
     let v = "line1\nline2";
-    let r = to_string::<String>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == `"line1\\nline2"` };
 }
 
 test "serialize null" {
     let v: Option<i32> = null;
-    let r = to_string::<Option<i32>>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "null" };
 }
 
@@ -70,7 +70,7 @@ impl Deserialize for Point;
 
 test "serialize struct as array" {
     let p = Point { x: 10, y: 20 };
-    let r = to_string::<Point>(&p);
+    let r = to_string(&p);
     assert r matches { Ok(s) && s == "[10,20]" };
 }
 
@@ -85,7 +85,7 @@ impl Deserialize for Person;
 
 test "serialize struct with mixed types" {
     let p = Person { name: "Alice", age: 30, active: true };
-    let r = to_string::<Person>(&p);
+    let r = to_string(&p);
     assert r matches { Ok(s) && s == `["Alice",30,true]` };
 }
 
@@ -101,7 +101,7 @@ impl Deserialize for Line;
 
 test "serialize nested struct" {
     let l = Line { start: Point { x: 1, y: 2 }, end: Point { x: 3, y: 4 } };
-    let r = to_string::<Line>(&l);
+    let r = to_string(&l);
     assert r matches { Ok(s) && s == "[[1,2],[3,4]]" };
 }
 
@@ -118,19 +118,19 @@ impl Deserialize for Color;
 
 test "serialize unit variant as discriminant" {
     let c = Color::Red;
-    let r = to_string::<Color>(&c);
+    let r = to_string(&c);
     assert r matches { Ok(s) && s == "0" };
 }
 
 test "serialize unit variant Green" {
     let c = Color::Green;
-    let r = to_string::<Color>(&c);
+    let r = to_string(&c);
     assert r matches { Ok(s) && s == "1" };
 }
 
 test "serialize unit variant Blue" {
     let c = Color::Blue;
-    let r = to_string::<Color>(&c);
+    let r = to_string(&c);
     assert r matches { Ok(s) && s == "2" };
 }
 
@@ -147,33 +147,33 @@ impl Deserialize for Shape;
 
 test "serialize payload variant" {
     let s = Shape::Circle(5.0);
-    let r = to_string::<Shape>(&s);
+    let r = to_string(&s);
     assert r matches { Ok(v) && v == "[0,5]" };
 }
 
 test "serialize tuple-payload variant" {
     let s = Shape::Rectangle([10.0, 20.0]);
-    let r = to_string::<Shape>(&s);
+    let r = to_string(&s);
     assert r matches { Ok(v) && v == "[1,[10,20]]" };
 }
 
 test "serialize unit variant in variant type" {
     let s = Shape::Point;
-    let r = to_string::<Shape>(&s);
+    let r = to_string(&s);
     assert r matches { Ok(v) && v == "2" };
 }
 
 // --- Option serialization ---
 
 test "serialize Option Some" {
-    let v = Option::<i32>::Some(42);
-    let r = to_string::<Option<i32>>(&v);
+    let v: Option<i32> = Option::Some(42);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "42" };
 }
 
 test "serialize Option None" {
     let v: Option<i32> = null;
-    let r = to_string::<Option<i32>>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "null" };
 }
 
@@ -181,42 +181,42 @@ test "serialize Option None" {
 
 test "serialize Array" {
     let v: Array<i32> = [1, 2, 3];
-    let r = to_string::<Array<i32>>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "[1,2,3]" };
 }
 
 test "serialize Array of structs" {
     let v: Array<Point> = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
-    let r = to_string::<Array<Point>>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "[[1,2],[3,4]]" };
 }
 
 // --- Primitive deserialization (same as JSON) ---
 
 test "deserialize i32" {
-    let r = from_string::<i32>("42");
+    let r: Result<i32, DeserializeError> = from_string("42");
     assert r matches { Ok(v) && v == 42 };
 }
 
 test "deserialize f64" {
-    let r = from_string::<f64>("3.14");
+    let r: Result<f64, DeserializeError> = from_string("3.14");
     assert r matches { Ok(v) && v == 3.14 };
 }
 
 test "deserialize bool" {
-    let r = from_string::<bool>("true");
+    let r: Result<bool, DeserializeError> = from_string("true");
     assert r matches { Ok(v) && v == true };
 }
 
 test "deserialize string" {
-    let r = from_string::<String>(`"hello"`);
+    let r: Result<String, DeserializeError> = from_string(`"hello"`);
     assert r matches { Ok(v) && v == "hello" };
 }
 
 // --- Struct deserialization (NSD: from positional array) ---
 
 test "deserialize struct from array" {
-    let r = from_string::<Point>("[10,20]");
+    let r: Result<Point, DeserializeError> = from_string("[10,20]");
     if let Ok(p) = r {
         assert p.x == 10;
         assert p.y == 20;
@@ -226,7 +226,7 @@ test "deserialize struct from array" {
 }
 
 test "deserialize struct with mixed types" {
-    let r = from_string::<Person>(`["Alice",30,true]`);
+    let r: Result<Person, DeserializeError> = from_string(`["Alice",30,true]`);
     if let Ok(p) = r {
         assert p.name == "Alice";
         assert p.age == 30;
@@ -237,7 +237,7 @@ test "deserialize struct with mixed types" {
 }
 
 test "deserialize nested struct" {
-    let r = from_string::<Line>("[[1,2],[3,4]]");
+    let r: Result<Line, DeserializeError> = from_string("[[1,2],[3,4]]");
     if let Ok(l) = r {
         assert l.start.x == 1;
         assert l.start.y == 2;
@@ -251,7 +251,7 @@ test "deserialize nested struct" {
 // --- Enum deserialization ---
 
 test "deserialize unit variant Red" {
-    let r = from_string::<Color>("0");
+    let r: Result<Color, DeserializeError> = from_string("0");
     if let Ok(c) = r {
         assert c == Color::Red;
     } else {
@@ -260,7 +260,7 @@ test "deserialize unit variant Red" {
 }
 
 test "deserialize unit variant Blue" {
-    let r = from_string::<Color>("2");
+    let r: Result<Color, DeserializeError> = from_string("2");
     if let Ok(c) = r {
         assert c == Color::Blue;
     } else {
@@ -271,7 +271,7 @@ test "deserialize unit variant Blue" {
 // --- Variant deserialization ---
 
 test "deserialize payload variant" {
-    let r = from_string::<Shape>("[0,5.0]");
+    let r: Result<Shape, DeserializeError> = from_string("[0,5.0]");
     if let Ok(s) = r {
         if let Circle(radius) = s {
             assert radius == 5.0;
@@ -284,7 +284,7 @@ test "deserialize payload variant" {
 }
 
 test "deserialize unit variant in variant type" {
-    let r = from_string::<Shape>("2");
+    let r: Result<Shape, DeserializeError> = from_string("2");
     if let Ok(s) = r {
         assert s matches { Point };
     } else {
@@ -296,9 +296,9 @@ test "deserialize unit variant in variant type" {
 
 test "round-trip struct" {
     let orig = Point { x: 42, y: -7 };
-    let json_r = to_string::<Point>(&orig);
+    let json_r = to_string(&orig);
     if let Ok(json) = json_r {
-        let parsed_r = from_string::<Point>(json);
+        let parsed_r: Result<Point, DeserializeError> = from_string(json);
         if let Ok(parsed) = parsed_r {
             assert parsed.x == 42;
             assert parsed.y == -7;
@@ -315,9 +315,9 @@ test "round-trip nested struct" {
         start: Point { x: 1, y: 2 },
         end: Point { x: 3, y: 4 },
     };
-    let json_r = to_string::<Line>(&orig);
+    let json_r = to_string(&orig);
     if let Ok(json) = json_r {
-        let parsed_r = from_string::<Line>(json);
+        let parsed_r: Result<Line, DeserializeError> = from_string(json);
         if let Ok(parsed) = parsed_r {
             assert parsed.start.x == 1;
             assert parsed.start.y == 2;
@@ -333,9 +333,9 @@ test "round-trip nested struct" {
 
 test "round-trip enum" {
     let orig = Color::Green;
-    let json_r = to_string::<Color>(&orig);
+    let json_r = to_string(&orig);
     if let Ok(json) = json_r {
-        let parsed_r = from_string::<Color>(json);
+        let parsed_r: Result<Color, DeserializeError> = from_string(json);
         if let Ok(parsed) = parsed_r {
             assert parsed == Color::Green;
         } else {
@@ -349,11 +349,11 @@ test "round-trip enum" {
 // --- Error cases ---
 
 test "deserialize struct wrong type" {
-    let r: Result<Point, DeserializeError> = from_string::<Point>("42");
+    let r: Result<Point, DeserializeError> = from_string("42");
     assert r matches { Err(_) };
 }
 
 test "deserialize trailing data" {
-    let r: Result<i32, DeserializeError> = from_string::<i32>("42 extra");
+    let r: Result<i32, DeserializeError> = from_string("42 extra");
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData };
 }

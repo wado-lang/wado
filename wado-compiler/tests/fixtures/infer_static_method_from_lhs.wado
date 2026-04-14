@@ -1,0 +1,32 @@
+// Inference: a static method on a generic struct should back-infer its
+// generic type parameter from the LHS variable type annotation when no
+// argument constrains it.
+//
+// Pattern used (before fix) in `core:base64` and friends:
+//     let mut out: Array<u8> = Array::<u8>::with_capacity(out_len);
+//
+// We want to write:
+//     let mut out: Array<u8> = Array::with_capacity(out_len);
+//
+// Note: instance methods do back-infer correctly, and free functions on
+// generic structs back-infer correctly when the result has no
+// argument-derived constraint. The limitation is specific to static
+// (associated) methods on generic structs.
+
+struct Container<T> {
+    _phantom: i32,
+}
+
+impl<T> Container<T> {
+    pub fn make() -> Container<T> {
+        return Container { _phantom: 0 };
+    }
+}
+
+export fn run() {
+    let c: Container<i32> = Container::make();
+    assert c._phantom == 0;
+}
+
+__DATA__
+{"stdout": ""}

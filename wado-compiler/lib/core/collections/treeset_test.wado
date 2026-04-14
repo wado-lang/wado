@@ -1,14 +1,14 @@
 use { TreeSet } from "core:collections";
 
 test "empty set" {
-    let s = TreeSet::<i32>::new();
+    let s: TreeSet<i32> = TreeSet::new();
     assert s.is_empty();
     assert s.len() == 0;
     assert !s.contains(1);
 }
 
 test "insert single element" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     let inserted = s.insert(42);
     assert inserted;
     assert s.len() == 1;
@@ -17,14 +17,14 @@ test "insert single element" {
 }
 
 test "insert returns false for duplicate" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     assert s.insert(10);
     assert !s.insert(10);
     assert s.len() == 1;
 }
 
 test "insert multiple elements" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(1);
     s.insert(2);
     s.insert(3);
@@ -36,7 +36,7 @@ test "insert multiple elements" {
 }
 
 test "contains returns false for absent element" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(1);
     assert !s.contains(0);
     assert !s.contains(2);
@@ -44,7 +44,7 @@ test "contains returns false for absent element" {
 }
 
 test "remove returns true if present" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(5);
     assert s.remove(5);
     assert s.len() == 0;
@@ -52,19 +52,19 @@ test "remove returns true if present" {
 }
 
 test "remove returns false if absent" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(5);
     assert !s.remove(99);
     assert s.len() == 1;
 }
 
 test "remove from empty set returns false" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     assert !s.remove(1);
 }
 
 test "remove preserves other elements" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(1);
     s.insert(2);
     s.insert(3);
@@ -76,7 +76,7 @@ test "remove preserves other elements" {
 }
 
 test "clear empties the set" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(1);
     s.insert(2);
     s.insert(3);
@@ -87,7 +87,7 @@ test "clear empties the set" {
 }
 
 test "insert after clear" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(1);
     s.clear();
     s.insert(2);
@@ -97,7 +97,7 @@ test "insert after clear" {
 }
 
 test "iterates in insertion order" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(30);
     s.insert(10);
     s.insert(20);
@@ -112,7 +112,7 @@ test "iterates in insertion order" {
 }
 
 test "duplicate insert does not change order" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(3);
     s.insert(1);
     s.insert(2);
@@ -128,7 +128,7 @@ test "duplicate insert does not change order" {
 }
 
 test "remove and re-insert appends to end" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(1);
     s.insert(2);
     s.insert(3);
@@ -145,7 +145,7 @@ test "remove and re-insert appends to end" {
 }
 
 test "iteration skips removed elements" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(10);
     s.insert(20);
     s.insert(30);
@@ -160,7 +160,7 @@ test "iteration skips removed elements" {
 }
 
 test "for-of loop" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(5);
     s.insert(3);
     s.insert(7);
@@ -172,7 +172,7 @@ test "for-of loop" {
 }
 
 test "iter matches for-of" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(100);
     s.insert(200);
     let mut iter = s.iter();
@@ -182,7 +182,7 @@ test "iter matches for-of" {
 }
 
 test "iterate same set twice" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(1);
     s.insert(2);
     s.insert(3);
@@ -202,7 +202,7 @@ test "iterate same set twice" {
 }
 
 test "empty set iteration yields nothing" {
-    let s = TreeSet::<i32>::new();
+    let s: TreeSet<i32> = TreeSet::new();
     let mut count = 0;
     for let _ of s {
         count = count + 1;
@@ -211,7 +211,7 @@ test "empty set iteration yields nothing" {
 }
 
 test "negative integers" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(-3);
     s.insert(-1);
     s.insert(-2);
@@ -262,7 +262,7 @@ test "empty sequence literal" {
 }
 
 test "string set basic operations" {
-    let mut s = TreeSet::<String>::new();
+    let mut s: TreeSet<String> = TreeSet::new();
     s.insert("banana");
     s.insert("apple");
     s.insert("cherry");
@@ -275,7 +275,7 @@ test "string set basic operations" {
 }
 
 test "string set insertion order" {
-    let mut s = TreeSet::<String>::new();
+    let mut s: TreeSet<String> = TreeSet::new();
     s.insert("c");
     s.insert("a");
     s.insert("b");
@@ -289,7 +289,7 @@ test "string set insertion order" {
 }
 
 test "large set insert and lookup" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     let mut i = 0;
     while i < 100 {
         s.insert(i);
@@ -303,12 +303,12 @@ test "large set insert and lookup" {
 }
 
 test "inspect empty set" {
-    let s = TreeSet::<i32>::new();
+    let s: TreeSet<i32> = TreeSet::new();
     assert `{s:?}` == "{}";
 }
 
 test "inspect i32 set" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(10);
     s.insert(20);
     s.insert(30);
@@ -316,19 +316,19 @@ test "inspect i32 set" {
 }
 
 test "inspect string set" {
-    let mut s = TreeSet::<String>::new();
+    let mut s: TreeSet<String> = TreeSet::new();
     s.insert("a");
     s.insert("b");
     assert `{s:?}` == "{\"a\", \"b\"}";
 }
 
 test "pretty-print empty set" {
-    let s = TreeSet::<i32>::new();
+    let s: TreeSet<i32> = TreeSet::new();
     assert `{s:#?}` == "{}";
 }
 
 test "pretty-print i32 set" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(10);
     s.insert(20);
     s.insert(30);
@@ -340,7 +340,7 @@ test "pretty-print i32 set" {
 }
 
 test "compaction after many removals" {
-    let mut s = TreeSet::<i32>::new();
+    let mut s: TreeSet<i32> = TreeSet::new();
     let mut i = 0;
     while i < 50 {
         s.insert(i);

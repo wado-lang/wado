@@ -89,12 +89,12 @@ impl Serialize for Value {
                         for let item of *arr {
                             let r = seq.element::<Value>(&item);
                             if let Err(e) = r {
-                                return Result::<(), SerializeError>::Err(e);
+                                return Result::Err(e);
                             }
                         }
                         seq.end();
                     },
-                    Err(e) => Result::<(), SerializeError>::Err(e),
+                    Err(e) => Result::Err(e),
                 }
             },
             Object(map) => {
@@ -104,16 +104,16 @@ impl Serialize for Value {
                         for let [key, val] of map.entries() {
                             let key_r = m.key::<String>(&key);
                             if let Err(e) = key_r {
-                                return Result::<(), SerializeError>::Err(e);
+                                return Result::Err(e);
                             }
                             let val_r = m.value::<Value>(&val);
                             if let Err(e) = val_r {
-                                return Result::<(), SerializeError>::Err(e);
+                                return Result::Err(e);
                             }
                         }
                         m.end();
                     },
-                    Err(e) => Result::<(), SerializeError>::Err(e),
+                    Err(e) => Result::Err(e),
                 }
             },
         };
@@ -127,19 +127,19 @@ impl Visitor for ValueVisitor {
     type Value = Value;
 
     fn visit_null(&mut self) -> Result<Value, DeserializeError> {
-        return Result::<Value, DeserializeError>::Ok(Value::Null);
+        return Result::Ok(Value::Null);
     }
 
     fn visit_bool(&mut self, v: bool) -> Result<Value, DeserializeError> {
-        return Result::<Value, DeserializeError>::Ok(Value::Bool(v));
+        return Result::Ok(Value::Bool(v));
     }
 
     fn visit_f64(&mut self, v: f64) -> Result<Value, DeserializeError> {
-        return Result::<Value, DeserializeError>::Ok(Value::Number(v));
+        return Result::Ok(Value::Number(v));
     }
 
     fn visit_string(&mut self, v: String) -> Result<Value, DeserializeError> {
-        return Result::<Value, DeserializeError>::Ok(Value::String(v));
+        return Result::Ok(Value::String(v));
     }
 
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Value, DeserializeError> {
@@ -153,20 +153,20 @@ impl Visitor for ValueVisitor {
                     },
                     None => {
                         if let Err(e) = seq.end() {
-                            return Result::<Value, DeserializeError>::Err(e);
+                            return Result::Err(e);
                         }
-                        return Result::<Value, DeserializeError>::Ok(Value::Array(items));
+                        return Result::Ok(Value::Array(items));
                     },
                 },
                 Err(e) => {
-                    return Result::<Value, DeserializeError>::Err(e);
+                    return Result::Err(e);
                 },
             }
         }
     }
 
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Value, DeserializeError> {
-        let mut obj = TreeMap::<String, Value>::new();
+        let mut obj: TreeMap<String, Value> = TreeMap::new();
         loop {
             let key_r: Result<Option<String>, DeserializeError> = map.next_key_string();
             match key_r {
@@ -178,19 +178,19 @@ impl Visitor for ValueVisitor {
                                 obj[key] = val;
                             },
                             Err(e) => {
-                                return Result::<Value, DeserializeError>::Err(e);
+                                return Result::Err(e);
                             },
                         }
                     },
                     None => {
                         if let Err(e) = map.end() {
-                            return Result::<Value, DeserializeError>::Err(e);
+                            return Result::Err(e);
                         }
-                        return Result::<Value, DeserializeError>::Ok(Value::Object(obj));
+                        return Result::Ok(Value::Object(obj));
                     },
                 },
                 Err(e) => {
-                    return Result::<Value, DeserializeError>::Err(e);
+                    return Result::Err(e);
                 },
             }
         }

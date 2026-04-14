@@ -332,7 +332,7 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
     type Output = TreeMap<String, V>;
 
     fn new_literal(capacity: i32) -> TreeMap<String, V> {
-        return TreeMap::<String, V>::new();
+        return TreeMap::new();
     }
 
     fn insert_literal(&mut self, key: String, value: Self::Value) with stores[value] {
@@ -381,7 +381,7 @@ pub struct TreeSet<T> {
 impl<T: Ord> TreeSet<T> {
     /// Creates a new empty TreeSet.
     pub fn new() -> TreeSet<T> {
-        return TreeSet { inner: TreeMap::<T, ()>::new() };
+        return TreeSet { inner: TreeMap::new() };
     }
 
     /// Returns the number of elements in the set.
@@ -448,7 +448,7 @@ impl<T: Ord> SequenceLiteralBuilder for TreeSet<T> {
     type Output = TreeSet<T>;
 
     fn new_literal(capacity: i32) -> TreeSet<T> {
-        return TreeSet::<T>::new();
+        return TreeSet::new();
     }
 
     fn push_literal(&mut self, value: T) {
@@ -470,17 +470,17 @@ impl<T: Serialize, V: Serialize> Serialize for TreeMap<String, V> {
                 let v = entry.1;
                 let kr = m.key::<String>(&k);
                 if let Err(e) = kr {
-                    return Result::<(), SerializeError>::Err(e);
+                    return Result::Err(e);
                 }
                 let vr = m.value::<V>(&v);
                 if let Err(e) = vr {
-                    return Result::<(), SerializeError>::Err(e);
+                    return Result::Err(e);
                 }
             }
             return m.end();
         }
         if let Err(e) = map_r {
-            return Result::<(), SerializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }
@@ -490,7 +490,7 @@ impl<V: Deserialize> Deserialize for TreeMap<String, V> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError> {
         let map_r = d.begin_map();
         if let Ok(mut ma) = map_r {
-            let mut result = TreeMap::<String, V>::new();
+            let mut result: TreeMap<String, V> = TreeMap::new();
             loop {
                 let key_r = ma.next_key_string();
                 if let Ok(key_opt) = key_r {
@@ -500,23 +500,23 @@ impl<V: Deserialize> Deserialize for TreeMap<String, V> {
                             result.insert(key, val);
                         }
                         if let Err(e) = val_r {
-                            return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+                            return Result::Err(e);
                         }
                     } else {
                         let end_r = ma.end();
                         if let Err(e) = end_r {
-                            return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+                            return Result::Err(e);
                         }
-                        return Result::<TreeMap<String, V>, DeserializeError>::Ok(result);
+                        return Result::Ok(result);
                     }
                 }
                 if let Err(e) = key_r {
-                    return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+                    return Result::Err(e);
                 }
             }
         }
         if let Err(e) = map_r {
-            return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }
@@ -598,12 +598,12 @@ impl<T: InspectAlt + Ord> InspectAlt for TreeSet<T> {
 
 impl<K: Ord, V> Default for TreeMap<K, V> {
     pub fn default() -> TreeMap<K, V> {
-        return TreeMap::<K, V>::new();
+        return TreeMap::new();
     }
 }
 
 impl<T: Ord> Default for TreeSet<T> {
     pub fn default() -> TreeSet<T> {
-        return TreeSet::<T>::new();
+        return TreeSet::new();
     }
 }

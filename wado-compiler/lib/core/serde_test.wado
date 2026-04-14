@@ -58,7 +58,7 @@ impl SerializeSeq for MockSeqSerializer {
 
     fn end(&mut self) -> Result<(), SerializeError> {
         self.w.buf.push_str("]");
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 }
 
@@ -84,7 +84,7 @@ impl SerializeMap for MockMapSerializer {
 
     fn end(&mut self) -> Result<(), SerializeError> {
         self.w.buf.push_str("}");
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 }
 
@@ -103,7 +103,7 @@ impl SerializeStruct for MockStructSerializer {
 
     fn end(&mut self) -> Result<(), SerializeError> {
         self.w.buf.push_str("}");
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 }
 
@@ -117,7 +117,7 @@ impl SerializeVariant for MockVariantSerializer {
 
     fn end(&mut self) -> Result<(), SerializeError> {
         self.w.buf.push_str("}");
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 }
 
@@ -129,32 +129,32 @@ impl Serializer for MockSerializer {
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
         self.w.buf.push_str(`{v}`);
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
         self.w.buf.push_str(`{v}`);
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
         self.w.buf.push_str(`{v}`);
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
         self.w.buf.push_str(`{v}`);
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
         self.w.buf.push_str(`{v as f64}`);
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
         self.w.buf.push_str(`{v}`);
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
@@ -163,47 +163,47 @@ impl Serializer for MockSerializer {
         } else {
             self.w.buf.push_str("false");
         }
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
         self.w.buf.push_str(`"{v}"`);
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
         self.w.buf.push_str(`"{*v}"`);
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
         self.w.buf.push_str("null");
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<MockSeqSerializer, SerializeError> {
         self.w.buf.push_str("[");
-        return Result::<MockSeqSerializer, SerializeError>::Ok(MockSeqSerializer { w: self.w, count: 0 });
+        return Result::Ok(MockSeqSerializer { w: self.w, count: 0 });
     }
 
     fn begin_map(&mut self, len: i32) -> Result<MockMapSerializer, SerializeError> {
         self.w.buf.push_str("{");
-        return Result::<MockMapSerializer, SerializeError>::Ok(MockMapSerializer { w: self.w, count: 0 });
+        return Result::Ok(MockMapSerializer { w: self.w, count: 0 });
     }
 
     fn begin_struct(&mut self, name: &String, fields: i32) -> Result<MockStructSerializer, SerializeError> {
         self.w.buf.push_str("{");
-        return Result::<MockStructSerializer, SerializeError>::Ok(MockStructSerializer { w: self.w, count: 0 });
+        return Result::Ok(MockStructSerializer { w: self.w, count: 0 });
     }
 
     fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
         self.w.buf.push_str(`"{*variant_name}"`);
-        return Result::<(), SerializeError>::Ok(());
+        return Result::Ok(());
     }
 
     fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<MockVariantSerializer, SerializeError> {
         self.w.buf.push_str(`\{"{*variant_name}":`);
-        return Result::<MockVariantSerializer, SerializeError>::Ok(MockVariantSerializer { w: self.w });
+        return Result::Ok(MockVariantSerializer { w: self.w });
     }
 }
 
@@ -230,76 +230,76 @@ test "error type construction" {
 
 test "serialize i32" {
     let n = 42;
-    assert mock_serialize::<i32>(&n) == "42";
+    assert mock_serialize(&n) == "42";
 }
 
 test "serialize negative i32" {
     let n = -7;
-    assert mock_serialize::<i32>(&n) == "-7";
+    assert mock_serialize(&n) == "-7";
 }
 
 test "serialize i64" {
     let n: i64 = 1000000000000;
-    assert mock_serialize::<i64>(&n) == "1000000000000";
+    assert mock_serialize(&n) == "1000000000000";
 }
 
 test "serialize u32" {
     let n: u32 = 100;
-    assert mock_serialize::<u32>(&n) == "100";
+    assert mock_serialize(&n) == "100";
 }
 
 test "serialize u64" {
     let n: u64 = 42;
-    assert mock_serialize::<u64>(&n) == "42";
+    assert mock_serialize(&n) == "42";
 }
 
 test "serialize f64" {
     let n = 3.14;
-    assert mock_serialize::<f64>(&n) == "3.14";
+    assert mock_serialize(&n) == "3.14";
 }
 
 test "serialize bool true" {
     let v = true;
-    assert mock_serialize::<bool>(&v) == "true";
+    assert mock_serialize(&v) == "true";
 }
 
 test "serialize bool false" {
     let v = false;
-    assert mock_serialize::<bool>(&v) == "false";
+    assert mock_serialize(&v) == "false";
 }
 
 test "serialize string" {
     let s = "hello";
-    assert mock_serialize::<String>(&s) == `"hello"`;
+    assert mock_serialize(&s) == `"hello"`;
 }
 
 test "serialize Option Some" {
-    let opt = Option::<i32>::Some(42);
-    assert mock_serialize::<Option<i32>>(&opt) == "42";
+    let opt: Option<i32> = Option::Some(42);
+    assert mock_serialize(&opt) == "42";
 }
 
 test "serialize Option None" {
     let opt: Option<i32> = null;
-    assert mock_serialize::<Option<i32>>(&opt) == "null";
+    assert mock_serialize(&opt) == "null";
 }
 
 test "serialize Array<i32>" {
     let arr: Array<i32> = [1, 2, 3];
-    assert mock_serialize::<Array<i32>>(&arr) == "[1,2,3]";
+    assert mock_serialize(&arr) == "[1,2,3]";
 }
 
 test "serialize empty Array" {
     let arr: Array<i32> = [];
-    assert mock_serialize::<Array<i32>>(&arr) == "[]";
+    assert mock_serialize(&arr) == "[]";
 }
 
 test "serialize Array<String>" {
     let arr: Array<String> = ["a", "b"];
-    assert mock_serialize::<Array<String>>(&arr) == `["a","b"]`;
+    assert mock_serialize(&arr) == `["a","b"]`;
 }
 
 test "serialize nested Option<Array>" {
     let arr: Array<i32> = [10, 20];
-    let opt = Option::<Array<i32>>::Some(arr);
-    assert mock_serialize::<Option<Array<i32>>>(&opt) == "[10,20]";
+    let opt: Option<Array<i32>> = Option::Some(arr);
+    assert mock_serialize(&opt) == "[10,20]";
 }

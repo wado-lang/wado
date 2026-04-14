@@ -253,6 +253,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .iter()
                             .map(|ty| self.resolve_type(ty))
                             .collect();
+                        // Impl-level type args inferred from the LHS / receiver type.
+                        // Only populated by `infer_static_method_type_args`; the
+                        // explicit `call.type_args` only carries method-level args.
+                        let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
                         // If no explicit type args, try to infer from argument types
                         let mangled_name = MethodName::format_local(prefix, None, suffix);
                         if method_type_args.is_empty() {
@@ -260,13 +264,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 self.infer_fn_type_args(suffix, &call.args, &args, expected_type);
                         }
                         if method_type_args.is_empty() {
-                            method_type_args = self.infer_static_method_type_args(
+                            let (impl_args, method_args) = self.infer_static_method_type_args(
                                 prefix,
                                 suffix,
                                 &call.args,
                                 &args,
                                 expected_type,
                             );
+                            impl_type_args_inferred = impl_args;
+                            method_type_args = method_args;
                         }
                         // Check trait bounds and register assoc type resolutions for inferred type args
                         if !method_type_args.is_empty() {
@@ -347,12 +353,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         // coercion and verify the inferred type-arg binding is consistent
                         // with every arg (e.g. `two_static<T>(1 as u8, 2 as u32)` must
                         // fail because `T` cannot be both `u8` and `u32`).
-                        if !method_type_args.is_empty() {
+                        if !method_type_args.is_empty() || !impl_type_args_inferred.is_empty() {
                             let raw_param_types =
                                 self.lookup_static_method_param_types(prefix, suffix);
+                            let mut combined_type_args = impl_type_args_inferred.clone();
+                            combined_type_args.extend_from_slice(&method_type_args);
                             let substituted: Vec<TypeId> = raw_param_types
                                 .iter()
-                                .map(|&t| self.substitute_type_params(t, &method_type_args))
+                                .map(|&t| self.substitute_type_params(t, &combined_type_args))
                                 .collect();
                             self.recoerce_literal_args(&call.args, &mut args, &substituted);
                             for (i, arg) in args.iter().enumerate() {
@@ -371,6 +379,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             suffix,
                             &mangled_name,
                             &args,
+                            &impl_type_args_inferred,
                             &method_type_args,
                             call.span,
                             ctx,
@@ -1447,6 +1456,50 @@ impl<H: CompilerHost> Resolver<'_, H> {
         args: &[TirExpr],
         expected_type: Option<TypeId>,
     ) -> Vec<TypeId> {
+        // Builtin functions: pull type-param / param / return info from the
+        // BuiltinRegistry so that calls like `builtin::select(a, b, c)` and
+        // `builtin::array_new(n)` infer their generic type parameters from
+        // argument types or LHS annotations the same way ordinary generic
+        // functions do.
+        if let Some(info) = self.builtin_registry.get(func_name) {
+            let real_type_params: Vec<&String> = info.type_params.iter().collect();
+            if real_type_params.is_empty() {
+                return vec![];
+            }
+            let param_ids: Vec<TypeId> = real_type_params
+                .iter()
+                .enumerate()
+                .map(|(i, name)| {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::TypeParam {
+                            index: i as u32,
+                            name: (*name).clone(),
+                        })
+                })
+                .collect();
+            let resolved_param_types: Vec<TypeId> = info.params.iter().map(|(_, t)| *t).collect();
+            let decl_return_type = info.return_type;
+
+            let mut infer = InferCtx::new(&self.type_table, param_ids.clone());
+            for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
+                if Self::is_literal_number_arg(raw_args.get(i)) {
+                    infer.add_deferred(*param_type, arg.type_id);
+                } else {
+                    infer.add(*param_type, arg.type_id);
+                }
+            }
+            if let Some(expected) = expected_type {
+                infer.add_expected_return(decl_return_type, expected);
+            }
+            let (inferred, bindings) = infer.solve_with_bindings();
+            let any_bound = param_ids.iter().any(|p| bindings.contains_key(p));
+            if !any_bound {
+                return vec![];
+            }
+            return inferred;
+        }
+
         // Fast path: current-module cache (populated during item resolution).
         let cached = if let (Some(tp), Some(rp)) = (
             self.generic_function_params.get(func_name).cloned(),
@@ -1579,12 +1632,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Infer type arguments for a generic static method by looking up the method in loaded modules.
-    /// Works cross-module unlike `infer_fn_type_args` (which requires same-module data).
+    /// Infer impl-level and method-level type arguments for a generic static method
+    /// by looking up the method in loaded modules. Works cross-module unlike
+    /// `infer_fn_type_args` (which requires same-module data).
     ///
     /// Shares the three-tier constraint model with [`Self::infer_fn_type_args`]
     /// via [`InferCtx`]: typed args, then literal-number args, then
     /// expected-return back-inference.
+    ///
+    /// Returns `(impl_args, method_args)` with the inferred type arguments
+    /// split into impl-level (from `impl Container<T>` / `impl<T> Container<T>`)
+    /// and method-level (from `fn make<U>()`). Either side may be empty if
+    /// nothing on that level was inferable.
     fn infer_static_method_type_args(
         &mut self,
         struct_name: &str,
@@ -1592,9 +1651,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         raw_args: &[Expr],
         args: &[TirExpr],
         expected_type: Option<TypeId>,
-    ) -> Vec<TypeId> {
-        // Find the method in loaded modules
-        let method_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>, Option<ast::Type>)> = {
+    ) -> (Vec<TypeId>, Vec<TypeId>) {
+        // Find the impl block + method (regardless of whether the method has
+        // its own type params — we also want to infer impl-level params from
+        // the LHS for static methods like `Container::make()`).
+        let method_info: Option<(
+            ast::Type,
+            Vec<ast::GenericParam>,
+            Vec<ast::Param>,
+            Option<ast::Type>,
+        )> = {
             let mut found = None;
             'outer: for (_, module) in self.loaded_modules {
                 for item in &module.items {
@@ -1602,8 +1668,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         && Self::get_type_name_static(&impl_block.ty) == struct_name
                     {
                         for method in &impl_block.methods {
-                            if method.name == method_name && !method.type_params.is_empty() {
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if method.name == method_name && !has_self {
                                 found = Some((
+                                    impl_block.ty.clone(),
                                     method.type_params.clone(),
                                     method.params.clone(),
                                     method.return_type.clone(),
@@ -1621,8 +1692,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         && Self::get_type_name_static(&impl_block.ty) == struct_name
                     {
                         for method in &impl_block.methods {
-                            if method.name == method_name && !method.type_params.is_empty() {
+                            let has_self = method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None);
+                            if method.name == method_name && !has_self {
                                 found = Some((
+                                    impl_block.ty.clone(),
                                     method.type_params.clone(),
                                     method.params.clone(),
                                     method.return_type.clone(),
@@ -1635,27 +1711,75 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             found
         };
-        let Some((type_params, params, return_type_ast)) = method_info else {
-            return vec![];
+        let Some((impl_ty, method_type_params, params, return_type_ast)) = method_info else {
+            return (vec![], vec![]);
         };
 
-        // Temporarily create TypeParam TypeIds for this method's type params on
-        // top of the caller's trait context (so outer-scope type params remain
-        // visible while we resolve the method's signature).
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.register_generic_params(&type_params, 0);
-        let type_param_list: Vec<(String, TypeId)> = type_params
-            .iter()
-            .filter_map(|tp| {
-                scope
-                    .trait_ctx
-                    .type_params
-                    .get(&tp.name)
-                    .map(|&(_, id)| (tp.name.clone(), id))
-            })
-            .collect();
+        // Extract impl-level type param names (e.g. `impl Container<T>` -> ["T"]).
+        let impl_type_param_names: Vec<String> = match &impl_ty {
+            ast::Type::Generic(g) => g
+                .args
+                .iter()
+                .filter_map(|arg| match arg {
+                    ast::Type::Named(n) => Some(n.name.clone()),
+                    _ => None,
+                })
+                .collect(),
+            _ => vec![],
+        };
 
-        // Resolve non-self param types in the context of the method's type params
+        // Nothing generic to infer.
+        if impl_type_param_names.is_empty() && method_type_params.is_empty() {
+            return (vec![], vec![]);
+        }
+
+        // Set up scope: impl params at indices 0..impl_count, method params
+        // at indices impl_count..(impl_count + method_count). This matches the
+        // layout used by `lookup_static_method_return_type` and
+        // `resolve_static_method_params_in_scope`, so substitution by a single
+        // flat `[impl_args.., method_args..]` list lines up correctly.
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.trait_ctx.type_params.clear();
+
+        let mut impl_param_ids: Vec<TypeId> = Vec::with_capacity(impl_type_param_names.len());
+        for (i, name) in impl_type_param_names.iter().enumerate() {
+            let type_id = scope
+                .type_table
+                .borrow_mut()
+                .make_type_param(name.clone(), i as u32);
+            scope
+                .trait_ctx
+                .type_params
+                .insert(name.clone(), (i as u32, type_id));
+            impl_param_ids.push(type_id);
+        }
+
+        let m_offset = impl_type_param_names.len();
+        let mut method_param_ids: Vec<TypeId> = Vec::with_capacity(method_type_params.len());
+        for (i, tp) in method_type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .enumerate()
+        {
+            let idx = (m_offset + i) as u32;
+            let type_id = if tp.is_pack {
+                scope
+                    .type_table
+                    .borrow_mut()
+                    .make_type_pack(tp.name.clone(), idx)
+            } else {
+                scope
+                    .type_table
+                    .borrow_mut()
+                    .make_type_param(tp.name.clone(), idx)
+            };
+            scope
+                .trait_ctx
+                .type_params
+                .insert(tp.name.clone(), (idx, type_id));
+            method_param_ids.push(type_id);
+        }
+
         let resolved_param_types: Vec<TypeId> = params
             .iter()
             .filter(|p| p.self_kind == ast::SelfKind::None)
@@ -1666,8 +1790,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         drop(scope);
 
-        let param_ids: Vec<TypeId> = type_param_list.iter().map(|(_, id)| *id).collect();
-        let mut infer = InferCtx::new(&self.type_table, param_ids.clone());
+        let mut all_param_ids = impl_param_ids.clone();
+        all_param_ids.extend_from_slice(&method_param_ids);
+
+        let mut infer = InferCtx::new(&self.type_table, all_param_ids.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
                 infer.add_deferred(*param_type, arg.type_id);
@@ -1682,11 +1808,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Permissive solve — see `infer_fn_type_args` for the
         // TypeParam-forwarding rationale.
         let (inferred, bindings) = infer.solve_with_bindings();
-        let any_bound = param_ids.iter().any(|p| bindings.contains_key(p));
+        let any_bound = all_param_ids.iter().any(|p| bindings.contains_key(p));
         if !any_bound {
-            return vec![];
+            return (vec![], vec![]);
         }
-        inferred
+
+        let impl_count = impl_param_ids.len();
+        let impl_args = inferred[..impl_count].to_vec();
+        let method_args = inferred[impl_count..].to_vec();
+        (impl_args, method_args)
     }
 
     /// Look up function parameter types with type args substituted.

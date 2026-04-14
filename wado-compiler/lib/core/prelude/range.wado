@@ -119,7 +119,7 @@ impl<T: Step + Ord> Iterator for RangeExclusive<T> {
         } else {
             self.start = self.end;
         }
-        return Option::<T>::Some(current);
+        return Option::Some(current);
     }
 }
 
@@ -136,14 +136,14 @@ impl<T: Step + Ord> Iterator for RangeInclusive<T> {
         let current = self.start;
         if self.start == self.end {
             self.exhausted = true;
-            return Option::<T>::Some(current);
+            return Option::Some(current);
         }
         if let Some(next) = current.next_step() {
             self.start = next;
         } else {
             self.exhausted = true;
         }
-        return Option::<T>::Some(current);
+        return Option::Some(current);
     }
 }
 
