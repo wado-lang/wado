@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776172103040,
+  "lastUpdate": 1776179194111,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12854,6 +12854,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5be2665400c1b0bdf0f011a4ef4f26522cb24ec1"
         },
         "date": 1776172102810,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "65ed19908d5fe0697ce1aa9bd00805cabd6fddb3",
+          "message": "Merge pull request #840 from wado-lang/copilot/fix-wasm-validation-error\n\nFix Wasm validation failure from generic `ndjson(...)` wrappers",
+          "timestamp": "2026-04-15T00:02:59+09:00",
+          "tree_id": "4c8b66804ca3301f05a96e39a0c2112e3d0cf30d",
+          "url": "https://github.com/wado-lang/wado/commit/65ed19908d5fe0697ce1aa9bd00805cabd6fddb3"
+        },
+        "date": 1776179193828,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
