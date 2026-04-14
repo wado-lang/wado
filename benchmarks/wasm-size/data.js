@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776171134376,
+  "lastUpdate": 1776172103040,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12815,6 +12815,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f5c066b6e993ad390c830a118f2ceed790fcbde3"
         },
         "date": 1776171134099,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5be2665400c1b0bdf0f011a4ef4f26522cb24ec1",
+          "message": "Merge pull request #839 from wado-lang/gfx/update_cargo_deps\n\nchore: update Cargo.lock",
+          "timestamp": "2026-04-14T22:03:09+09:00",
+          "tree_id": "3687ad1a1373abbe077dd3fa65ebb9625b64e9a6",
+          "url": "https://github.com/wado-lang/wado/commit/5be2665400c1b0bdf0f011a4ef4f26522cb24ec1"
+        },
+        "date": 1776172102810,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
