@@ -40,9 +40,10 @@ description = "Format, clippy-fix, update golden fixtures, regenerate stdlib doc
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
+cargo build
+
 mise run clippy-fix
 # mise run update-bundled # platform affects the WAT
-cargo build --bin wado --bin wado-dev-tools
 mise run update-golden-fixtures
 mise run update-golden-format-fixtures
 mise run update-gale-golden
@@ -57,7 +58,6 @@ description = "Check Rust crates (host + wasm32 targets)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-mise run update-bundled
 cargo check
 cargo check -p wado-compiler --target wasm32-unknown-unknown
 cargo check -p wado-manifest --target wasm32-unknown-unknown
