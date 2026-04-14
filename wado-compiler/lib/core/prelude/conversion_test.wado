@@ -147,9 +147,9 @@ impl TryFrom<i32> for EvenNumber {
 
     fn try_from(value: i32) -> Result<EvenNumber, ConvertError> {
         if value % 2 != 0 {
-            return Result::<EvenNumber, ConvertError>::Err(ConvertError::new(`{value} is not even`));
+            return Result::Err(ConvertError::new(`{value} is not even`));
         }
-        return Result::<EvenNumber, ConvertError>::Ok(EvenNumber { value });
+        return Result::Ok(EvenNumber { value });
     }
 }
 
@@ -305,11 +305,11 @@ impl TryFrom<i32> for Direction {
 
     fn try_from(value: i32) -> Result<Direction, ConvertError> {
         return match value {
-            0 => Result::<Direction, ConvertError>::Ok(Direction::North),
-            1 => Result::<Direction, ConvertError>::Ok(Direction::East),
-            2 => Result::<Direction, ConvertError>::Ok(Direction::South),
-            3 => Result::<Direction, ConvertError>::Ok(Direction::West),
-            _ => Result::<Direction, ConvertError>::Err(ConvertError::new(`unknown direction code: {value}`)),
+            0 => Result::Ok(Direction::North),
+            1 => Result::Ok(Direction::East),
+            2 => Result::Ok(Direction::South),
+            3 => Result::Ok(Direction::West),
+            _ => Result::Err(ConvertError::new(`unknown direction code: {value}`)),
         };
     }
 }
@@ -362,9 +362,9 @@ impl TryFrom<u32> for AccessFlags {
 
     fn try_from(value: u32) -> Result<AccessFlags, ConvertError> {
         if value > 7 as u32 {
-            return Result::<AccessFlags, ConvertError>::Err(ConvertError::new(`invalid flags: {value as i32}`));
+            return Result::Err(ConvertError::new(`invalid flags: {value as i32}`));
         }
-        return Result::<AccessFlags, ConvertError>::Ok(value as AccessFlags);
+        return Result::Ok(value as AccessFlags);
     }
 }
 

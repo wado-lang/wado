@@ -24,7 +24,7 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
     let len = message.len();
     if add_newline {
         let new_repr = builtin::array_new::<u8>(len + 1);
-        builtin::array_copy::<u8>(new_repr, 0, bytes, 0, len);
+        builtin::array_copy(new_repr, 0, bytes, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
         tx.write_raw(new_repr, len + 1);
     } else {
@@ -80,7 +80,7 @@ pub fn env(name: String) -> Option<String> with Environment {
     for let mut i = 0; i < vars.len(); i += 1 {
         let pair = vars[i];
         if pair.0 == name {
-            return Option::<String>::Some(pair.1);
+            return Option::Some(pair.1);
         }
     }
     return null;

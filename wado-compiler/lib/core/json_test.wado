@@ -14,97 +14,97 @@ use { to_string, from_string, write_escaped_string } from "core:json";
 
 test "serialize i32" {
     let n = 42;
-    let r = to_string::<i32>(&n);
+    let r = to_string(&n);
     assert r matches { Ok(s) && s == "42" };
 }
 
 test "serialize negative i32" {
     let n = -123;
-    let r = to_string::<i32>(&n);
+    let r = to_string(&n);
     assert r matches { Ok(s) && s == "-123" };
 }
 
 test "serialize i64" {
     let n: i64 = 1000000000000;
-    let r = to_string::<i64>(&n);
+    let r = to_string(&n);
     assert r matches { Ok(s) && s == "1000000000000" };
 }
 
 test "serialize u32" {
     let n: u32 = 255;
-    let r = to_string::<u32>(&n);
+    let r = to_string(&n);
     assert r matches { Ok(s) && s == "255" };
 }
 
 test "serialize f64" {
     let n = 3.14;
-    let r = to_string::<f64>(&n);
+    let r = to_string(&n);
     assert r matches { Ok(s) && s == "3.14" };
 }
 
 test "serialize bool true" {
     let v = true;
-    let r = to_string::<bool>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "true" };
 }
 
 test "serialize bool false" {
     let v = false;
-    let r = to_string::<bool>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "false" };
 }
 
 test "serialize string" {
     let v = "hello world";
-    let r = to_string::<String>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == `"hello world"` };
 }
 
 test "serialize string with escapes" {
     let v = "line1\nline2\ttab";
-    let r = to_string::<String>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == `"line1\\nline2\\ttab"` };
 }
 
 test "serialize string with quotes" {
     let v = `say "hi"`;
-    let r = to_string::<String>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == `"say \\"hi\\""` };
 }
 
 test "serialize Option Some" {
-    let v = Option::<i32>::Some(42);
-    let r = to_string::<Option<i32>>(&v);
+    let v: Option<i32> = Option::Some(42);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "42" };
 }
 
 test "serialize Option None" {
     let v: Option<i32> = null;
-    let r = to_string::<Option<i32>>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "null" };
 }
 
 test "serialize Array<i32>" {
     let v: Array<i32> = [1, 2, 3];
-    let r = to_string::<Array<i32>>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "[1,2,3]" };
 }
 
 test "serialize empty Array" {
     let v: Array<i32> = [];
-    let r = to_string::<Array<i32>>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "[]" };
 }
 
 test "serialize Array<String>" {
     let v: Array<String> = ["hello", "world"];
-    let r = to_string::<Array<String>>(&v);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == `["hello","world"]` };
 }
 
 test "serialize nested Array" {
-    let v = Option::<Array<i32>>::Some([10, 20]);
-    let r = to_string::<Option<Array<i32>>>(&v);
+    let v: Option<Array<i32>> = Option::Some([10, 20]);
+    let r = to_string(&v);
     assert r matches { Ok(s) && s == "[10,20]" };
 }
 
@@ -119,76 +119,76 @@ test "write_escaped_string helper" {
 }
 
 test "deserialize i32" {
-    let r = from_string::<i32>("42");
+    let r: Result<i32, DeserializeError> = from_string("42");
     assert r matches { Ok(v) && v == 42 };
 }
 
 test "deserialize negative i32" {
-    let r = from_string::<i32>("-7");
+    let r: Result<i32, DeserializeError> = from_string("-7");
     assert r matches { Ok(v) && v == -7 };
 }
 
 test "deserialize i32 with whitespace" {
-    let r = from_string::<i32>("  42  ");
+    let r: Result<i32, DeserializeError> = from_string("  42  ");
     assert r matches { Ok(v) && v == 42 };
 }
 
 test "deserialize i64" {
-    let r = from_string::<i64>("1000000000000");
+    let r: Result<i64, DeserializeError> = from_string("1000000000000");
     assert r matches { Ok(v) && v == 1000000000000 };
 }
 
 test "deserialize u32" {
-    let r = from_string::<u32>("255");
+    let r: Result<u32, DeserializeError> = from_string("255");
     assert r matches { Ok(v) && v == 255 };
 }
 
 test "deserialize f64" {
-    let r = from_string::<f64>("3.14");
+    let r: Result<f64, DeserializeError> = from_string("3.14");
     assert r matches { Ok(v) && v == 3.14 };
 }
 
 test "deserialize f64 integer" {
-    let r = from_string::<f64>("42");
+    let r: Result<f64, DeserializeError> = from_string("42");
     assert r matches { Ok(v) && v == 42.0 };
 }
 
 test "deserialize bool true" {
-    let r = from_string::<bool>("true");
+    let r: Result<bool, DeserializeError> = from_string("true");
     assert r matches { Ok(v) && v == true };
 }
 
 test "deserialize bool false" {
-    let r = from_string::<bool>("false");
+    let r: Result<bool, DeserializeError> = from_string("false");
     assert r matches { Ok(v) && v == false };
 }
 
 test "deserialize string" {
-    let r = from_string::<String>(`"hello"`);
+    let r: Result<String, DeserializeError> = from_string(`"hello"`);
     assert r matches { Ok(v) && v == "hello" };
 }
 
 test "deserialize string with escapes" {
-    let r = from_string::<String>(`"line1\\nline2"`);
+    let r: Result<String, DeserializeError> = from_string(`"line1\\nline2"`);
     assert r matches { Ok(v) && v == "line1\nline2" };
 }
 
 test "deserialize string with unicode" {
-    let r = from_string::<String>(`"\\u0041"`);
+    let r: Result<String, DeserializeError> = from_string(`"\\u0041"`);
     assert r matches { Ok(v) && v == "A" };
 }
 
 test "deserialize trailing data error" {
-    let r: Result<i32, DeserializeError> = from_string::<i32>("42 extra");
+    let r: Result<i32, DeserializeError> = from_string("42 extra");
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData };
 }
 
 test "deserialize malformed error" {
-    let r: Result<i32, DeserializeError> = from_string::<i32>("abc");
+    let r: Result<i32, DeserializeError> = from_string("abc");
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
 }
 
 test "deserialize eof error" {
-    let r: Result<String, DeserializeError> = from_string::<String>(`"`);
+    let r: Result<String, DeserializeError> = from_string(`"`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::Eof };
 }

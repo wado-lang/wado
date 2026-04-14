@@ -871,7 +871,7 @@ test "char encode_utf8" {
 
 test "serialize Url to JSON" {
     if let Ok(url) = Url::parse("https://example.com/path?q=1") {
-        let r = to_string::<Url>(&url);
+        let r = to_string(&url);
         assert r matches { Ok(s) && s == `"https://example.com/path?q=1"` };
     } else {
         panic("parse failed");
@@ -892,7 +892,7 @@ test "deserialize Url from JSON" {
 
 test "serialize deserialize Url roundtrip" {
     if let Ok(original) = Url::parse("https://user:pass@example.com:8443/api/v1?key=val#frag") {
-        let json = to_string::<Url>(&original);
+        let json = to_string(&original);
         if let Ok(json_str) = json {
             let restored = from_string::<Url>(json_str);
             if let Ok(url) = restored {

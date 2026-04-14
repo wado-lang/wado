@@ -470,17 +470,17 @@ impl<T: Serialize, V: Serialize> Serialize for TreeMap<String, V> {
                 let v = entry.1;
                 let kr = m.key::<String>(&k);
                 if let Err(e) = kr {
-                    return Result::<(), SerializeError>::Err(e);
+                    return Result::Err(e);
                 }
                 let vr = m.value::<V>(&v);
                 if let Err(e) = vr {
-                    return Result::<(), SerializeError>::Err(e);
+                    return Result::Err(e);
                 }
             }
             return m.end();
         }
         if let Err(e) = map_r {
-            return Result::<(), SerializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }
@@ -500,23 +500,23 @@ impl<V: Deserialize> Deserialize for TreeMap<String, V> {
                             result.insert(key, val);
                         }
                         if let Err(e) = val_r {
-                            return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+                            return Result::Err(e);
                         }
                     } else {
                         let end_r = ma.end();
                         if let Err(e) = end_r {
-                            return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+                            return Result::Err(e);
                         }
-                        return Result::<TreeMap<String, V>, DeserializeError>::Ok(result);
+                        return Result::Ok(result);
                     }
                 }
                 if let Err(e) = key_r {
-                    return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+                    return Result::Err(e);
                 }
             }
         }
         if let Err(e) = map_r {
-            return Result::<TreeMap<String, V>, DeserializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }

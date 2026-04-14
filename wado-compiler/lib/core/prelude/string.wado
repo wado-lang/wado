@@ -8,10 +8,10 @@ use { Eq, Ord, Iterator, IntoIterator } from "core:prelude/traits.wado";
 use { Option, Result } from "core:prelude/types.wado";
 
 fn i32_min(a: i32, b: i32) -> i32 {
-    return builtin::select::<i32>(a < b, a, b);
+    return builtin::select(a < b, a, b);
 }
 fn i32_max(a: i32, b: i32) -> i32 {
-    return builtin::select::<i32>(a > b, a, b);
+    return builtin::select(a > b, a, b);
 }
 fn byte_to_ascii_lowercase(b: u8) -> u8 {
     return b | (b >= 'A' as u8 && b <= 'Z' as u8) as u8 * ('A' as u8 ^ 'a' as u8);
@@ -78,7 +78,7 @@ impl String {
 
         // Create new array and copy existing bytes
         let new_repr = builtin::array_new::<u8>(new_capacity);
-        builtin::array_copy::<u8>(new_repr, 0, self.repr, 0, self.used);
+        builtin::array_copy(new_repr, 0, self.repr, 0, self.used);
         self.repr = new_repr;
     }
 
@@ -123,7 +123,7 @@ impl String {
         if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
             self.grow(new_used);
         }
-        builtin::array_fill::<u8>(self.repr, self.used, byte, n);
+        builtin::array_fill(self.repr, self.used, byte, n);
         self.used = new_used;
     }
 
@@ -141,7 +141,7 @@ impl String {
             self.grow(new_used);
         }
 
-        builtin::array_copy::<u8>(self.repr, self.used, other.internal_raw_bytes(), 0, other_len);
+        builtin::array_copy(self.repr, self.used, other.internal_raw_bytes(), 0, other_len);
         self.used = new_used;
     }
 
@@ -154,8 +154,8 @@ impl String {
 
         // Create new string with exact capacity needed
         let repr = builtin::array_new::<u8>(total);
-        builtin::array_copy::<u8>(repr, 0, a.internal_raw_bytes(), 0, len_a);
-        builtin::array_copy::<u8>(repr, len_a, b.internal_raw_bytes(), 0, len_b);
+        builtin::array_copy(repr, 0, a.internal_raw_bytes(), 0, len_a);
+        builtin::array_copy(repr, len_a, b.internal_raw_bytes(), 0, len_b);
 
         return String { repr, used: total };
     }
@@ -489,7 +489,7 @@ impl String {
         let capacity = builtin::array_len(self.repr);
         if capacity > self.used {
             let new_repr = builtin::array_new::<u8>(self.used);
-            builtin::array_copy::<u8>(new_repr, 0, self.repr, 0, self.used);
+            builtin::array_copy(new_repr, 0, self.repr, 0, self.used);
             self.repr = new_repr;
         }
     }
@@ -643,7 +643,7 @@ impl String {
             return String::with_capacity(0);
         }
         let repr = builtin::array_new::<u8>(len);
-        builtin::array_copy::<u8>(repr, 0, self.repr, start, len);
+        builtin::array_copy(repr, 0, self.repr, start, len);
         return String { repr, used: len };
     }
 
@@ -848,7 +848,7 @@ impl String {
             i -= 1;
         }
         // Copy inserted string
-        builtin::array_copy::<u8>(self.repr, byte_index, s.internal_raw_bytes(), 0, s_len);
+        builtin::array_copy(self.repr, byte_index, s.internal_raw_bytes(), 0, s_len);
         self.used = new_used;
     }
 
@@ -899,7 +899,7 @@ impl String {
         let total = self.used * n;
         let repr = builtin::array_new::<u8>(total);
         for let mut r = 0; r < n; r += 1 {
-            builtin::array_copy::<u8>(repr, r * self.used, self.repr, 0, self.used);
+            builtin::array_copy(repr, r * self.used, self.repr, 0, self.used);
         }
         return String { repr, used: total };
     }
@@ -942,7 +942,7 @@ impl String {
                     if new_used > builtin::array_len(result.repr) {
                         result.grow(new_used);
                     }
-                    builtin::array_copy::<u8>(result.repr, result.used, to_repr, 0, to_len);
+                    builtin::array_copy(result.repr, result.used, to_repr, 0, to_len);
                     result.used = new_used;
                 }
                 pos += from_len;
@@ -1212,7 +1212,7 @@ impl Iterator for StrSplitIter {
             if matched {
                 let len = i - self.pos;
                 let part = builtin::array_new::<u8>(len);
-                builtin::array_copy::<u8>(part, 0, self.repr, self.pos, len);
+                builtin::array_copy(part, 0, self.repr, self.pos, len);
                 self.pos = i + self.sep_len;
                 return Option::Some(String::internal_from_utf8_raw(part, len));
             }
@@ -1221,7 +1221,7 @@ impl Iterator for StrSplitIter {
         // No more separators; return the remaining part
         let len = self.used - self.pos;
         let part = builtin::array_new::<u8>(len);
-        builtin::array_copy::<u8>(part, 0, self.repr, self.pos, len);
+        builtin::array_copy(part, 0, self.repr, self.pos, len);
         self.finished = true;
         return Option::Some(String::internal_from_utf8_raw(part, len));
     }
@@ -1249,7 +1249,7 @@ impl Iterator for StrSplitNIter {
         if self.remaining <= 1 {
             let len = self.used - self.pos;
             let part = builtin::array_new::<u8>(len);
-            builtin::array_copy::<u8>(part, 0, self.repr, self.pos, len);
+            builtin::array_copy(part, 0, self.repr, self.pos, len);
             self.finished = true;
             return Option::Some(String::internal_from_utf8_raw(part, len));
         }
@@ -1267,7 +1267,7 @@ impl Iterator for StrSplitNIter {
             if matched {
                 let len = i - self.pos;
                 let part = builtin::array_new::<u8>(len);
-                builtin::array_copy::<u8>(part, 0, self.repr, self.pos, len);
+                builtin::array_copy(part, 0, self.repr, self.pos, len);
                 self.pos = i + self.sep_len;
                 self.remaining -= 1;
                 return Option::Some(String::internal_from_utf8_raw(part, len));
@@ -1277,7 +1277,7 @@ impl Iterator for StrSplitNIter {
         // No more separators; return remaining
         let len = self.used - self.pos;
         let part = builtin::array_new::<u8>(len);
-        builtin::array_copy::<u8>(part, 0, self.repr, self.pos, len);
+        builtin::array_copy(part, 0, self.repr, self.pos, len);
         self.finished = true;
         return Option::Some(String::internal_from_utf8_raw(part, len));
     }
@@ -1312,7 +1312,7 @@ impl Iterator for StrSplitWhitespaceIter {
         }
         let len = self.pos - start;
         let part = builtin::array_new::<u8>(len);
-        builtin::array_copy::<u8>(part, 0, self.repr, start, len);
+        builtin::array_copy(part, 0, self.repr, start, len);
         return Option::Some(String::internal_from_utf8_raw(part, len));
     }
 }
@@ -1343,14 +1343,14 @@ impl Iterator for StrLinesIter {
             if b == 0x0A {
                 let len = self.pos - start;
                 let part = builtin::array_new::<u8>(len);
-                builtin::array_copy::<u8>(part, 0, self.repr, start, len);
+                builtin::array_copy(part, 0, self.repr, start, len);
                 self.pos += 1;  // skip \n
                 return Option::Some(String::internal_from_utf8_raw(part, len));
             }
             if b == 0x0D {
                 let len = self.pos - start;
                 let part = builtin::array_new::<u8>(len);
-                builtin::array_copy::<u8>(part, 0, self.repr, start, len);
+                builtin::array_copy(part, 0, self.repr, start, len);
                 self.pos += 1;  // skip \r
                 if self.pos < self.used && builtin::array_get_u8(self.repr, self.pos) == 0x0A {
                     self.pos += 1;  // skip \n after \r
@@ -1363,7 +1363,7 @@ impl Iterator for StrLinesIter {
         let len = self.pos - start;
         if len > 0 {
             let part = builtin::array_new::<u8>(len);
-            builtin::array_copy::<u8>(part, 0, self.repr, start, len);
+            builtin::array_copy(part, 0, self.repr, start, len);
             self.finished = true;
             return Option::Some(String::internal_from_utf8_raw(part, len));
         }

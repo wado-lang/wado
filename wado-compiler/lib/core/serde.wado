@@ -196,9 +196,9 @@ pub trait Deserialize {
     fn deserialize_next_element_from_seq<S: DeserializeSeq>(seq: &mut S) -> Result<Self, DeserializeError> {
         let opt = seq.next_element::<Self>()?;
         if let Some(v) = opt {
-            return Result::<Self, DeserializeError>::Ok(v);
+            return Result::Ok(v);
         }
-        return Result::<Self, DeserializeError>::Err(DeserializeError::eof(-1));
+        return Result::Err(DeserializeError::eof(-1));
     }
 }
 
@@ -309,15 +309,15 @@ impl<T: Serialize> Serialize for Array<T> {
             for let item of *self {
                 let r = seq.element::<T>(&item);
                 if let Err(e) = r {
-                    return Result::<(), SerializeError>::Err(e);
+                    return Result::Err(e);
                 }
             }
             return seq.end();
         }
         if let Err(e) = seq {
-            return Result::<(), SerializeError>::Err(e);
+            return Result::Err(e);
         }
-        return Result::<(), SerializeError>::Err(SerializeError {
+        return Result::Err(SerializeError {
             kind: SerializeErrorKind::Custom,
             message: "begin_seq failed",
         });
@@ -332,12 +332,12 @@ impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
             if let Ok(mut vs) = var {
                 let r = vs.payload::<T>(v);
                 if let Err(e) = r {
-                    return Result::<(), SerializeError>::Err(e);
+                    return Result::Err(e);
                 }
                 return vs.end();
             }
             if let Err(e) = var {
-                return Result::<(), SerializeError>::Err(e);
+                return Result::Err(e);
             }
         }
         if let Err(v) = self {
@@ -345,12 +345,12 @@ impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
             if let Ok(mut vs) = var {
                 let r = vs.payload::<E>(v);
                 if let Err(e) = r {
-                    return Result::<(), SerializeError>::Err(e);
+                    return Result::Err(e);
                 }
                 return vs.end();
             }
             if let Err(e) = var {
-                return Result::<(), SerializeError>::Err(e);
+                return Result::Err(e);
             }
         }
         unreachable();
@@ -362,12 +362,12 @@ impl Deserialize for i8 {
         let r = d.deserialize_i32();
         if let Ok(v) = r {
             if v < -128 || v > 127 {
-                return Result::<i8, DeserializeError>::Err(DeserializeError::overflow("value out of range for i8", -1));
+                return Result::Err(DeserializeError::overflow("value out of range for i8", -1));
             }
-            return Result::<i8, DeserializeError>::Ok(v as i8);
+            return Result::Ok(v as i8);
         }
         if let Err(e) = r {
-            return Result::<i8, DeserializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }
@@ -378,14 +378,14 @@ impl Deserialize for i16 {
         let r = d.deserialize_i32();
         if let Ok(v) = r {
             if v < -32768 || v > 32767 {
-                return Result::<i16, DeserializeError>::Err(
+                return Result::Err(
                     DeserializeError::overflow("value out of range for i16", -1),
                 );
             }
-            return Result::<i16, DeserializeError>::Ok(v as i16);
+            return Result::Ok(v as i16);
         }
         if let Err(e) = r {
-            return Result::<i16, DeserializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }
@@ -408,12 +408,12 @@ impl Deserialize for u8 {
         let r = d.deserialize_u32();
         if let Ok(v) = r {
             if v > 255 {
-                return Result::<u8, DeserializeError>::Err(DeserializeError::overflow("value out of range for u8", -1));
+                return Result::Err(DeserializeError::overflow("value out of range for u8", -1));
             }
-            return Result::<u8, DeserializeError>::Ok(v as u8);
+            return Result::Ok(v as u8);
         }
         if let Err(e) = r {
-            return Result::<u8, DeserializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }
@@ -424,14 +424,14 @@ impl Deserialize for u16 {
         let r = d.deserialize_u32();
         if let Ok(v) = r {
             if v > 65535 {
-                return Result::<u16, DeserializeError>::Err(
+                return Result::Err(
                     DeserializeError::overflow("value out of range for u16", -1),
                 );
             }
-            return Result::<u16, DeserializeError>::Ok(v as u16);
+            return Result::Ok(v as u16);
         }
         if let Err(e) = r {
-            return Result::<u16, DeserializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }
@@ -496,18 +496,18 @@ impl<T: Deserialize> Deserialize for Option<T> {
         let null_check = d.is_null();
         if let Ok(is_null) = null_check {
             if is_null {
-                return Result::<Option<T>, DeserializeError>::Ok(null);
+                return Result::Ok(null);
             }
-            let inner = T::deserialize::<D>(d);
+            let inner = T::deserialize(d);
             if let Ok(v) = inner {
-                return Result::<Option<T>, DeserializeError>::Ok(Option::<T>::Some(v));
+                return Result::Ok(Option::Some(v));
             }
             if let Err(e) = inner {
-                return Result::<Option<T>, DeserializeError>::Err(e);
+                return Result::Err(e);
             }
         }
         if let Err(e) = null_check {
-            return Result::<Option<T>, DeserializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }
@@ -533,30 +533,30 @@ impl<T: Deserialize> Deserialize for Array<T> {
                             } else {
                                 let end_result = seq.end();
                                 if let Err(e) = end_result {
-                                    return Result::<Array<T>, DeserializeError>::Err(e);
+                                    return Result::Err(e);
                                 }
-                                return Result::<Array<T>, DeserializeError>::Ok(items);
+                                return Result::Ok(items);
                             }
                         }
                         if let Err(e) = next {
-                            return Result::<Array<T>, DeserializeError>::Err(e);
+                            return Result::Err(e);
                         }
                     }
                 } else {
                     let end_result = seq.end();
                     if let Err(e) = end_result {
-                        return Result::<Array<T>, DeserializeError>::Err(e);
+                        return Result::Err(e);
                     }
-                    return Result::<Array<T>, DeserializeError>::Ok([] as Array<T>);
+                    return Result::Ok([] as Array<T>);
                 }
             }
             if let Err(e) = first {
-                return Result::<Array<T>, DeserializeError>::Err(e);
+                return Result::Err(e);
             }
             unreachable();
         }
         if let Err(e) = seq_result {
-            return Result::<Array<T>, DeserializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }
@@ -573,12 +573,12 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
                     if let Ok(val) = val_r {
                         let end_r = va.end();
                         if let Err(e) = end_r {
-                            return Result::<Result<T, E>, DeserializeError>::Err(e);
+                            return Result::Err(e);
                         }
-                        return Result::<Result<T, E>, DeserializeError>::Ok(Result::<T, E>::Ok(val));
+                        return Result::Ok(Result::Ok(val));
                     }
                     if let Err(e) = val_r {
-                        return Result::<Result<T, E>, DeserializeError>::Err(e);
+                        return Result::Err(e);
                     }
                 }
                 if name == "Err" {
@@ -586,26 +586,26 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
                     if let Ok(val) = val_r {
                         let end_r = va.end();
                         if let Err(e) = end_r {
-                            return Result::<Result<T, E>, DeserializeError>::Err(e);
+                            return Result::Err(e);
                         }
-                        return Result::<Result<T, E>, DeserializeError>::Ok(Result::<T, E>::Err(val));
+                        return Result::Ok(Result::Err(val));
                     }
                     if let Err(e) = val_r {
-                        return Result::<Result<T, E>, DeserializeError>::Err(e);
+                        return Result::Err(e);
                     }
                 }
-                return Result::<Result<T, E>, DeserializeError>::Err(DeserializeError {
+                return Result::Err(DeserializeError {
                     kind: DeserializeErrorKind::UnknownVariant,
                     message: `unknown Result variant: {name}`,
                     offset: -1,
                 });
             }
             if let Err(e) = name_r {
-                return Result::<Result<T, E>, DeserializeError>::Err(e);
+                return Result::Err(e);
             }
         }
         if let Err(e) = va_r {
-            return Result::<Result<T, E>, DeserializeError>::Err(e);
+            return Result::Err(e);
         }
         unreachable();
     }
@@ -628,6 +628,6 @@ impl<..T: Deserialize> Deserialize for [..T] {
         let mut seq = d.begin_seq()?;
         let tuple = [..T::deserialize_next_element_from_seq(&mut seq)?];
         seq.end()?;
-        return Result::<[..T], DeserializeError>::Ok(tuple);
+        return Result::Ok(tuple);
     }
 }

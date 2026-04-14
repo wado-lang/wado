@@ -1,0 +1,27 @@
+// SKIPPED: inference engine cannot infer generic type parameter T of a
+// `builtin::*` function from the LHS variable type annotation.
+//
+// Used in `core:prelude/format.wado:163`:
+//     let arr = builtin::array_new::<u8>(len);
+//
+// We want to write:
+//     let arr: builtin::array<u8> = builtin::array_new(len);
+// but the compiler reports:
+//     type mismatch: expected 'builtin::array<u8>', found 'builtin::array<T>'
+//
+// Note: the same pattern works for non-builtin generic structs and
+// functions (see e.g. struct_back_inference fixtures), so the limitation
+// is specific to `builtin::*` types.
+//
+// Once the inference engine supports back-inference for builtin generics,
+// remove this fixture and remove the turbofish in
+// `wado-compiler/lib/core/prelude/format.wado`.
+
+export fn run() {
+    let arr: builtin::array<u8> = builtin::array_new(8);
+    builtin::array_set_u8(arr, 0, 42);
+    assert builtin::array_get_u8(arr, 0) == 42;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'builtin::array<u8>', found 'builtin::array<T>'"}
