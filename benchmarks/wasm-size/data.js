@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776122182472,
+  "lastUpdate": 1776159511073,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12737,6 +12737,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f36d13b814c876dfc3b21cf042b72cbf32971ee3"
         },
         "date": 1776122182270,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0abc63c2ea638a5710069f284146d1f01dadee43",
+          "message": "Merge pull request #837 from wado-lang/claude/remove-turbofish-syntax-O7HsT\n\nfix resolver and remove turbofish across stdlib via LHS/field/impl inference",
+          "timestamp": "2026-04-14T18:35:12+09:00",
+          "tree_id": "bc7939115255b09f7b63bc6752352743362534ea",
+          "url": "https://github.com/wado-lang/wado/commit/0abc63c2ea638a5710069f284146d1f01dadee43"
+        },
+        "date": 1776159510778,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
