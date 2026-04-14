@@ -256,6 +256,11 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult) {
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
+                if arg.is_mut {
+                    mark_potentially_mutated_local(&arg.expr, result);
+                }
+            }
+            for arg in args {
                 analyze_expr(&arg.expr, result);
             }
         }
@@ -268,8 +273,11 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult) {
             // Conservatively treat method calls as mutating the receiver local.
             // This prevents unsound propagation of snapshot copies like:
             // `let x = s; s.push_str("!"); use(x)`.
-            if let TirExprKind::Local { index, .. } = &receiver.kind {
-                result.usage.entry(*index).or_default().is_assigned = true;
+            mark_potentially_mutated_local(receiver, result);
+            for arg in args {
+                if arg.is_mut {
+                    mark_potentially_mutated_local(&arg.expr, result);
+                }
             }
             analyze_expr(receiver, result);
             for arg in args {
@@ -390,6 +398,23 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult) {
         TirExprKind::TemplateString { .. } => {
             unreachable!("TemplateString should be expanded before this phase")
         }
+    }
+}
+
+fn mark_potentially_mutated_local(expr: &TirExpr, result: &mut AnalysisResult) {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => {
+            result.usage.entry(*index).or_default().is_assigned = true;
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. } => {
+            mark_potentially_mutated_local(inner, result);
+        }
+        TirExprKind::Index { expr: inner, .. } => {
+            mark_potentially_mutated_local(inner, result);
+        }
+        _ => {}
     }
 }
 
