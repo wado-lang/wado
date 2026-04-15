@@ -6,11 +6,34 @@ use {
     SerializeStruct,
     DeserializeStruct,
     SerializeError,
+    SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
 } from "core:serde";
+use { TreeMap } from "core:collections";
 
-use { to_string, from_string, write_escaped_string } from "core:json";
+use { to_string, to_string_pretty, from_string, write_escaped_string, PrettyJsonSerializer } from "core:json";
+
+struct PrettyUser {
+    first_name: String,
+    age: i32,
+}
+
+impl Serialize for PrettyUser;
+
+enum PrettyColor {
+    Red,
+    Green,
+}
+
+impl Serialize for PrettyColor;
+
+variant PrettyShape {
+    Circle(f64),
+    Point,
+}
+
+impl Serialize for PrettyShape;
 
 test "serialize i32" {
     let n = 42;
@@ -106,6 +129,82 @@ test "serialize nested Array" {
     let v: Option<Array<i32>> = Option::Some([10, 20]);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "[10,20]" };
+}
+
+test "serialize pretty struct with default indent" {
+    let user = PrettyUser {
+        first_name: "Alice",
+        age: 30,
+    };
+    let r = to_string_pretty(&user);
+    assert r matches { Ok(s) && s == "{
+  \"firstName\": \"Alice\",
+  \"age\": 30
+}" };
+}
+
+test "serialize pretty with custom indent field" {
+    let v: Array<Array<i32>> = [[1], [2, 3]];
+    let indent = "    ";
+    let mut buf = "";
+    let mut ser = PrettyJsonSerializer {
+        buf: &mut buf,
+        indent: &indent,
+        depth: 0,
+    };
+    let r = v.serialize::<PrettyJsonSerializer>(&mut ser);
+    assert r matches { Ok };
+    assert buf == "[
+    [
+        1
+    ],
+    [
+        2,
+        3
+    ]
+]";
+}
+
+test "serialize pretty empty array" {
+    let v: Array<i32> = [];
+    let r = to_string_pretty(&v);
+    assert r matches { Ok(s) && s == "[]" };
+}
+
+test "serialize pretty map" {
+    let mut m: TreeMap<String, i32> = TreeMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    let r = to_string_pretty(&m);
+    assert r matches { Ok(s) && s == "{
+  \"a\": 1,
+  \"b\": 2
+}" };
+}
+
+test "serialize pretty empty map" {
+    let m: TreeMap<String, i32> = TreeMap::new();
+    let r = to_string_pretty(&m);
+    assert r matches { Ok(s) && s == "{}" };
+}
+
+test "serialize pretty unit variant" {
+    let c = PrettyColor::Red;
+    let r = to_string_pretty(&c);
+    assert r matches { Ok(s) && s == `"Red"` };
+}
+
+test "serialize pretty payload variant" {
+    let s = PrettyShape::Circle(5.0);
+    let r = to_string_pretty(&s);
+    assert r matches { Ok(v) && v == "{
+  \"Circle\": 5
+}" };
+}
+
+test "serialize pretty f64 nan error" {
+    let r = to_string_pretty(&f64::NAN);
+    assert r matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
 }
 
 test "write_escaped_string helper" {
