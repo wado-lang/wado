@@ -1074,9 +1074,11 @@ fn "core:json/core/json/from_string<String>"(input) {
 }
 
 fn "core:json/core/json/to_string<String>"(value) {
-    let __local_3: ref "core:serde//SerializeError";
+    let buf: ref "core:prelude/string.wado//String";
+    let __local_4: ref "core:serde//SerializeError";
     let __sroa_ser_buf: ref "core:prelude/string.wado//String";
-    __sroa_ser_buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    __sroa_ser_buf = buf;
     let __match_scrut_0: ref null "core:serde//SerializeError";
     __match_scrut_0 = __inline_JsonSerializer_Serializer__serialize_string_0: block -> ref null "core:serde//SerializeError" {
         "core:json/write_escaped_string"(__sroa_ser_buf, value);
@@ -1086,13 +1088,13 @@ fn "core:json/core/json/to_string<String>"(value) {
     } else if ref.is_null(__match_scrut_0) == 0 {
         let __cast_1: ref null "core:serde//SerializeError";
         __cast_1 = ref.as_non_null(__match_scrut_0);
-        __local_3 = ref.as_non_null(__cast_1);
-        return 1, ref.null none, __local_3;
+        __local_4 = ref.as_non_null(__cast_1);
+        return 1, ref.null none, __local_4;
         unreachable;
     } else {
         unreachable;
     }
-    return 0, __sroa_ser_buf, ref.null none;
+    return 0, buf, ref.null none;
 }
 
 fn "core:prelude/primitive.wado/char::from_u32"(value) {
@@ -1591,7 +1593,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     }) {
         result_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(prefix_len), used: 0 };
         start_6 = "core:prelude/string.wado/String::internal_reserve_uninit"(result_5, prefix_len);
-        __for_0: block {
+        __for_1: block {
             i_7 = 0;
             _licm_input_58 = self.input;
             _licm_repr_59 = result_5.repr;
@@ -1599,7 +1601,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             block {
                 l118: loop {
                     if i_7 >= prefix_len {
-                        break __for_0;
+                        break __for_1;
                     }
                     index_32 = start_6 + i_7;
                     value_33 = __inline_String__get_byte_10: block -> u8 {
@@ -1620,7 +1622,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
         break __inline_String__with_capacity_11: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(__local_36), used: 0 };
     };
     start_9 = "core:prelude/string.wado/String::internal_reserve_uninit"(result_8, prefix_len);
-    __for_1: block {
+    __for_2: block {
         i_10 = 0;
         _licm_input_61 = self.input;
         _licm_repr_62 = result_8.repr;
@@ -1628,7 +1630,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
         block {
             l121: loop {
                 if i_10 >= prefix_len {
-                    break __for_1;
+                    break __for_2;
                 }
                 index_38 = start_9 + i_10;
                 value_39 = __inline_String__get_byte_13: block -> u8 {
@@ -1792,7 +1794,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
         }) };
     }
     code = 0;
-    __for_2: block {
+    __for_3: block {
         i = 0;
         _licm_input_14 = self.input;
         _licm_pos_15 = self.pos;
@@ -1800,7 +1802,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
         block {
             l144: loop {
                 if i >= 4 {
-                    break __for_2;
+                    break __for_3;
                 }
                 c = __inline_String__get_byte_2: block -> u8 {
                     __local_9 = _licm_pos_15 + i;
