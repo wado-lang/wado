@@ -305,7 +305,7 @@ mod tests {
 
     fn run_async_test<F>(future: F)
     where
-        F: Future<Output = ()>,
+        F: Future<Output = ()> + Send + 'static,
     {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
