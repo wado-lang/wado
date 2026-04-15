@@ -10776,12 +10776,14 @@ fn "core:collections/TreeMap<String,i32>::find_index"(self, key) {
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Config^Serialize::serialize<JsonSerializer>"(self, s) {
+    let st: ref "core:json//JsonStructSerializer";
     let __fused_payload_9: ref "core:json//JsonStructSerializer";
     "core:prelude/string.wado/String::push"(s, 123);
     __fused_payload_9 = struct.new "core:json//JsonStructSerializer" { buf: s, count: 0 };
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<TreeMap<String,i32>>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("settings"), used: 8 }, self));
+    st = __fused_payload_9;
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<TreeMap<String,i32>>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("settings"), used: 8 }, self));
     return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null "core:serde//SerializeError" {
-        "core:prelude/string.wado/String::push"(__fused_payload_9.buf, 125);
+        "core:prelude/string.wado/String::push"(st.buf, 125);
         break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
     };
 }
@@ -11254,13 +11256,15 @@ fn "core:json/JsonVariantSerializer^SerializeVariant::payload<Inner>"(self, valu
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner^Serialize::serialize<JsonSerializer>"(self, s) {
+    let st: ref "core:json//JsonStructSerializer";
     let __fused_payload_9: ref "core:json//JsonStructSerializer";
     "core:prelude/string.wado/String::push"(s, 123);
     __fused_payload_9 = struct.new "core:json//JsonStructSerializer" { buf: s, count: 0 };
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<i32>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 }, self.value));
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<String>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("label"), used: 5 }, self.label));
+    st = __fused_payload_9;
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<i32>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 }, self.value));
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<String>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("label"), used: 5 }, self.label));
     return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null "core:serde//SerializeError" {
-        "core:prelude/string.wado/String::push"(__fused_payload_9.buf, 125);
+        "core:prelude/string.wado/String::push"(st.buf, 125);
         break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
     };
 }
@@ -12479,13 +12483,15 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Outer^Deseria
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Outer^Serialize::serialize<JsonSerializer>"(self, s) {
+    let st: ref "core:json//JsonStructSerializer";
     let __fused_payload_9: ref "core:json//JsonStructSerializer";
     "core:prelude/string.wado/String::push"(s, 123);
     __fused_payload_9 = struct.new "core:json//JsonStructSerializer" { buf: s, count: 0 };
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<Inner>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inner"), used: 5 }, self.inner));
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<i32>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("count"), used: 5 }, self.count));
+    st = __fused_payload_9;
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<Inner>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inner"), used: 5 }, self.inner));
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<i32>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("count"), used: 5 }, self.count));
     return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null "core:serde//SerializeError" {
-        "core:prelude/string.wado/String::push"(__fused_payload_9.buf, 125);
+        "core:prelude/string.wado/String::push"(st.buf, 125);
         break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
     };
 }
@@ -12844,18 +12850,20 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<String>"(self) {
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/FullStruct^Serialize::serialize<JsonSerializer>"(self, s) {
+    let st: ref "core:json//JsonStructSerializer";
     let __fused_payload_9: ref "core:json//JsonStructSerializer";
     "core:prelude/string.wado/String::push"(s, 123);
     __fused_payload_9 = struct.new "core:json//JsonStructSerializer" { buf: s, count: 0 };
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<String>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("name"), used: 4 }, self.name));
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<i32>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("age"), used: 3 }, self.age));
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<f64>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("score"), used: 5 }, self.score));
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<bool>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("active"), used: 6 }, self.active));
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<Array<String>>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tags"), used: 4 }, self.tags));
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<Option<String>>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("address"), used: 7 }, self.address));
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<Option<i32>>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rating"), used: 6 }, self.rating));
+    st = __fused_payload_9;
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<String>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("name"), used: 4 }, self.name));
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<i32>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("age"), used: 3 }, self.age));
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<f64>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("score"), used: 5 }, self.score));
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<bool>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("active"), used: 6 }, self.active));
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<Array<String>>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tags"), used: 4 }, self.tags));
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<Option<String>>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("address"), used: 7 }, self.address));
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<Option<i32>>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rating"), used: 6 }, self.rating));
     return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null "core:serde//SerializeError" {
-        "core:prelude/string.wado/String::push"(__fused_payload_9.buf, 125);
+        "core:prelude/string.wado/String::push"(st.buf, 125);
         break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
     };
 }

@@ -4677,13 +4677,15 @@ fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Point^Deserialize
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Line^Serialize::serialize<JsonSerializer>"(self, s) {
+    let st: ref "core:json//JsonStructSerializer";
     let __fused_payload_9: ref "core:json//JsonStructSerializer";
     "core:prelude/string.wado/String::push"(s, 123);
     __fused_payload_9 = struct.new "core:json//JsonStructSerializer" { buf: s, count: 0 };
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<Point>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("startPoint"), used: 10 }, self.start_point));
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<Point>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("endPoint"), used: 8 }, self.end_point));
+    st = __fused_payload_9;
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<Point>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("startPoint"), used: 10 }, self.start_point));
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<Point>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("endPoint"), used: 8 }, self.end_point));
     return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null "core:serde//SerializeError" {
-        "core:prelude/string.wado/String::push"(__fused_payload_9.buf, 125);
+        "core:prelude/string.wado/String::push"(st.buf, 125);
         break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
     };
 }
@@ -4704,13 +4706,15 @@ fn "core:json/JsonStructSerializer^SerializeStruct::field<Point>"(self, name, va
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_nested_struct.wado/Point^Serialize::serialize<JsonSerializer>"(self, s) {
+    let st: ref "core:json//JsonStructSerializer";
     let __fused_payload_9: ref "core:json//JsonStructSerializer";
     "core:prelude/string.wado/String::push"(s, 123);
     __fused_payload_9 = struct.new "core:json//JsonStructSerializer" { buf: s, count: 0 };
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<f64>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 }, self.x));
-    drop("core:json/JsonStructSerializer^SerializeStruct::field<f64>"(__fused_payload_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y"), used: 1 }, self.y));
+    st = __fused_payload_9;
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<f64>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 }, self.x));
+    drop("core:json/JsonStructSerializer^SerializeStruct::field<f64>"(st, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y"), used: 1 }, self.y));
     return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null "core:serde//SerializeError" {
-        "core:prelude/string.wado/String::push"(__fused_payload_9.buf, 125);
+        "core:prelude/string.wado/String::push"(st.buf, 125);
         break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
     };
 }

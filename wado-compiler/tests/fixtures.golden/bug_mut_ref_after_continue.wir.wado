@@ -152,6 +152,7 @@ fn "wado-compiler/tests/fixtures/bug_mut_ref_after_continue.wado/run"() with Std
     let __local_54: ref "core:prelude/format.wado//Formatter";
     let __local_65: ref "core:prelude/format.wado//Formatter";
     let __local_71: ref "core:prelude/format.wado//Formatter";
+    let __local_76: ref "core:prelude/types.wado//Box<i32>";
     let __local_82: ref "core:prelude/format.wado//Formatter";
     let __local_86: ref "core:prelude/types.wado//Box<i32>";
     let __local_87: i32;
@@ -159,6 +160,7 @@ fn "wado-compiler/tests/fixtures/bug_mut_ref_after_continue.wado/run"() with Std
     let __local_93: ref "core:prelude/format.wado//Formatter";
     let __local_104: ref "core:prelude/format.wado//Formatter";
     let __local_110: ref "core:prelude/format.wado//Formatter";
+    let __local_115: ref "core:prelude/types.wado//Box<i32>";
     let __local_121: ref "core:prelude/format.wado//Formatter";
     let _licm_used_124: i32;
     let _licm_repr_125: ref builtin::array<i32>;
@@ -266,7 +268,8 @@ condition: first == 20
                         __local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
                         "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected pos=2, got "), used: 20 });
                         __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
-                        "core:prelude/primitive.wado/i32::fmt_decimal"(pos.value, __local_18);
+                        __local_76 = pos;
+                        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_76.value, __local_18);
                         break __tmpl: __local_17;
                     });
                     "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -367,7 +370,8 @@ condition: second == 30
                         __local_25 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
                         "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected pos=3, got "), used: 20 });
                         __local_26 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_25 };
-                        "core:prelude/primitive.wado/i32::fmt_decimal"(pos.value, __local_26);
+                        __local_115 = pos;
+                        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_115.value, __local_26);
                         break __tmpl: __local_25;
                     });
                     "core:prelude/string.wado/String::push_str"(__local_27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
