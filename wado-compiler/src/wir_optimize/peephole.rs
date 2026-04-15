@@ -643,6 +643,21 @@ fn elide_value_copies_cross_scope(
     }
 }
 
+/// Extract the source local name from the inner expression of a `ValueCopy`.
+///
+/// Traces through `RefAsNonNull`, `RefCast`, and `StructGet` wrappers to find
+/// the innermost `LocalGet`. Returns `None` when the inner expression is not
+/// rooted at a local variable (e.g. a literal or a call return value).
+fn value_copy_source_local<'a>(expr: &'a WirInstr) -> Option<&'a str> {
+    match expr {
+        WirInstr::LocalGet { name, .. } => Some(name.as_str()),
+        WirInstr::RefAsNonNull(inner)
+        | WirInstr::RefCast { expr: inner, .. }
+        | WirInstr::StructGet { expr: inner, .. } => value_copy_source_local(inner),
+        _ => None,
+    }
+}
+
 /// Recursively walk a single instruction, eliding `value_copies` and descending
 /// into nested blocks/ifs/seqs.
 fn elide_value_copies_in_instr(
@@ -656,14 +671,21 @@ fn elide_value_copies_in_instr(
             if let WirInstr::ValueCopy { expr, .. } = value.as_ref()
                 && is_fresh_via_defs(expr, defs)
             {
-                // Safety check: only elide if the destination local is never
-                // mutated (no StructSet, no mutable call args, etc.).
-                // Otherwise skipping the copy creates an alias that could be
-                // corrupted by mutation, violating Wado's value semantics.
-                if remaining
+                // Safety check: only elide if:
+                // 1. The destination local is never mutated in the remaining
+                //    instructions (no StructSet, no mutable call args, etc.).
+                // 2. The source local is not mutated after the copy point.
+                //    Eliding the copy creates an alias; any subsequent mutation
+                //    of the source would corrupt the destination's value.
+                let dest_safe = remaining
                     .iter()
-                    .all(|i| uses_of_var_are_reads_only(i, name))
-                {
+                    .all(|i| uses_of_var_are_reads_only(i, name));
+                let source_safe = value_copy_source_local(expr).map_or(true, |src| {
+                    remaining
+                        .iter()
+                        .all(|i| uses_of_var_are_reads_only(i, src))
+                });
+                if dest_safe && source_safe {
                     let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
                     if let WirInstr::ValueCopy { expr, .. } = old {
                         *value = expr;
@@ -856,13 +878,28 @@ fn elide_copy_used_only_for_field_reads(instrs: &mut [WirInstr]) {
                 if matches!(value.as_ref(), WirInstr::ValueCopy { .. }) =>
             {
                 let var_name = name.clone();
-                let all_reads_only = instrs[i + 1..]
+                let remaining = &instrs[i + 1..];
+                // The destination must only be used for struct field reads.
+                let all_reads_only = remaining
                     .iter()
                     .all(|instr| uses_of_var_are_field_reads_only(instr, &var_name));
-                if all_reads_only && let WirInstr::LocalSet { value, .. } = &mut instrs[i] {
-                    let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
-                    if let WirInstr::ValueCopy { expr, .. } = old {
-                        *value.as_mut() = *expr;
+                // The source must not be mutated after the copy; otherwise eliding
+                // the copy creates an alias whose value would change under the caller.
+                let source_safe = if let WirInstr::ValueCopy { expr, .. } = value.as_ref() {
+                    value_copy_source_local(expr).map_or(true, |src| {
+                        remaining
+                            .iter()
+                            .all(|instr| uses_of_var_are_reads_only(instr, src))
+                    })
+                } else {
+                    true
+                };
+                if all_reads_only && source_safe {
+                    if let WirInstr::LocalSet { value, .. } = &mut instrs[i] {
+                        let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
+                        if let WirInstr::ValueCopy { expr, .. } = old {
+                            *value.as_mut() = *expr;
+                        }
                     }
                 }
             }
