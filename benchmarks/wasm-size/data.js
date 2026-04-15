@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776211409256,
+  "lastUpdate": 1776211639411,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12932,6 +12932,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2976db916878ef858022c4e6413d13005355acc7"
         },
         "date": 1776211409157,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7ba049eda66241d4526c02080b6f7a85e2a86a3f",
+          "message": "Merge pull request #842 from wado-lang/gfx/tweak_httpbin\n\nchore: ndjson() is now available",
+          "timestamp": "2026-04-15T09:04:01+09:00",
+          "tree_id": "65e41d38824e7d0293b0c2163f6a95acacec8e5d",
+          "url": "https://github.com/wado-lang/wado/commit/7ba049eda66241d4526c02080b6f7a85e2a86a3f"
+        },
+        "date": 1776211639243,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
