@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776179194111,
+  "lastUpdate": 1776211409256,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -12893,6 +12893,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/65ed19908d5fe0697ce1aa9bd00805cabd6fddb3"
         },
         "date": 1776179193828,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2976db916878ef858022c4e6413d13005355acc7",
+          "message": "Merge pull request #841 from wado-lang/gfx/do_not_run_update_bundled\n\nchore: do not run update bundled",
+          "timestamp": "2026-04-15T09:00:08+09:00",
+          "tree_id": "64ce4afa2a9c1d29de76ee97ad552b36174d8f6a",
+          "url": "https://github.com/wado-lang/wado/commit/2976db916878ef858022c4e6413d13005355acc7"
+        },
+        "date": 1776211409157,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
