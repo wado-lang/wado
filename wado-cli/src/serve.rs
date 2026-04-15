@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use bytes::Bytes;
+use futures::future::{Either, select};
 use http_body_util::{BodyExt, Full};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -207,7 +208,7 @@ fn create_http_state() -> HttpWasiState {
 /// outside `run_concurrent` deadlocks because the store stops polling as soon
 /// as the closure future resolves.
 ///
-/// The handler arm and the request-body I/O arm are raced via `tokio::select!`
+/// The handler arm and the request-body I/O arm are raced via `futures::future::select`
 /// — handler completing first is the normal case (a guest may never consume
 /// the request body, in which case the I/O future only resolves when the
 /// request resource is dropped).
@@ -249,9 +250,9 @@ async fn handle_http_request(
                     io.await
                         .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
                 });
-                tokio::select! {
-                    result = handler => result,
-                    result = io => result.map(|()| Err(None)),
+                match select(handler, io).await {
+                    Either::Left((result, _)) => result,
+                    Either::Right((result, _)) => result.map(|()| Err(None)),
                 }
             },
         )

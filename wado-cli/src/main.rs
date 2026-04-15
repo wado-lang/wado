@@ -94,8 +94,18 @@ fn print_version() {
     println!("wado {}", env!("CARGO_PKG_VERSION"));
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap_or_else(|e| {
+            eprintln!("Error: failed to create tokio runtime: {e}");
+            process::exit(1);
+        });
+    runtime.block_on(async_main());
+}
+
+async fn async_main() {
     let mut parser = lexopt::Parser::from_env();
 
     let Some(arg) = parser.next().unwrap_or_else(|e| {

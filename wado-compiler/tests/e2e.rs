@@ -14,6 +14,7 @@
 mod common;
 
 use bytes::Bytes;
+use futures::future::{Either, select};
 use http_body_util::{BodyExt, Full};
 use serde::Deserialize;
 use std::path::Path;
@@ -389,11 +390,11 @@ async fn run_http_request_async(
                     io.await
                         .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
                 });
-                // select!: handler completing first is normal (guest may not
+                // select: handler completing first is normal (guest may not
                 // consume request body); io completing first means body error.
-                tokio::select! {
-                    result = handler => result,
-                    result = io => result.map(|()| Err(None)),
+                match select(handler, io).await {
+                    Either::Left((result, _)) => result,
+                    Either::Right((result, _)) => result.map(|()| Err(None)),
                 }
             })
             .await?
