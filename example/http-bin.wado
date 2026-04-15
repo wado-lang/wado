@@ -328,14 +328,14 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
             allow = a;
         },
         "/headers" => {
-            body_str = stringify(&HeadersResponse { headers: headers_to_map(&h) }) + "\n";
+            body_str = ndjson(&HeadersResponse { headers: headers_to_map(&h) });
         },
         "/ip" => {
             let origin = get_header(&h, "x-forwarded-for");
-            body_str = stringify(&IpResponse { origin }) + "\n";
+            body_str = ndjson(&IpResponse { origin });
         },
         "/user-agent" => {
-            body_str = stringify(&UserAgentResponse { user_agent }) + "\n";
+            body_str = ndjson(&UserAgentResponse { user_agent });
         },
         _ => {
             let [s, c, b] = handle_fallback(request, method, url, path, args);
