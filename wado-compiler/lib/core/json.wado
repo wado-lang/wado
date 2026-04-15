@@ -54,27 +54,27 @@ pub fn write_escaped_string(buf: &mut String, s: &String) {
 }
 
 struct JsonSeqSerializer {
-    buf: String,
+    buf: &mut String,
     count: i32,
 }
 
 struct JsonMapSerializer {
-    buf: String,
+    buf: &mut String,
     count: i32,
     need_value: bool,
 }
 
 struct JsonStructSerializer {
-    buf: String,
+    buf: &mut String,
     count: i32,
 }
 
 struct JsonVariantSerializer {
-    buf: String,
+    buf: &mut String,
 }
 
 pub struct JsonSerializer {
-    buf: String,
+    buf: &mut String,
 }
 
 fn write_pretty_newline_and_indent(buf: &mut String, indent: &String, depth: i32) {
@@ -312,14 +312,14 @@ impl Serializer for JsonSerializer {
 }
 
 struct PrettyJsonSeqSerializer {
-    buf: String,
+    buf: &mut String,
     count: i32,
     indent: &String,
     depth: i32,
 }
 
 struct PrettyJsonMapSerializer {
-    buf: String,
+    buf: &mut String,
     count: i32,
     need_value: bool,
     indent: &String,
@@ -327,20 +327,20 @@ struct PrettyJsonMapSerializer {
 }
 
 struct PrettyJsonStructSerializer {
-    buf: String,
+    buf: &mut String,
     count: i32,
     indent: &String,
     depth: i32,
 }
 
 struct PrettyJsonVariantSerializer {
-    buf: String,
+    buf: &mut String,
     indent: &String,
     depth: i32,
 }
 
 pub struct PrettyJsonSerializer {
-    pub buf: String,
+    pub buf: &mut String,
     pub indent: &String,
     pub depth: i32,
 }
@@ -2050,21 +2050,23 @@ impl Deserializer for JsonDeserializer {
 
 /// Serializes a value to a JSON string.
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
-    let mut ser = JsonSerializer { buf: "" };
+    let mut buf = "";
+    let mut ser = JsonSerializer { buf: &mut buf };
     value.serialize::<JsonSerializer>(&mut ser)?;
-    return Result::Ok(ser.buf);
+    return Result::Ok(buf);
 }
 
 /// Serializes a value to a pretty JSON string.
 pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeError> {
     let indent = "  ";
+    let mut buf = "";
     let mut ser = PrettyJsonSerializer {
-        buf: "",
+        buf: &mut buf,
         indent: &indent,
         depth: 0,
     };
     value.serialize::<PrettyJsonSerializer>(&mut ser)?;
-    return Result::Ok(ser.buf);
+    return Result::Ok(buf);
 }
 
 /// Deserializes a value from a JSON string.

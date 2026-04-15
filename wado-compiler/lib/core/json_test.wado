@@ -146,14 +146,15 @@ test "serialize pretty struct with default indent" {
 test "serialize pretty with custom indent field" {
     let v: Array<Array<i32>> = [[1], [2, 3]];
     let indent = "    ";
+    let mut buf = "";
     let mut ser = PrettyJsonSerializer {
-        buf: "",
+        buf: &mut buf,
         indent: &indent,
         depth: 0,
     };
     let r = v.serialize::<PrettyJsonSerializer>(&mut ser);
     assert r matches { Ok(()) };
-    assert ser.buf == "[
+    assert buf == "[
     [
         1
     ],
