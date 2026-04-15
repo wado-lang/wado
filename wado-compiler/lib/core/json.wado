@@ -314,7 +314,7 @@ impl Serializer for JsonSerializer {
 struct PrettyJsonSeqSerializer {
     buf: String,
     count: i32,
-    indent: String,
+    indent: &String,
     depth: i32,
 }
 
@@ -322,26 +322,26 @@ struct PrettyJsonMapSerializer {
     buf: String,
     count: i32,
     need_value: bool,
-    indent: String,
+    indent: &String,
     depth: i32,
 }
 
 struct PrettyJsonStructSerializer {
     buf: String,
     count: i32,
-    indent: String,
+    indent: &String,
     depth: i32,
 }
 
 struct PrettyJsonVariantSerializer {
     buf: String,
-    indent: String,
+    indent: &String,
     depth: i32,
 }
 
 pub struct PrettyJsonSerializer {
     pub buf: String,
-    pub indent: String,
+    pub indent: &String,
     pub depth: i32,
 }
 
@@ -350,7 +350,7 @@ impl SerializeSeq for PrettyJsonSeqSerializer {
         if self.count > 0 {
             self.buf.push_str(",");
         }
-        write_pretty_newline_and_indent(&mut self.buf, &self.indent, self.depth);
+        write_pretty_newline_and_indent(&mut self.buf, self.indent, self.depth);
         let mut ser = PrettyJsonSerializer {
             buf: self.buf,
             indent: self.indent,
@@ -364,7 +364,7 @@ impl SerializeSeq for PrettyJsonSeqSerializer {
 
     fn end(&mut self) -> Result<(), SerializeError> {
         if self.count > 0 {
-            write_pretty_newline_and_indent(&mut self.buf, &self.indent, self.depth - 1);
+            write_pretty_newline_and_indent(&mut self.buf, self.indent, self.depth - 1);
         }
         self.buf.push_str("]");
         return Result::Ok(());
@@ -376,7 +376,7 @@ impl SerializeMap for PrettyJsonMapSerializer {
         if self.count > 0 {
             self.buf.push_str(",");
         }
-        write_pretty_newline_and_indent(&mut self.buf, &self.indent, self.depth);
+        write_pretty_newline_and_indent(&mut self.buf, self.indent, self.depth);
         let mut ser = PrettyJsonSerializer {
             buf: self.buf,
             indent: self.indent,
@@ -404,7 +404,7 @@ impl SerializeMap for PrettyJsonMapSerializer {
 
     fn end(&mut self) -> Result<(), SerializeError> {
         if self.count > 0 {
-            write_pretty_newline_and_indent(&mut self.buf, &self.indent, self.depth - 1);
+            write_pretty_newline_and_indent(&mut self.buf, self.indent, self.depth - 1);
         }
         self.buf.push_str("}");
         return Result::Ok(());
@@ -416,7 +416,7 @@ impl SerializeStruct for PrettyJsonStructSerializer {
         if self.count > 0 {
             self.buf.push_str(",");
         }
-        write_pretty_newline_and_indent(&mut self.buf, &self.indent, self.depth);
+        write_pretty_newline_and_indent(&mut self.buf, self.indent, self.depth);
         write_escaped_string(&mut self.buf, name);
         self.buf.push_str(": ");
         let mut ser = PrettyJsonSerializer {
@@ -432,7 +432,7 @@ impl SerializeStruct for PrettyJsonStructSerializer {
 
     fn end(&mut self) -> Result<(), SerializeError> {
         if self.count > 0 {
-            write_pretty_newline_and_indent(&mut self.buf, &self.indent, self.depth - 1);
+            write_pretty_newline_and_indent(&mut self.buf, self.indent, self.depth - 1);
         }
         self.buf.push_str("}");
         return Result::Ok(());
@@ -452,7 +452,7 @@ impl SerializeVariant for PrettyJsonVariantSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        write_pretty_newline_and_indent(&mut self.buf, &self.indent, self.depth - 1);
+        write_pretty_newline_and_indent(&mut self.buf, self.indent, self.depth - 1);
         self.buf.push_str("}");
         return Result::Ok(());
     }
@@ -599,7 +599,7 @@ impl Serializer for PrettyJsonSerializer {
 
     fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<PrettyJsonVariantSerializer, SerializeError> {
         self.buf.push_str("{");
-        write_pretty_newline_and_indent(&mut self.buf, &self.indent, self.depth + 1);
+        write_pretty_newline_and_indent(&mut self.buf, self.indent, self.depth + 1);
         write_escaped_string(&mut self.buf, variant_name);
         self.buf.push_str(": ");
         return Result::Ok(PrettyJsonVariantSerializer {
@@ -2057,9 +2057,10 @@ pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
 
 /// Serializes a value to a pretty JSON string.
 pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeError> {
+    let indent = "  ";
     let mut ser = PrettyJsonSerializer {
         buf: "",
-        indent: "  ",
+        indent: &indent,
         depth: 0,
     };
     value.serialize::<PrettyJsonSerializer>(&mut ser)?;
