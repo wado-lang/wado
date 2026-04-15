@@ -418,10 +418,7 @@ fn may_mutate_caller_state(expr: &TirExpr, type_table: &TypeTable) -> bool {
 }
 
 fn may_mutate_through_arg(expr: &TirExpr, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(expr.type_id),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    )
+    matches!(type_table.get(expr.type_id), ResolvedType::MutRef(_))
 }
 
 /// Check if a type requires value copying (composite types with value semantics).
