@@ -15,9 +15,8 @@ When you finish a task, you'd better reviewing docs if necessary:
 Then, run `time mise run on-task-done`, which includes:
 
 ```sh
+cargo build
 mise run clippy-fix
-mise run update-bundled
-cargo build --bin wado --bin wado-dev-tools
 mise run update-golden-fixtures
 mise run update-golden-format-fixtures
 mise run update-gale-golden
