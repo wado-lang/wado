@@ -1,0 +1,38 @@
+// Regression test: copy propagation must not eliminate a snapshot copy
+// when the source struct is mutated by a non-inlined &mut self method call
+// after the binding.
+//
+// Bug: `may_mutate_caller_state` returns false for struct-type receivers
+// (e.g. `c.increment()` where `c: Counter`), so `has_field_mutation` is
+// never set, and the single-use copy-propagation incorrectly eliminates
+// `let snapshot = c`, replacing `snapshot.get()` with `c.get()` — which
+// reads the already-incremented value instead of the snapshotted one.
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    #[inline(never)]
+    fn increment(&mut self) {
+        self.value += 1;
+    }
+
+    #[inline(never)]
+    fn get(&self) -> i32 {
+        return self.value;
+    }
+}
+
+test {
+    let mut c = Counter { value: 0 };
+    let snapshot = c;   // snapshot must capture value=0
+    c.increment();      // c.value becomes 1; snapshot must stay 0
+    assert snapshot.get() == 0;
+    assert c.get() == 1;
+}
+
+__DATA__
+{
+    "test": {}
+}

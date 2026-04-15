@@ -72,6 +72,11 @@ struct LocalUsage {
     address_taken: bool,
     /// Whether the local is captured by a closure
     is_captured: bool,
+    /// Whether this local was used as the receiver of any method call on a
+    /// struct type. At TIR level the implicit `&mut self` wrapping is not
+    /// visible (it is added during WIR generation), so we conservatively
+    /// treat any struct-type method call as a potential mutation source.
+    has_method_call: bool,
 }
 
 /// Analyze a Let statement to see if it's a copy binding.
@@ -270,6 +275,20 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
         TirExprKind::MethodCall { receiver, args, .. } => {
             if may_mutate_caller_state(receiver, type_table) {
                 mark_potentially_mutated_local(receiver, result);
+            }
+            // Conservatively mark struct-type receivers as having a method
+            // call. At TIR level, non-inlined `&mut self` methods have a
+            // plain struct receiver (the implicit `&mut` wrapping happens at
+            // WIR generation). We cannot distinguish `&self` from `&mut self`
+            // here, so any method call on a struct-type local is treated as a
+            // potential mutation to block incorrect single-use copy propagation.
+            if let TirExprKind::Local { index, .. } = &receiver.kind
+                && matches!(
+                    type_table.get(receiver.type_id),
+                    ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
+                )
+            {
+                result.usage.entry(*index).or_default().has_method_call = true;
             }
             analyze_expr(receiver, result, type_table);
             for arg in args {
@@ -486,7 +505,7 @@ fn can_propagate_copy(
             if is_value_type
                 && target_usage.read_count == 1
                 && let Some(su) = source_usage
-                && su.has_field_mutation
+                && (su.has_field_mutation || su.has_method_call)
             {
                 return false;
             }
