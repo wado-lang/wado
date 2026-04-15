@@ -110,14 +110,11 @@ fn "wado-compiler/tests/fixtures/serde_serialize_trait.wado/run"() with Stdout {
     let s: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
-    let __local_7: ref "wado-compiler/tests/fixtures/serde_serialize_trait.wado//TextSerializer";
-    let __local_10: ref "wado-compiler/tests/fixtures/serde_serialize_trait.wado//TextSerializer";
     let __local_12: i32;
     ser = struct.new "wado-compiler/tests/fixtures/serde_serialize_trait.wado//TextSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop(__inline_i32_Serialize__serialize_TextSerializer__2: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_trait.wado//SerializeError" {
         __local_12 = 42;
-        __local_7 = ser;
-        break __inline_i32_Serialize__serialize_TextSerializer__2: "wado-compiler/tests/fixtures/serde_serialize_trait.wado/TextSerializer^Serializer::serialize_i32"(__local_7.buf, 42);
+        break __inline_i32_Serialize__serialize_TextSerializer__2: "wado-compiler/tests/fixtures/serde_serialize_trait.wado/TextSerializer^Serializer::serialize_i32"(ser.buf, 42);
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
@@ -131,10 +128,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_trait.wado/run"() with Stdout {
     });
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    drop(__inline_String_Serialize__serialize_TextSerializer__4: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_trait.wado//SerializeError" {
-        __local_10 = ser;
-        break __inline_String_Serialize__serialize_TextSerializer__4: "wado-compiler/tests/fixtures/serde_serialize_trait.wado/TextSerializer^Serializer::serialize_string"(__local_10.buf, s);
-    });
+    drop("wado-compiler/tests/fixtures/serde_serialize_trait.wado/TextSerializer^Serializer::serialize_string"(ser.buf, s));
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
         "core:prelude/string.wado/String::push"(__local_4, 83);

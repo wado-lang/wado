@@ -3722,7 +3722,6 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/User^Deseri
     let __local_21: ref "core:prelude/types.wado//Result<Array<i32>,DeserializeError>";
     let __local_22: ref "core:prelude//Array<i32>";
     let __local_27: ref "core:json//JsonDeserializer";
-    let __local_32: ref "core:json//JsonDeserializer";
     let __sroa___result_discriminant: i32;
     let __sroa___result_case0_payload_0: ref null "core:json//JsonStructAccess";
     let __sroa___result_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -3747,11 +3746,7 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/User^Deseri
                         if __idx == 0 {
                             __local_10 = __inline_String_Deserialize__deserialize_JsonDeserializer__7: block -> ref "core:prelude/types.wado//Result<String,DeserializeError>" {
                                 __local_27 = sd.de;
-                                __inline_JsonDeserializer_Deserializer__deserialize_string_0: block -> ref "core:prelude/types.wado//Result<String,DeserializeError>" {
-                                    __local_32 = __local_27;
-                                    break __inline_JsonDeserializer_Deserializer__deserialize_string_0: "core:json/JsonDeserializer::read_json_string"(__local_32);
-                                };
-                                break __inline_String_Deserialize__deserialize_JsonDeserializer__7;
+                                break __inline_String_Deserialize__deserialize_JsonDeserializer__7: "core:json/JsonDeserializer::read_json_string"(__local_27);
                             };
                             __local_19 = __local_10;
                             if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__local_19) {
@@ -3982,11 +3977,7 @@ fn "core:json/JsonSeqAccess^DeserializeSeq::next_element<i32>"(self) {
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/i32^Deserialize::deserialize<JsonDeserializer>"(d) {
-    let __local_1: ref "core:json//JsonDeserializer";
-    return __inline_JsonDeserializer_Deserializer__deserialize_i32_0: block -> ref "core:prelude/types.wado//Result<i32,DeserializeError>" {
-        __local_1 = d;
-        break __inline_JsonDeserializer_Deserializer__deserialize_i32_0: "core:json/JsonDeserializer::parse_i32_direct"(__local_1);
-    };
+    return "core:json/JsonDeserializer::parse_i32_direct"(d);
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/Option<String>^Deserialize::deserialize<JsonDeserializer>"(d) {
@@ -3995,7 +3986,6 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/Option<Stri
     let v: ref "core:prelude/string.wado//String";
     let e_5: ref "core:serde//DeserializeError";
     let e_6: ref "core:serde//DeserializeError";
-    let __local_12: ref "core:json//JsonDeserializer";
     let __sroa_null_check_discriminant: i32;
     let __sroa_null_check_case0_payload_0: bool;
     let __sroa_null_check_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -4005,10 +3995,7 @@ fn "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/Option<Stri
         if is_null {
             return struct.new "core:prelude/types.wado//Result<Option<String>,DeserializeError>::Ok" { discriminant: 0, payload_0: ref.null none };
         }
-        inner = __inline_JsonDeserializer_Deserializer__deserialize_string_1: block -> ref "core:prelude/types.wado//Result<String,DeserializeError>" {
-            __local_12 = d;
-            break __inline_JsonDeserializer_Deserializer__deserialize_string_1: "core:json/JsonDeserializer::read_json_string"(__local_12);
-        };
+        inner = "core:json/JsonDeserializer::read_json_string"(d);
         if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(inner) {
             v = ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(inner).payload_0;
             return struct.new "core:prelude/types.wado//Result<Option<String>,DeserializeError>::Ok" { discriminant: 0, payload_0: v };
@@ -4108,15 +4095,11 @@ fn "core:prelude/array.wado/Array<i32>^Serialize::serialize<JsonSerializer>"(sel
 fn "core:json/JsonSeqSerializer^SerializeSeq::element<i32>"(self, value) {
     let ser: ref "core:json//JsonSerializer";
     let r: ref null "core:serde//SerializeError";
-    let __local_5: ref "core:json//JsonSerializer";
     if self.count > 0 {
         "core:prelude/string.wado/String::push"(self.buf, 44);
     }
     ser = struct.new "core:json//JsonSerializer" { buf: self.buf };
-    r = __inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref null "core:serde//SerializeError" {
-        __local_5 = ser;
-        break __inline_i32_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i32"(__local_5.buf, value);
-    };
+    r = "core:json/JsonSerializer^Serializer::serialize_i32"(ser.buf, value);
     self.buf = ser.buf;
     self.count = self.count + 1;
     return r;

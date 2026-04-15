@@ -3361,8 +3361,6 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/ApiResponse^Deserialize:
     let __local_17: ref "core:prelude/types.wado//Result<String,DeserializeError>";
     let __local_19: ref "core:json//JsonDeserializer";
     let __local_21: ref "core:json//JsonDeserializer";
-    let __local_24: ref "core:json//JsonDeserializer";
-    let __local_25: ref "core:json//JsonDeserializer";
     let __sroa___result_discriminant: i32;
     let __sroa___result_case0_payload_0: ref null "core:json//JsonStructAccess";
     let __sroa___result_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -3383,11 +3381,7 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/ApiResponse^Deserialize:
                         if __idx == 0 {
                             __local_9 = __inline_i32_Deserialize__deserialize_JsonDeserializer__3: block -> ref "core:prelude/types.wado//Result<i32,DeserializeError>" {
                                 __local_19 = sd.de;
-                                __inline_JsonDeserializer_Deserializer__deserialize_i32_0: block -> ref "core:prelude/types.wado//Result<i32,DeserializeError>" {
-                                    __local_24 = __local_19;
-                                    break __inline_JsonDeserializer_Deserializer__deserialize_i32_0: "core:json/JsonDeserializer::parse_i32_direct"(__local_24);
-                                };
-                                break __inline_i32_Deserialize__deserialize_JsonDeserializer__3;
+                                break __inline_i32_Deserialize__deserialize_JsonDeserializer__3: "core:json/JsonDeserializer::parse_i32_direct"(__local_19);
                             };
                             __local_16 = __local_9;
                             if ref.test "core:prelude/types.wado//Result<i32,DeserializeError>::Ok"(__local_16) {
@@ -3400,11 +3394,7 @@ fn "wado-compiler/tests/fixtures/serde_json_rename.wado/ApiResponse^Deserialize:
                         } else if __idx == 1 {
                             __local_11 = __inline_String_Deserialize__deserialize_JsonDeserializer__5: block -> ref "core:prelude/types.wado//Result<String,DeserializeError>" {
                                 __local_21 = sd.de;
-                                __inline_JsonDeserializer_Deserializer__deserialize_string_1: block -> ref "core:prelude/types.wado//Result<String,DeserializeError>" {
-                                    __local_25 = __local_21;
-                                    break __inline_JsonDeserializer_Deserializer__deserialize_string_1: "core:json/JsonDeserializer::read_json_string"(__local_25);
-                                };
-                                break __inline_String_Deserialize__deserialize_JsonDeserializer__5;
+                                break __inline_String_Deserialize__deserialize_JsonDeserializer__5: "core:json/JsonDeserializer::read_json_string"(__local_21);
                             };
                             __local_17 = __local_11;
                             if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__local_17) {
@@ -3471,17 +3461,13 @@ fn "core:json/JsonStructSerializer^SerializeStruct::field<String>"(self, name, v
 fn "core:json/JsonStructSerializer^SerializeStruct::field<i32>"(self, name, value) {
     let ser: ref "core:json//JsonSerializer";
     let r: ref null "core:serde//SerializeError";
-    let __local_6: ref "core:json//JsonSerializer";
     if self.count > 0 {
         "core:prelude/string.wado/String::push"(self.buf, 44);
     }
     "core:json/write_escaped_string"(self.buf, name);
     "core:prelude/string.wado/String::push"(self.buf, 58);
     ser = struct.new "core:json//JsonSerializer" { buf: self.buf };
-    r = __inline_i32_Serialize__serialize_JsonSerializer__0: block -> ref null "core:serde//SerializeError" {
-        __local_6 = ser;
-        break __inline_i32_Serialize__serialize_JsonSerializer__0: "core:json/JsonSerializer^Serializer::serialize_i32"(__local_6.buf, value);
-    };
+    r = "core:json/JsonSerializer^Serializer::serialize_i32"(ser.buf, value);
     self.buf = ser.buf;
     self.count = self.count + 1;
     return r;

@@ -97,10 +97,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/string-truncate-panic.wado/__cm_export__run"() {
     let s: ref "core:prelude/string.wado//String";
-    let self: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("日本語"), used: 9 };
-    self = s;
-    "core:prelude/string.wado/String::truncate"(self, 4);
+    "core:prelude/string.wado/String::truncate"(s, 4);
     "wasi/task-return"(0);
 }
 
@@ -352,10 +350,8 @@ fn "core:prelude/string.wado/String::truncate"(self, byte_len) {
     let __local_28: ref "core:prelude/format.wado//Formatter";
     let __local_33: ref "core:prelude/format.wado//Formatter";
     let __local_38: ref "core:prelude/format.wado//Formatter";
-    let __local_40: ref "core:prelude/format.wado//Formatter";
     let __local_43: ref "core:prelude/format.wado//Formatter";
     let __local_48: ref "core:prelude/format.wado//Formatter";
-    let __local_50: ref "core:prelude/format.wado//Formatter";
     if byte_len >= self.used {
         return;
     }
@@ -428,8 +424,7 @@ condition: b < 0x80 || b >= 0xC0
                 "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b < 0x80: "), used: 10 });
                 __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                 __local_38 = __local_13;
-                __local_40 = __local_38;
-                "core:prelude/format.wado/Formatter::pad"(__local_40, (if __v1 -> ref "core:prelude/string.wado//String" {
+                "core:prelude/format.wado/Formatter::pad"(__local_38, (if __v1 -> ref "core:prelude/string.wado//String" {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
                 } else {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -445,8 +440,7 @@ condition: b < 0x80 || b >= 0xC0
                 "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b >= 0xC0: "), used: 11 });
                 __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_12 };
                 __local_48 = __local_13;
-                __local_50 = __local_48;
-                "core:prelude/format.wado/Formatter::pad"(__local_50, (if __v3 -> ref "core:prelude/string.wado//String" {
+                "core:prelude/format.wado/Formatter::pad"(__local_48, (if __v3 -> ref "core:prelude/string.wado//String" {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
                 } else {
                     struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };

@@ -399,7 +399,7 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
 fn mark_potentially_mutated_local(expr: &TirExpr, result: &mut AnalysisResult) {
     match &expr.kind {
         TirExprKind::Local { index, .. } => {
-            result.usage.entry(*index).or_default().is_assigned = true;
+            result.usage.entry(*index).or_default().has_field_mutation = true;
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
@@ -482,6 +482,14 @@ fn can_propagate_copy(
             }
 
             let is_value_type = needs_value_copy(binding.type_id, type_table);
+
+            if is_value_type
+                && target_usage.read_count == 1
+                && let Some(su) = source_usage
+                && su.has_field_mutation
+            {
+                return false;
+            }
 
             // For value-type copies where the target is used exactly once,
             // we can safely propagate even when the source's address was taken.

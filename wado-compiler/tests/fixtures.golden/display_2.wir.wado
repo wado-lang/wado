@@ -495,7 +495,7 @@ fn "wado-compiler/tests/fixtures/display_2.wado/test_format_padding"() with Stdo
     let __v0_15: ref "core:prelude/string.wado//String";
     let __cond_16: bool;
     let buf: ref "core:prelude/string.wado//String";
-    let f_18: ref "core:prelude/format.wado//Formatter";
+    let f: ref "core:prelude/format.wado//Formatter";
     let __v0_19: ref "core:prelude/string.wado//String";
     let __cond_20: bool;
     let __v0_21: ref "core:prelude/string.wado//String";
@@ -525,7 +525,6 @@ fn "wado-compiler/tests/fixtures/display_2.wado/test_format_padding"() with Stdo
     let __local_72: ref "core:prelude/format.wado//Formatter";
     let __local_79: ref "core:prelude/format.wado//Formatter";
     let __local_86: ref "core:prelude/format.wado//Formatter";
-    let f_94: ref "core:prelude/format.wado//Formatter";
     let __local_98: ref "core:prelude/format.wado//Formatter";
     let __local_105: ref "core:prelude/format.wado//Formatter";
     x = struct.new "core:prelude/types.wado//Box<i32>" { value: 42 };
@@ -719,9 +718,8 @@ condition: fmt_int(&x, '*', Alignment::Center, false, false, 10) == \"****42****
         unreachable;
     }
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(64), used: 0 };
-    f_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 8, precision: -1, indent: 0, buf: buf };
-    f_94 = f_18;
-    "core:prelude/format.wado/Formatter::pad"(f_94, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 });
+    f = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 8, precision: -1, indent: 0, buf: buf };
+    "core:prelude/format.wado/Formatter::pad"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 });
     __v0_19 = value_copy "core:prelude/string.wado//String"(buf);
     __cond_20 = "core:prelude/string.wado/String^Eq::eq"(__v0_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true    "), used: 8 });
     if __cond_20 == 0 {
@@ -1101,11 +1099,6 @@ fn "wado-compiler/tests/fixtures/display_2.wado/test_template_specifiers"() with
     let __local_325: ref "core:prelude/format.wado//Formatter";
     let __local_326: ref "core:prelude/string.wado//String";
     let __local_327: ref "core:prelude/format.wado//Formatter";
-    let __local_848: ref "core:prelude/format.wado//Formatter";
-    let __local_857: ref "core:prelude/format.wado//Formatter";
-    let __local_866: ref "core:prelude/format.wado//Formatter";
-    let __local_878: ref "core:prelude/format.wado//Formatter";
-    let __local_890: ref "core:prelude/format.wado//Formatter";
     __cond_1 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_78 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_79 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_78 };
@@ -2512,8 +2505,7 @@ condition: `{i:<10x}` == \"2a        \"
     __cond_68 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_292 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_293 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: __local_292 };
-        __local_848 = __local_293;
-        "core:prelude/format.wado/Formatter::pad"(__local_848, s);
+        "core:prelude/format.wado/Formatter::pad"(__local_293, s);
         break __tmpl: __local_292;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("     hello"), used: 10 });
     if __cond_68 == 0 {
@@ -2539,8 +2531,7 @@ condition: `{s:>10}` == \"     hello\"
     __cond_69 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_296 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_297 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 0, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: __local_296 };
-        __local_857 = __local_297;
-        "core:prelude/format.wado/Formatter::pad"(__local_857, s);
+        "core:prelude/format.wado/Formatter::pad"(__local_297, s);
         break __tmpl: __local_296;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello     "), used: 10 });
     if __cond_69 == 0 {
@@ -2566,8 +2557,7 @@ condition: `{s:<10}` == \"hello     \"
     __cond_70 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_300 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_301 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 1, sign_plus: 0, zero_pad: 0, width: 10, precision: -1, indent: 0, buf: __local_300 };
-        __local_866 = __local_301;
-        "core:prelude/format.wado/Formatter::pad"(__local_866, s);
+        "core:prelude/format.wado/Formatter::pad"(__local_301, s);
         break __tmpl: __local_300;
     }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("  hello   "), used: 10 });
     if __cond_70 == 0 {
@@ -2593,8 +2583,7 @@ condition: `{s:^10}` == \"  hello   \"
     __cond_71 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_304 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_305 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_304 };
-        __local_878 = __local_305;
-        "core:prelude/format.wado/Formatter::pad"(__local_878, block -> ref "core:prelude/string.wado//String" {
+        "core:prelude/format.wado/Formatter::pad"(__local_305, block -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
         });
         break __tmpl: __local_304;
@@ -2622,8 +2611,7 @@ condition: `{true}` == \"true\"
     __cond_72 = "core:prelude/string.wado/String^Eq::eq"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_308 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_309 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_308 };
-        __local_890 = __local_309;
-        "core:prelude/format.wado/Formatter::pad"(__local_890, block -> ref "core:prelude/string.wado//String" {
+        "core:prelude/format.wado/Formatter::pad"(__local_309, block -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
         break __tmpl: __local_308;
@@ -7206,39 +7194,29 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
     let start_6: i32;
     let start_7: i32;
     let raw: ref builtin::array<u8>;
-    let buf_9: ref "core:prelude/string.wado//String";
     let n_10: i32;
-    let buf_12: ref "core:prelude/string.wado//String";
-    let buf_15: ref "core:prelude/string.wado//String";
-    let buf_17: ref "core:prelude/string.wado//String";
     let n_18: i32;
-    let buf_20: ref "core:prelude/string.wado//String";
     let n_21: i32;
     let index: i32;
     decimal_pos = nd + p;
     if decimal_pos <= 0 {
         "core:prelude/string.wado/String::push"(buf, 48);
         "core:prelude/string.wado/String::push"(buf, 46);
-        buf_9 = buf;
         n_10 = 0 - decimal_pos;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_9, 48, n_10);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, n_10);
         digit_offset = buf.used;
-        buf_12 = buf;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_12, 48, nd);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, nd);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, digit_offset, d, nd);
     } else if decimal_pos >= nd {
         start_6 = buf.used;
-        buf_15 = buf;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_15, 48, nd);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, nd);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, start_6, d, nd);
-        buf_17 = buf;
         n_18 = decimal_pos - nd;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_17, 48, n_18);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, n_18);
     } else {
         start_7 = buf.used;
-        buf_20 = buf;
         n_21 = nd + 1;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_20, 48, n_21);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, n_21);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, start_7, d, nd);
         raw = buf.repr;
         builtin::array_copy<u8>(raw, (start_7 + decimal_pos) + 1, raw, start_7 + decimal_pos, nd - decimal_pos);
@@ -7253,10 +7231,8 @@ fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd, upper) {
     let raw: ref builtin::array<u8>;
     let start_8: i32;
     let abs_exp: i32;
-    let buf_11: ref "core:prelude/string.wado//String";
     let n: i32;
     let index: i32;
-    let buf_18: ref "core:prelude/string.wado//String";
     let __local_20: u32;
     let __local_23: u32;
     let __local_24: i32;
@@ -7268,9 +7244,8 @@ fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd, upper) {
     exp = (p + nd) - 1;
     if nd > 1 {
         start_6 = buf.used;
-        buf_11 = buf;
         n = nd + 1;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_11, 48, n);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, n);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, start_6, d, nd);
         raw = buf.repr;
         builtin::array_copy<u8>(raw, start_6 + 2, raw, start_6 + 1, nd - 1);
@@ -7278,8 +7253,7 @@ fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd, upper) {
         builtin::array_set_u8(buf.repr, index, 46);
     } else {
         start_8 = buf.used;
-        buf_18 = buf;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_18, 48, 1);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, 1);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, start_8, d, 1);
     }
     "core:prelude/string.wado/String::push_str"(buf, (if upper -> ref "core:prelude/string.wado//String" {
@@ -7353,20 +7327,10 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
     let trailing_21: i32;
     let start_22: i32;
     let raw_23: ref builtin::array<u8>;
-    let buf_24: ref "core:prelude/string.wado//String";
-    let buf_26: ref "core:prelude/string.wado//String";
-    let buf_29: ref "core:prelude/string.wado//String";
-    let buf_31: ref "core:prelude/string.wado//String";
-    let buf_34: ref "core:prelude/string.wado//String";
-    let buf_36: ref "core:prelude/string.wado//String";
     let n_37: i32;
-    let buf_38: ref "core:prelude/string.wado//String";
-    let buf_41: ref "core:prelude/string.wado//String";
     let index_45: i32;
-    let buf_48: ref "core:prelude/string.wado//String";
     let n_49: i32;
     let index_52: i32;
-    let buf_54: ref "core:prelude/string.wado//String";
     if precision < 0 {
         "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd);
         return;
@@ -7377,12 +7341,10 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
         "core:prelude/string.wado/String::push"(buf, 48);
         "core:prelude/string.wado/String::push"(buf, 46);
         if precision <= leading_zeros {
-            buf_24 = buf;
-            "core:prelude/string.wado/String::append_byte_filled"(buf_24, 48, precision);
+            "core:prelude/string.wado/String::append_byte_filled"(buf, 48, precision);
             return;
         }
-        buf_26 = buf;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_26, 48, leading_zeros);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, leading_zeros);
         remaining_prec = precision - leading_zeros;
         digits_to_output = select i32(remaining_prec < nd, remaining_prec, nd);
         trailing_9 = (precision - leading_zeros) - digits_to_output;
@@ -7399,23 +7361,18 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
             };
         };
         digit_offset = buf.used;
-        buf_29 = buf;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_29, 48, digits_to_output);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, digits_to_output);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, digit_offset, trim_d_10, digits_to_output);
-        buf_31 = buf;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_31, 48, trailing_9);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, trailing_9);
     } else if decimal_pos >= nd {
         start_13 = buf.used;
-        buf_34 = buf;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_34, 48, nd);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, nd);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, start_13, d, nd);
-        buf_36 = buf;
         n_37 = decimal_pos - nd;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_36, 48, n_37);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, n_37);
         if precision > 0 {
             "core:prelude/string.wado/String::push"(buf, 46);
-            buf_38 = buf;
-            "core:prelude/string.wado/String::append_byte_filled"(buf_38, 48, precision);
+            "core:prelude/string.wado/String::append_byte_filled"(buf, 48, precision);
         }
     } else {
         after_decimal = nd - decimal_pos;
@@ -7435,8 +7392,7 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
             };
             total = output_nd + 1;
             start_19 = buf.used;
-            buf_41 = buf;
-            "core:prelude/string.wado/String::append_byte_filled"(buf_41, 48, total);
+            "core:prelude/string.wado/String::append_byte_filled"(buf, 48, total);
             "core:prelude/fpfmt.wado/write_digits_at"(buf, start_19, trim_d_16, output_nd);
             raw_20 = buf.repr;
             builtin::array_copy<u8>(raw_20, (start_19 + decimal_pos) + 1, raw_20, start_19 + decimal_pos, output_nd - decimal_pos);
@@ -7446,16 +7402,14 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
         }
         trailing_21 = precision - after_decimal;
         start_22 = buf.used;
-        buf_48 = buf;
         n_49 = nd + 1;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_48, 48, n_49);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, n_49);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, start_22, d, nd);
         raw_23 = buf.repr;
         builtin::array_copy<u8>(raw_23, (start_22 + decimal_pos) + 1, raw_23, start_22 + decimal_pos, nd - decimal_pos);
         index_52 = start_22 + decimal_pos;
         builtin::array_set_u8(buf.repr, index_52, 46);
-        buf_54 = buf;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_54, 48, trailing_21);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, trailing_21);
     }
 }
 
@@ -7473,11 +7427,8 @@ fn "core:prelude/fpfmt.wado/write_exp_prec"(buf, d, p, nd, precision, upper) {
     let skip_16: i32;
     let exp: i32;
     let abs_exp: i32;
-    let buf_20: ref "core:prelude/string.wado//String";
     let n: i32;
     let index: i32;
-    let buf_26: ref "core:prelude/string.wado//String";
-    let buf_29: ref "core:prelude/string.wado//String";
     let __local_31: u32;
     let __local_34: u32;
     let __local_35: i32;
@@ -7496,9 +7447,8 @@ fn "core:prelude/fpfmt.wado/write_exp_prec"(buf, d, p, nd, precision, upper) {
         trailing = precision - to_output;
         digit_count = 1 + to_output;
         start_10 = buf.used;
-        buf_20 = buf;
         n = digit_count + 1;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_20, 48, n);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, n);
         trim_d = d;
         skip_12 = nd - digit_count;
         b269: block {
@@ -7516,12 +7466,10 @@ fn "core:prelude/fpfmt.wado/write_exp_prec"(buf, d, p, nd, precision, upper) {
         builtin::array_copy<u8>(raw, start_10 + 2, raw, start_10 + 1, digit_count - 1);
         index = start_10 + 1;
         builtin::array_set_u8(buf.repr, index, 46);
-        buf_26 = buf;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_26, 48, trailing);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, trailing);
     } else {
         start_14 = buf.used;
-        buf_29 = buf;
-        "core:prelude/string.wado/String::append_byte_filled"(buf_29, 48, 1);
+        "core:prelude/string.wado/String::append_byte_filled"(buf, 48, 1);
         first_d = d;
         skip_16 = nd - 1;
         b272: block {
@@ -8176,7 +8124,6 @@ fn "core:prelude/primitive.wado/f32::fmt_into"(self, f) {
     let nd: i32;
     let mark: i32;
     let precision: i32;
-    let f_14: ref "core:prelude/format.wado//Formatter";
     let v64: f64;
     let __local_17: i32;
     let __local_18: i32;
@@ -8184,9 +8131,8 @@ fn "core:prelude/primitive.wado/f32::fmt_into"(self, f) {
     let __local_25: ref "core:prelude//Array<u64>";
     if f.precision >= 0 {
         precision = f.precision;
-        f_14 = f;
         v64 = builtin::f64_promote_f32(self);
-        "core:prelude/primitive.wado/f64::fmt_fixed"(v64, precision, f_14);
+        "core:prelude/primitive.wado/f64::fmt_fixed"(v64, precision, f);
         return;
     }
     let __sroa___pattern_temp_0_0: bool;
