@@ -10,7 +10,14 @@ use {
     DeserializeErrorKind,
 } from "core:serde";
 
-use { to_string, from_string, write_escaped_string } from "core:json";
+use { to_string, to_string_pretty, from_string, write_escaped_string, PrettyJsonSerializer } from "core:json";
+
+struct PrettyUser {
+    first_name: String,
+    age: i32,
+}
+
+impl Serialize for PrettyUser;
 
 test "serialize i32" {
     let n = 42;
@@ -106,6 +113,38 @@ test "serialize nested Array" {
     let v: Option<Array<i32>> = Option::Some([10, 20]);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "[10,20]" };
+}
+
+test "serialize pretty struct with default indent" {
+    let user = PrettyUser {
+        first_name: "Alice",
+        age: 30,
+    };
+    let r = to_string_pretty(&user);
+    assert r matches { Ok(s) && s == "{
+  \"firstName\": \"Alice\",
+  \"age\": 30
+}" };
+}
+
+test "serialize pretty with custom indent field" {
+    let v: Array<Array<i32>> = [[1], [2, 3]];
+    let mut ser = PrettyJsonSerializer {
+        buf: "",
+        indent: "    ",
+        depth: 0,
+    };
+    let r = v.serialize::<PrettyJsonSerializer>(&mut ser);
+    assert r matches { Ok(()) };
+    assert ser.buf == "[
+    [
+        1
+    ],
+    [
+        2,
+        3
+    ]
+]";
 }
 
 test "write_escaped_string helper" {
