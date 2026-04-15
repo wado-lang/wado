@@ -154,7 +154,6 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_pub_use_alias.wado/run"() wi
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/string.wado//String";
-    let __local_8: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -169,8 +168,7 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_pub_use_alias.wado/run"() wi
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        __local_8 = __local_2;
-        "core:prelude/primitive.wado/f64::fmt_into"(m.value, __local_8);
+        "core:prelude/primitive.wado/f64::fmt_into"(m.value, __local_2);
         "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" "), used: 1 });
         "core:prelude/string.wado/String::push_str"(__local_1, m.unit);
         break __tmpl: __local_1;

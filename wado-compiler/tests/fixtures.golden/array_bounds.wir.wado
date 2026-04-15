@@ -125,7 +125,6 @@ fn "wado-compiler/tests/fixtures/array_bounds.wado/array_bounds_check"() with St
     let __local_18: ref "core:prelude/format.wado//Formatter";
     let __local_25: ref "core:prelude/format.wado//Formatter";
     let __local_32: ref "core:prelude/format.wado//Formatter";
-    let __local_47: ref "core:prelude/format.wado//Formatter";
     arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
@@ -173,14 +172,13 @@ fn "wado-compiler/tests/fixtures/array_bounds.wado/array_bounds_check"() with St
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        __local_47 = __local_5;
         "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_i32__IndexValue_i32___index_value_23: block -> i32 {
             if 1 >= arr.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_i32__IndexValue_i32___index_value_23: builtin::array_get<i32>(arr.repr, 1);
-        }, __local_47);
+        }, __local_5);
         break __tmpl: __local_4;
     });
 }
@@ -200,7 +198,6 @@ fn "wado-compiler/tests/fixtures/array_bounds.wado/array_bounds_elim_redundant"(
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_29: ref "core:prelude/format.wado//Formatter";
     let __local_34: ref "core:prelude/format.wado//Formatter";
-    let __local_42: ref "core:prelude/format.wado//Formatter";
     let _licm_used_43: i32;
     let _licm_repr_44: ref builtin::array<i32>;
     arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
@@ -260,8 +257,7 @@ condition: sum == 120
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-        __local_42 = __local_11;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(sum, __local_42);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(sum, __local_11);
         break __tmpl: __local_10;
     });
 }

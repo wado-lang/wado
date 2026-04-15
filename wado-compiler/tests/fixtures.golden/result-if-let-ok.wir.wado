@@ -113,7 +113,6 @@ fn "wado-compiler/tests/fixtures/result-if-let-ok.wado/run"() with Stdout {
     let x: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let __local_11: ref "core:prelude/format.wado//Formatter";
     r = struct.new "core:prelude/types.wado//Result<i32,String>::Ok" { discriminant: 0, payload_0: 42 };
     if ref.test "core:prelude/types.wado//Result<i32,String>::Ok"(r) {
         x = ref.cast "core:prelude/types.wado//Result<i32,String>::Ok"(r).payload_0;
@@ -124,8 +123,7 @@ fn "wado-compiler/tests/fixtures/result-if-let-ok.wado/run"() with Stdout {
             "core:prelude/string.wado/String::push"(__local_2, 58);
             "core:prelude/string.wado/String::push"(__local_2, 32);
             __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-            __local_11 = __local_3;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(x, __local_11);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(x, __local_3);
             break __tmpl: __local_2;
         });
     } else {

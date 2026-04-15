@@ -154,7 +154,6 @@ fn "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado/run"() 
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __local_15: ref "core:prelude/format.wado//Formatter";
     let __local_20: ref "core:prelude/format.wado//Formatter";
-    let __local_28: ref "core:prelude/format.wado//Formatter";
     leaf1 = struct.new "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Leaf" { discriminant: 0, payload_0: 1 };
     leaf2 = struct.new "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Leaf" { discriminant: 0, payload_0: 2 };
     leaf3 = struct.new "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado//Tree::Leaf" { discriminant: 0, payload_0: 3 };
@@ -197,8 +196,7 @@ condition: total == 6
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-        __local_28 = __local_10;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(total, __local_28);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(total, __local_10);
         break __tmpl: __local_9;
     });
 }

@@ -98,7 +98,6 @@ global mut global:./sub/global_dce_helper.wado::USED_COUNTER: i32 = 0;
 fn "wado-compiler/tests/fixtures/global_dce_cross_module.wado/run"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/format.wado//Formatter";
-    let __local_8: ref "core:prelude/format.wado//Formatter";
     global:./sub/global_dce_helper.wado::USED_COUNTER = global:./sub/global_dce_helper.wado::USED_COUNTER + 1;
     global:./sub/global_dce_helper.wado::USED_COUNTER = global:./sub/global_dce_helper.wado::USED_COUNTER + 1;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -112,8 +111,7 @@ fn "wado-compiler/tests/fixtures/global_dce_cross_module.wado/run"() with Stdout
         "core:prelude/string.wado/String::push"(__local_0, 114);
         "core:prelude/string.wado/String::push"(__local_0, 61);
         __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
-        __local_8 = __local_1;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(global:./sub/global_dce_helper.wado::USED_COUNTER, __local_8);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(global:./sub/global_dce_helper.wado::USED_COUNTER, __local_1);
         break __tmpl: __local_0;
     });
 }

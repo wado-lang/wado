@@ -1979,12 +1979,10 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "core:json/JsonSerializer^Serializer::serialize_i32"(self, v) {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let __local_9: ref "core:prelude/format.wado//Formatter";
     "core:prelude/string.wado/String::push_str"(self, __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        __local_9 = __local_3;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_9);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_3);
         break __tmpl: __local_2;
     });
     return ref.null none;
@@ -4170,19 +4168,19 @@ fn "core:json/JsonStructSerializer^SerializeStruct::field<Option<String>>"(self,
 }
 
 fn "core:json/JsonStructSerializer^SerializeStruct::field<String>"(self, name, value) {
+    let ser: ref "core:json//JsonSerializer";
     let r: ref null "core:serde//SerializeError";
-    let __sroa_ser_buf: ref "core:prelude/string.wado//String";
     if self.count > 0 {
         "core:prelude/string.wado/String::push"(self.buf, 44);
     }
     "core:json/write_escaped_string"(self.buf, name);
     "core:prelude/string.wado/String::push"(self.buf, 58);
-    __sroa_ser_buf = self.buf;
+    ser = struct.new "core:json//JsonSerializer" { buf: self.buf };
     r = __inline_JsonSerializer_Serializer__serialize_string_1: block -> ref null "core:serde//SerializeError" {
-        "core:json/write_escaped_string"(__sroa_ser_buf, value);
+        "core:json/write_escaped_string"(ser.buf, value);
         break __inline_JsonSerializer_Serializer__serialize_string_1: ref.null none;
     };
-    self.buf = __sroa_ser_buf;
+    self.buf = ser.buf;
     self.count = self.count + 1;
     return r;
 }

@@ -158,7 +158,6 @@ fn "wado-compiler/tests/fixtures/user_func.wado/user_func_return_f32"() with Std
     let result: f32;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
-    let __local_10: ref "core:prelude/format.wado//Formatter";
     a = builtin::f32_demote_f64(2);
     b = builtin::f32_demote_f64(3);
     result = (a * b) + builtin::f32_demote_f64(1.5);
@@ -166,8 +165,7 @@ fn "wado-compiler/tests/fixtures/user_func.wado/user_func_return_f32"() with Std
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("result = "), used: 9 });
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-        __local_10 = __local_4;
-        "core:prelude/primitive.wado/f32::fmt_into"(result, __local_10);
+        "core:prelude/primitive.wado/f32::fmt_into"(result, __local_4);
         break __tmpl: __local_3;
     });
 }
@@ -175,13 +173,11 @@ fn "wado-compiler/tests/fixtures/user_func.wado/user_func_return_f32"() with Std
 fn "wado-compiler/tests/fixtures/user_func.wado/user_func_return_f64"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    let __local_8: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("result = "), used: 9 });
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        __local_8 = __local_2;
-        "core:prelude/primitive.wado/f64::fmt_into"(7.5, __local_8);
+        "core:prelude/primitive.wado/f64::fmt_into"(7.5, __local_2);
         break __tmpl: __local_1;
     });
 }

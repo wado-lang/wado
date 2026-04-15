@@ -96,7 +96,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/location_merged.wado/test_line_template"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/format.wado//Formatter";
-    let __local_7: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
         "core:prelude/string.wado/String::push"(__local_0, 108);
@@ -106,8 +105,7 @@ fn "wado-compiler/tests/fixtures/location_merged.wado/test_line_template"() with
         "core:prelude/string.wado/String::push"(__local_0, 58);
         "core:prelude/string.wado/String::push"(__local_0, 32);
         __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
-        __local_7 = __local_1;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(34, __local_7);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(34, __local_1);
         break __tmpl: __local_0;
     });
 }
@@ -121,7 +119,6 @@ fn "wado-compiler/tests/fixtures/location_merged.wado/__cm_export__run"() {
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
-    let __local_13: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"stdout_contains\": [\"LOCATION_DATA_MARKER\", \"data: \", \"LOCATION_DATA_MARKER\", \"location_merged.wado\", \"test_function\", \"LocFoo::bar\"]}
 "), used: 136 });
     s = __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -142,8 +139,7 @@ fn "wado-compiler/tests/fixtures/location_merged.wado/__cm_export__run"() {
     "core:cli/println"(__inline_i32__to_string_11: block -> ref "core:prelude/string.wado//String" {
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(12), used: 0 };
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-        __local_13 = __local_7;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(30, __local_13);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(30, __local_7);
         break __inline_i32__to_string_11: __local_6;
     });
     "wado-compiler/tests/fixtures/location_merged.wado/test_line_template"();

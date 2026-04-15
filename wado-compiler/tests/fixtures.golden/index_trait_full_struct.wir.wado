@@ -141,7 +141,6 @@ fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/run"() with Stdout
     let self_27: ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value";
     let self_29: ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value";
     let __local_35: ref "core:prelude/string.wado//String";
-    let __local_43: ref "core:prelude/format.wado//Formatter";
     let self_47: ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value";
     let self_48: ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Value";
     c = __inline_Container__from_values_2: block -> ref "wado-compiler/tests/fixtures/index_trait_full_struct.wado//Container" {
@@ -233,8 +232,7 @@ fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/run"() with Stdout
         "core:prelude/string.wado/String::push"(__local_9, 58);
         "core:prelude/string.wado/String::push"(__local_9, 32);
         __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_9 };
-        __local_43 = __local_10;
-        "core:prelude/primitive.wado/i32::fmt_decimal"((c.v0.n + c.v1.n) + c.v2.n, __local_43);
+        "core:prelude/primitive.wado/i32::fmt_decimal"((c.v0.n + c.v1.n) + c.v2.n, __local_10);
         break __tmpl: __local_9;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -507,14 +505,12 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "wado-compiler/tests/fixtures/index_trait_full_struct.wado/Value::describe"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    let __local_8: ref "core:prelude/format.wado//Formatter";
     return __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_1, self.tag);
         "core:prelude/string.wado/String::push"(__local_1, 58);
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        __local_8 = __local_2;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(self.n, __local_8);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(self.n, __local_2);
         break __tmpl: __local_1;
     };
 }

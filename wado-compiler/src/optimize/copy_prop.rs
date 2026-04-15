@@ -256,7 +256,7 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
-                if may_mutate_caller_state(&arg.expr, type_table) {
+                if arg.is_mut && may_mutate_through_arg(&arg.expr, type_table) {
                     mark_potentially_mutated_local(&arg.expr, result);
                 }
                 analyze_expr(&arg.expr, result, type_table);
@@ -273,7 +273,7 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
             }
             analyze_expr(receiver, result, type_table);
             for arg in args {
-                if may_mutate_caller_state(&arg.expr, type_table) {
+                if arg.is_mut && may_mutate_through_arg(&arg.expr, type_table) {
                     mark_potentially_mutated_local(&arg.expr, result);
                 }
                 analyze_expr(&arg.expr, result, type_table);
@@ -415,6 +415,13 @@ fn mark_potentially_mutated_local(expr: &TirExpr, result: &mut AnalysisResult) {
 
 fn may_mutate_caller_state(expr: &TirExpr, type_table: &TypeTable) -> bool {
     matches!(type_table.get(expr.type_id), ResolvedType::MutRef(_))
+}
+
+fn may_mutate_through_arg(expr: &TirExpr, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(expr.type_id),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+    )
 }
 
 /// Check if a type requires value copying (composite types with value semantics).

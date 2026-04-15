@@ -105,23 +105,19 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_p
     let __local_1: ref "core:prelude/format.wado//Formatter";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let __local_11: ref "core:prelude/format.wado//Formatter";
-    let __local_19: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
-        __local_11 = __local_1;
         "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_i32_ToNum__to_num_0: block -> i32 {
             break __inline_i32_ToNum__to_num_0: 10;
         } + __inline_i32_ToNum__to_num_1: block -> i32 {
             break __inline_i32_ToNum__to_num_1: 20;
-        }, __local_11);
+        }, __local_1);
         break __tmpl: __local_0;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        __local_19 = __local_3;
         "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_bool_ToNum__to_num_2: block -> i32 {
             block {
                 break __inline_bool_ToNum__to_num_2: 1;
@@ -131,7 +127,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_p
             block {
             };
             break __inline_bool_ToNum__to_num_3: 0;
-        }, __local_19);
+        }, __local_3);
         break __tmpl: __local_2;
     });
 }
@@ -151,15 +147,13 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_export__run"() {
 fn "wado-compiler/tests/fixtures/trait_bound_3.wado/describe<Player>"(x) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    let __local_10: ref "core:prelude/format.wado//Formatter";
     return __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_1, x.player_name);
         "core:prelude/string.wado/String::push"(__local_1, 58);
         "core:prelude/string.wado/String::push"(__local_1, 32);
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        __local_10 = __local_2;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x.player_score, __local_10);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(x.player_score, __local_2);
         break __tmpl: __local_1;
     };
 }
