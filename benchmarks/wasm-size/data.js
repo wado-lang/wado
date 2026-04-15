@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776214017400,
+  "lastUpdate": 1776251427824,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13049,6 +13049,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/68e13e9adb64fc4aad8e2353c3ff8d38f65aef97"
         },
         "date": 1776214017122,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "392fc7dd47b5ca920fb36d0db6edc91dba9b6102",
+          "message": "Merge pull request #845 from wado-lang/copilot/find-and-fix-optimizer-bugs\n\nRefine copy-prop mutation invalidation to reduce local-count regression",
+          "timestamp": "2026-04-15T20:06:36+09:00",
+          "tree_id": "8fa7dcba99be424fb24b33e07d09f52935ec0d72",
+          "url": "https://github.com/wado-lang/wado/commit/392fc7dd47b5ca920fb36d0db6edc91dba9b6102"
+        },
+        "date": 1776251427548,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
