@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776251427824,
+  "lastUpdate": 1776297133793,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13088,6 +13088,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/392fc7dd47b5ca920fb36d0db6edc91dba9b6102"
         },
         "date": 1776251427548,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0dcf4cf8ba4313b531085f6f2430613e19bd565b",
+          "message": "Merge pull request #846 from wado-lang/copilot/core-json-add-pretty-formatter\n\nFix core JSON serializer mutable-reference regressions and regenerate affected WIR goldens",
+          "timestamp": "2026-04-16T08:49:04+09:00",
+          "tree_id": "7d3b6071a25d5a45e3df656befdad32d8fb1e686",
+          "url": "https://github.com/wado-lang/wado/commit/0dcf4cf8ba4313b531085f6f2430613e19bd565b"
+        },
+        "date": 1776297133518,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
