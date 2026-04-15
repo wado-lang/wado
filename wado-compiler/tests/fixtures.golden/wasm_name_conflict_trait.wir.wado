@@ -98,13 +98,16 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_trait.wado/run"() with Stdou
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
+    let __local_12: ref "core:prelude/format.wado//Formatter";
+    let __local_19: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
         "core:prelude/string.wado/String::push"(__local_1, 97);
         "core:prelude/string.wado/String::push"(__local_1, 58);
         "core:prelude/string.wado/String::push"(__local_1, 32);
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_2);
+        __local_12 = __local_2;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(10, __local_12);
         break __tmpl: __local_1;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -113,7 +116,8 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_trait.wado/run"() with Stdou
         "core:prelude/string.wado/String::push"(__local_3, 58);
         "core:prelude/string.wado/String::push"(__local_3, 32);
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(15, __local_4);
+        __local_19 = __local_4;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(15, __local_19);
         break __tmpl: __local_3;
     });
 }

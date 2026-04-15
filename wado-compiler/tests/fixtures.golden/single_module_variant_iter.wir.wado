@@ -159,6 +159,7 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/run"() {
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_21: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Counter";
     let __local_25: ref "core:prelude/format.wado//Formatter";
+    let __local_33: ref "core:prelude/format.wado//Formatter";
     let __local_36: ref "core:prelude/format.wado//Formatter";
     leaf1 = struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::B" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData" { value: 10 } };
     leaf2 = struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::B" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//BData" { value: 20 } };
@@ -194,7 +195,8 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/run"() {
                 __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
                 "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 30, got "), used: 17 });
                 __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_9);
+                __local_33 = __local_9;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_33);
                 break __tmpl: __local_8;
             });
             "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -231,6 +233,7 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(
     let __local_6: ref null "core:prelude/types.wado//Box<Choice>";
     let __local_7: ref "core:prelude//Array<Choice>";
     let __local_8: ref "core:prelude//Array<Choice>";
+    let __local_9: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Counter";
     let __local_10: i32;
     let __match_scrut_0: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice";
     __match_scrut_0 = c;
@@ -260,8 +263,9 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(
         __cast_1 = ref.cast "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::B"(__match_scrut_0);
         __local_5 = __cast_1.payload_0;
         block {
+            __local_9 = h;
             __local_10 = __local_5.value;
-            h.total = h.total + __local_10;
+            __local_9.total = __local_9.total + __local_10;
         };
     } else {
         unreachable;

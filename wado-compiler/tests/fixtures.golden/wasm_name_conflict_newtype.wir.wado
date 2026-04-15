@@ -165,6 +165,8 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_newtype.wado/run"() with Std
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_12: ref "core:prelude/format.wado//Formatter";
+    let __local_19: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -180,7 +182,8 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_newtype.wado/run"() with Std
         "core:prelude/string.wado/String::push"(__local_4, 58);
         "core:prelude/string.wado/String::push"(__local_4, 32);
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        "core:prelude/primitive.wado/f64::fmt_into"(va, __local_5);
+        __local_12 = __local_5;
+        "core:prelude/primitive.wado/f64::fmt_into"(va, __local_12);
         break __tmpl: __local_4;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -189,7 +192,8 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_newtype.wado/run"() with Std
         "core:prelude/string.wado/String::push"(__local_6, 58);
         "core:prelude/string.wado/String::push"(__local_6, 32);
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_7);
+        __local_19 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_19);
         break __tmpl: __local_6;
     });
 }

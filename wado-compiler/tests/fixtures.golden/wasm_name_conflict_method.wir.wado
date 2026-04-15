@@ -109,14 +109,17 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/run"() with Stdo
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_16: ref "core:prelude/format.wado//Formatter";
     let __local_17: ref "core:prelude/string.wado//String";
+    let __local_25: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
         "core:prelude/string.wado/String::push"(__local_4, 97);
         "core:prelude/string.wado/String::push"(__local_4, 58);
         "core:prelude/string.wado/String::push"(__local_4, 32);
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_5);
+        __local_16 = __local_5;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_16);
         break __tmpl: __local_4;
     });
     cb = __inline_ContainerB__make_8: block -> ref "./sub/wasm_name_conflict_method_mod_b.wado//ContainerB" {
@@ -132,7 +135,8 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_method.wado/run"() with Stdo
         "core:prelude/string.wado/String::push_str"(__local_6, cfg_b.name);
         "core:prelude/string.wado/String::push"(__local_6, 32);
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(cfg_b.count, __local_7);
+        __local_25 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(cfg_b.count, __local_25);
         break __tmpl: __local_6;
     });
 }

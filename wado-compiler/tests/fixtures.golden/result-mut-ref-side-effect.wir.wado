@@ -1816,6 +1816,7 @@ fn "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/run"() {
     let __local_31: ref "core:prelude/string.wado//String";
     let __local_37: ref "core:prelude/string.wado//String";
     let __local_45: ref "core:prelude/format.wado//Formatter";
+    let __local_53: ref "core:prelude/format.wado//Formatter";
     let __local_56: ref "core:prelude/format.wado//Formatter";
     let __sroa_r_value: ref "core:prelude/types.wado//Result<E,ParseError>";
     tokens = __seq_lit: block -> ref "core:prelude//Array<Token>" {
@@ -1870,7 +1871,8 @@ fn "wado-compiler/tests/fixtures/result-mut-ref-side-effect.wado/run"() {
                 __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
                 "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected pos=3, got pos="), used: 24 });
                 __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(p.pos, __local_9);
+                __local_53 = __local_9;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(p.pos, __local_53);
                 break __tmpl: __local_8;
             });
             "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("

@@ -157,6 +157,7 @@ fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/run"() {
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "./sub/cross_module_variant_iter_helper.wado//Counter";
     let __local_14: ref "core:prelude/format.wado//Formatter";
+    let __local_22: ref "core:prelude/format.wado//Formatter";
     let __local_25: ref "core:prelude/format.wado//Formatter";
     result = __inline_count_2: block -> i32 {
         __local_10 = struct.new "./sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 };
@@ -186,7 +187,8 @@ fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/run"() {
                 __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
                 "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 30, got "), used: 17 });
                 __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_5);
+                __local_22 = __local_5;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_22);
                 break __tmpl: __local_4;
             });
             "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -374,6 +376,7 @@ fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_
     let __local_6: ref null "core:prelude/types.wado//Box<Choice>";
     let __local_7: ref "core:prelude//Array<Choice>";
     let __local_8: ref "core:prelude//Array<Choice>";
+    let __local_9: ref "./sub/cross_module_variant_iter_helper.wado//Counter";
     let __local_10: i32;
     let __match_scrut_0: ref "./sub/cross_module_variant_iter_helper.wado//Choice";
     __match_scrut_0 = c;
@@ -403,8 +406,9 @@ fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_
         __cast_1 = ref.cast "./sub/cross_module_variant_iter_helper.wado//Choice::B"(__match_scrut_0);
         __local_5 = __cast_1.payload_0;
         block {
+            __local_9 = h;
             __local_10 = __local_5.value;
-            h.total = h.total + __local_10;
+            __local_9.total = __local_9.total + __local_10;
         };
     } else {
         unreachable;

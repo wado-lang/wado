@@ -155,6 +155,7 @@ fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/__test_0_enum_field_
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
+    let __local_10: ref "core:prelude/format.wado//Formatter";
     r = "core:json/core/json/from_string<i32>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42 extra"), used: 8 });
     let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,DeserializeError>";
     __match_scrut_0 = r;
@@ -178,7 +179,8 @@ fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/__test_0_enum_field_
             "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_error_kind.wado"), used: 55 });
             "core:prelude/string.wado/String::push"(__local_3, 58);
             __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-            "core:prelude/primitive.wado/i32::fmt_decimal"(11, __local_4);
+            __local_10 = __local_4;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(11, __local_10);
             "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData }
 "), used: 81 });

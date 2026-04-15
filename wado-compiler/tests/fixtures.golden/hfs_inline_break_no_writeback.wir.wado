@@ -108,6 +108,7 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/run"() with 
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
+    let __local_11: ref "core:prelude/format.wado//Formatter";
     s = struct.new "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado//Scanner" { data: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("  a  b  c  "), used: 11 }, pos: 0 };
     count = 0;
     b0: block {
@@ -129,7 +130,8 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/run"() with 
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(count, __local_3);
+        __local_11 = __local_3;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(count, __local_11);
         break __tmpl: __local_2;
     });
 }

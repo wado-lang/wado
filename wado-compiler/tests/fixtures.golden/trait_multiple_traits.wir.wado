@@ -98,6 +98,7 @@ fn "wado-compiler/tests/fixtures/trait_multiple_traits.wado/run"() with Stdout {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/string.wado//String";
+    let __local_14: ref "core:prelude/format.wado//Formatter";
     let __sroa_p_name: ref "core:prelude/string.wado//String";
     let __sroa_p_city: ref "core:prelude/string.wado//String";
     __sroa_p_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
@@ -121,7 +122,8 @@ fn "wado-compiler/tests/fixtures/trait_multiple_traits.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push"(__local_2, 58);
         "core:prelude/string.wado/String::push"(__local_2, 32);
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(30, __local_3);
+        __local_14 = __local_3;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(30, __local_14);
         break __tmpl: __local_2;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {

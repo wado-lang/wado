@@ -136,10 +136,12 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_le_guard_wir.wado/sum_le"(lim
 fn "wado-compiler/tests/fixtures/array_bounds_elim_le_guard_wir.wado/run"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/format.wado//Formatter";
+    let __local_8: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"("wado-compiler/tests/fixtures/array_bounds_elim_le_guard_wir.wado/sum_le"(5), __local_1);
+        __local_8 = __local_1;
+        "core:prelude/primitive.wado/i32::fmt_decimal"("wado-compiler/tests/fixtures/array_bounds_elim_le_guard_wir.wado/sum_le"(5), __local_8);
         break __tmpl: __local_0;
     });
 }

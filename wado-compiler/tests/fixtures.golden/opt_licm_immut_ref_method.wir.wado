@@ -107,6 +107,7 @@ fn "wado-compiler/tests/fixtures/opt_licm_immut_ref_method.wado/run"() with Stdo
     let i: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __local_12: ref "core:prelude/format.wado//Formatter";
     let _licm_threshold_13: i32;
     config = struct.new "wado-compiler/tests/fixtures/opt_licm_immut_ref_method.wado//Config" { threshold: 100, scale: 2 };
     config_ref = config;
@@ -129,7 +130,8 @@ fn "wado-compiler/tests/fixtures/opt_licm_immut_ref_method.wado/run"() with Stdo
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(sum, __local_5);
+        __local_12 = __local_5;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(sum, __local_12);
         break __tmpl: __local_4;
     });
 }

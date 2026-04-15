@@ -130,6 +130,7 @@ fn "wado-compiler/tests/fixtures/allocator_free_rewind.wado/run"() with Stdout {
     let __local_60: ref "core:prelude/format.wado//Formatter";
     let __local_65: ref "core:prelude/format.wado//Formatter";
     let __local_71: ref "core:prelude/format.wado//Formatter";
+    let __local_79: ref "core:prelude/format.wado//Formatter";
     let __local_82: ref "core:prelude/format.wado//Formatter";
     let __local_87: ref "core:prelude/format.wado//Formatter";
     base = "mem/realloc"(0, 0, 4, 64);
@@ -276,7 +277,8 @@ condition: ptr2 == ptr1
                             __local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(54), used: 0 };
                             "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("loop iteration "), used: 15 });
                             __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_20 };
-                            "core:prelude/primitive.wado/i32::fmt_decimal"(i, __local_21);
+                            __local_79 = __local_21;
+                            "core:prelude/primitive.wado/i32::fmt_decimal"(i, __local_79);
                             "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(": expected same address"), used: 23 });
                             break __tmpl: __local_20;
                         });

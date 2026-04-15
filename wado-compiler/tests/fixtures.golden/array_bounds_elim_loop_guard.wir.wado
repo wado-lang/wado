@@ -126,6 +126,7 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/run"() with S
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_30: ref "core:prelude/format.wado//Formatter";
     let __local_35: ref "core:prelude/format.wado//Formatter";
+    let __local_43: ref "core:prelude/format.wado//Formatter";
     let _licm_used_44: i32;
     let _licm_repr_45: ref builtin::array<i32>;
     arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
@@ -185,7 +186,8 @@ condition: sum == 150
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_8 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(sum, __local_9);
+        __local_43 = __local_9;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(sum, __local_43);
         break __tmpl: __local_8;
     });
 }

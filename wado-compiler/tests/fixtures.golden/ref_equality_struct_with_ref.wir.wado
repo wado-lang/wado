@@ -707,6 +707,7 @@ fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Ins
     let s_7: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
     let self_10: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
+    let f_11: ref "core:prelude/format.wado//Formatter";
     let inner: ref "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado//Inner";
     let s_14: ref "core:prelude/string.wado//String";
     let s_16: ref "core:prelude/string.wado//String";
@@ -720,10 +721,11 @@ fn "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Container^Ins
     s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("data: "), used: 6 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     self_10 = self.data;
+    f_11 = f;
     s_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
-    "core:prelude/string.wado/String::push_str"(f.buf, s_14);
+    "core:prelude/string.wado/String::push_str"(f_11.buf, s_14);
     inner = self_10;
-    "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Inner^Inspect::inspect"(inner.value, f);
+    "wado-compiler/tests/fixtures/ref_equality_struct_with_ref.wado/Inner^Inspect::inspect"(inner.value, f_11);
     s_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_16);
 }

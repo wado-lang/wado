@@ -159,6 +159,7 @@ fn "wado-compiler/tests/fixtures/match_ergonomics.wado/match_ergonomics_if_let"(
     let __local_35: ref "core:prelude/string.wado//String";
     let __local_42: ref "core:prelude/format.wado//Formatter";
     let __local_47: ref "core:prelude/types.wado//Box<i32>";
+    let __local_50: ref "core:prelude/format.wado//Formatter";
     let __local_54: ref "core:prelude/format.wado//Formatter";
     let __local_59: ref "core:prelude/format.wado//Formatter";
     let __local_61: ref "core:prelude/format.wado//Formatter";
@@ -221,7 +222,8 @@ condition: *x == 42
             "core:prelude/string.wado/String::push"(__local_16, 32);
             __local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_16 };
             __local_47 = struct.new "core:prelude/types.wado//Box<i32>" { value: x.value };
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_47.value, __local_17);
+            __local_50 = __local_17;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_47.value, __local_50);
             break __tmpl: __local_16;
         });
     }

@@ -165,6 +165,7 @@ fn "wado-compiler/tests/fixtures/trait_default.wado/trait_default_count"() with 
     let __local_20: ref "core:prelude/array.wado//ArrayIter<i32>";
     let __local_21: i32;
     let __local_22: ref "core:prelude/types.wado//Option<i32>";
+    let __local_28: ref "core:prelude/format.wado//Formatter";
     arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
         break __seq_lit: __local_0;
@@ -190,7 +191,8 @@ fn "wado-compiler/tests/fixtures/trait_default.wado/trait_default_count"() with 
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(remaining, __local_5);
+        __local_28 = __local_5;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(remaining, __local_28);
         break __tmpl: __local_4;
     });
 }
@@ -472,6 +474,7 @@ fn "wado-compiler/tests/fixtures/trait_default.wado/Person^Greet::greet"(self) {
 fn "wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::name"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
+    let __local_8: ref "core:prelude/format.wado//Formatter";
     return __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
         "core:prelude/string.wado/String::push"(__local_1, 82);
@@ -481,7 +484,8 @@ fn "wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::name"(self) {
         "core:prelude/string.wado/String::push"(__local_1, 116);
         "core:prelude/string.wado/String::push"(__local_1, 45);
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_2);
+        __local_8 = __local_2;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_8);
         break __tmpl: __local_1;
     };
 }

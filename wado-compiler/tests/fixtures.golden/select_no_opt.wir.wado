@@ -98,11 +98,13 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/select_no_opt.wado/side_effect"(x) with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
+    let __local_8: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(28), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called with "), used: 12 });
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x, __local_2);
+        __local_8 = __local_2;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(x, __local_8);
         break __tmpl: __local_1;
     });
     return x;
@@ -114,17 +116,21 @@ fn "wado-compiler/tests/fixtures/select_no_opt.wado/run"() with Stdout {
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
+    let __local_13: ref "core:prelude/format.wado//Formatter";
+    let __local_19: ref "core:prelude/format.wado//Formatter";
     result = "wado-compiler/tests/fixtures/select_no_opt.wado/side_effect"(1);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_4);
+        __local_13 = __local_4;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_13);
         break __tmpl: __local_3;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_6);
+        __local_19 = __local_6;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(42, __local_19);
         break __tmpl: __local_5;
     });
 }

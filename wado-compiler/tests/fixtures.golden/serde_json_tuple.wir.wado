@@ -2414,10 +2414,12 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "core:json/JsonSerializer^Serializer::serialize_i32"(self, v) {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
+    let __local_9: ref "core:prelude/format.wado//Formatter";
     "core:prelude/string.wado/String::push_str"(self, __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_3);
+        __local_9 = __local_3;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_9);
         break __tmpl: __local_2;
     });
     return ref.null none;
@@ -2427,6 +2429,7 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/types.wado//Box<f64>";
+    let __local_9: ref "core:prelude/format.wado//Formatter";
     if v != v {
         return struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
     }
@@ -2439,7 +2442,8 @@ fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {
     "core:prelude/string.wado/String::push_str"(self, __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/f64::fmt_into"(v, __local_3);
+        __local_9 = __local_3;
+        "core:prelude/primitive.wado/f64::fmt_into"(v, __local_9);
         break __tmpl: __local_2;
     });
     return ref.null none;
@@ -3851,17 +3855,17 @@ fn "core:prelude/types.wado/Tuple<i32,String>^Serialize::serialize<JsonSerialize
 }
 
 fn "core:json/JsonSeqSerializer^SerializeSeq::element<String>"(self, value) {
-    let ser: ref "core:json//JsonSerializer";
     let r: ref null "core:serde//SerializeError";
+    let __sroa_ser_buf: ref "core:prelude/string.wado//String";
     if self.count > 0 {
         "core:prelude/string.wado/String::push"(self.buf, 44);
     }
-    ser = struct.new "core:json//JsonSerializer" { buf: self.buf };
+    __sroa_ser_buf = self.buf;
     r = __inline_JsonSerializer_Serializer__serialize_string_1: block -> ref null "core:serde//SerializeError" {
-        "core:json/write_escaped_string"(ser.buf, value);
+        "core:json/write_escaped_string"(__sroa_ser_buf, value);
         break __inline_JsonSerializer_Serializer__serialize_string_1: ref.null none;
     };
-    self.buf = ser.buf;
+    self.buf = __sroa_ser_buf;
     self.count = self.count + 1;
     return r;
 }

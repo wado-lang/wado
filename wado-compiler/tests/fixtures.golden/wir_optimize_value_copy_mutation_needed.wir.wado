@@ -105,21 +105,25 @@ fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_mutation_needed.wado/ru
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __local_11: ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_mutation_needed.wado//Point";
+    let __local_13: ref "core:prelude/format.wado//Formatter";
+    let __local_19: ref "core:prelude/format.wado//Formatter";
     p = struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_mutation_needed.wado//Point" { x: 1, y: 2 };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_13 = __local_2;
         "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_modify_copy_5: block -> i32 {
             __local_11 = value_copy "wado-compiler/tests/fixtures/wir_optimize_value_copy_mutation_needed.wado//Point"(p);
             __local_11.x = 99;
             break __inline_modify_copy_5: p.x + __local_11.x;
-        }, __local_2);
+        }, __local_13);
         break __tmpl: __local_1;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(p.x, __local_4);
+        __local_19 = __local_4;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(p.x, __local_19);
         break __tmpl: __local_3;
     });
 }

@@ -161,8 +161,10 @@ fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/run"() {
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let __local_31: ref "core:prelude/format.wado//Formatter";
+    let __local_39: ref "core:prelude/format.wado//Formatter";
     let __local_42: ref "core:prelude/format.wado//Formatter";
     let __local_48: ref "core:prelude/format.wado//Formatter";
+    let __local_56: ref "core:prelude/format.wado//Formatter";
     let __local_59: ref "core:prelude/format.wado//Formatter";
     state = struct.new "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado//State" { counter: 0, total: 0, limit: 5, data: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30, 40, 50), used: 5 };
@@ -193,7 +195,8 @@ fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/run"() {
                 __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
                 "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 150, got "), used: 18 });
                 __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(state.total, __local_7);
+                __local_39 = __local_7;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(state.total, __local_39);
                 break __tmpl: __local_6;
             });
             "core:prelude/string.wado/String::push_str"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -232,7 +235,8 @@ condition: state.total == 150
                 __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
                 "core:prelude/string.wado/String::push_str"(__local_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected 5, got "), used: 16 });
                 __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_10 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(state.counter, __local_11);
+                __local_56 = __local_11;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(state.counter, __local_56);
                 break __tmpl: __local_10;
             });
             "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("

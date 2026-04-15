@@ -98,6 +98,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_dae.wado/run"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
+    let __local_12: ref "core:prelude/format.wado//Formatter";
     result = __inline_add_with_label_2: block -> i32 {
         __local_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unused"), used: 6 };
         break __inline_add_with_label_2: 30;
@@ -105,7 +106,8 @@ fn "wado-compiler/tests/fixtures/wir_optimize_dae.wado/run"() with Stdout {
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_2);
+        __local_12 = __local_2;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_12);
         break __tmpl: __local_1;
     });
 }

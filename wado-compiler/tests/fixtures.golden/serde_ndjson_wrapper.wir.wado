@@ -727,19 +727,19 @@ fn "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage^Serializ
 }
 
 fn "core:json/JsonStructSerializer^SerializeStruct::field<String>"(self, name, value) {
-    let ser: ref "core:json//JsonSerializer";
     let r: ref null "core:serde//SerializeError";
+    let __sroa_ser_buf: ref "core:prelude/string.wado//String";
     if self.count > 0 {
         "core:prelude/string.wado/String::push"(self.buf, 44);
     }
     "core:json/write_escaped_string"(self.buf, name);
     "core:prelude/string.wado/String::push"(self.buf, 58);
-    ser = struct.new "core:json//JsonSerializer" { buf: self.buf };
+    __sroa_ser_buf = self.buf;
     r = __inline_JsonSerializer_Serializer__serialize_string_1: block -> ref null "core:serde//SerializeError" {
-        "core:json/write_escaped_string"(ser.buf, value);
+        "core:json/write_escaped_string"(__sroa_ser_buf, value);
         break __inline_JsonSerializer_Serializer__serialize_string_1: ref.null none;
     };
-    self.buf = ser.buf;
+    self.buf = __sroa_ser_buf;
     self.count = self.count + 1;
     return r;
 }

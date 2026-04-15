@@ -106,6 +106,10 @@ fn "wado-compiler/tests/fixtures/global_multimod.wado/run"() with Stdout {
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_14: ref "core:prelude/format.wado//Formatter";
+    let __local_20: ref "core:prelude/format.wado//Formatter";
+    let __local_26: ref "core:prelude/format.wado//Formatter";
+    let __local_32: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -118,21 +122,24 @@ fn "wado-compiler/tests/fixtures/global_multimod.wado/run"() with Stdout {
         __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("HELPER_COUNTER="), used: 15 });
         __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(global:./sub/global_multimod_helper.wado::HELPER_COUNTER, __local_1);
+        __local_14 = __local_1;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(global:./sub/global_multimod_helper.wado::HELPER_COUNTER, __local_14);
         break __tmpl: __local_0;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("get_counter()="), used: 14 });
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(global:./sub/global_multimod_helper.wado::HELPER_COUNTER, __local_3);
+        __local_20 = __local_3;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(global:./sub/global_multimod_helper.wado::HELPER_COUNTER, __local_20);
         break __tmpl: __local_2;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("MAIN_VALUE="), used: 11 });
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(global:MAIN_VALUE, __local_5);
+        __local_26 = __local_5;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(global:MAIN_VALUE, __local_26);
         break __tmpl: __local_4;
     });
     global:./sub/global_multimod_helper.wado::HELPER_COUNTER = global:./sub/global_multimod_helper.wado::HELPER_COUNTER + 1;
@@ -140,7 +147,8 @@ fn "wado-compiler/tests/fixtures/global_multimod.wado/run"() with Stdout {
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("after increment="), used: 16 });
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(global:./sub/global_multimod_helper.wado::HELPER_COUNTER, __local_7);
+        __local_32 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(global:./sub/global_multimod_helper.wado::HELPER_COUNTER, __local_32);
         break __tmpl: __local_6;
     });
 }

@@ -1597,11 +1597,13 @@ fn "wado-compiler/tests/fixtures/static_method_in_generic_context.wado/Foo^Seria
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
+    let __local_11: ref "core:prelude/format.wado//Formatter";
     return __inline_JsonSerializer_Serializer__serialize_string_0: block -> ref null "core:serde//SerializeError" {
         __local_5 = __tmpl: block -> ref "core:prelude/string.wado//String" {
             __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
             __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-            "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_3);
+            __local_11 = __local_3;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_11);
             break __tmpl: __local_2;
         };
         "core:json/write_escaped_string"(s, __local_5);

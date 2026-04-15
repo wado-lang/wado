@@ -120,7 +120,9 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_variant.wado/run"() with Std
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/types.wado//Box<i32>";
+    let __local_13: ref "core:prelude/format.wado//Formatter";
     let __local_20: i32;
+    let __local_22: ref "core:prelude/format.wado//Formatter";
     a = struct.new "./sub/wasm_name_conflict_variant_mod_a.wado//Status" { 0 };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
@@ -135,7 +137,8 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_variant.wado/run"() with Std
         } else {
             unreachable;
         }) };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_9.value, __local_3);
+        __local_13 = __local_3;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_9.value, __local_13);
         break __tmpl: __local_2;
     });
     b = struct.new "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok" { discriminant: 0, payload_0: 99 };
@@ -145,6 +148,7 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_variant.wado/run"() with Std
         "core:prelude/string.wado/String::push"(__local_4, 58);
         "core:prelude/string.wado/String::push"(__local_4, 32);
         __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
+        __local_22 = __local_5;
         "core:prelude/primitive.wado/i32::fmt_decimal"(let __match_scrut_1: ref "./sub/wasm_name_conflict_variant_mod_b.wado//Status"; __match_scrut_1 = b; (if ref.test "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok"(__match_scrut_1) -> i32 {
             let __cast_1: ref "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok";
             __cast_1 = ref.cast "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok"(__match_scrut_1);
@@ -154,7 +158,7 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_variant.wado/run"() with Std
             -1;
         } else {
             unreachable;
-        }), __local_5);
+        }), __local_22);
         break __tmpl: __local_4;
     });
 }

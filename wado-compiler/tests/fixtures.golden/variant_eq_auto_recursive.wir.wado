@@ -575,13 +575,15 @@ fn "wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado/BranchData^Inspe
 
 fn "wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado/Node^Inspect::inspect"(self, f) {
     let __local_3: ref "core:prelude/string.wado//String";
+    let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/string.wado//String";
     if ref.test "wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado//Node::Leaf"(self) {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Node::Leaf("), used: 11 };
         "core:prelude/string.wado/String::push_str"(f.buf, __local_3);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(ref.cast "wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado//Node::Leaf"(self).payload_0, f);
+        __local_5 = f;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(ref.cast "wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado//Node::Leaf"(self).payload_0, __local_5);
         __local_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, __local_9);
     } else if ref.test "wado-compiler/tests/fixtures/variant_eq_auto_recursive.wado//Node::Branch"(self) {

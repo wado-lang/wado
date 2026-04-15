@@ -527,6 +527,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_5.wado/Wrapper<i32>^Describable::de
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __local_9: ref "core:prelude/format.wado//Formatter";
     return __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
         "core:prelude/string.wado/String::push"(__local_1, 87);
@@ -541,7 +542,8 @@ fn "wado-compiler/tests/fixtures/trait_bound_5.wado/Wrapper<i32>^Describable::de
             __tmpl: block -> ref "core:prelude/string.wado//String" {
                 __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
                 __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
-                "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_5);
+                __local_9 = __local_5;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(self, __local_9);
                 break __tmpl: __local_4;
             };
             break __inline_i32_Describable__describe_1;

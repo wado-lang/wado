@@ -155,6 +155,8 @@ fn "wado-compiler/tests/fixtures/coerce_float_literal_return.wado/run"() with St
     let __local_1: ref "core:prelude/format.wado//Formatter";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
+    let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_11: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -166,14 +168,16 @@ fn "wado-compiler/tests/fixtures/coerce_float_literal_return.wado/run"() with St
         __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("f32: "), used: 5 });
         __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
-        "core:prelude/primitive.wado/f32::fmt_into"(3.14_f32, __local_1);
+        __local_7 = __local_1;
+        "core:prelude/primitive.wado/f32::fmt_into"(3.14_f32, __local_7);
         break __tmpl: __local_0;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("f64: "), used: 5 });
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/f64::fmt_into"(2.718, __local_3);
+        __local_11 = __local_3;
+        "core:prelude/primitive.wado/f64::fmt_into"(2.718, __local_11);
         break __tmpl: __local_2;
     });
 }
