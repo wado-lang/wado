@@ -1,24 +1,30 @@
 // Regression test: copy propagation must not eliminate a snapshot copy
-// when the source struct is mutated by a non-inlined &mut self method call
+// when the source struct is mutated by an inlined &mut self method call
 // after the binding.
 //
-// Bug: `may_mutate_caller_state` returns false for struct-type receivers
-// (e.g. `c.increment()` where `c: Counter`), so `has_field_mutation` is
-// never set, and the single-use copy-propagation incorrectly eliminates
-// `let snapshot = c`, replacing `snapshot.get()` with `c.get()` — which
-// reads the already-incremented value instead of the snapshotted one.
+// Root cause: when `c.increment()` is inlined, the MethodCall node is gone and
+// the body becomes `let self = &mut c; (*self).value += 1`. At TIR level the
+// mutation is through `*self`, not directly on `c`. Previously, only
+// `c.address_taken = true` was set (from the `&mut c` operand), but NOT
+// `c.has_field_mutation`. The `single_use_value_copy` optimization then bypassed
+// the `address_taken` check when `snapshot` was single-use, incorrectly propagating
+// `let snapshot = c` → `c`, which reads the already-incremented value.
+//
+// Fix: taking `&mut c` now also sets `c.has_field_mutation = true`, blocking
+// the incorrect single-use copy propagation.
 
 struct Counter {
     value: i32,
 }
 
 impl Counter {
-    #[inline(never)]
+    // Intentionally inlinable (no #[inline(never)]) so the bug manifests.
+    // After inlining, `c.increment()` becomes `let self = &mut c; (*self).value += 1`
+    // which is the pattern that previously confused copy_prop.
     fn increment(&mut self) {
         self.value += 1;
     }
 
-    #[inline(never)]
     fn get(&self) -> i32 {
         return self.value;
     }
