@@ -301,6 +301,18 @@ impl DependencyProvider for InMemoryDependencyProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::future::Future;
+
+    fn run_async_test<F>(future: F)
+    where
+        F: Future<Output = ()>,
+    {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(future);
+    }
 
     fn sample_manifest(name: &str, version: &str) -> Manifest {
         format!(
@@ -315,147 +327,163 @@ lib = "src/lib.wado"
         .unwrap()
     }
 
-    #[tokio::test]
-    async fn registry_list_versions() {
-        let mut provider = InMemoryDependencyProvider::new();
-        provider.add_registry_package(
-            "https://wa.dev",
-            "docs:regex",
-            Version::parse("1.0.0").unwrap(),
-            RegistryPackageInfo {
-                manifest: sample_manifest("regex", "1.0.0"),
-                integrity: "sha256:aaa".to_string(),
-            },
-        );
-        provider.add_registry_package(
-            "https://wa.dev",
-            "docs:regex",
-            Version::parse("1.1.0").unwrap(),
-            RegistryPackageInfo {
-                manifest: sample_manifest("regex", "1.1.0"),
-                integrity: "sha256:bbb".to_string(),
-            },
-        );
-
-        let versions = provider
-            .list_registry_versions("https://wa.dev", "docs:regex")
-            .await
-            .unwrap();
-        assert_eq!(versions.len(), 2);
-        assert_eq!(versions[0].to_string(), "1.0.0");
-        assert_eq!(versions[1].to_string(), "1.1.0");
-    }
-
-    #[tokio::test]
-    async fn registry_fetch_package() {
-        let mut provider = InMemoryDependencyProvider::new();
-        provider.add_registry_package(
-            "https://wa.dev",
-            "docs:regex",
-            Version::parse("1.0.0").unwrap(),
-            RegistryPackageInfo {
-                manifest: sample_manifest("regex", "1.0.0"),
-                integrity: "sha256:aaa".to_string(),
-            },
-        );
-
-        let info = provider
-            .fetch_registry_package(
+    #[test]
+    fn registry_list_versions() {
+        run_async_test(async {
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_registry_package(
                 "https://wa.dev",
                 "docs:regex",
-                &Version::parse("1.0.0").unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(info.integrity, "sha256:aaa");
-        assert_eq!(info.manifest.package.unwrap().name, "regex");
+                Version::parse("1.0.0").unwrap(),
+                RegistryPackageInfo {
+                    manifest: sample_manifest("regex", "1.0.0"),
+                    integrity: "sha256:aaa".to_string(),
+                },
+            );
+            provider.add_registry_package(
+                "https://wa.dev",
+                "docs:regex",
+                Version::parse("1.1.0").unwrap(),
+                RegistryPackageInfo {
+                    manifest: sample_manifest("regex", "1.1.0"),
+                    integrity: "sha256:bbb".to_string(),
+                },
+            );
+
+            let versions = provider
+                .list_registry_versions("https://wa.dev", "docs:regex")
+                .await
+                .unwrap();
+            assert_eq!(versions.len(), 2);
+            assert_eq!(versions[0].to_string(), "1.0.0");
+            assert_eq!(versions[1].to_string(), "1.1.0");
+        });
     }
 
-    #[tokio::test]
-    async fn registry_not_found() {
-        let provider = InMemoryDependencyProvider::new();
-        let err = provider
-            .list_registry_versions("https://wa.dev", "nonexistent:pkg")
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ProviderError::NotFound { .. }));
+    #[test]
+    fn registry_fetch_package() {
+        run_async_test(async {
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_registry_package(
+                "https://wa.dev",
+                "docs:regex",
+                Version::parse("1.0.0").unwrap(),
+                RegistryPackageInfo {
+                    manifest: sample_manifest("regex", "1.0.0"),
+                    integrity: "sha256:aaa".to_string(),
+                },
+            );
+
+            let info = provider
+                .fetch_registry_package(
+                    "https://wa.dev",
+                    "docs:regex",
+                    &Version::parse("1.0.0").unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(info.integrity, "sha256:aaa");
+            assert_eq!(info.manifest.package.unwrap().name, "regex");
+        });
     }
 
-    #[tokio::test]
-    async fn git_tags() {
-        let mut provider = InMemoryDependencyProvider::new();
-        provider.add_git_tag(
-            "https://github.com/user/lib.git",
-            GitTagInfo {
-                version: Version::parse("1.0.0").unwrap(),
-                sha: "abc123".to_string(),
-            },
-        );
-        provider.add_git_tag(
-            "https://github.com/user/lib.git",
-            GitTagInfo {
-                version: Version::parse("1.1.0").unwrap(),
-                sha: "def456".to_string(),
-            },
-        );
-
-        let tags = provider
-            .list_git_tags("https://github.com/user/lib.git")
-            .await
-            .unwrap();
-        assert_eq!(tags.len(), 2);
-        assert_eq!(tags[0].sha, "abc123");
-        assert_eq!(tags[1].version.to_string(), "1.1.0");
+    #[test]
+    fn registry_not_found() {
+        run_async_test(async {
+            let provider = InMemoryDependencyProvider::new();
+            let err = provider
+                .list_registry_versions("https://wa.dev", "nonexistent:pkg")
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ProviderError::NotFound { .. }));
+        });
     }
 
-    #[tokio::test]
-    async fn git_resolve_ref() {
-        let mut provider = InMemoryDependencyProvider::new();
-        provider.add_git_ref("https://github.com/user/lib.git", "main", "abc123def456789");
+    #[test]
+    fn git_tags() {
+        run_async_test(async {
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_git_tag(
+                "https://github.com/user/lib.git",
+                GitTagInfo {
+                    version: Version::parse("1.0.0").unwrap(),
+                    sha: "abc123".to_string(),
+                },
+            );
+            provider.add_git_tag(
+                "https://github.com/user/lib.git",
+                GitTagInfo {
+                    version: Version::parse("1.1.0").unwrap(),
+                    sha: "def456".to_string(),
+                },
+            );
 
-        let sha = provider
-            .resolve_git_ref("https://github.com/user/lib.git", "main")
-            .await
-            .unwrap();
-        assert_eq!(sha, "abc123def456789");
+            let tags = provider
+                .list_git_tags("https://github.com/user/lib.git")
+                .await
+                .unwrap();
+            assert_eq!(tags.len(), 2);
+            assert_eq!(tags[0].sha, "abc123");
+            assert_eq!(tags[1].version.to_string(), "1.1.0");
+        });
     }
 
-    #[tokio::test]
-    async fn git_manifest() {
-        let mut provider = InMemoryDependencyProvider::new();
-        provider.add_git_manifest(
-            "https://github.com/user/lib.git",
-            "abc123",
-            sample_manifest("my-lib", "0.1.0"),
-        );
+    #[test]
+    fn git_resolve_ref() {
+        run_async_test(async {
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_git_ref("https://github.com/user/lib.git", "main", "abc123def456789");
 
-        let manifest = provider
-            .fetch_git_manifest("https://github.com/user/lib.git", "abc123")
-            .await
-            .unwrap();
-        let pkg = manifest.package.unwrap();
-        assert_eq!(pkg.name, "my-lib");
-        assert_eq!(pkg.version, "0.1.0");
+            let sha = provider
+                .resolve_git_ref("https://github.com/user/lib.git", "main")
+                .await
+                .unwrap();
+            assert_eq!(sha, "abc123def456789");
+        });
     }
 
-    #[tokio::test]
-    async fn path_manifest() {
-        let mut provider = InMemoryDependencyProvider::new();
-        provider.add_path_manifest("../shared", sample_manifest("shared", "0.2.0"));
+    #[test]
+    fn git_manifest() {
+        run_async_test(async {
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_git_manifest(
+                "https://github.com/user/lib.git",
+                "abc123",
+                sample_manifest("my-lib", "0.1.0"),
+            );
 
-        let manifest = provider.load_path_manifest("../shared").await.unwrap();
-        let pkg = manifest.package.unwrap();
-        assert_eq!(pkg.name, "shared");
-        assert_eq!(pkg.version, "0.2.0");
+            let manifest = provider
+                .fetch_git_manifest("https://github.com/user/lib.git", "abc123")
+                .await
+                .unwrap();
+            let pkg = manifest.package.unwrap();
+            assert_eq!(pkg.name, "my-lib");
+            assert_eq!(pkg.version, "0.1.0");
+        });
     }
 
-    #[tokio::test]
-    async fn path_not_found() {
-        let provider = InMemoryDependencyProvider::new();
-        let err = provider
-            .load_path_manifest("./nonexistent")
-            .await
-            .unwrap_err();
-        assert!(matches!(err, ProviderError::NotFound { .. }));
+    #[test]
+    fn path_manifest() {
+        run_async_test(async {
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_path_manifest("../shared", sample_manifest("shared", "0.2.0"));
+
+            let manifest = provider.load_path_manifest("../shared").await.unwrap();
+            let pkg = manifest.package.unwrap();
+            assert_eq!(pkg.name, "shared");
+            assert_eq!(pkg.version, "0.2.0");
+        });
+    }
+
+    #[test]
+    fn path_not_found() {
+        run_async_test(async {
+            let provider = InMemoryDependencyProvider::new();
+            let err = provider
+                .load_path_manifest("./nonexistent")
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ProviderError::NotFound { .. }));
+        });
     }
 }

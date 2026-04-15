@@ -383,19 +383,25 @@ impl CompilerHost for InMemoryCompilerHost {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_in_memory_host() {
-        let mut host = InMemoryCompilerHost::new();
-        host.add_source("./test.wado", "fn run() {}");
+    #[test]
+    fn test_in_memory_host() {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let mut host = InMemoryCompilerHost::new();
+                host.add_source("./test.wado", "fn run() {}");
 
-        // Test load_source returns bytes
-        let result = host.load_source("./test.wado").await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), b"fn run() {}");
+                // Test load_source returns bytes
+                let result = host.load_source("./test.wado").await;
+                assert!(result.is_ok());
+                assert_eq!(result.unwrap(), b"fn run() {}");
 
-        // Test not found
-        let result = host.load_source("./missing.wado").await;
-        assert!(matches!(result, Err(SourceError::NotFound { .. })));
+                // Test not found
+                let result = host.load_source("./missing.wado").await;
+                assert!(matches!(result, Err(SourceError::NotFound { .. })));
+            });
     }
 
     #[test]
