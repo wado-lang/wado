@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776332372815,
+  "lastUpdate": 1776342790908,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13166,6 +13166,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0b07097144873f8f8ad1568310b0a92adac5867c"
         },
         "date": 1776332372518,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8114d6f5e34a500dec3e300b0a4ad67277e209d6",
+          "message": "Merge pull request #848 from wado-lang/claude/wado-crate-naming-9UO2n\n\nAdd wado-lsp crate and language service MVP",
+          "timestamp": "2026-04-16T21:29:40+09:00",
+          "tree_id": "be16bbdfad29f14913ee9f7c9106a6d9c11db423",
+          "url": "https://github.com/wado-lang/wado/commit/8114d6f5e34a500dec3e300b0a4ad67277e209d6"
+        },
+        "date": 1776342790623,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
