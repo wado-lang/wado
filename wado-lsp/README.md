@@ -75,3 +75,8 @@ wado lsp                              # Start LSP server over stdio
 wado query diagnostics file.wado      # One-shot diagnostics (human-readable)
 wado query diagnostics --json file.wado  # One-shot diagnostics (JSON)
 ```
+
+## References
+
+- [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
+- lsp.md - [LSP 3.18](https://github.com/microsoft/language-server-protocol/blob/gh-pages/_specifications/lsp/3.18/specification.md)
