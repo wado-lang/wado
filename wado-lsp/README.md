@@ -53,7 +53,7 @@ VS Code Extension (TypeScript)
   └── VS Code Adapter (TS)    Converts Engine results → VS Code Diagnostics API
 ```
 
-1. **wasm-pack build**: Compile `wado-lsp` to Wasm, expose `Engine` methods via `wasm-bindgen`.
+1. **Build**: `cargo build --target wasm32-unknown-unknown` + `wasm-bindgen` CLI to generate JS/TS bindings for `Engine`.
 2. **CompilerHost in TypeScript**: Implement `load_source` using `vscode.workspace.fs` (desktop) or in-memory files (web/sandbox).
 3. **VS Code adapter**: Convert `Diagnostic`, `Position`, `Range` to `vscode.Diagnostic`, `vscode.Position`, `vscode.Range`.
 
