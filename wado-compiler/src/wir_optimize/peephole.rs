@@ -728,12 +728,11 @@ fn elide_value_copies_in_instr(
                 let dest_safe = remaining
                     .iter()
                     .all(|i| uses_of_var_are_reads_only(i, name));
-                let source_safe = value_copy_source_local(expr)
-                    .is_none_or(|src| {
-                        remaining
-                            .iter()
-                            .all(|i| no_potential_source_mutation_or_escape(i, src))
-                    });
+                let source_safe = value_copy_source_local(expr).is_none_or(|src| {
+                    remaining
+                        .iter()
+                        .all(|i| no_potential_source_mutation_or_escape(i, src))
+                });
                 if dest_safe && source_safe {
                     let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
                     if let WirInstr::ValueCopy { expr, .. } = old {
