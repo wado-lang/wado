@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776345782882,
+  "lastUpdate": 1776346595188,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13283,6 +13283,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8b49a567248e19ab059efdf60ddf80594e8067a1"
         },
         "date": 1776345782605,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "56ad413861ac476a877a3e9e2a604a877ce7b4e2",
+          "message": "Merge pull request #851 from wado-lang/gfx/lsp_spec_md\n\nchore: add LSP spec file",
+          "timestamp": "2026-04-16T22:32:56+09:00",
+          "tree_id": "0ef69ecfe83966adc67ce01d3dd93beaf002cd49",
+          "url": "https://github.com/wado-lang/wado/commit/56ad413861ac476a877a3e9e2a604a877ce7b4e2"
+        },
+        "date": 1776346594889,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
