@@ -21,10 +21,10 @@ use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers, Sta
 use { TreeMap } from "core:collections";
 use { decode } from "core:base64";
 use { Serialize } from "core:serde";
-use { to_string } from "core:json";
 use { Url } from "core:url";
 use { log_stderr } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
+use json from "core:json";
 
 struct RequestInfo {
     method: String,
@@ -75,18 +75,6 @@ fn scheme_name(s: Option<Scheme>) -> String {
         Some(Other(name)) => name,
         None => "http",
     };
-}
-
-fn stringify<T: Serialize>(value: &T) -> String {
-    return match to_string(value) {
-        Ok(s) => s,
-        Err(_) => "null",
-    };
-}
-
-/// Serializes the value as JSON followed by a trailing newline.
-fn ndjson<T: Serialize>(value: &T) -> String {
-    return stringify(value) + "\n";
 }
 
 /// Returns the substring after `prefix` if `s` starts with it, else None.
@@ -187,7 +175,7 @@ fn build_request_json(
         Some(s) => s,
         None => "",
     };
-    return ndjson(&RequestInfo {
+    return json::to_string_pretty(&RequestInfo {
         method: method_name(method),
         path,
         args,
@@ -195,11 +183,11 @@ fn build_request_json(
         origin,
         url,
         data: body,
-    });
+    }).unwrap() + "\n";
 }
 
 fn json_error(msg: String) -> String {
-    return ndjson(&ErrorResponse { error: msg });
+    return json::to_string_pretty(&ErrorResponse { error: msg }).unwrap() + "\n";
 }
 
 fn handle_fallback(
@@ -213,13 +201,13 @@ fn handle_fallback(
         if let Some(code) = parse_status_code(code_str) {
             return [code as StatusCode, "text/plain", ""];
         }
-        return [400, "application/json", json_error("Invalid status code")];
+        return [400, "application/json", json_error("Invalid status code") + "\n"];
     }
     if let Some(encoded) = strip_prefix(path, "/base64/") {
         if let Some(decoded_bytes) = decode(encoded) {
             return [200, "text/plain", String::from_utf8_lossy(decoded_bytes)];
         }
-        return [400, "application/json", json_error("Invalid base64")];
+        return [400, "application/json", json_error("Invalid base64") + "\n"];
     }
     if path == "/anything" || path.starts_with("/anything/") {
         let h = request.get_headers();
@@ -228,13 +216,13 @@ fn handle_fallback(
             return [
                 200,
                 "application/json",
-                build_request_json(method, url, path, args, &h, Option::Some(data)),
+                build_request_json(method, url, path, args, &h, Option::Some(data)) + "\n",
             ];
         }
         return [
             200,
             "application/json",
-            build_request_json(method, url, path, args, &h, null),
+            build_request_json(method, url, path, args, &h, null) + "\n",
         ];
     }
     return [404, "application/json", json_error("Not Found")];
@@ -308,7 +296,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
             status = s;
             body_str = b;
             allow = a;
-        },
+       },
         "/put" => {
             let [s, b, a] = echo_if_method(request, method, Method::Put, "PUT", true, url, path, args);
             status = s;
@@ -328,14 +316,14 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
             allow = a;
         },
         "/headers" => {
-            body_str = ndjson(&HeadersResponse { headers: headers_to_map(&h) });
+            body_str = json::to_string_pretty(&HeadersResponse { headers: headers_to_map(&h) }).unwrap() + "\n";
         },
         "/ip" => {
             let origin = get_header(&h, "x-forwarded-for");
-            body_str = ndjson(&IpResponse { origin });
+            body_str = json::to_string_pretty(&IpResponse { origin }).unwrap() + "\n";
         },
         "/user-agent" => {
-            body_str = ndjson(&UserAgentResponse { user_agent });
+            body_str = json::to_string_pretty(&UserAgentResponse { user_agent }).unwrap() + "\n";
         },
         _ => {
             let [s, c, b] = handle_fallback(request, method, url, path, args);
@@ -360,6 +348,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     task return Result::Ok(response);
 
     body_tx.write(body_str.as_bytes());
+
     body_tx.drop();
     trailers_tx.write(Result::Ok(null));
 
@@ -367,11 +356,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     // response body has been written out. `log_stderr` appends its own
     // newline so we don't add one here.
     let elapsed = MonotonicClock::now() - start_mark;
-    log_stderr(stringify(&AccessLog {
+    log_stderr(json::to_string(&AccessLog {
         method: method_name(method),
         path,
         user_agent,
         status,
         duration_us: (elapsed as u64) / 1000,
-    }));
+    }).unwrap());
 }
