@@ -116,3 +116,50 @@ Tests for standard library logic live alongside implementations in `lib/`. These
 ## Wasm Compatibility
 
 This crate must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules in production code. CI enforces this with a wasm32 build check.
+
+## Refactoring Plan: Toward LSP-Friendly, Salsa-Ready Architecture
+
+### Motivation
+
+The current pipeline (`parse → bind → desugar → load → analyze → resolve → TIR → monomorphize → lower → optimize → codegen`) treats **resolve as AST → TIR lowering**. This is fine for batch compilation but hostile to LSP:
+
+- TIR is a transformed tree, losing 1:1 correspondence with source AST. `position → type` / `position → symbol` queries have no direct path.
+- AST declarations carry a single `Span` covering the whole item, not the name identifier. LSP features (go-to-definition, rename, hover) need the name span.
+- The pipeline is monolithic: producing diagnostics for one file re-runs the entire compilation. No incremental story, no per-function caching.
+- Symbols lack source-file/URI info, so cross-file navigation cannot be assembled.
+
+Roslyn and rust-analyzer both solve this by keeping the **AST (or a lossless syntax tree) as the source of truth** and attaching semantic information via queries (`SemanticModel.GetTypeInfo(node)`, salsa queries keyed by `AstId`). Wado should move in the same direction.
+
+### Target Architecture (two-step)
+
+**Step 1 — Attach semantic info to AST (non-salsa, hand-rolled).**
+
+- Introduce stable `AstId` (module-local, parse-stable) and `AstPtr` (position-resolvable).
+- Add `name_span: Span` to every AST declaration (fn, struct, enum, variant, flags, trait, newtype, impl method, global, let, param).
+- Rework `SymbolTable` / `TypeTable` to be keyed by `AstId` rather than consumed during TIR construction.
+- Split `resolve` into: (a) *annotate* AST with `SymbolTable`/`TypeTable` (no lowering), (b) *lower* to TIR as a later phase.
+- Expose a query API: `position → AstId`, `AstId → Symbol`, `AstId → ResolvedType`, `Symbol → defining AstId + source URI`.
+- Add a **lightweight analysis entry point** (parse + bind + resolve, no monomorphize/lower/codegen) for LSP use.
+- Add source URI to `Symbol` so cross-file definition results can be returned.
+
+**Step 2 — Wrap in salsa (demand-driven, incremental).**
+
+- Make each phase a salsa query (`parse`, `module_symbols`, `resolve_function_body`, `type_of`, …).
+- Per-function body type inference, cached; invalidation driven by input changes.
+- TIR generation becomes lazy, only materialized for codegen or when requested.
+- LSP reuses the same query functions; no separate code path.
+
+Step 1 is a stepping stone, not throwaway: `AstId`, query API shape, phase separation all carry forward. Salsa wrapping is mostly mechanical once the data flow is untangled.
+
+### Principles
+
+- **AST is the source of truth.** Semantic info is attached, not substituted.
+- **Lowering is demand-driven.** TIR / monomorphization / codegen only run when their output is actually needed.
+- **Every semantic entity points back to source.** `Symbol`, `ResolvedType`, TIR nodes carry `AstId` (and transitively `Span` + URI).
+- **The `codegen.rs` principle still holds.** Codegen consumes TIR without knowledge of earlier phases; what changes is how and when TIR is produced.
+
+### Scope Boundaries
+
+- This plan does **not** change the language, `Package` format, or codegen output.
+- Batch compilation (`wado compile`) continues to work by driving the queries end-to-end.
+- Diagnostics format is unchanged; only how they are computed and cached changes.
