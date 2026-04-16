@@ -6,8 +6,8 @@ Language service engine for the Wado compiler toolchain.
 
 - This crate must be IO-free. No filesystem, network, or stdio operations. All IO goes through `CompilerHost`.
 - This crate must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules.
-- Types follow LSP semantics: 0-based line/column positions, LSP severity levels.
-- Protocol handling (LSP JSON-RPC, MCP, CLI output) belongs in `wado-cli`, not here.
+- Types follow LSP semantics
+- Protocol handling (LSP JSON-RPC, MCP, CLI one-shot query) belongs in `wado-cli`
 
 ## Architecture
 
@@ -33,3 +33,7 @@ Language service engine for the Wado compiler toolchain.
 | `src/query.rs`         | `wado query` subcommand: arg parsing, dispatch                                  |
 | `src/query_adapter.rs` | Engine invocation, text/JSON output formatting                                  |
 | `tests/lsp.rs`         | Integration tests for both `wado lsp` and `wado query`                          |
+
+## References
+
+See [lsp.md](lsp.md) for the specification of the latest LSP.
