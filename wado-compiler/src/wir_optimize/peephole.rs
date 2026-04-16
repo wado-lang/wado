@@ -648,7 +648,7 @@ fn elide_value_copies_cross_scope(
 /// Traces through `RefAsNonNull`, `RefCast`, and `StructGet` wrappers to find
 /// the innermost `LocalGet`. Returns `None` when the inner expression is not
 /// rooted at a local variable (e.g. a literal or a call return value).
-fn value_copy_source_local<'a>(expr: &'a WirInstr) -> Option<&'a str> {
+fn value_copy_source_local(expr: &WirInstr) -> Option<&str> {
     match expr {
         WirInstr::LocalGet { name, .. } => Some(name.as_str()),
         WirInstr::RefAsNonNull(inner)
@@ -680,11 +680,8 @@ fn elide_value_copies_in_instr(
                 let dest_safe = remaining
                     .iter()
                     .all(|i| uses_of_var_are_reads_only(i, name));
-                let source_safe = value_copy_source_local(expr).map_or(true, |src| {
-                    remaining
-                        .iter()
-                        .all(|i| uses_of_var_are_reads_only(i, src))
-                });
+                let source_safe = value_copy_source_local(expr)
+                    .is_none_or(|src| remaining.iter().all(|i| uses_of_var_are_reads_only(i, src)));
                 if dest_safe && source_safe {
                     let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
                     if let WirInstr::ValueCopy { expr, .. } = old {
@@ -886,7 +883,7 @@ fn elide_copy_used_only_for_field_reads(instrs: &mut [WirInstr]) {
                 // The source must not be mutated after the copy; otherwise eliding
                 // the copy creates an alias whose value would change under the caller.
                 let source_safe = if let WirInstr::ValueCopy { expr, .. } = value.as_ref() {
-                    value_copy_source_local(expr).map_or(true, |src| {
+                    value_copy_source_local(expr).is_none_or(|src| {
                         remaining
                             .iter()
                             .all(|instr| uses_of_var_are_reads_only(instr, src))
@@ -894,12 +891,13 @@ fn elide_copy_used_only_for_field_reads(instrs: &mut [WirInstr]) {
                 } else {
                     true
                 };
-                if all_reads_only && source_safe {
-                    if let WirInstr::LocalSet { value, .. } = &mut instrs[i] {
-                        let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
-                        if let WirInstr::ValueCopy { expr, .. } = old {
-                            *value.as_mut() = *expr;
-                        }
+                if all_reads_only
+                    && source_safe
+                    && let WirInstr::LocalSet { value, .. } = &mut instrs[i]
+                {
+                    let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
+                    if let WirInstr::ValueCopy { expr, .. } = old {
+                        *value.as_mut() = *expr;
                     }
                 }
             }

@@ -303,7 +303,12 @@ fn analyze_expr(
                 analyze_expr(arg, result, type_table, first_param_types);
             }
         }
-        TirExprKind::MethodCall { receiver, func, args, .. } => {
+        TirExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } => {
             // A method call mutates its receiver when the method's first parameter
             // is `&mut Self`. In TIR, auto-ref is implicit: the receiver expression
             // has type `T` even when the method is declared as `fn f(&mut self)`.

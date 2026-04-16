@@ -1923,7 +1923,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Deserialize::d
     let __pattern_temp_0: ref "core:prelude/types.wado//Result<JsonVariantAccess,DeserializeError>";
     let __pattern_temp_2: ref "core:prelude/types.wado//Result<String,DeserializeError>";
     __va_r = "core:json/JsonDeserializer^Deserializer::begin_variant"(d);
-    __pattern_temp_0 = __va_r;
+    __pattern_temp_0 = value_copy "core:prelude/types.wado//Result<JsonVariantAccess,DeserializeError>"(__va_r);
     if ref.test "core:prelude/types.wado//Result<JsonVariantAccess,DeserializeError>::Ok"(__pattern_temp_0) {
         va = value_copy "core:json//JsonVariantAccess"(ref.cast "core:prelude/types.wado//Result<JsonVariantAccess,DeserializeError>::Ok"(__pattern_temp_0).payload_0);
         __disc_r = struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 9, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("JSON does not encode discriminants"), used: 34 }, offset: -1_i64 } };
@@ -1959,7 +1959,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Deserialize::d
             return struct.new "core:prelude/types.wado//Result<Color,DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 2, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown variant discriminant"), used: 28 }, offset: -1_i64 } };
         } else {
             __name_r = struct.new "core:prelude/types.wado//Result<String,DeserializeError>::Ok" { discriminant: 0, payload_0: va.variant };
-            __pattern_temp_2 = __name_r;
+            __pattern_temp_2 = value_copy "core:prelude/types.wado//Result<String,DeserializeError>"(__name_r);
             if ref.test "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__pattern_temp_2) {
                 __name = value_copy "core:prelude/string.wado//String"(ref.cast "core:prelude/types.wado//Result<String,DeserializeError>::Ok"(__pattern_temp_2).payload_0);
                 if "core:prelude/string.wado/String^Eq::eq"(__name, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Red"), used: 3 }) {
