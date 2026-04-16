@@ -13,6 +13,8 @@ enum Cmd {
     Doc,
     Dump,
     Syntax,
+    Lsp,
+    Query,
 }
 
 impl Cmd {
@@ -26,6 +28,8 @@ impl Cmd {
         Self::Doc,
         Self::Dump,
         Self::Syntax,
+        Self::Lsp,
+        Self::Query,
     ];
 
     const fn name(self) -> &'static str {
@@ -39,6 +43,8 @@ impl Cmd {
             Self::Doc => "doc",
             Self::Dump => "dump",
             Self::Syntax => "syntax",
+            Self::Lsp => "lsp",
+            Self::Query => "query",
         }
     }
 
@@ -47,7 +53,8 @@ impl Cmd {
             Self::Compile | Self::Run | Self::Serve => "[options] [file.wado]",
             Self::Test => "[options] [files or dirs...]",
             Self::Format | Self::Doc | Self::Dump => "[options] <file.wado>...",
-            Self::Init | Self::Syntax => "[options]",
+            Self::Init | Self::Syntax | Self::Lsp => "[options]",
+            Self::Query => "<kind> [options] <file.wado>",
         }
     }
 
@@ -62,6 +69,8 @@ impl Cmd {
             Self::Doc => "Generate documentation from source files",
             Self::Dump => "Dump compiler internal state",
             Self::Syntax => "Generate syntax definition files",
+            Self::Lsp => "Start the language server (LSP over stdio)",
+            Self::Query => "Query language service information",
         }
     }
 
@@ -167,6 +176,13 @@ async fn async_main() {
                         let opts =
                             wado_cli::syntax::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::syntax::run(opts);
+                    }
+                    Cmd::Lsp => {
+                        wado_cli::lsp::run().await;
+                    }
+                    Cmd::Query => {
+                        let opts = wado_cli::query::parse_args(parser).unwrap_or_else(|e| e.exit());
+                        wado_cli::query::run(opts).await;
                     }
                 }
             } else {
