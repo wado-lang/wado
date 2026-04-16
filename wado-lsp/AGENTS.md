@@ -37,3 +37,92 @@ Language service engine for the Wado compiler toolchain.
 ## References
 
 See [lsp.md](lsp.md) for the specification of the latest LSP.
+
+## TODO: LSP Feature Implementation
+
+Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kind (request/notification group), not individual fields or options.
+
+### Server Lifecycle
+
+- [x] `initialize` / `initialized`
+- [x] `shutdown` / `exit`
+- [ ] `client/registerCapability` / `client/unregisterCapability`
+- [ ] `$/setTrace` / `$/logTrace`
+- [ ] `$/cancelRequest`
+
+### Text Document Synchronization
+
+- [x] `textDocument/didOpen`
+- [x] `textDocument/didChange` (Full sync only)
+- [x] `textDocument/didClose`
+- [ ] `textDocument/didChange` (Incremental sync)
+- [ ] `textDocument/willSave`
+- [ ] `textDocument/willSaveWaitUntil`
+- [ ] `textDocument/didSave`
+- [ ] `textDocument/didRename`
+
+### Diagnostics
+
+- [x] `textDocument/publishDiagnostics` (push)
+- [ ] `textDocument/diagnostic` (pull)
+- [ ] `workspace/diagnostic` (pull)
+
+### Language Features — Navigation
+
+- [ ] `textDocument/declaration`
+- [ ] `textDocument/definition`
+- [ ] `textDocument/typeDefinition`
+- [ ] `textDocument/implementation`
+- [ ] `textDocument/references`
+- [ ] `textDocument/callHierarchy` (prepare / incomingCalls / outgoingCalls)
+- [ ] `textDocument/typeHierarchy` (prepare / supertypes / subtypes)
+
+### Language Features — Comprehension
+
+- [ ] `textDocument/hover`
+- [ ] `textDocument/signatureHelp`
+- [ ] `textDocument/documentHighlight`
+- [ ] `textDocument/documentLink`
+- [ ] `textDocument/codeLens`
+- [ ] `textDocument/inlayHint`
+- [ ] `textDocument/inlineValue`
+- [ ] `textDocument/moniker`
+
+### Language Features — Structure
+
+- [ ] `textDocument/documentSymbol`
+- [ ] `textDocument/foldingRange`
+- [ ] `textDocument/selectionRange`
+- [ ] `textDocument/semanticTokens` (full / delta / range)
+- [ ] `textDocument/linkedEditingRange`
+
+### Language Features — Editing
+
+- [ ] `textDocument/completion`
+- [ ] `textDocument/codeAction`
+- [ ] `textDocument/formatting`
+- [ ] `textDocument/rangeFormatting`
+- [ ] `textDocument/onTypeFormatting`
+- [ ] `textDocument/rename` / `textDocument/prepareRename`
+- [ ] `textDocument/inlineCompletion`
+- [ ] `textDocument/documentColor` / `textDocument/colorPresentation`
+
+### Workspace Features
+
+- [ ] `workspace/symbol`
+- [ ] `workspace/configuration`
+- [ ] `workspace/didChangeConfiguration`
+- [ ] `workspace/workspaceFolders` / `workspace/didChangeWorkspaceFolders`
+- [ ] `workspace/didChangeWatchedFiles`
+- [ ] `workspace/executeCommand`
+- [ ] `workspace/applyEdit`
+- [ ] `workspace/textDocumentContent`
+- [ ] File operations (`willCreateFiles` / `didCreateFiles` / `willRenameFiles` / `didRenameFiles` / `willDeleteFiles` / `didDeleteFiles`)
+
+### Window Features
+
+- [ ] `window/showMessage` / `window/showMessageRequest`
+- [ ] `window/showDocument`
+- [ ] `window/logMessage`
+- [ ] `window/workDoneProgress` (create / cancel)
+- [ ] `telemetry/event`
