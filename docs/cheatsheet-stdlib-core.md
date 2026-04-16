@@ -227,16 +227,16 @@ pub trait Iterator {
     fn next(&mut self) -> Option<Self::Item>;
     fn collect(&mut self) -> Array<Self::Item>;
     fn count(&mut self) -> i32;
-    fn map<U>(&self, f: Fn(Self::Item) -> U) -> IterMap<Self, U>;
-    fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, Self::Item) -> Acc) -> Acc;
-    fn find(&mut self, pred: Fn(Self::Item) -> bool) -> Option<Self::Item>;
-    fn any(&mut self, pred: Fn(Self::Item) -> bool) -> bool;
-    fn all(&mut self, pred: Fn(Self::Item) -> bool) -> bool;
+    fn map<U>(&self, f: fn(Self::Item) -> U) -> IterMap<Self, U>;
+    fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, Self::Item) -> Acc) -> Acc;
+    fn find(&mut self, pred: fn(Self::Item) -> bool) -> Option<Self::Item>;
+    fn any(&mut self, pred: fn(Self::Item) -> bool) -> bool;
+    fn all(&mut self, pred: fn(Self::Item) -> bool) -> bool;
     fn last(&mut self) -> Option<Self::Item>;
     fn nth(&mut self, n: i32) -> Option<Self::Item>;
-    fn position(&mut self, pred: Fn(Self::Item) -> bool) -> Option<i32>;
-    fn reduce(&mut self, f: Fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>;
-    fn filter(&self, pred: Fn(Self::Item) -> bool) -> IterFilter<Self>;
+    fn position(&mut self, pred: fn(Self::Item) -> bool) -> Option<i32>;
+    fn reduce(&mut self, f: fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>;
+    fn filter(&self, pred: fn(Self::Item) -> bool) -> IterFilter<Self>;
     fn enumerate(&self) -> IterEnumerate<Self>;
     fn take(&self, n: i32) -> IterTake<Self>;
     fn skip(&self, n: i32) -> IterSkip<Self>;
@@ -380,16 +380,16 @@ pub trait Iterator {
     fn next(&mut self) -> Option<Self::Item>;
     fn collect(&mut self) -> Array<Self::Item>;
     fn count(&mut self) -> i32;
-    fn map<U>(&self, f: Fn(Self::Item) -> U) -> IterMap<Self, U>;
-    fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, Self::Item) -> Acc) -> Acc;
-    fn find(&mut self, pred: Fn(Self::Item) -> bool) -> Option<Self::Item>;
-    fn any(&mut self, pred: Fn(Self::Item) -> bool) -> bool;
-    fn all(&mut self, pred: Fn(Self::Item) -> bool) -> bool;
+    fn map<U>(&self, f: fn(Self::Item) -> U) -> IterMap<Self, U>;
+    fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, Self::Item) -> Acc) -> Acc;
+    fn find(&mut self, pred: fn(Self::Item) -> bool) -> Option<Self::Item>;
+    fn any(&mut self, pred: fn(Self::Item) -> bool) -> bool;
+    fn all(&mut self, pred: fn(Self::Item) -> bool) -> bool;
     fn last(&mut self) -> Option<Self::Item>;
     fn nth(&mut self, n: i32) -> Option<Self::Item>;
-    fn position(&mut self, pred: Fn(Self::Item) -> bool) -> Option<i32>;
-    fn reduce(&mut self, f: Fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>;
-    fn filter(&self, pred: Fn(Self::Item) -> bool) -> IterFilter<Self>;
+    fn position(&mut self, pred: fn(Self::Item) -> bool) -> Option<i32>;
+    fn reduce(&mut self, f: fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>;
+    fn filter(&self, pred: fn(Self::Item) -> bool) -> IterFilter<Self>;
     fn enumerate(&self) -> IterEnumerate<Self>;
     fn take(&self, n: i32) -> IterTake<Self>;
     fn skip(&self, n: i32) -> IterSkip<Self>;
@@ -418,7 +418,7 @@ pub trait Step {
 ```wado
 pub struct IterMap<I: Iterator, U> {
     inner: I,
-    f: Fn(I::Item) -> U,
+    f: fn(I::Item) -> U,
 }
 
 impl Iterator for IterMap<I, U> {
@@ -433,7 +433,7 @@ impl IntoIterator for IterMap<I, U> {
 ```wado
 pub struct IterFilter<I: Iterator> {
     inner: I,
-    pred: Fn(I::Item) -> bool,
+    pred: fn(I::Item) -> bool,
 }
 
 impl Iterator for IterFilter<I> {
@@ -896,7 +896,7 @@ impl String {
     pub fn find(&self, pat: String) -> Option<i32>;
     pub fn rfind(&self, pat: String) -> Option<i32>;
     pub fn contains_char(&self, ch: char) -> bool;
-    pub fn find_char(&self, pred: Fn(char) -> bool) -> Option<i32>;
+    pub fn find_char(&self, pred: fn(char) -> bool) -> Option<i32>;
     pub fn insert(&mut self, byte_index: i32, ch: char);
     pub fn insert_str(&mut self, byte_index: i32, s: String);
     pub fn remove(&mut self, byte_index: i32) -> char;
@@ -959,7 +959,7 @@ impl Iterator for StrCharIter {
 ```wado
 pub struct IterMap<I: Iterator, U> {
     inner: I,
-    f: Fn(I::Item) -> U,
+    f: fn(I::Item) -> U,
 }
 
 impl Iterator for IterMap<I, U> {
@@ -974,7 +974,7 @@ impl IntoIterator for IterMap<I, U> {
 ```wado
 pub struct IterFilter<I: Iterator> {
     inner: I,
-    pred: Fn(I::Item) -> bool,
+    pred: fn(I::Item) -> bool,
 }
 
 impl Iterator for IterFilter<I> {
@@ -1095,8 +1095,8 @@ impl Array {
     pub fn contains(&self, value: &T) -> bool;
     pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>;
     pub fn iter(&self) -> ArrayIter<T>;
-    pub fn sort_by(&mut self, cmp: Fn(&T, &T) -> Ordering);
-    pub fn sorted_by(&self, cmp: Fn(&T, &T) -> Ordering) -> Array<T>;
+    pub fn sort_by(&mut self, cmp: fn(&T, &T) -> Ordering);
+    pub fn sorted_by(&self, cmp: fn(&T, &T) -> Ordering) -> Array<T>;
     pub fn windows(&self, size: i32) -> WindowsIter<T>;
     pub fn chunks(&self, size: i32) -> ChunksIter<T>;
     pub fn sort(&mut self);

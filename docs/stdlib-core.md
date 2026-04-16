@@ -491,25 +491,25 @@ Collects remaining elements into an Array.
 
 Counts the number of remaining elements in the iterator.
 
-##### `fn map<U>(&self, f: Fn(Self::Item) -> U) -> IterMap<Self, U>`
+##### `fn map<U>(&self, f: fn(Self::Item) -> U) -> IterMap<Self, U>`
 
 Transforms each element using a function.
 
-##### `fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, Self::Item) -> Acc) -> Acc`
+##### `fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, Self::Item) -> Acc) -> Acc`
 
 Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
 Always returns a value (unlike `reduce`, which returns None for empty iterators).
 
-##### `fn find(&mut self, pred: Fn(Self::Item) -> bool) -> Option<Self::Item>`
+##### `fn find(&mut self, pred: fn(Self::Item) -> bool) -> Option<Self::Item>`
 
 Returns the first element for which `pred` returns true, advancing the iterator up to that point.
 
-##### `fn any(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
+##### `fn any(&mut self, pred: fn(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a matching element is found.
 
-##### `fn all(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
+##### `fn all(&mut self, pred: fn(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for every element (∀). True for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
@@ -522,16 +522,16 @@ Advances the entire iterator and returns the last element, or None if empty.
 
 Returns the nth element (0-indexed), advancing the iterator up to and including it.
 
-##### `fn position(&mut self, pred: Fn(Self::Item) -> bool) -> Option<i32>`
+##### `fn position(&mut self, pred: fn(Self::Item) -> bool) -> Option<i32>`
 
 Returns the 0-based index of the first element for which `pred` returns true, or None.
 
-##### `fn reduce(&mut self, f: Fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
+##### `fn reduce(&mut self, f: fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
 
 Reduces elements to a single value without an initial accumulator.
 Returns None if the iterator is empty.
 
-##### `fn filter(&self, pred: Fn(Self::Item) -> bool) -> IterFilter<Self>`
+##### `fn filter(&self, pred: fn(Self::Item) -> bool) -> IterFilter<Self>`
 
 Returns an adapter that skips elements for which `pred` returns false.
 
@@ -838,25 +838,25 @@ Collects remaining elements into an Array.
 
 Counts the number of remaining elements in the iterator.
 
-##### `fn map<U>(&self, f: Fn(Self::Item) -> U) -> IterMap<Self, U>`
+##### `fn map<U>(&self, f: fn(Self::Item) -> U) -> IterMap<Self, U>`
 
 Transforms each element using a function.
 
-##### `fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, Self::Item) -> Acc) -> Acc`
+##### `fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, Self::Item) -> Acc) -> Acc`
 
 Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
 Always returns a value (unlike `reduce`, which returns None for empty iterators).
 
-##### `fn find(&mut self, pred: Fn(Self::Item) -> bool) -> Option<Self::Item>`
+##### `fn find(&mut self, pred: fn(Self::Item) -> bool) -> Option<Self::Item>`
 
 Returns the first element for which `pred` returns true, advancing the iterator up to that point.
 
-##### `fn any(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
+##### `fn any(&mut self, pred: fn(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a matching element is found.
 
-##### `fn all(&mut self, pred: Fn(Self::Item) -> bool) -> bool`
+##### `fn all(&mut self, pred: fn(Self::Item) -> bool) -> bool`
 
 Returns true if `pred` returns true for every element (∀). True for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
@@ -869,16 +869,16 @@ Advances the entire iterator and returns the last element, or None if empty.
 
 Returns the nth element (0-indexed), advancing the iterator up to and including it.
 
-##### `fn position(&mut self, pred: Fn(Self::Item) -> bool) -> Option<i32>`
+##### `fn position(&mut self, pred: fn(Self::Item) -> bool) -> Option<i32>`
 
 Returns the 0-based index of the first element for which `pred` returns true, or None.
 
-##### `fn reduce(&mut self, f: Fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
+##### `fn reduce(&mut self, f: fn(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
 
 Reduces elements to a single value without an initial accumulator.
 Returns None if the iterator is empty.
 
-##### `fn filter(&self, pred: Fn(Self::Item) -> bool) -> IterFilter<Self>`
+##### `fn filter(&self, pred: fn(Self::Item) -> bool) -> IterFilter<Self>`
 
 Returns an adapter that skips elements for which `pred` returns false.
 
@@ -934,7 +934,7 @@ Generic map iterator adapter that wraps any Iterator.
 
 ##### `inner: I`
 
-##### `f: Fn(I::Item) -> U`
+##### `f: fn(I::Item) -> U`
 
 ##### `impl Iterator for IterMap<I, U>`
 
@@ -950,7 +950,7 @@ Generic filter iterator adapter that wraps any Iterator.
 
 ##### `inner: I`
 
-##### `pred: Fn(I::Item) -> bool`
+##### `pred: fn(I::Item) -> bool`
 
 ##### `impl Iterator for IterFilter<I>`
 
@@ -1744,7 +1744,7 @@ Returns the byte index of the last occurrence of `pat`, or None.
 
 Returns true if the string contains the given character.
 
-##### `pub fn find_char(&self, pred: Fn(char) -> bool) -> Option<i32>`
+##### `pub fn find_char(&self, pred: fn(char) -> bool) -> Option<i32>`
 
 Returns the byte index of the first character matching the predicate, or None.
 
@@ -1874,7 +1874,7 @@ Generic map iterator adapter that wraps any Iterator.
 
 ##### `inner: I`
 
-##### `f: Fn(I::Item) -> U`
+##### `f: fn(I::Item) -> U`
 
 ##### `impl Iterator for IterMap<I, U>`
 
@@ -1890,7 +1890,7 @@ Generic filter iterator adapter that wraps any Iterator.
 
 ##### `inner: I`
 
-##### `pred: Fn(I::Item) -> bool`
+##### `pred: fn(I::Item) -> bool`
 
 ##### `impl Iterator for IterFilter<I>`
 
@@ -2073,11 +2073,11 @@ Returns true if the array contains the given value.
 
 ##### `pub fn iter(&self) -> ArrayIter<T>`
 
-##### `pub fn sort_by(&mut self, cmp: Fn(&T, &T) -> Ordering)`
+##### `pub fn sort_by(&mut self, cmp: fn(&T, &T) -> Ordering)`
 
 In-place sort with comparator. Stable, O(n log n) worst case.
 
-##### `pub fn sorted_by(&self, cmp: Fn(&T, &T) -> Ordering) -> Array<T>`
+##### `pub fn sorted_by(&self, cmp: fn(&T, &T) -> Ordering) -> Array<T>`
 
 ##### `pub fn windows(&self, size: i32) -> WindowsIter<T>`
 
