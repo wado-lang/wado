@@ -33,6 +33,15 @@ pub async fn run() {
                                 "openClose": true,
                                 "change": 1, // Full sync
                             },
+                            "definitionProvider": true,
+                            "hoverProvider": true,
+                            "semanticTokensProvider": {
+                                "legend": {
+                                    "tokenTypes": wado_lsp::semantic_tokens::TOKEN_TYPES,
+                                    "tokenModifiers": wado_lsp::semantic_tokens::TOKEN_MODIFIERS,
+                                },
+                                "full": true,
+                            },
                         },
                         "serverInfo": {
                             "name": "wado-lsp",
@@ -97,6 +106,104 @@ pub async fn run() {
                         {
                             eprintln!("wado-lsp: {e}");
                         }
+                    }
+                }
+            }
+            "textDocument/definition" => {
+                if let Some(id) = id {
+                    let uri = params
+                        .get("textDocument")
+                        .and_then(|td| td.get("uri"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    let line = params
+                        .get("position")
+                        .and_then(|p| p.get("line"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u32;
+                    let character = params
+                        .get("position")
+                        .and_then(|p| p.get("character"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u32;
+                    let position = wado_lsp::Position { line, character };
+                    let result = match engine.definition(uri, position) {
+                        Some(def) => json!({
+                            "uri": def.uri,
+                            "range": {
+                                "start": {
+                                    "line": def.range.start.line,
+                                    "character": def.range.start.character,
+                                },
+                                "end": {
+                                    "line": def.range.end.line,
+                                    "character": def.range.end.character,
+                                },
+                            },
+                        }),
+                        None => Value::Null,
+                    };
+                    if let Err(e) = lsp_adapter::send_response(&mut writer, id, result).await {
+                        eprintln!("wado-lsp: {e}");
+                        break;
+                    }
+                }
+            }
+            "textDocument/hover" => {
+                if let Some(id) = id {
+                    let uri = params
+                        .get("textDocument")
+                        .and_then(|td| td.get("uri"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    let line = params
+                        .get("position")
+                        .and_then(|p| p.get("line"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u32;
+                    let character = params
+                        .get("position")
+                        .and_then(|p| p.get("character"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u32;
+                    let position = wado_lsp::Position { line, character };
+                    let result = match engine.hover(uri, position) {
+                        Some(hover) => json!({
+                            "contents": {
+                                "kind": "markdown",
+                                "value": hover.contents,
+                            },
+                            "range": {
+                                "start": {
+                                    "line": hover.range.start.line,
+                                    "character": hover.range.start.character,
+                                },
+                                "end": {
+                                    "line": hover.range.end.line,
+                                    "character": hover.range.end.character,
+                                },
+                            },
+                        }),
+                        None => Value::Null,
+                    };
+                    if let Err(e) = lsp_adapter::send_response(&mut writer, id, result).await {
+                        eprintln!("wado-lsp: {e}");
+                        break;
+                    }
+                }
+            }
+            "textDocument/semanticTokens/full" => {
+                if let Some(id) = id {
+                    let uri = params
+                        .get("textDocument")
+                        .and_then(|td| td.get("uri"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    let data = engine.semantic_tokens(uri);
+                    let result = json!({ "data": data });
+                    if let Err(e) = lsp_adapter::send_response(&mut writer, id, result).await {
+                        eprintln!("wado-lsp: {e}");
+                        break;
                     }
                 }
             }

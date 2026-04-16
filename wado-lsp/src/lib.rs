@@ -1,9 +1,14 @@
+mod definition;
 mod diagnostics;
+mod hover;
+pub mod semantic_tokens;
 
 use indexmap::IndexMap;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic as CompilerDiagnostic, LogLevel};
 
+pub use definition::DefinitionResult;
 pub use diagnostics::{Diagnostic, Position, Range, Severity};
+pub use hover::HoverResult;
 
 /// Protocol-agnostic language service engine.
 ///
@@ -38,6 +43,38 @@ impl Engine {
     #[must_use]
     pub fn get_document(&self, uri: &str) -> Option<&str> {
         self.documents.get(uri).map(String::as_str)
+    }
+
+    /// Find the definition of the symbol at the given position.
+    ///
+    /// Returns the location of the definition, or `None` if not found.
+    /// Currently resolves definitions within the same file only (AST-level).
+    #[must_use]
+    pub fn definition(&self, uri: &str, position: Position) -> Option<DefinitionResult> {
+        let source = self.documents.get(uri)?;
+        definition::find_definition(source, position, uri)
+    }
+
+    /// Compute hover information for the symbol at the given position.
+    ///
+    /// Returns markdown content describing the symbol, or `None` if not found.
+    #[must_use]
+    pub fn hover(&self, uri: &str, position: Position) -> Option<HoverResult> {
+        let source = self.documents.get(uri)?;
+        hover::find_hover(source, position)
+    }
+
+    /// Compute semantic tokens for the given document.
+    ///
+    /// Returns delta-encoded token data for LSP `textDocument/semanticTokens/full`.
+    /// This is a lightweight operation (lex + parse only, no compilation).
+    #[must_use]
+    pub fn semantic_tokens(&self, uri: &str) -> Vec<u32> {
+        let Some(source) = self.documents.get(uri) else {
+            return Vec::new();
+        };
+        let tokens = semantic_tokens::compute(source);
+        semantic_tokens::delta_encode(&tokens)
     }
 
     /// Compute diagnostics for the given document.
