@@ -11,9 +11,9 @@ Language service engine for the Wado compiler toolchain.
 
 ## Architecture
 
-| File | Role |
-|------|------|
-| `src/lib.rs` | `Engine` struct: document management + query dispatch |
+| File                 | Role                                                            |
+| -------------------- | --------------------------------------------------------------- |
+| `src/lib.rs`         | `Engine` struct: document management + query dispatch           |
 | `src/diagnostics.rs` | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion |
 
 ### Engine
@@ -26,10 +26,10 @@ Language service engine for the Wado compiler toolchain.
 
 ## Related Files in wado-cli
 
-| File | Role |
-|------|------|
-| `src/lsp.rs` | `wado lsp` subcommand: main loop, LSP message dispatch |
-| `src/lsp_adapter.rs` | LSP JSON-RPC transport (Content-Length framing), diagnostics-to-JSON conversion |
-| `src/query.rs` | `wado query` subcommand: arg parsing, dispatch |
-| `src/query_adapter.rs` | Engine invocation, text/JSON output formatting |
-| `tests/lsp.rs` | Integration tests for both `wado lsp` and `wado query` |
+| File                   | Role                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| `src/lsp.rs`           | `wado lsp` subcommand: main loop, LSP message dispatch                          |
+| `src/lsp_adapter.rs`   | LSP JSON-RPC transport (Content-Length framing), diagnostics-to-JSON conversion |
+| `src/query.rs`         | `wado query` subcommand: arg parsing, dispatch                                  |
+| `src/query_adapter.rs` | Engine invocation, text/JSON output formatting                                  |
+| `tests/lsp.rs`         | Integration tests for both `wado lsp` and `wado query`                          |
