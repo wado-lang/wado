@@ -662,6 +662,50 @@ fn value_copy_source_local(expr: &WirInstr) -> Option<&str> {
     }
 }
 
+/// Returns `true` if `instr` does not potentially mutate or escape `var_name`.
+///
+/// This is intentionally weaker than `uses_of_var_are_reads_only`: source-safety
+/// for copy elision only needs to prevent alias-corrupting writes/escapes, not
+/// reject every non-trivial read pattern.
+fn no_potential_source_mutation_or_escape(instr: &WirInstr, var_name: &str) -> bool {
+    match instr {
+        // Direct mutation through the variable (or a projection rooted at it).
+        WirInstr::StructSet { expr, .. } => !expr_roots_at_var(expr, var_name),
+        // Unknown calls may mutate through arguments; be conservative when the
+        // source variable appears in any argument expression.
+        WirInstr::Call { args, .. } | WirInstr::CallRef { args, .. } => args
+            .iter()
+            .all(|arg| !instr_contains_local_get(arg, var_name)),
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => body
+            .iter()
+            .all(|i| no_potential_source_mutation_or_escape(i, var_name)),
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            no_potential_source_mutation_or_escape(condition, var_name)
+                && then_body
+                    .iter()
+                    .all(|i| no_potential_source_mutation_or_escape(i, var_name))
+                && else_body.as_ref().is_none_or(|eb| {
+                    eb.iter()
+                        .all(|i| no_potential_source_mutation_or_escape(i, var_name))
+                })
+        }
+        _ => {
+            let mut ok = true;
+            instr.for_each_child(&mut |child| {
+                if ok {
+                    ok = no_potential_source_mutation_or_escape(child, var_name);
+                }
+            });
+            ok
+        }
+    }
+}
+
 /// Recursively walk a single instruction, eliding `value_copies` and descending
 /// into nested blocks/ifs/seqs.
 fn elide_value_copies_in_instr(
@@ -685,7 +729,11 @@ fn elide_value_copies_in_instr(
                     .iter()
                     .all(|i| uses_of_var_are_reads_only(i, name));
                 let source_safe = value_copy_source_local(expr)
-                    .is_none_or(|src| remaining.iter().all(|i| uses_of_var_are_reads_only(i, src)));
+                    .is_none_or(|src| {
+                        remaining
+                            .iter()
+                            .all(|i| no_potential_source_mutation_or_escape(i, src))
+                    });
                 if dest_safe && source_safe {
                     let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
                     if let WirInstr::ValueCopy { expr, .. } = old {
@@ -890,7 +938,7 @@ fn elide_copy_used_only_for_field_reads(instrs: &mut [WirInstr]) {
                     value_copy_source_local(expr).is_none_or(|src| {
                         remaining
                             .iter()
-                            .all(|instr| uses_of_var_are_reads_only(instr, src))
+                            .all(|instr| no_potential_source_mutation_or_escape(instr, src))
                     })
                 } else {
                     true
