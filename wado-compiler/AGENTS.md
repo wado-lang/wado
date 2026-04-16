@@ -137,7 +137,7 @@ Roslyn and rust-analyzer both solve this by keeping the **AST (or a lossless syn
 - Introduce stable `AstId` (module-local, parse-stable) and `AstPtr` (position-resolvable).
 - Add `name_span: Span` to every AST declaration (fn, struct, enum, variant, flags, trait, newtype, impl method, global, let, param).
 - Rework `SymbolTable` / `TypeTable` to be keyed by `AstId` rather than consumed during TIR construction.
-- Split `resolve` into: (a) *annotate* AST with `SymbolTable`/`TypeTable` (no lowering), (b) *lower* to TIR as a later phase.
+- Split `resolve` into: (a) _annotate_ AST with `SymbolTable`/`TypeTable` (no lowering), (b) _lower_ to TIR as a later phase.
 - Expose a query API: `position → AstId`, `AstId → Symbol`, `AstId → ResolvedType`, `Symbol → defining AstId + source URI`.
 - Add a **lightweight analysis entry point** (parse + bind + resolve, no monomorphize/lower/codegen) for LSP use.
 - Add source URI to `Symbol` so cross-file definition results can be returned.

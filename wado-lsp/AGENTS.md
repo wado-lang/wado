@@ -11,12 +11,12 @@ Language service engine for the Wado compiler toolchain.
 
 ## Architecture
 
-| File                     | Role                                                            |
-| ------------------------ | --------------------------------------------------------------- |
-| `src/lib.rs`             | `Engine` struct: document management + query dispatch           |
-| `src/diagnostics.rs`     | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion |
-| `src/semantic_tokens.rs` | Semantic token computation (lexer + AST classification)         |
-| `src/definition.rs`      | Go-to-definition (single-file, AST-level name resolution)       |
+| File                     | Role                                                                   |
+| ------------------------ | ---------------------------------------------------------------------- |
+| `src/lib.rs`             | `Engine` struct: document management + query dispatch                  |
+| `src/diagnostics.rs`     | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion        |
+| `src/semantic_tokens.rs` | Semantic token computation (lexer + AST classification)                |
+| `src/definition.rs`      | Go-to-definition (single-file, AST-level name resolution)              |
 | `src/hover.rs`           | Hover info (delegates signature rendering to `wado_compiler::unparse`) |
 
 ### Engine
