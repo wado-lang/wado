@@ -31,11 +31,11 @@ The header part consists of header fields. Each header field is comprised of a n
 
 Currently the following header fields are supported:
 
-| Header Field Name | Value Type  | Description |
-|:------------------|:------------|:------------|
-| Content-Length    | number      | The length of the content part in bytes. This header is required. |
-| Content-Type      | string      | The mime type of the content part. Defaults to application/vscode-jsonrpc; charset=utf-8 |
-{: .table .table-bordered .table-responsive}
+| Header Field Name                            | Value Type | Description                                                                              |
+| :------------------------------------------- | :--------- | :--------------------------------------------------------------------------------------- |
+| Content-Length                               | number     | The length of the content part in bytes. This header is required.                        |
+| Content-Type                                 | string     | The mime type of the content part. Defaults to application/vscode-jsonrpc; charset=utf-8 |
+| {: .table .table-bordered .table-responsive} |            |                                                                                          |
 
 The header part is encoded using the 'ascii' encoding. This includes the '\r\n' separating the header and content part.
 
@@ -59,6 +59,7 @@ Content-Length: ...\r\n
 	}
 }
 ```
+
 ### Base Protocol JSON structures
 
 The protocol uses request, response, and notification objects as specified in the [JSON-RPC protocol](http://www.jsonrpc.org/specification). The protocol currently does not support JSON-RPC batch messages; protocol clients and servers must not send JSON-RPC requests.
@@ -145,6 +146,7 @@ interface Message {
 	jsonrpc: string;
 }
 ```
+
 #### <a href="#requestMessage" name="requestMessage" class="anchor">Request Message</a>
 
 A request message to describe a request between the client and the server. Every processed request must send a response back to the sender of the request.
@@ -310,6 +312,7 @@ export namespace ErrorCodes {
 	export const lspReservedErrorRangeEnd: integer = -32800;
 }
 ```
+
 #### <a href="#notificationMessage" name="notificationMessage" class="anchor">Notification Message</a>
 
 A notification message. A processed notification message must not send a response back. They work like events.
@@ -337,8 +340,9 @@ Notifications and requests whose methods start with '\$/' are messages which are
 The base protocol offers support for request cancellation. To cancel a request, a notification message with the following properties is sent:
 
 _Notification_:
-* method: '$/cancelRequest'
-* params: `CancelParams` defined as follows:
+
+- method: '$/cancelRequest'
+- params: `CancelParams` defined as follows:
 
 ```typescript
 interface CancelParams {
@@ -353,15 +357,16 @@ A request that got canceled still needs to return from the server and send a res
 
 #### <a href="#progress" name="progress" class="anchor">Progress Support (:arrow_right: :arrow_left:)</a>
 
-> *Since version 3.15.0*
+> _Since version 3.15.0_
 
 The base protocol also offers support to report progress in a generic fashion. This mechanism can be used to report any kind of progress including [work done progress](#workDoneProgress) (usually used to report progress in the user interface using a progress bar) and partial result progress to support streaming of results.
 
 A progress notification has the following properties:
 
 _Notification_:
-* method: '$/progress'
-* params: `ProgressParams` defined as follows:
+
+- method: '$/progress'
+- params: `ProgressParams` defined as follows:
 
 ```typescript
 type ProgressToken = integer | string;
@@ -426,13 +431,12 @@ However, the server may decide to use a parallel execution strategy and may wish
 
 As said, LSP defines a set of requests, responses and notifications. Each of those are documented using the following format:
 
-* a header describing the request
-* an optional _Client Capability_ section describing the client capability of the request. This includes the client capabilities property path and JSON structure.
-* an optional _Server Capability_ section describing the server capability of the request. This includes the server capabilities property path and JSON structure. Clients should ignore server capabilities they don't understand (e.g. the initialize request shouldn't fail in this case).
-* an optional _Registration Options_ section describing the registration option if the request or notification supports dynamic capability registration. See the [register](#client_registerCapability) and [unregister](#client_unregisterCapability) request for how this works in detail.
-* a _Request_ section describing the format of the request sent. The method is a string identifying the request, the params are documented using a TypeScript interface. It is also documented whether the request supports work done progress and partial result progress.
-* a _Response_ section describing the format of the response. The result item describes the returned data in case of a success. The optional partial result item describes the returned data of a partial result notification. The error.data describes the returned data in case of an error. Please remember that in case of a failure the response already contains an error.code and an error.message field. These fields are only specified if the protocol forces the use of certain error codes or messages. In cases where the server can decide on these values freely they aren't listed here.
-
+- a header describing the request
+- an optional _Client Capability_ section describing the client capability of the request. This includes the client capabilities property path and JSON structure.
+- an optional _Server Capability_ section describing the server capability of the request. This includes the server capabilities property path and JSON structure. Clients should ignore server capabilities they don't understand (e.g. the initialize request shouldn't fail in this case).
+- an optional _Registration Options_ section describing the registration option if the request or notification supports dynamic capability registration. See the [register](#client_registerCapability) and [unregister](#client_unregisterCapability) request for how this works in detail.
+- a _Request_ section describing the format of the request sent. The method is a string identifying the request, the params are documented using a TypeScript interface. It is also documented whether the request supports work done progress and partial result progress.
+- a _Response_ section describing the format of the response. The result item describes the returned data in case of a success. The optional partial result item describes the returned data of a partial result notification. The error.data describes the returned data in case of an error. Please remember that in case of a failure the response already contains an error.code and an error.message field. These fields are only specified if the protocol forces the use of certain error codes or messages. In cases where the server can decide on these values freely they aren't listed here.
 
 ### <a href="#basicJsonStructures" name="basicJsonStructures" class="anchor">Basic JSON Structures</a>
 
@@ -487,14 +491,16 @@ The current protocol specification defines that the lifecycle of a server is man
 Client support for `textDocument/didOpen`, `textDocument/didChange` and `textDocument/didClose` notifications is mandatory in the protocol and clients can not opt out supporting them. This includes both full and incremental synchronization in the `textDocument/didChange` notification. In addition a server must either implement all three of them or none. Their capabilities are therefore controlled via a combined client and server capability. Opting out of text document synchronization makes only sense if the documents shown by the client are read only. Otherwise the server might receive request for documents, for which the content is managed in the client (e.g. they might have changed).
 
 <a href="#textDocument_synchronization_cc" name="textDocument_synchronization_cc" class="anchor">_Client Capability_:</a>
-* property path (optional): `textDocument.synchronization.dynamicRegistration`
-* property type: `boolean`
+
+- property path (optional): `textDocument.synchronization.dynamicRegistration`
+- property type: `boolean`
 
 Controls whether text document synchronization supports dynamic registration.
 
 <a href="#textDocument_synchronization_sc" name="textDocument_synchronization_sc" class="anchor">_Server Capability_:</a>
-* property path (optional): `textDocumentSync`
-* property type: `TextDocumentSyncKind | TextDocumentSyncOptions`. The below definition of the `TextDocumentSyncOptions` only covers the properties specific to the open, change and close notifications. A complete definition covering all properties can be found [here](#textDocument_didClose):
+
+- property path (optional): `textDocumentSync`
+- property type: `TextDocumentSyncKind | TextDocumentSyncOptions`. The below definition of the `TextDocumentSyncOptions` only covers the properties specific to the open, change and close notifications. A complete definition covering all properties can be found [here](#textDocument_didClose):
 
 <div class="anchorHolder"><a href="#textDocumentSyncKind" name="textDocumentSyncKind" class="linkableAnchor"></a></div>
 
@@ -724,136 +730,134 @@ Since 3.17 there is a meta model describing the LSP protocol:
 
 #### <a href="#version_3_18_0" name="version_3_18_0" class="anchor">3.18.0 (mm/dd/yyyy)</a>
 
-* Added inline completions support.
-* Added dynamic text document content support.
-* Added refresh support for folding ranges.
-* Support to format multiple ranges at once.
-* Support for snippets in workspace edits.
-* Relative Pattern support for document filters and notebook document filters.
-* Support for code action kind documentation.
-* Add support for `activeParameter` on `SignatureHelp` and `SignatureInformation` being `null`.
-* Support tooltips for `Command`.
-* Support for meta data information on workspace edits.
-* Support for snippets in text document edits.
-* Support for debug message kind.
-* Client capability to enumerate properties that can be resolved for code lenses.
-* Added support for `completionList.applyKind` to determine how values from `completionList.itemDefaults` and `completion` are combined.
-
+- Added inline completions support.
+- Added dynamic text document content support.
+- Added refresh support for folding ranges.
+- Support to format multiple ranges at once.
+- Support for snippets in workspace edits.
+- Relative Pattern support for document filters and notebook document filters.
+- Support for code action kind documentation.
+- Add support for `activeParameter` on `SignatureHelp` and `SignatureInformation` being `null`.
+- Support tooltips for `Command`.
+- Support for meta data information on workspace edits.
+- Support for snippets in text document edits.
+- Support for debug message kind.
+- Client capability to enumerate properties that can be resolved for code lenses.
+- Added support for `completionList.applyKind` to determine how values from `completionList.itemDefaults` and `completion` are combined.
 
 #### <a href="#version_3_17_0" name="version_3_17_0" class="anchor">3.17.0 (05/10/2022)</a>
 
-* Specify how clients will handle stale requests.
-* Added support for a completion item label details.
-* Added support for workspace symbol resolve request.
-* Added support for label details and insert text mode on completion items.
-* Added support for shared values on CompletionItemList.
-* Added support for HTML tags in Markdown.
-* Added support for collapsed text in folding.
-* Added support for trigger kinds on code action requests.
-* Added the following support to semantic tokens:
+- Specify how clients will handle stale requests.
+- Added support for a completion item label details.
+- Added support for workspace symbol resolve request.
+- Added support for label details and insert text mode on completion items.
+- Added support for shared values on CompletionItemList.
+- Added support for HTML tags in Markdown.
+- Added support for collapsed text in folding.
+- Added support for trigger kinds on code action requests.
+- Added the following support to semantic tokens:
   - server cancelable
   - augmentation of syntax tokens
-* Added support to negotiate the position encoding.
-* Added support for relative patterns in file watchers.
-* Added support for type hierarchies
-* Added support for inline values.
-* Added support for inlay hints.
-* Added support for notebook documents.
-* Added support for diagnostic pull model.
+- Added support to negotiate the position encoding.
+- Added support for relative patterns in file watchers.
+- Added support for type hierarchies
+- Added support for inline values.
+- Added support for inlay hints.
+- Added support for notebook documents.
+- Added support for diagnostic pull model.
 
 #### <a href="#version_3_16_0" name="version_3_16_0" class="anchor">3.16.0 (12/14/2020)</a>
 
-* Added support for tracing.
-* Added semantic token support.
-* Added call hierarchy support.
-* Added client capability for resolving text edits on completion items.
-* Added support for client default behavior on renames.
-* Added support for insert and replace ranges on `CompletionItem`.
-* Added support for diagnostic code descriptions.
-* Added support for document symbol provider label.
-* Added support for tags on `SymbolInformation` and `DocumentSymbol`.
-* Added support for moniker request method.
-* Added support for code action `data` property.
-* Added support for code action `disabled` property.
-* Added support for code action resolve request.
-* Added support for diagnostic `data` property.
-* Added support for signature information `activeParameter` property.
-* Added support for `workspace/didCreateFiles` notifications and `workspace/willCreateFiles` requests.
-* Added support for `workspace/didRenameFiles` notifications and `workspace/willRenameFiles` requests.
-* Added support for `workspace/didDeleteFiles` notifications and `workspace/willDeleteFiles` requests.
-* Added client capability to signal whether the client normalizes line endings.
-* Added support to preserve additional attributes on `MessageActionItem`.
-* Added support to provide the clients locale in the initialize call.
-* Added support for opening and showing a document in the client user interface.
-* Added support for linked editing.
-* Added support for change annotations in text edits as well as in create file, rename file and delete file operations.
+- Added support for tracing.
+- Added semantic token support.
+- Added call hierarchy support.
+- Added client capability for resolving text edits on completion items.
+- Added support for client default behavior on renames.
+- Added support for insert and replace ranges on `CompletionItem`.
+- Added support for diagnostic code descriptions.
+- Added support for document symbol provider label.
+- Added support for tags on `SymbolInformation` and `DocumentSymbol`.
+- Added support for moniker request method.
+- Added support for code action `data` property.
+- Added support for code action `disabled` property.
+- Added support for code action resolve request.
+- Added support for diagnostic `data` property.
+- Added support for signature information `activeParameter` property.
+- Added support for `workspace/didCreateFiles` notifications and `workspace/willCreateFiles` requests.
+- Added support for `workspace/didRenameFiles` notifications and `workspace/willRenameFiles` requests.
+- Added support for `workspace/didDeleteFiles` notifications and `workspace/willDeleteFiles` requests.
+- Added client capability to signal whether the client normalizes line endings.
+- Added support to preserve additional attributes on `MessageActionItem`.
+- Added support to provide the clients locale in the initialize call.
+- Added support for opening and showing a document in the client user interface.
+- Added support for linked editing.
+- Added support for change annotations in text edits as well as in create file, rename file and delete file operations.
 
 #### <a href="#version_3_15_0" name="version_3_15_0" class="anchor">3.15.0 (01/14/2020)</a>
 
-* Added generic progress reporting support.
-* Added specific work done progress reporting support to requests where applicable.
-* Added specific partial result progress support to requests where applicable.
-* Added support for `textDocument/selectionRange`.
-* Added support for server and client information.
-* Added signature help context.
-* Added Erlang and Elixir to the list of supported programming languages
-* Added `version` on `PublishDiagnosticsParams`
-* Added `CodeAction#isPreferred` support.
-* Added `CompletionItem#tag` support.
-* Added `Diagnostic#tag` support.
-* Added `DocumentLink#tooltip` support.
-* Added `trimTrailingWhitespace`, `insertFinalNewline` and `trimFinalNewlines` to `FormattingOptions`.
-* Clarified `WorkspaceSymbolParams#query` parameter.
-
+- Added generic progress reporting support.
+- Added specific work done progress reporting support to requests where applicable.
+- Added specific partial result progress support to requests where applicable.
+- Added support for `textDocument/selectionRange`.
+- Added support for server and client information.
+- Added signature help context.
+- Added Erlang and Elixir to the list of supported programming languages
+- Added `version` on `PublishDiagnosticsParams`
+- Added `CodeAction#isPreferred` support.
+- Added `CompletionItem#tag` support.
+- Added `Diagnostic#tag` support.
+- Added `DocumentLink#tooltip` support.
+- Added `trimTrailingWhitespace`, `insertFinalNewline` and `trimFinalNewlines` to `FormattingOptions`.
+- Clarified `WorkspaceSymbolParams#query` parameter.
 
 #### <a href="#version_3_14_0" name="version_3_14_0" class="anchor">3.14.0 (12/13/2018)</a>
 
-* Added support for signature label offsets.
-* Added support for location links.
-* Added support for `textDocument/declaration` request.
+- Added support for signature label offsets.
+- Added support for location links.
+- Added support for `textDocument/declaration` request.
 
 #### <a href="#version_3_13_0" name="version_3_13_0" class="anchor">3.13.0 (9/11/2018)</a>
 
-* Added support for file and folder operations (create, rename, move) to workspace edits.
+- Added support for file and folder operations (create, rename, move) to workspace edits.
 
 #### <a href="#version_3_12_0" name="version_3_12_0" class="anchor">3.12.0 (8/23/2018)</a>
 
-* Added support for `textDocument/prepareRename` request.
+- Added support for `textDocument/prepareRename` request.
 
 #### <a href="#version_3_11_0" name="version_3_11_0" class="anchor">3.11.0 (8/21/2018)</a>
 
-* Added support for CodeActionOptions to allow a server to provide a list of code action it supports.
+- Added support for CodeActionOptions to allow a server to provide a list of code action it supports.
 
 #### <a href="#version_3_10_0" name="version_3_10_0" class="anchor">3.10.0 (7/23/2018)</a>
 
-* Added support for hierarchical document symbols as a valid response to a `textDocument/documentSymbol` request.
-* Added support for folding ranges as a valid response to a `textDocument/foldingRange` request.
+- Added support for hierarchical document symbols as a valid response to a `textDocument/documentSymbol` request.
+- Added support for folding ranges as a valid response to a `textDocument/foldingRange` request.
 
 #### <a href="#version_3_9_0" name="version_3_9_0" class="anchor">3.9.0 (7/10/2018)</a>
 
-* Added support for `preselect` property in `CompletionItem`
+- Added support for `preselect` property in `CompletionItem`
 
 #### <a href="#version_3_8_0" name="version_3_8_0" class="anchor">3.8.0 (6/11/2018)</a>
 
-* Added support for CodeAction literals to the `textDocument/codeAction` request.
-* ColorServerCapabilities.colorProvider can also be a boolean
-* Corrected ColorPresentationParams.colorInfo to color (as in the `d.ts` and in implementations)
+- Added support for CodeAction literals to the `textDocument/codeAction` request.
+- ColorServerCapabilities.colorProvider can also be a boolean
+- Corrected ColorPresentationParams.colorInfo to color (as in the `d.ts` and in implementations)
 
 #### <a href="#version_3_7_0" name="version_3_7_0" class="anchor">3.7.0 (4/5/2018)</a>
 
-* Added support for related information to Diagnostics.
+- Added support for related information to Diagnostics.
 
 #### <a href="#version_3_6_0" name="version_3_6_0" class="anchor">3.6.0 (2/22/2018)</a>
 
 Merge the proposed protocol for workspace folders, configuration, go to type definition, go to implementation and document color provider into the main branch of the specification. For details see:
 
-* [Get Workspace Folders](https://microsoft.github.io/language-server-protocol/specification#workspace_workspaceFolders)
-* [DidChangeWorkspaceFolders Notification](https://microsoft.github.io/language-server-protocol/specification#workspace_didChangeWorkspaceFolders)
-* [Get Configuration](https://microsoft.github.io/language-server-protocol/specification#workspace_configuration)
-* [Go to Type Definition](https://microsoft.github.io/language-server-protocol/specification#textDocument_typeDefinition)
-* [Go to Implementation](https://microsoft.github.io/language-server-protocol/specification#textDocument_implementation)
-* [Document Color](https://microsoft.github.io/language-server-protocol/specification#textDocument_documentColor)
-* [Color Presentation](https://microsoft.github.io/language-server-protocol/specification#textDocument_colorPresentation)
+- [Get Workspace Folders](https://microsoft.github.io/language-server-protocol/specification#workspace_workspaceFolders)
+- [DidChangeWorkspaceFolders Notification](https://microsoft.github.io/language-server-protocol/specification#workspace_didChangeWorkspaceFolders)
+- [Get Configuration](https://microsoft.github.io/language-server-protocol/specification#workspace_configuration)
+- [Go to Type Definition](https://microsoft.github.io/language-server-protocol/specification#textDocument_typeDefinition)
+- [Go to Implementation](https://microsoft.github.io/language-server-protocol/specification#textDocument_implementation)
+- [Document Color](https://microsoft.github.io/language-server-protocol/specification#textDocument_documentColor)
+- [Color Presentation](https://microsoft.github.io/language-server-protocol/specification#textDocument_colorPresentation)
 
 In addition we enhanced the `CompletionTriggerKind` with a new value `TriggerForIncompleteCompletions: 3 = 3` to signal the a completion request got trigger since the last result was incomplete.
 
@@ -863,22 +867,22 @@ Decided to skip this version to bring the protocol version number in sync the wi
 
 #### <a href="#version_3_4_0" name="version_3_4_0" class="anchor">3.4.0 (11/27/2017)</a>
 
-* [extensible completion item and symbol kinds](https://github.com/Microsoft/language-server-protocol/issues/129)
+- [extensible completion item and symbol kinds](https://github.com/Microsoft/language-server-protocol/issues/129)
 
 #### <a href="#version_3_3_0" name="version_3_3_0" class="anchor">3.3.0 (11/24/2017)</a>
 
-* Added support for `CompletionContext`
-* Added support for `MarkupContent`
-* Removed old New and Updated markers.
+- Added support for `CompletionContext`
+- Added support for `MarkupContent`
+- Removed old New and Updated markers.
 
 #### <a href="#version_3_2_0" name="version_3_2_0" class="anchor">3.2.0 (09/26/2017)</a>
 
-* Added optional `commitCharacters` property to the `CompletionItem`
+- Added optional `commitCharacters` property to the `CompletionItem`
 
 #### <a href="#version_3_1_0" name="version_3_1_0" class="anchor">3.1.0 (02/28/2017)</a>
 
-* Make the `WorkspaceEdit` changes backwards compatible.
-* Updated the specification to correctly describe the breaking changes from 2.x to 3.x around `WorkspaceEdit`and `TextDocumentEdit`.
+- Make the `WorkspaceEdit` changes backwards compatible.
+- Updated the specification to correctly describe the breaking changes from 2.x to 3.x around `WorkspaceEdit`and `TextDocumentEdit`.
 
 #### <a href="#version_3_0_0" name="version_3_0_0" class="anchor">3.0 Version</a>
 
