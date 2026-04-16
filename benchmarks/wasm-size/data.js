@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776342790908,
+  "lastUpdate": 1776345608411,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13205,6 +13205,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8114d6f5e34a500dec3e300b0a4ad67277e209d6"
         },
         "date": 1776342790623,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c8e43ed380ed098abfca801a1ebcd9720edbe2b0",
+          "message": "Merge pull request #849 from wado-lang/gfx/pretty_json_httpbin\n\nchore: use pretty JSON in http-bin.wado",
+          "timestamp": "2026-04-16T22:16:31+09:00",
+          "tree_id": "a3cfc3e0590603aaddddfbdb2bf6b71f653164d6",
+          "url": "https://github.com/wado-lang/wado/commit/c8e43ed380ed098abfca801a1ebcd9720edbe2b0"
+        },
+        "date": 1776345608118,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
