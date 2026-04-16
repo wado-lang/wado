@@ -6,12 +6,13 @@ use crate::ast::{
     AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr,
     CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ConditionElement, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt,
-    FieldAccessExpr, ForOfStmt, ForStmt, Function, FunctionType, GlobalDecl, IfExpr, IfStmt,
-    ImplBlock, ImportAttributes, IndexExpr, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt,
-    MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
-    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl,
+    FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
+    GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, Item, LabeledBlockStmt,
+    LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param,
+    Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry,
+    StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl,
+    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
+    VariantCase, VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::hashmap::IndexSet;
@@ -3514,7 +3515,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
             output.push('>');
         }
         Type::Function(f) => {
-            output.push_str("Fn(");
+            output.push_str("fn(");
             for (i, param) in f.params.iter().enumerate() {
                 if i > 0 {
                     output.push_str(", ");
@@ -3523,6 +3524,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
             }
             output.push_str(") -> ");
             unparse_type_into(&f.return_type, output);
+            unparse_fn_type_with_clause_into(&f.effects, &f.stores, output);
         }
         Type::Tuple(types) => {
             output.push('[');
@@ -3595,6 +3597,271 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
             output.push_str("\")");
         }
     }
+}
+
+/// Signature-only unparsers for AST declarations.
+///
+/// These produce a single-line textual signature suitable for hover, completion
+/// detail, document symbols, etc. — without emitting the body, attributes, or
+/// surrounding indentation. They are stateless (no `CommentMap` required) and
+/// match the canonical source syntax of the language.
+pub fn unparse_function_signature(f: &Function) -> String {
+    let mut out = String::new();
+    unparse_function_signature_into(f, &mut out);
+    out
+}
+
+pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
+    if f.is_pub {
+        output.push_str("pub ");
+    }
+    if f.is_export {
+        output.push_str("export ");
+    }
+    if f.is_async {
+        output.push_str("async ");
+    }
+    output.push_str("fn ");
+    output.push_str(&f.name);
+    unparse_generic_params_into(&f.type_params, output);
+    output.push('(');
+    for (i, param) in f.params.iter().enumerate() {
+        if i > 0 {
+            output.push_str(", ");
+        }
+        unparse_param_into(param, output);
+    }
+    output.push(')');
+    if let Some(ret) = &f.return_type
+        && !matches!(ret, Type::Named(n) if n.name == "()")
+    {
+        output.push_str(" -> ");
+        unparse_type_into(ret, output);
+    }
+    unparse_with_clause_into(&f.effects, &f.stores, output);
+}
+
+pub fn unparse_struct_header(s: &StructDecl) -> String {
+    let mut out = String::new();
+    if s.is_pub {
+        out.push_str("pub ");
+    }
+    out.push_str("struct ");
+    out.push_str(&s.name);
+    unparse_generic_params_into(&s.type_params, &mut out);
+    out
+}
+
+pub fn unparse_enum_header(e: &EnumDecl) -> String {
+    let mut out = String::new();
+    if e.is_pub {
+        out.push_str("pub ");
+    }
+    out.push_str("enum ");
+    out.push_str(&e.name);
+    unparse_generic_params_into(&e.type_params, &mut out);
+    out
+}
+
+pub fn unparse_variant_header(v: &VariantDecl) -> String {
+    let mut out = String::new();
+    if v.is_pub {
+        out.push_str("pub ");
+    }
+    out.push_str("variant ");
+    out.push_str(&v.name);
+    unparse_generic_params_into(&v.type_params, &mut out);
+    out
+}
+
+pub fn unparse_flags_header(fl: &FlagsDecl) -> String {
+    let mut out = String::new();
+    if fl.is_pub {
+        out.push_str("pub ");
+    }
+    out.push_str("flags ");
+    out.push_str(&fl.name);
+    out
+}
+
+pub fn unparse_trait_header(t: &TraitDecl) -> String {
+    let mut out = String::new();
+    if t.is_pub {
+        out.push_str("pub ");
+    }
+    out.push_str("trait ");
+    out.push_str(&t.name);
+    unparse_generic_params_into(&t.type_params, &mut out);
+    out
+}
+
+pub fn unparse_newtype_signature(n: &Newtype) -> String {
+    let mut out = String::new();
+    if n.is_pub {
+        out.push_str("pub ");
+    }
+    out.push_str("type ");
+    out.push_str(&n.name);
+    unparse_generic_params_into(&n.type_params, &mut out);
+    out.push_str(" = ");
+    unparse_type_into(&n.ty, &mut out);
+    out
+}
+
+pub fn unparse_global_signature(g: &GlobalDecl) -> String {
+    let mut out = String::new();
+    if g.is_pub {
+        out.push_str("pub ");
+    }
+    out.push_str("global ");
+    if g.mutable {
+        out.push_str("mut ");
+    }
+    out.push_str(&g.name);
+    out.push_str(": ");
+    unparse_type_into(&g.ty, &mut out);
+    out
+}
+
+pub fn unparse_generic_params_into(params: &[GenericParam], output: &mut String) {
+    if params.is_empty() {
+        return;
+    }
+    output.push('<');
+    for (i, param) in params.iter().enumerate() {
+        if i > 0 {
+            output.push_str(", ");
+        }
+        if param.is_effect {
+            output.push_str("effect ");
+        }
+        if param.is_pack {
+            output.push_str("..");
+        }
+        output.push_str(&param.name);
+        if !param.bounds.is_empty() {
+            output.push_str(": ");
+            for (j, bound) in param.bounds.iter().enumerate() {
+                if j > 0 {
+                    output.push_str(" + ");
+                }
+                output.push_str(&bound.name);
+                if !bound.assoc_types.is_empty() {
+                    output.push('<');
+                    for (k, assoc) in bound.assoc_types.iter().enumerate() {
+                        if k > 0 {
+                            output.push_str(", ");
+                        }
+                        output.push_str(&assoc.name);
+                        output.push_str(" = ");
+                        unparse_type_into(&assoc.ty, output);
+                    }
+                    output.push('>');
+                }
+            }
+        }
+        if let Some(default_type) = &param.default {
+            output.push_str(" = ");
+            unparse_type_into(default_type, output);
+        }
+    }
+    output.push('>');
+}
+
+pub fn unparse_param_into(param: &Param, output: &mut String) {
+    match param.self_kind {
+        SelfKind::Ref => {
+            output.push_str("&self");
+            return;
+        }
+        SelfKind::MutRef => {
+            output.push_str("&mut self");
+            return;
+        }
+        SelfKind::None => {}
+    }
+    if param.name == "self" {
+        if let Type::Reference(inner) = &param.ty
+            && matches!(inner.as_ref(), Type::Named(n) if n.name == "Self")
+        {
+            output.push_str("&self");
+            return;
+        }
+        if let Type::MutReference(inner) = &param.ty
+            && matches!(inner.as_ref(), Type::Named(n) if n.name == "Self")
+        {
+            output.push_str("&mut self");
+            return;
+        }
+    }
+    if param.is_mut {
+        output.push_str("mut ");
+    }
+    output.push_str(&param.name);
+    output.push_str(": ");
+    unparse_type_into(&param.ty, output);
+}
+
+pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &mut String) {
+    if effects.is_empty() && stores.is_empty() {
+        return;
+    }
+    output.push_str(" with ");
+    if !effects.is_empty() {
+        output.push_str(&effects.join(", "));
+        if !stores.is_empty() {
+            output.push_str(", ");
+        }
+    }
+    if !stores.is_empty() {
+        output.push_str("stores[");
+        output.push_str(&stores.join(", "));
+        output.push(']');
+    }
+}
+
+/// with-clause for function-type position (`stores[0, 1]` with positional indices).
+fn unparse_fn_type_with_clause_into(
+    effects: &[String],
+    stores: &[StoresEntry],
+    output: &mut String,
+) {
+    if effects.is_empty() && stores.is_empty() {
+        return;
+    }
+    output.push_str(" with ");
+    if !effects.is_empty() {
+        output.push_str(&effects.join(", "));
+        if !stores.is_empty() {
+            output.push_str(", ");
+        }
+    }
+    if !stores.is_empty() {
+        output.push_str("stores[");
+        let entries: Vec<String> = stores.iter().map(ToString::to_string).collect();
+        output.push_str(&entries.join(", "));
+        output.push(']');
+    }
+}
+
+pub fn unparse_enum_case(enum_name: &str, case: &EnumCase) -> String {
+    format!("{enum_name}::{}", case.name)
+}
+
+pub fn unparse_variant_case(variant_name: &str, case: &VariantCase) -> String {
+    let mut out = format!("{variant_name}::{}", case.name);
+    if let Some(payload) = &case.payload {
+        out.push('(');
+        unparse_type_into(payload, &mut out);
+        out.push(')');
+    }
+    out
+}
+
+pub fn unparse_struct_field(struct_name: &str, field: &StructField) -> String {
+    let mut out = format!("{struct_name}.{}: ", field.name);
+    unparse_type_into(&field.ty, &mut out);
+    out
 }
 
 use crate::lexer::is_valid_ident;
