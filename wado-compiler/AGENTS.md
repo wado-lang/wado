@@ -163,3 +163,12 @@ Step 1 is a stepping stone, not throwaway: `AstId`, query API shape, phase separ
 - This plan does **not** change the language, `Package` format, or codegen output.
 - Batch compilation (`wado compile`) continues to work by driving the queries end-to-end.
 - Diagnostics format is unchanged; only how they are computed and cached changes.
+
+### `name_span` Convention
+
+Every AST declaration must carry a `name_span: Span` covering **only the name identifier**, in addition to the existing `span` (which covers the whole item).
+
+- Why: LSP features (go-to-definition, hover target, rename, semantic token for declaration name) need to highlight/click the name alone. The item-wide `span` is too coarse; lexer heuristics to recover the name position are fragile and duplicated in wado-lsp.
+- Where: `Function`, `Struct`, `Enum` (and each enum member), `Variant` (and each variant case), `Flags` (and each flag member), `Trait`, `Newtype`, `Effect`, `Global`, `Impl` method, `LetStatement` binding, function/closure `Parameter`, generic `TypeParameter`.
+- Parser responsibility: capture the span at the identifier token at parse time. Do not reconstruct from `span` later.
+- Independent of the larger refactor: `name_span` can land first on its own; it is a pure additive change with immediate LSP benefit.
