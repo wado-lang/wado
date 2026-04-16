@@ -28,6 +28,37 @@ wado-lsp (this crate)          wado-cli (consumers)
 
 The engine manages open document state and delegates compilation to `wado-compiler`. Protocol adapters in `wado-cli` handle wire formats and IO.
 
+## VS Code Integration
+
+The VS Code extension embeds wado-lsp as a Wasm module. There is no subprocess mode — Wasm-only keeps the architecture simple and enables both desktop and web with a single path.
+
+### Why Wasm-only
+
+- **Zero-install**: Users install only the VS Code extension. No separate `wado` binary needed.
+- **VS Code Web**: Works on github.dev and vscode.dev out of the box.
+- **Sandbox & tutorials**: Enables rich browser-based playground and interactive tutorials without a server.
+- **Single code path**: One integration to maintain, not two.
+
+### How it works
+
+```
+VS Code Extension (TypeScript)
+  │
+  ├── wado_lsp.wasm          (Engine compiled to Wasm)
+  │     ↑
+  │     │  open_document(), diagnostics(), ...
+  │     │
+  ├── CompilerHost (TS)       Implements load_source via VS Code workspace API
+  │
+  └── VS Code Adapter (TS)    Converts Engine results → VS Code Diagnostics API
+```
+
+1. **wasm-pack build**: Compile `wado-lsp` to Wasm, expose `Engine` methods via `wasm-bindgen`.
+2. **CompilerHost in TypeScript**: Implement `load_source` using `vscode.workspace.fs` (desktop) or in-memory files (web/sandbox).
+3. **VS Code adapter**: Convert `Diagnostic`, `Position`, `Range` to `vscode.Diagnostic`, `vscode.Position`, `vscode.Range`.
+
+The `CompilerHost` trait is async, so the TypeScript side returns Promises naturally.
+
 ## Usage
 
 ```rust
