@@ -134,10 +134,7 @@ impl LspSession {
 fn lsp_initialize_returns_capabilities() {
     let mut session = LspSession::start();
 
-    let id = session.send_request(
-        "initialize",
-        json!({ "capabilities": {} }),
-    );
+    let id = session.send_request("initialize", json!({ "capabilities": {} }));
 
     let resp = session.read_message();
     assert_eq!(resp["id"], id);
@@ -178,7 +175,10 @@ fn lsp_diagnostics_on_did_open_valid() {
     assert_eq!(notif["params"]["uri"], "file:///tmp/lsp_test_valid.wado");
 
     let diags = notif["params"]["diagnostics"].as_array().unwrap();
-    assert!(diags.is_empty(), "valid file should produce no diagnostics, got: {diags:?}");
+    assert!(
+        diags.is_empty(),
+        "valid file should produce no diagnostics, got: {diags:?}"
+    );
 
     assert_eq!(session.shutdown_and_exit(), 0);
 }
@@ -267,7 +267,10 @@ fn lsp_diagnostics_update_on_did_change() {
 
     let notif2 = session.read_message();
     let diags2 = notif2["params"]["diagnostics"].as_array().unwrap();
-    assert!(diags2.is_empty(), "errors should be cleared after fix, got: {diags2:?}");
+    assert!(
+        diags2.is_empty(),
+        "errors should be cleared after fix, got: {diags2:?}"
+    );
 
     assert_eq!(session.shutdown_and_exit(), 0);
 }
@@ -320,10 +323,13 @@ fn lsp_unknown_method_returns_error() {
     session.send_request("initialize", json!({ "capabilities": {} }));
     let _init_resp = session.read_message();
 
-    let id = session.send_request("textDocument/hover", json!({
-        "textDocument": { "uri": "file:///tmp/test.wado" },
-        "position": { "line": 0, "character": 0 }
-    }));
+    let id = session.send_request(
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": "file:///tmp/test.wado" },
+            "position": { "line": 0, "character": 0 }
+        }),
+    );
 
     let resp = session.read_message();
     assert_eq!(resp["id"], id);
@@ -384,7 +390,11 @@ fn lsp_exit_without_shutdown_returns_nonzero() {
 
     drop(child.stdin.take());
     let status = child.wait().unwrap();
-    assert_eq!(status.code().unwrap(), 1, "exit without shutdown should return 1");
+    assert_eq!(
+        status.code().unwrap(),
+        1,
+        "exit without shutdown should return 1"
+    );
 }
 
 // ===========================================================================
@@ -403,7 +413,11 @@ fn query_diagnostics_valid_file() {
 #[test]
 fn query_diagnostics_invalid_file() {
     let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
-    std::fs::write(tmp.path(), "export fn run() {\n    let x: i32 = \"oops\";\n}\n").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "export fn run() {\n    let x: i32 = \"oops\";\n}\n",
+    )
+    .unwrap();
 
     wado()
         .args(["query", "diagnostics", tmp.path().to_str().unwrap()])
@@ -416,17 +430,27 @@ fn query_diagnostics_invalid_file() {
 #[test]
 fn query_diagnostics_json_output() {
     let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
-    std::fs::write(tmp.path(), "export fn run() {\n    let x: i32 = \"oops\";\n}\n").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "export fn run() {\n    let x: i32 = \"oops\";\n}\n",
+    )
+    .unwrap();
 
     let output = wado()
-        .args(["query", "diagnostics", "--json", tmp.path().to_str().unwrap()])
+        .args([
+            "query",
+            "diagnostics",
+            "--json",
+            tmp.path().to_str().unwrap(),
+        ])
         .assert()
         .failure()
         .get_output()
         .stdout
         .clone();
 
-    let parsed: Vec<Value> = serde_json::from_slice(&output).expect("output should be valid JSON array");
+    let parsed: Vec<Value> =
+        serde_json::from_slice(&output).expect("output should be valid JSON array");
     assert!(!parsed.is_empty(), "should have at least one diagnostic");
 
     let first = &parsed[0];
@@ -447,7 +471,10 @@ fn query_diagnostics_json_valid_file() {
         .clone();
 
     let parsed: Vec<Value> = serde_json::from_slice(&output).unwrap();
-    assert!(parsed.is_empty(), "valid file should produce empty JSON array");
+    assert!(
+        parsed.is_empty(),
+        "valid file should produce empty JSON array"
+    );
 }
 
 #[test]

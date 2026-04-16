@@ -1,6 +1,4 @@
-use wado_compiler::{
-    Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity,
-};
+use wado_compiler::{Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity};
 
 /// LSP-compatible diagnostic severity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

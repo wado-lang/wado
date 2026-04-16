@@ -49,8 +49,7 @@ pub async fn run() {
             "shutdown" => {
                 shutdown_requested = true;
                 if let Some(id) = id
-                    && let Err(e) =
-                        lsp_adapter::send_response(&mut writer, id, Value::Null).await
+                    && let Err(e) = lsp_adapter::send_response(&mut writer, id, Value::Null).await
                 {
                     eprintln!("wado-lsp: {e}");
                     break;

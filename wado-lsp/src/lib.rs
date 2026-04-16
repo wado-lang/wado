@@ -44,11 +44,7 @@ impl Engine {
     ///
     /// Runs the compiler with a silent host that collects diagnostics without printing.
     /// The `host` is used to load imported modules from the filesystem (or any other source).
-    pub async fn diagnostics<H: CompilerHost>(
-        &self,
-        uri: &str,
-        host: &H,
-    ) -> Vec<Diagnostic> {
+    pub async fn diagnostics<H: CompilerHost>(&self, uri: &str, host: &H) -> Vec<Diagnostic> {
         let Some(source) = self.documents.get(uri) else {
             return Vec::new();
         };
@@ -113,10 +109,7 @@ impl<'a, H> DiagnosticCollector<'a, H> {
 }
 
 impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
-    async fn load_source(
-        &self,
-        path: &str,
-    ) -> Result<Vec<u8>, wado_compiler::SourceError> {
+    async fn load_source(&self, path: &str) -> Result<Vec<u8>, wado_compiler::SourceError> {
         self.inner.load_source(path).await
     }
 
@@ -133,7 +126,10 @@ mod tests {
     fn test_open_and_close_document() {
         let mut engine = Engine::new();
         engine.open_document("file:///test.wado", "fn run() {}".to_string());
-        assert_eq!(engine.get_document("file:///test.wado"), Some("fn run() {}"));
+        assert_eq!(
+            engine.get_document("file:///test.wado"),
+            Some("fn run() {}")
+        );
         engine.close_document("file:///test.wado");
         assert_eq!(engine.get_document("file:///test.wado"), None);
     }
@@ -143,15 +139,15 @@ mod tests {
         let mut engine = Engine::new();
         engine.open_document("file:///test.wado", "let x = 1;".to_string());
         engine.update_document("file:///test.wado", "let x = 2;".to_string());
-        assert_eq!(
-            engine.get_document("file:///test.wado"),
-            Some("let x = 2;")
-        );
+        assert_eq!(engine.get_document("file:///test.wado"), Some("let x = 2;"));
     }
 
     #[test]
     fn test_uri_to_filename() {
-        assert_eq!(uri_to_filename("file:///home/user/test.wado"), "/home/user/test.wado");
+        assert_eq!(
+            uri_to_filename("file:///home/user/test.wado"),
+            "/home/user/test.wado"
+        );
         assert_eq!(uri_to_filename("untitled:1"), "untitled:1");
     }
 }

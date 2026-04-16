@@ -181,8 +181,7 @@ async fn async_main() {
                         wado_cli::lsp::run().await;
                     }
                     Cmd::Query => {
-                        let opts =
-                            wado_cli::query::parse_args(parser).unwrap_or_else(|e| e.exit());
+                        let opts = wado_cli::query::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::query::run(opts).await;
                     }
                 }
