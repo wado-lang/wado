@@ -15,6 +15,7 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
+use crate::name::ModuleSource;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
@@ -66,7 +67,9 @@ struct LocalUsage {
     read_count: u32,
     /// Whether the local is ever assigned to (after initialization)
     is_assigned: bool,
-    /// Whether a field of this local is ever assigned (e.g., `x.field = ...`)
+    /// Whether a field of this local is ever assigned (e.g., `x.field = ...`),
+    /// or whether a `&mut` reference to the local was taken (which may mutate
+    /// the local through the reference, e.g. after inlining an `&mut self` method).
     has_field_mutation: bool,
     /// Whether the local has its address taken
     address_taken: bool,
@@ -145,36 +148,56 @@ struct AnalysisResult {
     usage: IndexMap<u32, LocalUsage>,
 }
 
-fn analyze_function_body(body: &TirBlock, type_table: &TypeTable) -> AnalysisResult {
+/// Map from `(ModuleSource, function_name)` to the first parameter's `TypeId`.
+/// Used to determine whether a non-inlined method call mutates its receiver
+/// (i.e., whether the first param is `&mut T` even when the receiver expression
+/// has type `T`).
+type FirstParamTypes = IndexMap<(ModuleSource, String), TypeId>;
+
+fn analyze_function_body(
+    body: &TirBlock,
+    type_table: &TypeTable,
+    first_param_types: &FirstParamTypes,
+) -> AnalysisResult {
     let mut result = AnalysisResult {
         bindings: Vec::new(),
         usage: IndexMap::default(),
     };
-    analyze_block(body, &mut result, type_table);
+    analyze_block(body, &mut result, type_table, first_param_types);
     result
 }
 
-fn analyze_block(block: &TirBlock, result: &mut AnalysisResult, type_table: &TypeTable) {
+fn analyze_block(
+    block: &TirBlock,
+    result: &mut AnalysisResult,
+    type_table: &TypeTable,
+    first_param_types: &FirstParamTypes,
+) {
     for stmt in &block.stmts {
         // Check for copy bindings at statement level
         if let Some(binding) = analyze_copy_binding(stmt) {
             result.bindings.push(binding);
         }
-        analyze_stmt(stmt, result, type_table);
+        analyze_stmt(stmt, result, type_table, first_param_types);
     }
 }
 
-fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult, type_table: &TypeTable) {
+fn analyze_stmt(
+    stmt: &TirStmt,
+    result: &mut AnalysisResult,
+    type_table: &TypeTable,
+    first_param_types: &FirstParamTypes,
+) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } => {
-            analyze_expr(value, result, type_table);
+            analyze_expr(value, result, type_table, first_param_types);
         }
         TirStmtKind::Expr(expr) => {
-            analyze_expr(expr, result, type_table);
+            analyze_expr(expr, result, type_table, first_param_types);
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                analyze_expr(v, result, type_table);
+                analyze_expr(v, result, type_table, first_param_types);
             }
         }
         TirStmtKind::If {
@@ -182,17 +205,17 @@ fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult, type_table: &TypeTa
             then_block,
             else_block,
         } => {
-            analyze_expr(condition, result, type_table);
-            analyze_block(then_block, result, type_table);
+            analyze_expr(condition, result, type_table, first_param_types);
+            analyze_block(then_block, result, type_table, first_param_types);
             if let Some(eb) = else_block {
-                analyze_block(eb, result, type_table);
+                analyze_block(eb, result, type_table, first_param_types);
             }
         }
         TirStmtKind::Loop { body } => {
-            analyze_block(body, result, type_table);
+            analyze_block(body, result, type_table, first_param_types);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            analyze_block(block, result, type_table);
+            analyze_block(block, result, type_table, first_param_types);
         }
         TirStmtKind::IfLet {
             scrutinee,
@@ -200,20 +223,20 @@ fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult, type_table: &TypeTa
             else_block,
             ..
         } => {
-            analyze_expr(scrutinee, result, type_table);
-            analyze_block(then_block, result, type_table);
+            analyze_expr(scrutinee, result, type_table, first_param_types);
+            analyze_block(then_block, result, type_table, first_param_types);
             if let Some(eb) = else_block {
-                analyze_block(eb, result, type_table);
+                analyze_block(eb, result, type_table, first_param_types);
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                analyze_expr(v, result, type_table);
+                analyze_expr(v, result, type_table, first_param_types);
             }
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LetDestructure { value, .. } => {
-            analyze_expr(value, result, type_table);
+            analyze_expr(value, result, type_table, first_param_types);
         }
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -224,7 +247,12 @@ fn analyze_stmt(stmt: &TirStmt, result: &mut AnalysisResult, type_table: &TypeTa
     }
 }
 
-fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTable) {
+fn analyze_expr(
+    expr: &TirExpr,
+    result: &mut AnalysisResult,
+    type_table: &TypeTable,
+    first_param_types: &FirstParamTypes,
+) {
     match &expr.kind {
         TirExprKind::Local { index, .. } => {
             result.usage.entry(*index).or_default().read_count += 1;
@@ -239,54 +267,76 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
             {
                 result.usage.entry(*index).or_default().has_field_mutation = true;
             }
-            analyze_expr(target, result, type_table);
-            analyze_expr(value, result, type_table);
+            analyze_expr(target, result, type_table, first_param_types);
+            analyze_expr(value, result, type_table, first_param_types);
         }
         TirExprKind::Unary { op, expr: inner } => {
             if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
                 && let TirExprKind::Local { index, .. } = &inner.kind
             {
                 result.usage.entry(*index).or_default().address_taken = true;
+                // Taking `&mut x` means `x` may be mutated through the reference
+                // (e.g. after inlining an `&mut self` method, the inlined body
+                // contains `let self = &mut c` — the mutation of `*self` is not
+                // visible as a direct field write on `c`, so we use the MutRef
+                // itself as the mutation signal).
+                if matches!(op, TirUnaryOp::MutRef) {
+                    result.usage.entry(*index).or_default().has_field_mutation = true;
+                }
             }
-            analyze_expr(inner, result, type_table);
+            analyze_expr(inner, result, type_table, first_param_types);
         }
         TirExprKind::Binary { left, right, .. } => {
-            analyze_expr(left, result, type_table);
-            analyze_expr(right, result, type_table);
+            analyze_expr(left, result, type_table, first_param_types);
+            analyze_expr(right, result, type_table, first_param_types);
         }
         TirExprKind::Call { args, .. } => {
             for arg in args {
                 if arg.is_mut && may_mutate_through_arg(&arg.expr, type_table) {
                     mark_potentially_mutated_local(&arg.expr, result);
                 }
-                analyze_expr(&arg.expr, result, type_table);
+                analyze_expr(&arg.expr, result, type_table, first_param_types);
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                analyze_expr(arg, result, type_table);
+                analyze_expr(arg, result, type_table, first_param_types);
             }
         }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            if may_mutate_caller_state(receiver, type_table) {
+        TirExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } => {
+            // A method call mutates its receiver when the method's first parameter
+            // is `&mut Self`. In TIR, auto-ref is implicit: the receiver expression
+            // has type `T` even when the method is declared as `fn f(&mut self)`.
+            // Check both the receiver type (already `&mut T`) and the function's
+            // first param type (for the case where receiver is still plain `T`).
+            let receiver_is_mut_ref = may_mutate_caller_state(receiver, type_table);
+            let func_first_param_is_mut_ref = first_param_types
+                .get(&(func.module_source.clone(), func.name.clone()))
+                .is_some_and(|&tp| matches!(type_table.get(tp), ResolvedType::MutRef(_)));
+            if receiver_is_mut_ref || func_first_param_is_mut_ref {
                 mark_potentially_mutated_local(receiver, result);
             }
-            analyze_expr(receiver, result, type_table);
+            analyze_expr(receiver, result, type_table, first_param_types);
             for arg in args {
                 if arg.is_mut && may_mutate_through_arg(&arg.expr, type_table) {
                     mark_potentially_mutated_local(&arg.expr, result);
                 }
-                analyze_expr(&arg.expr, result, type_table);
+                analyze_expr(&arg.expr, result, type_table, first_param_types);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            analyze_expr(callee, result, type_table);
+            analyze_expr(callee, result, type_table, first_param_types);
             for arg in args {
-                analyze_expr(arg, result, type_table);
+                analyze_expr(arg, result, type_table, first_param_types);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            analyze_expr(functor, result, type_table);
+            analyze_expr(functor, result, type_table, first_param_types);
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
@@ -294,47 +344,47 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
         } => {
-            analyze_expr(inner, result, type_table);
+            analyze_expr(inner, result, type_table, first_param_types);
         }
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            analyze_expr(inner, result, type_table);
-            analyze_expr(index, result, type_table);
+            analyze_expr(inner, result, type_table, first_param_types);
+            analyze_expr(index, result, type_table, first_param_types);
         }
         TirExprKind::Cast { expr: inner, .. } => {
-            analyze_expr(inner, result, type_table);
+            analyze_expr(inner, result, type_table, first_param_types);
         }
         TirExprKind::Block(block) => {
-            analyze_block(block, result, type_table);
+            analyze_block(block, result, type_table, first_param_types);
         }
         TirExprKind::LabeledBlock { block, .. } => {
-            analyze_block(block, result, type_table);
+            analyze_block(block, result, type_table, first_param_types);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            analyze_expr(condition, result, type_table);
-            analyze_block(then_branch, result, type_table);
+            analyze_expr(condition, result, type_table, first_param_types);
+            analyze_block(then_branch, result, type_table, first_param_types);
             if let Some(eb) = else_branch {
-                analyze_block(eb, result, type_table);
+                analyze_block(eb, result, type_table, first_param_types);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                analyze_expr(&field.value, result, type_table);
+                analyze_expr(&field.value, result, type_table, first_param_types);
             }
         }
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                analyze_expr(elem, result, type_table);
+                analyze_expr(elem, result, type_table, first_param_types);
             }
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
-                analyze_expr(payload_expr, result, type_table);
+                analyze_expr(payload_expr, result, type_table, first_param_types);
             }
         }
         TirExprKind::Closure { body, captures, .. } => {
@@ -345,25 +395,25 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
                     .or_default()
                     .is_captured = true;
             }
-            analyze_expr(body, result, type_table);
+            analyze_expr(body, result, type_table, first_param_types);
         }
         TirExprKind::Match { expr: inner, arms } => {
-            analyze_expr(inner, result, type_table);
+            analyze_expr(inner, result, type_table, first_param_types);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    analyze_expr(guard, result, type_table);
+                    analyze_expr(guard, result, type_table, first_param_types);
                 }
-                analyze_expr(&arm.body, result, type_table);
+                analyze_expr(&arm.body, result, type_table, first_param_types);
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            analyze_expr(value, result, type_table);
+            analyze_expr(value, result, type_table, first_param_types);
         }
         TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
-            analyze_expr(expr, result, type_table);
+            analyze_expr(expr, result, type_table, first_param_types);
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            analyze_expr(expr, result, type_table);
+            analyze_expr(expr, result, type_table, first_param_types);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -371,11 +421,11 @@ fn analyze_expr(expr: &TirExpr, result: &mut AnalysisResult, type_table: &TypeTa
             default,
             ..
         } => {
-            analyze_expr(scrutinee, result, type_table);
+            analyze_expr(scrutinee, result, type_table, first_param_types);
             for arm in arms {
-                analyze_block(arm, result, type_table);
+                analyze_block(arm, result, type_table, first_param_types);
             }
-            analyze_block(default, result, type_table);
+            analyze_block(default, result, type_table, first_param_types);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
@@ -826,7 +876,11 @@ fn apply_in_expr(
 
 /// Eliminate trivial copy bindings in a function.
 /// Uses merged analysis (1 walk) and merged substitute+remove (1 walk) per iteration.
-fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
+fn propagate_copies_in_function(
+    func: &mut TirFunction,
+    type_table: &TypeTable,
+    first_param_types: &FirstParamTypes,
+) -> bool {
     let Some(body) = &mut func.body else {
         return false;
     };
@@ -835,7 +889,7 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
 
     loop {
         // Step 1: Collect copy bindings and usage info in a single walk
-        let analysis = analyze_function_body(body, type_table);
+        let analysis = analyze_function_body(body, type_table, first_param_types);
 
         if analysis.bindings.is_empty() {
             break;
@@ -893,9 +947,20 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
 pub fn propagate_copies(project: &mut FlatPackage) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
+    // Build a map from (module_source, function_name) → first-param TypeId so that
+    // MethodCall analysis can determine whether a call with an implicit-ref receiver
+    // (e.g. `c.increment()` where `increment` takes `&mut self`) mutates the receiver.
+    let mut first_param_types: FirstParamTypes = IndexMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        if let Some(first_param) = func.params.first() {
+            let key = (func.module_source.clone(), func.name.clone());
+            first_param_types.insert(key, first_param.type_id);
+        }
+    }
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        changed |= propagate_copies_in_function(&mut func, &type_table);
+        changed |= propagate_copies_in_function(&mut func, &type_table, &first_param_types);
     }
     changed
 }

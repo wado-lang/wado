@@ -643,6 +643,69 @@ fn elide_value_copies_cross_scope(
     }
 }
 
+/// Extract the source local name from the inner expression of a `ValueCopy`.
+///
+/// Traces through `RefAsNonNull` and `RefCast` wrappers to find the innermost
+/// `LocalGet`. Returns `None` when the inner expression is not rooted at a local
+/// variable (e.g. a literal, a call return value, or a struct field access).
+///
+/// `StructGet` is intentionally not traced: eliding `value_copy(self.field)` to
+/// `self.field` is always safe because the local captures the field value at
+/// assignment time, independent of any later mutations to `self.field`.
+fn value_copy_source_local(expr: &WirInstr) -> Option<&str> {
+    match expr {
+        WirInstr::LocalGet { name, .. } => Some(name.as_str()),
+        WirInstr::RefAsNonNull(inner) | WirInstr::RefCast { expr: inner, .. } => {
+            value_copy_source_local(inner)
+        }
+        _ => None,
+    }
+}
+
+/// Returns `true` if `instr` does not potentially mutate or escape `var_name`.
+///
+/// This is intentionally weaker than `uses_of_var_are_reads_only`: source-safety
+/// for copy elision only needs to prevent alias-corrupting writes/escapes, not
+/// reject every non-trivial read pattern.
+fn no_potential_source_mutation_or_escape(instr: &WirInstr, var_name: &str) -> bool {
+    match instr {
+        // Direct mutation through the variable (or a projection rooted at it).
+        WirInstr::StructSet { expr, .. } => !expr_roots_at_var(expr, var_name),
+        // Unknown calls may mutate through arguments; be conservative when the
+        // source variable appears in any argument expression.
+        WirInstr::Call { args, .. } | WirInstr::CallRef { args, .. } => args
+            .iter()
+            .all(|arg| !instr_contains_local_get(arg, var_name)),
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => body
+            .iter()
+            .all(|i| no_potential_source_mutation_or_escape(i, var_name)),
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            no_potential_source_mutation_or_escape(condition, var_name)
+                && then_body
+                    .iter()
+                    .all(|i| no_potential_source_mutation_or_escape(i, var_name))
+                && else_body.as_ref().is_none_or(|eb| {
+                    eb.iter()
+                        .all(|i| no_potential_source_mutation_or_escape(i, var_name))
+                })
+        }
+        _ => {
+            let mut ok = true;
+            instr.for_each_child(&mut |child| {
+                if ok {
+                    ok = no_potential_source_mutation_or_escape(child, var_name);
+                }
+            });
+            ok
+        }
+    }
+}
+
 /// Recursively walk a single instruction, eliding `value_copies` and descending
 /// into nested blocks/ifs/seqs.
 fn elide_value_copies_in_instr(
@@ -656,14 +719,21 @@ fn elide_value_copies_in_instr(
             if let WirInstr::ValueCopy { expr, .. } = value.as_ref()
                 && is_fresh_via_defs(expr, defs)
             {
-                // Safety check: only elide if the destination local is never
-                // mutated (no StructSet, no mutable call args, etc.).
-                // Otherwise skipping the copy creates an alias that could be
-                // corrupted by mutation, violating Wado's value semantics.
-                if remaining
+                // Safety check: only elide if:
+                // 1. The destination local is never mutated in the remaining
+                //    instructions (no StructSet, no mutable call args, etc.).
+                // 2. The source local is not mutated after the copy point.
+                //    Eliding the copy creates an alias; any subsequent mutation
+                //    of the source would corrupt the destination's value.
+                let dest_safe = remaining
                     .iter()
-                    .all(|i| uses_of_var_are_reads_only(i, name))
-                {
+                    .all(|i| uses_of_var_are_reads_only(i, name));
+                let source_safe = value_copy_source_local(expr).is_none_or(|src| {
+                    remaining
+                        .iter()
+                        .all(|i| no_potential_source_mutation_or_escape(i, src))
+                });
+                if dest_safe && source_safe {
                     let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
                     if let WirInstr::ValueCopy { expr, .. } = old {
                         *value = expr;
@@ -856,10 +926,26 @@ fn elide_copy_used_only_for_field_reads(instrs: &mut [WirInstr]) {
                 if matches!(value.as_ref(), WirInstr::ValueCopy { .. }) =>
             {
                 let var_name = name.clone();
-                let all_reads_only = instrs[i + 1..]
+                let remaining = &instrs[i + 1..];
+                // The destination must only be used for struct field reads.
+                let all_reads_only = remaining
                     .iter()
                     .all(|instr| uses_of_var_are_field_reads_only(instr, &var_name));
-                if all_reads_only && let WirInstr::LocalSet { value, .. } = &mut instrs[i] {
+                // The source must not be written to or field-mutated after the copy;
+                // otherwise eliding the copy creates an alias whose value would change.
+                let source_safe = if let WirInstr::ValueCopy { expr, .. } = value.as_ref() {
+                    value_copy_source_local(expr).is_none_or(|src| {
+                        remaining
+                            .iter()
+                            .all(|instr| no_potential_source_mutation_or_escape(instr, src))
+                    })
+                } else {
+                    true
+                };
+                if all_reads_only
+                    && source_safe
+                    && let WirInstr::LocalSet { value, .. } = &mut instrs[i]
+                {
                     let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
                     if let WirInstr::ValueCopy { expr, .. } = old {
                         *value.as_mut() = *expr;
@@ -1004,20 +1090,27 @@ fn is_safe_condition_use(instr: &WirInstr, var_name: &str) -> bool {
 }
 
 /// Returns `true` if `var_name` appears in the return/break value expression only
-/// as a direct `LocalGet(var_name)` inside `StructNew` or `ArrayNewFixed` fields.
+/// in read-only positions inside `StructNew` or `ArrayNewFixed` fields.
+///
+/// Safe field uses are:
+/// - Direct `LocalGet(var)` or `RefAsNonNull(LocalGet(var))` — the var is stored as-is.
+/// - Read-only chains rooted at `var`: `ref.cast(var).field`, `var.field`, etc.
+///   These are purely reads — no allocation or aliasing of `var` occurs.
 ///
 /// Handles multi-value returns (Seq), nested `StructNew`, and Block expressions.
-/// This is safe because each `StructNew` creates a fresh allocation — the variable
-/// reference is consumed into a new struct, not aliased or mutated.
 fn value_uses_var_only_in_struct_new_fields(instr: &WirInstr, var_name: &str) -> bool {
     match instr {
-        // StructNew/ArrayNewFixed: var must appear only as direct LocalGet in fields
+        // StructNew/ArrayNewFixed: var must appear only in safe read-only field positions
         WirInstr::StructNew { fields, .. }
         | WirInstr::ArrayNewFixed {
             elements: fields, ..
         } => {
             for field in fields {
                 if is_direct_local_get_or_non_null(field, var_name) {
+                    continue;
+                }
+                // Also safe: read-only chains like `ref.cast(var).field`
+                if expr_roots_at_var(field, var_name) {
                     continue;
                 }
                 // Recurse into nested StructNew fields
