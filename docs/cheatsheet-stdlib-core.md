@@ -2411,23 +2411,22 @@ RFC 1950 (zlib format) is supported except for preset dictionaries (FDICT);
 streams with FDICT set will return `ZlibError::PresetDictionaryNotSupported`.
 
 Features:
-
-- Adler-32 and CRC-32 checksums (with combine operations)
-- DEFLATE inflate (decompression) with dynamic/fixed Huffman and stored blocks
-- DEFLATE deflate (compression) with fixed and dynamic Huffman codes + LZ77
-- Compression levels 0-9 with strategy selection
-- zlib and gzip format support
-- Streaming deflate/inflate API
+  - Adler-32 and CRC-32 checksums (with combine operations)
+  - DEFLATE inflate (decompression) with dynamic/fixed Huffman and stored blocks
+  - DEFLATE deflate (compression) with fixed and dynamic Huffman codes + LZ77
+  - Compression levels 0-9 with strategy selection
+  - zlib and gzip format support
+  - Streaming deflate/inflate API
 
 Usage - Compression:
-let input: Array<u8> = [...];
-let compressed = zlib_compress(&input);
-let compressed_fast = compress2(&input, Z_BEST_SPEED);
-let compressed_best = compress2(&input, Z_BEST_COMPRESSION);
+  let input: Array<u8> = [...];
+  let compressed = zlib_compress(&input);
+  let compressed_fast = compress2(&input, Z_BEST_SPEED);
+  let compressed_best = compress2(&input, Z_BEST_COMPRESSION);
 
 Usage - Decompression:
-let decompressed = inflate_zlib(&compressed);
-let decompressed_gz = inflate_gzip(&gzipped_data);
+  let decompressed = inflate_zlib(&compressed);
+  let decompressed_gz = inflate_gzip(&gzipped_data);
 
 ### Globals
 

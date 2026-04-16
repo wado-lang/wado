@@ -324,7 +324,7 @@ fn lsp_unknown_method_returns_error() {
     let _init_resp = session.read_message();
 
     let id = session.send_request(
-        "textDocument/hover",
+        "textDocument/unknownMethod",
         json!({
             "textDocument": { "uri": "file:///tmp/test.wado" },
             "position": { "line": 0, "character": 0 }

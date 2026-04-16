@@ -11,10 +11,13 @@ Language service engine for the Wado compiler toolchain.
 
 ## Architecture
 
-| File                 | Role                                                            |
-| -------------------- | --------------------------------------------------------------- |
-| `src/lib.rs`         | `Engine` struct: document management + query dispatch           |
-| `src/diagnostics.rs` | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion |
+| File                     | Role                                                            |
+| ------------------------ | --------------------------------------------------------------- |
+| `src/lib.rs`             | `Engine` struct: document management + query dispatch           |
+| `src/diagnostics.rs`     | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion |
+| `src/semantic_tokens.rs` | Semantic token computation (lexer + AST classification)         |
+| `src/definition.rs`      | Go-to-definition (single-file, AST-level name resolution)       |
+| `src/hover.rs`           | Hover info (AST-level signature formatting)                     |
 
 ### Engine
 
@@ -70,7 +73,7 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 ### Language Features — Navigation
 
 - [ ] `textDocument/declaration`
-- [ ] `textDocument/definition`
+- [x] `textDocument/definition` (single-file, AST-level)
 - [ ] `textDocument/typeDefinition`
 - [ ] `textDocument/implementation`
 - [ ] `textDocument/references`
@@ -79,7 +82,7 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 
 ### Language Features — Comprehension
 
-- [ ] `textDocument/hover`
+- [x] `textDocument/hover` (single-file, AST-level signatures)
 - [ ] `textDocument/signatureHelp`
 - [ ] `textDocument/documentHighlight`
 - [ ] `textDocument/documentLink`
@@ -93,7 +96,7 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 - [ ] `textDocument/documentSymbol`
 - [ ] `textDocument/foldingRange`
 - [ ] `textDocument/selectionRange`
-- [ ] `textDocument/semanticTokens` (full / delta / range)
+- [x] `textDocument/semanticTokens` (full only, lexer+AST classification)
 - [ ] `textDocument/linkedEditingRange`
 
 ### Language Features — Editing
