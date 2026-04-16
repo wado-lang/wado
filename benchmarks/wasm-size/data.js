@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776297133793,
+  "lastUpdate": 1776332372815,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13127,6 +13127,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0dcf4cf8ba4313b531085f6f2430613e19bd565b"
         },
         "date": 1776297133518,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0b07097144873f8f8ad1568310b0a92adac5867c",
+          "message": "Merge pull request #847 from wado-lang/copilot/fix-optimizer-bug\n\nFix value_copy elision regression and refresh affected golden fixtures",
+          "timestamp": "2026-04-16T18:36:11+09:00",
+          "tree_id": "a61b340847b138da2a409619aa9b74886902c701",
+          "url": "https://github.com/wado-lang/wado/commit/0b07097144873f8f8ad1568310b0a92adac5867c"
+        },
+        "date": 1776332372518,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
