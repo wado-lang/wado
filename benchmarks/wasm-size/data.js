@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776346595188,
+  "lastUpdate": 1776381761897,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13322,6 +13322,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/56ad413861ac476a877a3e9e2a604a877ce7b4e2"
         },
         "date": 1776346594889,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d56ddc8bac17f91b583b84a82ec18a6631fcbcf",
+          "message": "Merge pull request #852 from wado-lang/claude/wado-lsp-todo-list-wEW6k\n\nLSP tier 1: semantic tokens, go-to-definition, hover + compiler unparse API",
+          "timestamp": "2026-04-17T08:19:10+09:00",
+          "tree_id": "2f9c336031a88280d03719b61fd04492c37a7392",
+          "url": "https://github.com/wado-lang/wado/commit/6d56ddc8bac17f91b583b84a82ec18a6631fcbcf"
+        },
+        "date": 1776381761617,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
