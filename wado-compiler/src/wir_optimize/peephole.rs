@@ -645,15 +645,19 @@ fn elide_value_copies_cross_scope(
 
 /// Extract the source local name from the inner expression of a `ValueCopy`.
 ///
-/// Traces through `RefAsNonNull`, `RefCast`, and `StructGet` wrappers to find
-/// the innermost `LocalGet`. Returns `None` when the inner expression is not
-/// rooted at a local variable (e.g. a literal or a call return value).
+/// Traces through `RefAsNonNull` and `RefCast` wrappers to find the innermost
+/// `LocalGet`. Returns `None` when the inner expression is not rooted at a local
+/// variable (e.g. a literal, a call return value, or a struct field access).
+///
+/// `StructGet` is intentionally not traced: eliding `value_copy(self.field)` to
+/// `self.field` is always safe because the local captures the field value at
+/// assignment time, independent of any later mutations to `self.field`.
 fn value_copy_source_local(expr: &WirInstr) -> Option<&str> {
     match expr {
         WirInstr::LocalGet { name, .. } => Some(name.as_str()),
-        WirInstr::RefAsNonNull(inner)
-        | WirInstr::RefCast { expr: inner, .. }
-        | WirInstr::StructGet { expr: inner, .. } => value_copy_source_local(inner),
+        WirInstr::RefAsNonNull(inner) | WirInstr::RefCast { expr: inner, .. } => {
+            value_copy_source_local(inner)
+        }
         _ => None,
     }
 }
@@ -880,8 +884,8 @@ fn elide_copy_used_only_for_field_reads(instrs: &mut [WirInstr]) {
                 let all_reads_only = remaining
                     .iter()
                     .all(|instr| uses_of_var_are_field_reads_only(instr, &var_name));
-                // The source must not be mutated after the copy; otherwise eliding
-                // the copy creates an alias whose value would change under the caller.
+                // The source must not be written to or field-mutated after the copy;
+                // otherwise eliding the copy creates an alias whose value would change.
                 let source_safe = if let WirInstr::ValueCopy { expr, .. } = value.as_ref() {
                     value_copy_source_local(expr).is_none_or(|src| {
                         remaining
@@ -1039,20 +1043,27 @@ fn is_safe_condition_use(instr: &WirInstr, var_name: &str) -> bool {
 }
 
 /// Returns `true` if `var_name` appears in the return/break value expression only
-/// as a direct `LocalGet(var_name)` inside `StructNew` or `ArrayNewFixed` fields.
+/// in read-only positions inside `StructNew` or `ArrayNewFixed` fields.
+///
+/// Safe field uses are:
+/// - Direct `LocalGet(var)` or `RefAsNonNull(LocalGet(var))` — the var is stored as-is.
+/// - Read-only chains rooted at `var`: `ref.cast(var).field`, `var.field`, etc.
+///   These are purely reads — no allocation or aliasing of `var` occurs.
 ///
 /// Handles multi-value returns (Seq), nested `StructNew`, and Block expressions.
-/// This is safe because each `StructNew` creates a fresh allocation — the variable
-/// reference is consumed into a new struct, not aliased or mutated.
 fn value_uses_var_only_in_struct_new_fields(instr: &WirInstr, var_name: &str) -> bool {
     match instr {
-        // StructNew/ArrayNewFixed: var must appear only as direct LocalGet in fields
+        // StructNew/ArrayNewFixed: var must appear only in safe read-only field positions
         WirInstr::StructNew { fields, .. }
         | WirInstr::ArrayNewFixed {
             elements: fields, ..
         } => {
             for field in fields {
                 if is_direct_local_get_or_non_null(field, var_name) {
+                    continue;
+                }
+                // Also safe: read-only chains like `ref.cast(var).field`
+                if expr_roots_at_var(field, var_name) {
                     continue;
                 }
                 // Recurse into nested StructNew fields
