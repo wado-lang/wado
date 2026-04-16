@@ -53,11 +53,10 @@ VS Code Extension (TypeScript)
   └── VS Code Adapter (TS)    Converts Engine results → VS Code Diagnostics API
 ```
 
-1. **Build**: `cargo build --target wasm32-unknown-unknown` + `wasm-bindgen` CLI to generate JS/TS bindings for `Engine`.
-2. **CompilerHost in TypeScript**: Implement `load_source` using `vscode.workspace.fs` (desktop) or in-memory files (web/sandbox).
-3. **VS Code adapter**: Convert `Diagnostic`, `Position`, `Range` to `vscode.Diagnostic`, `vscode.Position`, `vscode.Range`.
-
-The `CompilerHost` trait is async, so the TypeScript side returns Promises naturally.
+1. **Build**: `cargo build --target wasm32-unknown-unknown` to produce `wado_lsp.wasm`.
+2. **Handwritten C ABI bridge**: Rust side exposes `#[no_mangle] extern "C" fn` with pointer/length arguments. TypeScript side calls via `WebAssembly.instantiate` + a thin wrapper class for string marshalling over linear memory. The API surface is small (`open_document`, `close_document`, `update_document`, `diagnostics`), so handwritten bindings are simpler and lighter than wasm-bindgen.
+3. **CompilerHost in TypeScript**: Implement `load_source` using `vscode.workspace.fs` (desktop) or in-memory files (web/sandbox).
+4. **VS Code adapter**: Convert `Diagnostic`, `Position`, `Range` to `vscode.Diagnostic`, `vscode.Position`, `vscode.Range`.
 
 ## Usage
 
