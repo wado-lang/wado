@@ -3884,14 +3884,20 @@ Features:
 - Streaming deflate/inflate API
 
 Usage - Compression:
+
+```wado
 let input: Array<u8> = [...];
 let compressed = zlib_compress(&input);
 let compressed_fast = compress2(&input, Z_BEST_SPEED);
 let compressed_best = compress2(&input, Z_BEST_COMPRESSION);
+```
 
 Usage - Decompression:
+
+```wado
 let decompressed = inflate_zlib(&compressed);
 let decompressed_gz = inflate_gzip(&gzipped_data);
+```
 
 ### Globals
 
