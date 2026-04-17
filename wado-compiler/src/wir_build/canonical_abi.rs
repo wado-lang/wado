@@ -5,7 +5,7 @@
 //! These methods are part of `FunctionTranslator`; see `translate.rs` for
 //! the struct definition and the primary translation dispatch.
 
-use crate::tir::{CallArg, FunctionRef, PrimitiveType, ResolvedType, TirExpr, TypeId};
+use crate::tir::{CallArg, FunctionRef, PrimitiveType, ResolvedType, TirExpr, TirExprKind, TypeId};
 use crate::wir::{
     CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirFuncId, WirInstr,
     WirType,
@@ -151,9 +151,20 @@ impl FunctionTranslator<'_, '_> {
                 Some(self.emit_future_read(handle, result_type_id, payload))
             }
             "future-write" => {
-                let value_arg = self.translate_expr(&args[0].expr);
-                let value_type_id = args[0].expr.type_id;
+                let value_expr = &args[0].expr;
+                let value_type_id = value_expr.type_id;
                 let payload = self.cm_future_payload(receiver.type_id);
+                // Variant-shaped futures (used for trailers): pattern-match on
+                // TIR because general variant→CM lowering is not yet implemented.
+                if let Some(resource_expr) = match_ok_some_resource(value_expr) {
+                    let resource_handle = self.translate_expr(resource_expr);
+                    return Some(self.emit_future_write_ok_some_resource(handle, resource_handle));
+                }
+                if match_ok_none(value_expr) {
+                    return Some(self.emit_future_write_ok_none(handle));
+                }
+                // Scalar primitives are evaluated and lowered generically.
+                let value_arg = self.translate_expr(value_expr);
                 Some(self.emit_future_write(handle, value_arg, value_type_id, payload))
             }
             "future-cancel-read" => {
@@ -774,11 +785,14 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Emit WIR for `FutureWritable<T>::write(value)`.
+    /// Emit WIR for `FutureWritable<T>::write(value)` for scalar value types.
     ///
-    /// Dispatches to a type-specific emitter based on `value_type_id`:
-    /// - Scalar numeric types (i8–i64, u8–u64, bool, char): `emit_future_write_scalar`
-    /// - `Result<Option<R>, E>::Ok(null)` pattern: `emit_future_write_ok_none`
+    /// The variant-shaped futures (`Result<Option<R>, E>::Ok(None)` and
+    /// `::Ok(Some(<resource>))`) are dispatched at the call site in
+    /// `try_translate_canonical_method` because they require TIR-level
+    /// pattern matching. Anything else panics — silently writing `Ok(None)`
+    /// for an unrecognized shape produces wrong runtime behavior with no
+    /// diagnostic.
     fn emit_future_write(
         &mut self,
         handle: WirInstr,
@@ -786,7 +800,6 @@ impl FunctionTranslator<'_, '_> {
         value_type_id: TypeId,
         payload: CmFuturePayload,
     ) -> WirInstr {
-        // Check if the value type is a scalar numeric type
         if let ResolvedType::Primitive(
             PrimitiveType::I8
             | PrimitiveType::I16
@@ -803,8 +816,12 @@ impl FunctionTranslator<'_, '_> {
             return self.emit_future_write_scalar(handle, value, value_type_id, payload);
         }
 
-        // Fallback: Result<Option<R>, E>::Ok(null) pattern (trailers)
-        self.emit_future_write_ok_none(handle)
+        panic!(
+            "[WIR] FutureWritable::write: unsupported value of type_id={value_type_id:?}. \
+             Currently supported: scalar primitives (i8..i64, u8..u64, bool, char), \
+             Result::Ok(Option::None), Result::Ok(Option::Some(<resource>)). \
+             General variant→CM lowering is not yet implemented."
+        );
     }
 
     /// Emit WIR to write a scalar numeric value into a `FutureWritable` handle.
@@ -1163,5 +1180,226 @@ impl FunctionTranslator<'_, '_> {
         })));
 
         WirInstr::Seq(seq)
+    }
+
+    /// Emit WIR for `FutureWritable::write(Result::Ok(Option::Some(handle)))`,
+    /// the trailer-shape future used to deliver a Fields resource.
+    ///
+    /// CM layout written to the buffer for `result<option<own<R>>, error-code>`:
+    /// - offset 0:  result disc (u8) = 0 (Ok)
+    /// - offsets 1-7: padding (payload align = 8 because error-code contains
+    ///   cases with `option<u64>` payload — overall align is 8)
+    /// - offset 8:  option disc (u8) = 1 (Some)
+    /// - offsets 9-11: padding
+    /// - offset 12: own<R> resource handle (u32)
+    fn emit_future_write_ok_some_resource(
+        &mut self,
+        handle: WirInstr,
+        resource_handle: WirInstr,
+    ) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            panic!("[WIR] emit_future_write_ok_some_resource: builtin/realloc not registered");
+        };
+        let future_write_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::FutureWrite(CmFuturePayload::Trailers),
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+        let ws_new_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetNew,
+            vec![],
+            vec![WirType::I32],
+        );
+        let w_join_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableJoin,
+            vec![WirType::I32, WirType::I32],
+            vec![],
+        );
+        let ws_wait_id = self.ctx.ensure_canonical(
+            CanonicalIntrinsic::WaitableSetWait,
+            vec![WirType::I32, WirType::I32],
+            vec![WirType::I32],
+        );
+
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let ptr_name = format!("__fw_write_ptr_{suffix}");
+        let handle_name = format!("__fw_handle_{suffix}");
+        let result_name = format!("__fw_result_{suffix}");
+        let evt_name = format!("__fw_evt_{suffix}");
+        let resource_name = format!("__fw_resource_{suffix}");
+
+        const BUF_SIZE: i32 = 40;
+        const BUF_ALIGN: i32 = 8;
+
+        let mut seq = vec![];
+
+        for (name, ty) in [
+            (&ptr_name, WirType::I32),
+            (&handle_name, WirType::I32),
+            (&result_name, WirType::I32),
+            (&resource_name, WirType::I32),
+        ] {
+            seq.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+
+        seq.push(WirInstr::LocalSet {
+            name: handle_name.clone(),
+            value: Box::new(handle),
+        });
+
+        seq.push(WirInstr::LocalSet {
+            name: resource_name.clone(),
+            value: Box::new(resource_handle),
+        });
+
+        seq.push(WirInstr::LocalSet {
+            name: ptr_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: realloc_id.clone(),
+                args: vec![
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(BUF_ALIGN),
+                    WirInstr::I32Const(BUF_SIZE),
+                ],
+            }),
+        });
+
+        for i in 0..(BUF_SIZE / 8) {
+            seq.push(WirInstr::I64Store {
+                offset: u64::from((i * 8).cast_unsigned()),
+                align: 3,
+                addr: Box::new(WirInstr::LocalGet {
+                    name: ptr_name.clone(),
+                    result_ty: WirType::I32,
+                }),
+                value: Box::new(WirInstr::I64Const(0)),
+            });
+        }
+
+        seq.push(WirInstr::I32Store8 {
+            offset: 8,
+            align: 0,
+            addr: Box::new(WirInstr::LocalGet {
+                name: ptr_name.clone(),
+                result_ty: WirType::I32,
+            }),
+            value: Box::new(WirInstr::I32Const(1)),
+        });
+
+        seq.push(WirInstr::I32Store {
+            offset: 12,
+            align: 2,
+            addr: Box::new(WirInstr::LocalGet {
+                name: ptr_name.clone(),
+                result_ty: WirType::I32,
+            }),
+            value: Box::new(WirInstr::LocalGet {
+                name: resource_name,
+                result_ty: WirType::I32,
+            }),
+        });
+
+        seq.push(WirInstr::LocalSet {
+            name: result_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: future_write_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: handle_name.clone(),
+                        result_ty: WirType::I32,
+                    },
+                    WirInstr::LocalGet {
+                        name: ptr_name.clone(),
+                        result_ty: WirType::I32,
+                    },
+                ],
+            }),
+        });
+
+        seq.push(self.emit_future_write_blocked_wait(
+            &handle_name,
+            &result_name,
+            &evt_name,
+            &realloc_id,
+            &ws_new_id,
+            &w_join_id,
+            &ws_wait_id,
+        ));
+
+        seq.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id,
+            args: vec![
+                WirInstr::LocalGet {
+                    name: ptr_name,
+                    result_ty: WirType::I32,
+                },
+                WirInstr::I32Const(BUF_SIZE),
+                WirInstr::I32Const(BUF_ALIGN),
+                WirInstr::I32Const(0),
+            ],
+        })));
+
+        WirInstr::Seq(seq)
+    }
+}
+
+/// Detect `Result::Ok(Option::Some(<inner>))` at TIR level and return `<inner>`.
+///
+/// Used to special-case future writes that deliver a single resource handle
+/// (e.g. trailers) via the `Result<Option<own<R>>, _>` shape, since general
+/// variant→CM-buffer lowering is not yet implemented.
+fn match_ok_some_resource(expr: &TirExpr) -> Option<&TirExpr> {
+    let TirExprKind::VariantConstruct {
+        case_name: outer,
+        payload: Some(outer_payload),
+        ..
+    } = &expr.kind
+    else {
+        return None;
+    };
+    if outer != "Ok" {
+        return None;
+    }
+    let TirExprKind::VariantConstruct {
+        case_name: inner,
+        payload: Some(inner_payload),
+        ..
+    } = &outer_payload.kind
+    else {
+        return None;
+    };
+    if inner != "Some" {
+        return None;
+    }
+    Some(inner_payload)
+}
+
+/// Detect `Result::Ok(Option::None)` or `Result::Ok(null)` at TIR level.
+/// `null` stays as `TirExprKind::Null` in TIR (coerced to `Option::None` later).
+fn match_ok_none(expr: &TirExpr) -> bool {
+    let TirExprKind::VariantConstruct {
+        case_name: outer,
+        payload: Some(outer_payload),
+        ..
+    } = &expr.kind
+    else {
+        return false;
+    };
+    if outer != "Ok" {
+        return false;
+    }
+    match &outer_payload.kind {
+        TirExprKind::Null => true,
+        TirExprKind::VariantConstruct {
+            case_name: inner,
+            payload,
+            ..
+        } => inner == "None" && payload.is_none(),
+        _ => false,
     }
 }
