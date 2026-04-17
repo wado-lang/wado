@@ -183,35 +183,6 @@ scans per sql_stmt entry, not 9). Expect another perf improvement on
   (they are semantic-predicate-gated, not LR-gated, and out of scope
   for this work per WEP-2026-03-02).
 
-### Remaining Bottleneck: `Parser::last_end` (11.7%)
-
-| Function           | Self-time |
-| ------------------ | --------- |
-| `Parser::last_end` | 11.7%     |
-
-Called after every token consumption to compute node spans via
-`Span::new(start, p.last_end())`. The function itself is trivial (array
-index), but at millions of calls the overhead accumulates.
-
-Possible improvement: cache `last_end` in a field on `Parser` updated by
-`advance()`, avoiding repeated array indexing.
-
-### Resolved
-
-- **Backtracking (~44%)**: Eliminated by scan-then-parse optimization.
-  Lightweight scan functions check token kinds to pick the correct
-  alternative before calling the real parse function once.
-- **`Parser::expect` error path (~22%)**: Largely eliminated — scan
-  functions avoid speculative parse failures that triggered error
-  construction.
-- **Faithful scan_X for LR rules (2026-04)**: `scan_X_atom` /
-  `scan_X_prec` / `scan_X_lr_N` now mirror the parser's
-  precedence-climbing, fixing a shared-first-token LR commit bug
-  (`K_NOT K_IN` vs `K_NOT K_LIKE` under `expr`). `sqlite_parse`
-  14,883 → 11,826 µs (−21%); `sqlite.wado` `bt_try` 54 → 46;
-  `css3.wado` `bt_try` 2 → 0. LR gate in `is_rule_scannable` kept —
-  see "Next Up" above.
-
 ## Code Quality
 
 ### `parser_gen.wado`
