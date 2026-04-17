@@ -197,6 +197,8 @@ pub struct TestDecl {
 #[derive(Debug, Clone)]
 pub struct GlobalDecl {
     pub name: String,
+    /// Span of the identifier token alone (for LSP name-targeted queries).
+    pub name_span: Span,
     pub ty: Type,
     pub initializer: Expr,
     pub mutable: bool,
@@ -462,6 +464,8 @@ pub struct UseDecl {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
+    /// Span of the function name identifier alone (for LSP name-targeted queries).
+    pub name_span: Span,
     pub is_pub: bool,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,
@@ -493,6 +497,8 @@ pub enum SelfKind {
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: String,
+    /// Span of the parameter name identifier (or `self` token for self params).
+    pub name_span: Span,
     pub ty: Type,
     pub self_kind: SelfKind,
     pub is_mut: bool,
@@ -547,6 +553,12 @@ pub struct AssertStmt {
 #[derive(Debug, Clone)]
 pub struct LetStmt {
     pub pattern: Pattern,
+    /// Span of the pattern's leading token: exactly the identifier for
+    /// `Ident`/`MutIdent` patterns, or the opening delimiter/constructor for
+    /// destructuring patterns. For LSP name queries this is sufficient for the
+    /// simple cases; richer pattern-internal positions can be derived from
+    /// `pattern` itself.
+    pub name_span: Span,
     pub is_mut: bool,
     pub is_reactive: bool,
     pub ty: Option<Type>,
@@ -1181,6 +1193,8 @@ pub struct ClosureExpr {
 #[derive(Debug, Clone)]
 pub struct ClosureParam {
     pub name: String,
+    /// Span of the closure parameter name identifier.
+    pub name_span: Span,
     pub ty: Option<Type>,
     pub is_mut: bool,
 }
@@ -1280,6 +1294,8 @@ impl std::fmt::Display for StoresEntry {
 #[derive(Debug, Clone)]
 pub struct EffectDecl {
     pub name: String,
+    /// Span of the effect name identifier.
+    pub name_span: Span,
     pub is_pub: bool,
     pub attrs: Vec<Attribute>,
     pub methods: Vec<EffectMethod>,
@@ -1289,6 +1305,8 @@ pub struct EffectDecl {
 #[derive(Debug, Clone)]
 pub struct EffectMethod {
     pub name: String,
+    /// Span of the method name identifier.
+    pub name_span: Span,
     pub is_async: bool,
     pub attrs: Vec<Attribute>,
     pub params: Vec<Param>,
@@ -1318,6 +1336,8 @@ pub struct TraitBound {
 #[derive(Debug, Clone)]
 pub struct GenericParam {
     pub name: String,
+    /// Span of the type parameter name identifier.
+    pub name_span: Span,
     /// Whether this is an effect parameter (`effect E`)
     pub is_effect: bool,
     /// Whether this is a type pack parameter (`..T`)
@@ -1332,6 +1352,8 @@ pub struct GenericParam {
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
+    /// Span of the struct name identifier.
+    pub name_span: Span,
     pub is_pub: bool,
     /// Generic type parameters: `struct Pair<T, U> { ... }`
     pub type_params: Vec<GenericParam>,
@@ -1344,6 +1366,8 @@ pub struct StructDecl {
 #[derive(Debug, Clone)]
 pub struct StructField {
     pub name: String,
+    /// Span of the field name identifier.
+    pub name_span: Span,
     pub is_pub: bool,
     pub ty: Type,
     /// Attributes like `#[cm("...")]` for CM name override
@@ -1354,6 +1378,8 @@ pub struct StructField {
 #[derive(Debug, Clone)]
 pub struct EnumDecl {
     pub name: String,
+    /// Span of the enum name identifier.
+    pub name_span: Span,
     pub is_pub: bool,
     /// Generic type parameters: `enum Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
@@ -1368,6 +1394,8 @@ pub struct EnumDecl {
 #[derive(Debug, Clone)]
 pub struct EnumCase {
     pub name: String,
+    /// Span of the case name identifier.
+    pub name_span: Span,
     /// Attributes like `#[cm("wit-kebab-name")]` for CM name override
     pub attrs: Vec<Attribute>,
     pub span: Span,
@@ -1384,6 +1412,8 @@ pub struct EnumCase {
 #[derive(Debug, Clone)]
 pub struct FlagsDecl {
     pub name: String,
+    /// Span of the flags name identifier.
+    pub name_span: Span,
     pub is_pub: bool,
     pub attributes: Option<Vec<Attribute>>,
     pub flags: Vec<FlagsVariant>,
@@ -1393,6 +1423,8 @@ pub struct FlagsDecl {
 #[derive(Debug, Clone)]
 pub struct FlagsVariant {
     pub name: String,
+    /// Span of the flag member name identifier.
+    pub name_span: Span,
     /// Attributes like `#[cm("wit-kebab-name")]` for CM name override
     pub attrs: Vec<Attribute>,
     pub span: Span,
@@ -1408,6 +1440,8 @@ pub struct FlagsVariant {
 #[derive(Debug, Clone)]
 pub struct VariantDecl {
     pub name: String,
+    /// Span of the variant name identifier.
+    pub name_span: Span,
     pub is_pub: bool,
     /// Generic type parameters: `variant Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
@@ -1427,6 +1461,8 @@ pub struct VariantDecl {
 #[derive(Debug, Clone)]
 pub struct VariantCase {
     pub name: String,
+    /// Span of the case name identifier.
+    pub name_span: Span,
     /// Payload type for this case. None for unit variants like `None`.
     /// At TIR level, unit variants are normalized to have `()` payload.
     pub payload: Option<Type>,
@@ -1438,6 +1474,8 @@ pub struct VariantCase {
 #[derive(Debug, Clone)]
 pub struct Newtype {
     pub name: String,
+    /// Span of the newtype name identifier.
+    pub name_span: Span,
     pub is_pub: bool,
     pub type_params: Vec<GenericParam>,
     pub ty: Type,
@@ -1489,6 +1527,8 @@ pub struct AssociatedConst {
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
     pub name: String,
+    /// Span of the trait name identifier.
+    pub name_span: Span,
     pub is_pub: bool,
     pub type_params: Vec<GenericParam>,
     /// Associated type declarations: `type Output;`

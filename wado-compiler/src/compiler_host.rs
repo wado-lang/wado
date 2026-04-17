@@ -197,7 +197,7 @@ impl DiagnosticSpan {
             line: span.line,
             column: span.column,
             end_line: Some(span.end_line),
-            end_column: None, // Span doesn't have end_column
+            end_column: Some(span.end_column),
         }
     }
 }

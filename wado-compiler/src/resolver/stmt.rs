@@ -2137,6 +2137,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // let mut __iter_N = receiver.into_iter();
         let into_iter_let = LetStmt {
             pattern: Pattern::Ident(iter_var.clone()),
+            name_span: span,
             is_mut: true,
             is_reactive: false,
             ty: None,
@@ -2213,6 +2214,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
             let ref_let = Stmt::Let(LetStmt {
                 pattern: for_of.binding.clone(),
+                name_span: span,
                 is_mut: for_of.is_mut,
                 is_reactive: false,
                 ty: None,

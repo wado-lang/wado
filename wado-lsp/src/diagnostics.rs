@@ -151,4 +151,37 @@ mod tests {
         let diag = from_compiler_diagnostic(&compiler_diag, "file:///test.wado").unwrap();
         assert_eq!(diag.severity, Severity::Warning);
     }
+
+    #[test]
+    fn end_column_is_used_when_provided() {
+        // Compiler now always populates end_column (via Span::end_column) when
+        // building a DiagnosticSpan from a Span. Verify the conversion uses it
+        // exactly rather than falling back to start + 1.
+        let compiler_diag = CompilerDiagnostic {
+            severity: CompilerSeverity::Error,
+            code: Code::TypeMismatch,
+            message: "type mismatch".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "test.wado".to_string(),
+                line: 3,
+                column: 5,
+                end_line: Some(3),
+                end_column: Some(15),
+            }),
+        };
+        let diag = from_compiler_diagnostic(&compiler_diag, "file:///test.wado").unwrap();
+        assert_eq!(
+            diag.range,
+            Range {
+                start: Position {
+                    line: 2,
+                    character: 4
+                },
+                end: Position {
+                    line: 2,
+                    character: 14
+                },
+            }
+        );
+    }
 }

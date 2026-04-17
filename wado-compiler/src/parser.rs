@@ -338,11 +338,22 @@ impl Parser {
     }
 
     fn consume_ident(&mut self) -> ParseResult<String> {
+        self.consume_ident_with_span().map(|(name, _)| name)
+    }
+
+    /// Consume an identifier (or contextual keyword usable as an identifier) and
+    /// return both the name and the span of the identifier token itself.
+    ///
+    /// Use this when recording `name_span` on AST declaration nodes. The token span
+    /// is captured before the token is advanced past, so it accurately covers the
+    /// identifier alone (not any surrounding item extent).
+    fn consume_ident_with_span(&mut self) -> ParseResult<(String, Span)> {
         // Accept regular identifiers and contextual keywords (flags, type)
         if let Some(name) = self.peek_kind().as_ident_name() {
             let name = name.to_string();
+            let span = self.peek().span;
             self.advance();
-            Ok(name)
+            Ok((name, span))
         } else {
             Err(ParseError {
                 message: format!("expected identifier, found {:?}", self.peek_kind()),
@@ -476,7 +487,7 @@ impl Parser {
         };
 
         // Variable name
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
 
         // Type annotation (required)
         self.expect(&TokenKind::Colon)?;
@@ -491,6 +502,7 @@ impl Parser {
 
         Ok(GlobalDecl {
             name,
+            name_span,
             ty,
             initializer,
             mutable,
@@ -895,7 +907,7 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
 
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
 
         // Parse generic parameters like <T, U> or <T: Ord>
         let type_params = self.parse_generic_params()?;
@@ -928,6 +940,7 @@ impl Parser {
 
         Ok(Function {
             name,
+            name_span,
             is_pub,
             is_export,
             is_async,
@@ -965,6 +978,7 @@ impl Parser {
             if let TokenKind::Ident(name) = self.peek_kind()
                 && name == "self"
             {
+                let self_span = self.peek().span;
                 self.advance();
                 let self_type = Type::Named(NamedType {
                     name: "Self".to_string(),
@@ -977,6 +991,7 @@ impl Parser {
                 };
                 return Ok(Param {
                     name: "self".to_string(),
+                    name_span: self_span,
                     ty,
                     self_kind: if is_mut {
                         SelfKind::MutRef
@@ -1013,12 +1028,13 @@ impl Parser {
             false
         };
 
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
         self.expect(&TokenKind::Colon)?;
         let ty = self.parse_type()?;
 
         Ok(Param {
             name,
+            name_span,
             ty,
             self_kind: SelfKind::None,
             is_mut,
@@ -1303,7 +1319,9 @@ impl Parser {
             false
         };
 
+        let pattern_start_span = self.peek().span;
         let pattern = self.parse_pattern()?;
+        let name_span = pattern_start_span;
 
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
@@ -1334,6 +1352,7 @@ impl Parser {
 
         Ok(Stmt::Let(LetStmt {
             pattern,
+            name_span,
             is_mut,
             is_reactive,
             ty,
@@ -3197,14 +3216,19 @@ impl Parser {
         } else {
             false
         };
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
             Some(self.parse_type()?)
         } else {
             None
         };
-        Ok(ClosureParam { name, ty, is_mut })
+        Ok(ClosureParam {
+            name,
+            name_span,
+            ty,
+            is_mut,
+        })
     }
 
     /// Parse a type or a type pack spread (`..T`) inside a tuple type.
@@ -3359,7 +3383,7 @@ impl Parser {
     ) -> ParseResult<EffectDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Effect)?;
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
         self.expect(&TokenKind::LBrace)?;
 
         let mut methods = Vec::new();
@@ -3371,6 +3395,7 @@ impl Parser {
 
         Ok(EffectDecl {
             name,
+            name_span,
             is_pub,
             attrs,
             methods,
@@ -3393,7 +3418,7 @@ impl Parser {
         };
 
         self.expect(&TokenKind::Fn)?;
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
 
         let _type_params = self.parse_generic_params()?;
 
@@ -3412,6 +3437,7 @@ impl Parser {
 
         Ok(EffectMethod {
             name,
+            name_span,
             is_async,
             attrs,
             params,
@@ -3463,7 +3489,7 @@ impl Parser {
                 ));
             }
 
-            let name = self.consume_ident()?;
+            let (name, name_span) = self.consume_ident_with_span()?;
 
             // Parse optional trait bounds: `T: Ord`, `T: Ord + Clone`, `T: Builder<Output = T>`
             let bounds = if self.check(&TokenKind::Colon) {
@@ -3483,6 +3509,7 @@ impl Parser {
 
             params.push(crate::ast::GenericParam {
                 name,
+                name_span,
                 is_effect,
                 is_pack,
                 bounds,
@@ -3553,7 +3580,7 @@ impl Parser {
     ) -> ParseResult<StructDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Struct)?;
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
 
         // Parse generic parameters like <T, U>
         let type_params = self.parse_generic_params()?;
@@ -3566,6 +3593,7 @@ impl Parser {
 
         Ok(StructDecl {
             name,
+            name_span,
             is_pub,
             type_params,
             fields,
@@ -3587,12 +3615,14 @@ impl Parser {
                 false
             };
             // Allow keywords as field names (unambiguous in context)
+            let name_span = self.peek().span;
             let name = self.consume_field_name()?;
             self.expect(&TokenKind::Colon)?;
             let ty = self.parse_type()?;
 
             fields.push(StructField {
                 name,
+                name_span,
                 is_pub,
                 ty,
                 attrs,
@@ -3610,7 +3640,7 @@ impl Parser {
     fn parse_enum_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<EnumDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Enum)?;
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
 
         // Parse generic parameters like <T>
         let type_params = self.parse_generic_params()?;
@@ -3630,6 +3660,7 @@ impl Parser {
 
         Ok(EnumDecl {
             name,
+            name_span,
             is_pub,
             type_params,
             cases,
@@ -3640,11 +3671,12 @@ impl Parser {
 
     fn parse_enum_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<EnumCase> {
         let start_span = self.peek().span;
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
 
         // Enum cases have no payload (unlike variant cases)
         Ok(EnumCase {
             name,
+            name_span,
             attrs,
             span: start_span,
         })
@@ -3660,7 +3692,7 @@ impl Parser {
     fn parse_flags_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<FlagsDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Flags)?;
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
 
         self.expect(&TokenKind::LBrace)?;
 
@@ -3668,9 +3700,10 @@ impl Parser {
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let flag_attrs = self.parse_attributes()?;
             let flag_span = self.peek().span;
-            let flag_name = self.consume_ident()?;
+            let (flag_name, flag_name_span) = self.consume_ident_with_span()?;
             flags.push(FlagsVariant {
                 name: flag_name,
+                name_span: flag_name_span,
                 attrs: flag_attrs,
                 span: flag_span,
             });
@@ -3684,6 +3717,7 @@ impl Parser {
 
         Ok(FlagsDecl {
             name,
+            name_span,
             is_pub,
             attributes: if attrs.is_empty() { None } else { Some(attrs) },
             flags,
@@ -3705,7 +3739,7 @@ impl Parser {
     ) -> ParseResult<VariantDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Variant)?;
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
 
         // Parse generic parameters like <T>
         let type_params = self.parse_generic_params()?;
@@ -3725,6 +3759,7 @@ impl Parser {
 
         Ok(VariantDecl {
             name,
+            name_span,
             is_pub,
             type_params,
             cases,
@@ -3735,7 +3770,7 @@ impl Parser {
 
     fn parse_variant_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<VariantCase> {
         let start_span = self.peek().span;
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
 
         // Each variant case has exactly one payload type.
         // - Unit: `None` (no parentheses)
@@ -3760,6 +3795,7 @@ impl Parser {
 
         Ok(VariantCase {
             name,
+            name_span,
             payload,
             attrs,
             span: start_span,
@@ -3788,7 +3824,7 @@ impl Parser {
     fn parse_newtype(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Newtype> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Type)?;
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
         let type_params = self.parse_generic_params()?;
         self.expect(&TokenKind::Eq)?;
         let ty = self.parse_type()?;
@@ -3796,6 +3832,7 @@ impl Parser {
 
         Ok(Newtype {
             name,
+            name_span,
             is_pub,
             type_params,
             ty,
@@ -3951,12 +3988,13 @@ impl Parser {
                 && self.peek_nth(1).kind == TokenKind::Colon
             {
                 let param_span = self.peek().span;
-                let param_name = self.consume_ident()?;
+                let (param_name, param_name_span) = self.consume_ident_with_span()?;
                 self.advance(); // consume ':'
                 let bounds = self.parse_trait_bounds()?;
                 if !type_params.iter().any(|p| p.name == param_name) {
                     type_params.push(crate::ast::GenericParam {
                         name: param_name.clone(),
+                        name_span: param_name_span,
                         is_effect: false,
                         is_pack: false,
                         bounds,
@@ -4000,7 +4038,7 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Trait)?;
 
-        let name = self.consume_ident()?;
+        let (name, name_span) = self.consume_ident_with_span()?;
 
         // Parse generic parameters like <T>
         let type_params = self.parse_generic_params()?;
@@ -4041,6 +4079,7 @@ impl Parser {
 
         Ok(TraitDecl {
             name,
+            name_span,
             is_pub,
             type_params,
             associated_types,
@@ -5364,5 +5403,183 @@ line 2
             module.generated_meta_array("sources").unwrap(),
             &["a.wit".to_string(), "b.wit".to_string()],
         );
+    }
+
+    /// Extract the substring covered by `span` (byte offsets).
+    fn slice<'a>(source: &'a str, span: &Span) -> &'a str {
+        &source[span.start..span.end]
+    }
+
+    #[test]
+    fn function_name_span_covers_identifier_only() {
+        let source = "fn greet() {}";
+        let module = parse(source).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(slice(source, &func.name_span), "greet");
+        assert_eq!(func.name_span.line, 1);
+        assert_eq!(func.name_span.column, 4);
+        assert_eq!(func.name_span.end_column, 9);
+    }
+
+    #[test]
+    fn param_name_span_covers_identifier_only() {
+        let source = "fn add(a: i32, b: i32) -> i32 { return a + b; }";
+        let module = parse(source).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(slice(source, &func.params[0].name_span), "a");
+        assert_eq!(slice(source, &func.params[1].name_span), "b");
+    }
+
+    #[test]
+    fn self_param_name_span_covers_self_token() {
+        let source = "impl Point { fn get(&self) -> i32 { return 0; } }";
+        let module = parse(source).unwrap();
+        let Item::Impl(imp) = &module.items[0] else {
+            panic!("expected impl");
+        };
+        let m = &imp.methods[0];
+        assert_eq!(slice(source, &m.params[0].name_span), "self");
+    }
+
+    #[test]
+    fn struct_and_field_name_spans() {
+        let source = "struct Point { x: i32, y: i32 }";
+        let module = parse(source).unwrap();
+        let Item::Struct(s) = &module.items[0] else {
+            panic!("expected struct");
+        };
+        assert_eq!(slice(source, &s.name_span), "Point");
+        assert_eq!(slice(source, &s.fields[0].name_span), "x");
+        assert_eq!(slice(source, &s.fields[1].name_span), "y");
+    }
+
+    #[test]
+    fn enum_case_name_span() {
+        let source = "enum Color { Red, Green, Blue }";
+        let module = parse(source).unwrap();
+        let Item::Enum(e) = &module.items[0] else {
+            panic!("expected enum");
+        };
+        assert_eq!(slice(source, &e.name_span), "Color");
+        assert_eq!(slice(source, &e.cases[0].name_span), "Red");
+        assert_eq!(slice(source, &e.cases[1].name_span), "Green");
+        assert_eq!(slice(source, &e.cases[2].name_span), "Blue");
+    }
+
+    #[test]
+    fn variant_and_case_name_spans() {
+        let source = "variant Shape { Circle(f64), Point }";
+        let module = parse(source).unwrap();
+        let Item::Variant(v) = &module.items[0] else {
+            panic!("expected variant");
+        };
+        assert_eq!(slice(source, &v.name_span), "Shape");
+        assert_eq!(slice(source, &v.cases[0].name_span), "Circle");
+        assert_eq!(slice(source, &v.cases[1].name_span), "Point");
+    }
+
+    #[test]
+    fn flags_and_member_name_spans() {
+        let source = "flags Perms { Read, Write }";
+        let module = parse(source).unwrap();
+        let Item::Flags(f) = &module.items[0] else {
+            panic!("expected flags");
+        };
+        assert_eq!(slice(source, &f.name_span), "Perms");
+        assert_eq!(slice(source, &f.flags[0].name_span), "Read");
+        assert_eq!(slice(source, &f.flags[1].name_span), "Write");
+    }
+
+    #[test]
+    fn trait_name_span() {
+        let source = "trait Greet { fn greet(&self) -> i32; }";
+        let module = parse(source).unwrap();
+        let Item::Trait(t) = &module.items[0] else {
+            panic!("expected trait");
+        };
+        assert_eq!(slice(source, &t.name_span), "Greet");
+        assert_eq!(slice(source, &t.methods[0].name_span), "greet");
+    }
+
+    #[test]
+    fn newtype_name_span() {
+        let source = "type Meters = f64;";
+        let module = parse(source).unwrap();
+        let Item::Newtype(n) = &module.items[0] else {
+            panic!("expected newtype");
+        };
+        assert_eq!(slice(source, &n.name_span), "Meters");
+    }
+
+    #[test]
+    fn global_name_span() {
+        let source = "global PI: f64 = 3.14;";
+        let module = parse(source).unwrap();
+        let Item::Global(g) = &module.items[0] else {
+            panic!("expected global");
+        };
+        assert_eq!(slice(source, &g.name_span), "PI");
+    }
+
+    #[test]
+    fn generic_param_name_span() {
+        let source = "fn identity<T>(x: T) -> T { return x; }";
+        let module = parse(source).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(slice(source, &func.type_params[0].name_span), "T");
+    }
+
+    #[test]
+    fn closure_param_name_span() {
+        // Wrap the closure in a function body so it parses as a module-level item.
+        let source = "fn test() { let f = |x: i32| x + 1; }";
+        let module = parse(source).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let body = func.body.as_ref().unwrap();
+        let Stmt::Let(let_stmt) = &body.stmts[0] else {
+            panic!("expected let stmt");
+        };
+        let Some(Expr::Closure(c)) = let_stmt.value.as_ref() else {
+            panic!("expected closure expression");
+        };
+        assert_eq!(slice(source, &c.params[0].name_span), "x");
+    }
+
+    #[test]
+    fn let_stmt_name_span_for_ident_pattern() {
+        let source = "fn test() { let foo = 1; }";
+        let module = parse(source).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let body = func.body.as_ref().unwrap();
+        let Stmt::Let(let_stmt) = &body.stmts[0] else {
+            panic!("expected let stmt");
+        };
+        assert_eq!(slice(source, &let_stmt.name_span), "foo");
+    }
+
+    #[test]
+    fn span_end_column_tracks_multi_line_token() {
+        // A multi-line block comment followed by a token: the token's end_column
+        // should reflect the post-token cursor on the correct line.
+        let source = "fn a() {\n    return 1;\n}";
+        let module = parse(source).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        // The function span spans line 1..line 3; end_column points at column of
+        // first char past the closing brace.
+        assert_eq!(func.span.line, 1);
+        assert_eq!(func.span.end_line, 3);
+        assert_eq!(func.span.end_column, 2); // column after `}` on line 3
     }
 }

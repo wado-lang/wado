@@ -16,7 +16,8 @@ pub struct DefinitionResult {
 /// Find the definition location for the identifier at the given position.
 ///
 /// Uses AST-level resolution within the entry file: finds the token at the cursor,
-/// then scans all declarations for a matching name.
+/// then scans all declarations for a matching name. The returned range covers the
+/// declaration's name identifier alone (via `name_span`), not the whole item.
 pub fn find_definition(source: &str, position: Position, uri: &str) -> Option<DefinitionResult> {
     // 1. Lex to find the token at cursor position
     let mut lexer = Lexer::new(source);
@@ -34,7 +35,7 @@ pub fn find_definition(source: &str, position: Position, uri: &str) -> Option<De
 
     Some(DefinitionResult {
         uri: uri.to_string(),
-        range: span_to_range(&def.span),
+        range: span_to_range(&def.name_span),
     })
 }
 
@@ -45,17 +46,13 @@ fn find_ident_at_position(tokens: &[Token], position: Position) -> Option<String
 
     for token in tokens {
         if let TokenKind::Ident(ref name) = token.kind
-            && token.span.line == target_line
-            && target_col >= token.span.column
-            && target_col < token.span.column + (token.span.end - token.span.start)
+            && token_contains(&token.span, target_line, target_col)
         {
             return Some(name.clone());
         }
         // Also handle contextual keywords used as identifiers
         if let Some(name) = token.kind.as_ident_name()
-            && token.span.line == target_line
-            && target_col >= token.span.column
-            && target_col < token.span.column + (token.span.end - token.span.start)
+            && token_contains(&token.span, target_line, target_col)
         {
             if !matches!(
                 token.kind,
@@ -73,10 +70,25 @@ fn find_ident_at_position(tokens: &[Token], position: Position) -> Option<String
     None
 }
 
+/// Test whether (`target_line`, `target_col`) — both 1-based — lies within the
+/// half-open range covered by `span`.
+fn token_contains(span: &Span, target_line: usize, target_col: usize) -> bool {
+    if target_line < span.line || target_line > span.end_line {
+        return false;
+    }
+    if target_line == span.line && target_col < span.column {
+        return false;
+    }
+    if target_line == span.end_line && target_col >= span.end_column {
+        return false;
+    }
+    true
+}
+
 /// A definition found in the AST.
 struct Definition {
     name: String,
-    span: Span,
+    name_span: Span,
 }
 
 /// Collect all top-level and nested definitions from the AST module.
@@ -93,14 +105,14 @@ fn collect_item_defs(defs: &mut Vec<Definition>, item: &Item) {
         Item::Function(f) => {
             defs.push(Definition {
                 name: f.name.clone(),
-                span: f.span,
+                name_span: f.name_span,
             });
             // Collect parameter definitions
             for param in &f.params {
                 if param.self_kind == ast::SelfKind::None {
                     defs.push(Definition {
                         name: param.name.clone(),
-                        span: param.span,
+                        name_span: param.name_span,
                     });
                 }
             }
@@ -112,74 +124,74 @@ fn collect_item_defs(defs: &mut Vec<Definition>, item: &Item) {
         Item::Struct(s) => {
             defs.push(Definition {
                 name: s.name.clone(),
-                span: s.span,
+                name_span: s.name_span,
             });
             for field in &s.fields {
                 defs.push(Definition {
                     name: field.name.clone(),
-                    span: field.span,
+                    name_span: field.name_span,
                 });
             }
         }
         Item::Enum(e) => {
             defs.push(Definition {
                 name: e.name.clone(),
-                span: e.span,
+                name_span: e.name_span,
             });
             for case in &e.cases {
                 defs.push(Definition {
                     name: case.name.clone(),
-                    span: case.span,
+                    name_span: case.name_span,
                 });
             }
         }
         Item::Variant(v) => {
             defs.push(Definition {
                 name: v.name.clone(),
-                span: v.span,
+                name_span: v.name_span,
             });
             for case in &v.cases {
                 defs.push(Definition {
                     name: case.name.clone(),
-                    span: case.span,
+                    name_span: case.name_span,
                 });
             }
         }
         Item::Flags(f) => {
             defs.push(Definition {
                 name: f.name.clone(),
-                span: f.span,
+                name_span: f.name_span,
             });
             for flag in &f.flags {
                 defs.push(Definition {
                     name: flag.name.clone(),
-                    span: flag.span,
+                    name_span: flag.name_span,
                 });
             }
         }
         Item::Trait(t) => {
             defs.push(Definition {
                 name: t.name.clone(),
-                span: t.span,
+                name_span: t.name_span,
             });
             for method in &t.methods {
                 defs.push(Definition {
                     name: method.name.clone(),
-                    span: method.span,
+                    name_span: method.name_span,
                 });
             }
         }
         Item::Newtype(n) => {
             defs.push(Definition {
                 name: n.name.clone(),
-                span: n.span,
+                name_span: n.name_span,
             });
         }
         Item::Impl(imp) => {
             for method in &imp.methods {
                 defs.push(Definition {
                     name: method.name.clone(),
-                    span: method.span,
+                    name_span: method.name_span,
                 });
                 if let Some(body) = &method.body {
                     collect_block_defs(defs, body);
@@ -189,19 +201,19 @@ fn collect_item_defs(defs: &mut Vec<Definition>, item: &Item) {
         Item::Effect(e) => {
             defs.push(Definition {
                 name: e.name.clone(),
-                span: e.span,
+                name_span: e.name_span,
             });
             for method in &e.methods {
                 defs.push(Definition {
                     name: method.name.clone(),
-                    span: method.span,
+                    name_span: method.name_span,
                 });
             }
         }
         Item::Global(g) => {
             defs.push(Definition {
                 name: g.name.clone(),
-                span: g.span,
+                name_span: g.name_span,
             });
         }
         Item::Use(_)
@@ -222,7 +234,15 @@ fn collect_stmt_defs(defs: &mut Vec<Definition>, stmt: &Stmt) {
     match stmt {
         Stmt::Let(l) => {
             if let Some(name) = pattern_name(&l.pattern) {
-                defs.push(Definition { name, span: l.span });
+                defs.push(Definition {
+                    name,
+                    name_span: l.name_span,
+                });
+            }
+            // Recurse into the initializer so that, e.g., closure parameters in
+            // `let f = |x: i32| ...` are registered as definitions.
+            if let Some(value) = &l.value {
+                collect_expr_defs(defs, value);
             }
         }
         Stmt::If(i) => {
@@ -240,9 +260,11 @@ fn collect_stmt_defs(defs: &mut Vec<Definition>, stmt: &Stmt) {
         }
         Stmt::ForOf(fo) => {
             if let Some(name) = pattern_name(&fo.binding) {
+                // ForOfStmt does not yet expose a `name_span` for the loop binding;
+                // fall back to the statement span until that is wired through.
                 defs.push(Definition {
                     name,
-                    span: fo.span,
+                    name_span: fo.span,
                 });
             }
             collect_block_defs(defs, &fo.body);
@@ -274,8 +296,10 @@ fn collect_expr_defs(defs: &mut Vec<Definition>, expr: &Expr) {
         }
         Expr::Closure(c) => {
             for param in &c.params {
-                // Closure params don't have spans in the AST, skip for now
-                let _ = param;
+                defs.push(Definition {
+                    name: param.name.clone(),
+                    name_span: param.name_span,
+                });
             }
             collect_expr_defs(defs, &c.body);
         }
@@ -301,8 +325,7 @@ fn span_to_range(span: &Span) -> Range {
         },
         end: Position {
             line: span.end_line.saturating_sub(1) as u32,
-            // end column not available in Span, use start + length
-            character: span.column.saturating_sub(1) as u32 + (span.end - span.start) as u32,
+            character: span.end_column.saturating_sub(1) as u32,
         },
     }
 }
@@ -319,10 +342,21 @@ mod tests {
             line: 1,
             character: 12,
         };
-        let result = find_definition(source, pos, "file:///test.wado");
-        assert!(result.is_some());
-        let result = result.unwrap();
-        assert_eq!(result.range.start.line, 0); // fn greet is on line 0
+        let result = find_definition(source, pos, "file:///test.wado").unwrap();
+        // Range covers `greet` on line 0 (the identifier alone, not the whole fn item).
+        assert_eq!(
+            result.range,
+            Range {
+                start: Position {
+                    line: 0,
+                    character: 3
+                },
+                end: Position {
+                    line: 0,
+                    character: 8
+                },
+            }
+        );
     }
 
     #[test]
@@ -333,10 +367,21 @@ mod tests {
             line: 1,
             character: 10,
         };
-        let result = find_definition(source, pos, "file:///test.wado");
-        assert!(result.is_some());
-        let result = result.unwrap();
-        assert_eq!(result.range.start.line, 0); // struct Point is on line 0
+        let result = find_definition(source, pos, "file:///test.wado").unwrap();
+        // Range covers `Point` on line 0 (the identifier alone, not the whole struct).
+        assert_eq!(
+            result.range,
+            Range {
+                start: Position {
+                    line: 0,
+                    character: 7
+                },
+                end: Position {
+                    line: 0,
+                    character: 12
+                },
+            }
+        );
     }
 
     #[test]
@@ -364,5 +409,57 @@ mod tests {
             },
         );
         assert_eq!(name.as_deref(), Some("foo"));
+    }
+
+    #[test]
+    fn closure_param_goto_def_now_resolves() {
+        // Regression: previously closure params had no span and were skipped.
+        // The cursor is on the `x` use inside the closure body; definition should
+        // resolve to the parameter declaration.
+        let source = "fn test() { let f = |x: i32| x + 1; }";
+        let pos = Position {
+            line: 0,
+            character: 29,
+        };
+        let result = find_definition(source, pos, "file:///test.wado").unwrap();
+        // The parameter `x` lives on line 0 at column 21 (0-based).
+        assert_eq!(
+            result.range,
+            Range {
+                start: Position {
+                    line: 0,
+                    character: 21
+                },
+                end: Position {
+                    line: 0,
+                    character: 22
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn multi_line_function_range_uses_end_column() {
+        // The definition range of a multi-line function should be exactly the
+        // identifier; previously the byte-length hack overshot for multi-line items.
+        let source = "fn greet(\n  who: i32,\n) -> i32 {\n  return who;\n}";
+        let pos = Position {
+            line: 0,
+            character: 4,
+        };
+        let result = find_definition(source, pos, "file:///test.wado").unwrap();
+        assert_eq!(
+            result.range,
+            Range {
+                start: Position {
+                    line: 0,
+                    character: 3
+                },
+                end: Position {
+                    line: 0,
+                    character: 8
+                },
+            }
+        );
     }
 }

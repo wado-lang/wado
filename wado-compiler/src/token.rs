@@ -211,6 +211,11 @@ pub struct Span {
     pub line: usize,
     pub column: usize,
     pub end_line: usize,
+    /// 1-based column of the first position past the end of the token (exclusive end).
+    /// For a single-line ASCII token, this equals `column + (end - start)`.
+    /// For multi-line or multi-byte content, callers must supply the value explicitly
+    /// via `Span::with_end`; lexer tracks this via its own cursor state.
+    pub end_column: usize,
 }
 
 impl Token {
@@ -220,6 +225,9 @@ impl Token {
 }
 
 impl Span {
+    /// Create a span assuming single-line ASCII content.
+    /// `end_column` defaults to `column + (end - start)`, which is correct for
+    /// single-line tokens whose byte length equals their column width.
     pub fn new(start: usize, end: usize, line: usize, column: usize) -> Self {
         Self {
             start,
@@ -227,15 +235,19 @@ impl Span {
             line,
             column,
             end_line: line,
+            end_column: column + (end - start),
         }
     }
 
-    pub fn with_end_line(
+    /// Create a span with explicit end line and end column (1-based, exclusive).
+    /// Prefer this when the token may span multiple lines or contain multi-byte characters.
+    pub fn with_end(
         start: usize,
         end: usize,
         line: usize,
         column: usize,
         end_line: usize,
+        end_column: usize,
     ) -> Self {
         Self {
             start,
@@ -243,6 +255,7 @@ impl Span {
             line,
             column,
             end_line,
+            end_column,
         }
     }
 
@@ -257,6 +270,7 @@ impl Span {
             line: self.line,
             column: self.column,
             end_line: other.end_line,
+            end_column: other.end_column,
         }
     }
 }

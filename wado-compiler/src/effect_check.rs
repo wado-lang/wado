@@ -755,6 +755,7 @@ mod tests {
                 line: 10,
                 column: 5,
                 end_line: 10,
+                end_column: 12,
             },
         };
         assert_eq!(

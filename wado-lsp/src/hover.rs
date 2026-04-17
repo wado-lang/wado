@@ -39,22 +39,27 @@ fn find_ident_at_position(tokens: &[Token], position: Position) -> Option<(Strin
             _ => continue,
         };
 
-        if token.span.line == target_line
-            && target_col >= token.span.column
-            && target_col < token.span.column + (token.span.end - token.span.start)
-        {
-            let range = Range {
-                start: Position {
-                    line: (token.span.line - 1) as u32,
-                    character: (token.span.column - 1) as u32,
-                },
-                end: Position {
-                    line: (token.span.line - 1) as u32,
-                    character: (token.span.column - 1 + token.span.end - token.span.start) as u32,
-                },
-            };
-            return Some((name, range));
+        if target_line < token.span.line || target_line > token.span.end_line {
+            continue;
         }
+        if target_line == token.span.line && target_col < token.span.column {
+            continue;
+        }
+        if target_line == token.span.end_line && target_col >= token.span.end_column {
+            continue;
+        }
+
+        let range = Range {
+            start: Position {
+                line: (token.span.line - 1) as u32,
+                character: (token.span.column - 1) as u32,
+            },
+            end: Position {
+                line: (token.span.end_line - 1) as u32,
+                character: (token.span.end_column - 1) as u32,
+            },
+        };
+        return Some((name, range));
     }
     None
 }

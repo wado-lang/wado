@@ -535,6 +535,7 @@ mod tests {
             line: 1,
             column: 1,
             end_line: 1,
+            end_column: 1,
         }
     }
 
@@ -564,6 +565,7 @@ mod tests {
     fn type_param(name: &str) -> GenericParam {
         GenericParam {
             name: name.to_string(),
+            name_span: dummy_span(),
             is_effect: false,
             is_pack: false,
             bounds: vec![],

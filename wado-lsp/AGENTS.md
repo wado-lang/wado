@@ -43,21 +43,16 @@ See [lsp.md](lsp.md) for the specification of the latest LSP.
 
 ## TODO: LSP Feature Implementation
 
-Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kind (request/notification group), not individual fields or options.
+Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kind (request/notification group), not individual fields or options. Only remaining work is listed.
 
 ### Server Lifecycle
 
-- [x] `initialize` / `initialized`
-- [x] `shutdown` / `exit`
 - [ ] `client/registerCapability` / `client/unregisterCapability`
 - [ ] `$/setTrace` / `$/logTrace`
 - [ ] `$/cancelRequest`
 
 ### Text Document Synchronization
 
-- [x] `textDocument/didOpen`
-- [x] `textDocument/didChange` (Full sync only)
-- [x] `textDocument/didClose`
 - [ ] `textDocument/didChange` (Incremental sync)
 - [ ] `textDocument/willSave`
 - [ ] `textDocument/willSaveWaitUntil`
@@ -66,14 +61,12 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 
 ### Diagnostics
 
-- [x] `textDocument/publishDiagnostics` (push)
 - [ ] `textDocument/diagnostic` (pull)
 - [ ] `workspace/diagnostic` (pull)
 
 ### Language Features — Navigation
 
 - [ ] `textDocument/declaration`
-- [x] `textDocument/definition` (single-file, AST-level)
 - [ ] `textDocument/typeDefinition`
 - [ ] `textDocument/implementation`
 - [ ] `textDocument/references`
@@ -82,7 +75,6 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 
 ### Language Features — Comprehension
 
-- [x] `textDocument/hover` (single-file, AST-level signatures)
 - [ ] `textDocument/signatureHelp`
 - [ ] `textDocument/documentHighlight`
 - [ ] `textDocument/documentLink`
@@ -96,7 +88,6 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 - [ ] `textDocument/documentSymbol`
 - [ ] `textDocument/foldingRange`
 - [ ] `textDocument/selectionRange`
-- [x] `textDocument/semanticTokens` (full only, lexer+AST classification)
 - [ ] `textDocument/linkedEditingRange`
 
 ### Language Features — Editing
