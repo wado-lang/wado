@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776432733706,
+  "lastUpdate": 1776436345185,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13556,6 +13556,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2d2a4b0b6c74ab6cad8f2f92be3a9d14b590b327"
         },
         "date": 1776432733426,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "82e198861ed901dc95d8d656def3e7b0da3d9fa7",
+          "message": "Merge pull request #860 from wado-lang/claude/update-rust-workflow-2c5fo\n\nSimplify data section extraction and upgrade Rust toolchain",
+          "timestamp": "2026-04-17T23:25:26+09:00",
+          "tree_id": "e7557e796d8c20e48a85e9c7e1c402921920aafb",
+          "url": "https://github.com/wado-lang/wado/commit/82e198861ed901dc95d8d656def3e7b0da3d9fa7"
+        },
+        "date": 1776436344920,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
