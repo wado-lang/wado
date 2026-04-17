@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776381761897,
+  "lastUpdate": 1776417436971,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13361,6 +13361,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6d56ddc8bac17f91b583b84a82ec18a6631fcbcf"
         },
         "date": 1776381761617,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4d4a35d72fc8afb2b03150c26091162aa3d52dd1",
+          "message": "Merge pull request #854 from wado-lang/claude/compiler-lsp-modifications-VBSej\n\nfeat(compiler,lsp): add name_span and Span.end_column (Phase A)",
+          "timestamp": "2026-04-17T18:13:48+09:00",
+          "tree_id": "77a51352f4743dd805a5c9b40400bc1b4b609cfd",
+          "url": "https://github.com/wado-lang/wado/commit/4d4a35d72fc8afb2b03150c26091162aa3d52dd1"
+        },
+        "date": 1776417436685,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
