@@ -237,32 +237,35 @@ async fn handle_http_request(
     let http_req = http::Request::from_parts(parts, body);
     let (wasi_req, io) = WasiRequest::from_http(http_req);
 
-    let result = store
-        .run_concurrent(
-            async |store| -> Result<Result<http::Response<Collected<Bytes>>, Option<HttpErrorCode>>> {
-                let handler = pin!(async {
-                    let res = match service.handle(store, wasi_req).await? {
-                        Ok(res) => res,
-                        Err(err) => return anyhow::Ok(Err(Some(err))),
-                    };
-                    let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
-                    let (parts, body) = res.into_parts();
-                    let collected = BodyExt::collect(body)
-                        .await
-                        .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?;
-                    anyhow::Ok(Ok(http::Response::from_parts(parts, collected)))
-                });
-                let io = pin!(async {
-                    io.await
-                        .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
-                });
-                match select(handler, io).await {
-                    Either::Left((result, _)) => result,
-                    Either::Right((result, _)) => result.map(|()| Err(None)),
-                }
-            },
-        )
-        .await;
+    let result =
+        store
+            .run_concurrent(
+                async |store| -> Result<
+                    Result<http::Response<Collected<Bytes>>, Option<HttpErrorCode>>,
+                > {
+                    let handler = pin!(async {
+                        let res = match service.handle(store, wasi_req).await? {
+                            Ok(res) => res,
+                            Err(err) => return anyhow::Ok(Err(Some(err))),
+                        };
+                        let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
+                        let (parts, body) = res.into_parts();
+                        let collected = BodyExt::collect(body)
+                            .await
+                            .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?;
+                        anyhow::Ok(Ok(http::Response::from_parts(parts, collected)))
+                    });
+                    let io = pin!(async {
+                        io.await
+                            .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
+                    });
+                    match select(handler, io).await {
+                        Either::Left((result, _)) => result,
+                        Either::Right((result, _)) => result.map(|()| Err(None)),
+                    }
+                },
+            )
+            .await;
 
     let result = match result {
         Ok(Ok(inner)) => inner,
