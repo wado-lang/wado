@@ -2,7 +2,7 @@
 
 Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
-Environment: Wado 2026-04-12, wasmtime 43.0.0, gcc 13.3.0, rustc 1.94.1, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
+Environment: Wado 2026-04-17, wasmtime 43.0.0, gcc 13.3.0, rustc 1.94.1, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
 
 ## Prime Counting
 
@@ -91,17 +91,18 @@ Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlpa
 
 | Implementation             |     Time | vs best |
 | -------------------------- | -------: | ------: |
-| sqlparser-rs (Rust native) |   189 ms |   1.00x |
-| **Wado** (Gale)            | 1,305 ms |   6.91x |
+| sqlparser-rs (Rust native) |   188 ms |   1.00x |
+| **Wado** (Gale)            | 1,227 ms |   6.53x |
 
 ## Syntax Highlight
 
 Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated highlighter vs tree-sitter.
 
-| Implementation            |     Time | vs best |
-| ------------------------- | -------: | ------: |
-| tree-sitter (Rust native) |   484 ms |   1.00x |
-| **Wado** (Gale)           | 4,611 ms |   9.53x |
+| Implementation              |     Time | vs best |
+| --------------------------- | -------: | ------: |
+| tree-sitter (Rust native)   |   545 ms |   1.00x |
+| tree-sitter (Wasm/wasmtime) |   694 ms |   1.27x |
+| **Wado** (Gale)             | 5,121 ms |   9.39x |
 
 ## Running
 

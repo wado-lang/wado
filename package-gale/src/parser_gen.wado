@@ -1224,9 +1224,7 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, fn_name: &Stri
     f.emit_begin(w);
     w.line("let mut pos = pos;");
 
-    for let mut i = 0; i < prefix_len; i += 1 {
-        gen_scan_element(w, &alt.elements[i], ctx);
-    }
+    gen_scan_elements(w, &alt.elements, 0, prefix_len, ctx);
 
     w.line("return pos;");
     w.end();
@@ -1270,7 +1268,7 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext
     }
 
     if lr_indices.len() > 0 {
-        gen_scan_lr_rule(w, rule, &lr_indices, &non_lr_indices, ctx);
+        gen_scan_lr_functions(w, rule, &lr_indices, &non_lr_indices, ctx);
         return;
     }
 
@@ -1282,9 +1280,8 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext
 
     if rule.alternatives.len() == 1 {
         w.line("let mut pos = pos;");
-        for let elem of &rule.alternatives[0].elements {
-            gen_scan_element(w, elem, ctx);
-        }
+        let elems = &rule.alternatives[0].elements;
+        gen_scan_elements(w, elems, 0, elems.len(), ctx);
         w.line("return pos;");
     } else {
         gen_scan_multi_alt(w, &rule.alternatives, ctx);
@@ -1294,16 +1291,23 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext
     w.blank();
 }
 
-/// Generate scan functions for a left-recursive rule:
-///   - scan_X_atom: scans non-LR alternatives (first-match)
-///   - scan_X: calls atom, then greedily consumes LR suffixes
-/// Termination is guaranteed because each LR suffix must consume at least one
-/// token beyond the leading self-reference.
-fn gen_scan_lr_rule(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, non_lr_indices: &Array<i32>, ctx: &mut GenContext) {
+/// Generate scan functions for a left-recursive rule. Mirrors the parse-side
+/// precedence-climbing infrastructure so that scan success/failure is a
+/// faithful predicate for parse success/failure:
+///
+///   - scan_X_atom(tokens, pos): scans non-LR alternatives (first-match).
+///   - scan_X_lr_N(tokens, pos): scans the suffix (elements[1..]) of the N-th
+///     LR alternative, recursing into scan_X_prec for self-refs with the same
+///     precedence thresholds that parse_X_lr_N uses.
+///   - scan_X_prec(tokens, pos, min_prec): atom + precedence-aware LR-suffix
+///     loop with token-kind dispatch and second-token overlap resolution.
+///   - scan_X(tokens, pos) = scan_X_prec(tokens, pos, 0).
+fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, non_lr_indices: &Array<i32>, ctx: &mut GenContext) {
     let fn_name = `scan_{to_snake_case(&rule.name)}`;
     let atom_name = `{fn_name}_atom`;
+    let prec_fn = `{fn_name}_prec`;
 
-    // scan_X_atom: tries each non-LR alt
+    // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
     fa.add_param("tokens", "&Array<Token>");
     fa.add_param("pos", "i32");
@@ -1317,9 +1321,8 @@ fn gen_scan_lr_rule(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i3
         w.line("return -1;");
     } else if non_lr_alts.len() == 1 {
         w.line("let mut pos = pos;");
-        for let elem of &non_lr_alts[0].elements {
-            gen_scan_element(w, elem, ctx);
-        }
+        let elems = &non_lr_alts[0].elements;
+        gen_scan_elements(w, elems, 0, elems.len(), ctx);
         w.line("return pos;");
     } else {
         gen_scan_multi_alt(w, &non_lr_alts, ctx);
@@ -1327,73 +1330,546 @@ fn gen_scan_lr_rule(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i3
     w.end();
     w.blank();
 
-    // scan_X: atom then greedy LR suffix loop
-    let mut f = FnSpec::new(&fn_name);
-    f.add_param("tokens", "&Array<Token>");
-    f.add_param("pos", "i32");
-    f.set_return_type("i32");
-    f.emit_begin(w);
+    // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
+    gen_scan_lr_suffix_helpers(w, rule, lr_indices, ctx);
+
+    // scan_X_prec(tokens, pos, min_prec): atom + precedence-aware dispatch loop.
+    let mut f2 = FnSpec::new(&prec_fn);
+    f2.add_param("tokens", "&Array<Token>");
+    f2.add_param("pos", "i32");
+    f2.add_param("min_prec", "i32");
+    f2.set_return_type("i32");
+    f2.emit_begin(w);
     w.line(`let mut pos = {atom_name}(tokens, pos);`);
     w.line("if pos < 0 { return -1; }");
-    w.begin("loop");
-    w.line("let start = pos;");
-    // Inline an "LR-suffix" try: for each LR alt, try its tail (elements[1..]).
-    // On any success, update pos and continue outer loop. On all failures, break.
-    w.begin("scan_lr_alts:");
-    for let mut i = 0; i < lr_indices.len(); i += 1 {
-        let alt_idx = lr_indices[i];
-        let alt = &rule.alternatives[alt_idx];
-        let label = `try_lr_{i}`;
-        w.line("pos = start;");
-        w.begin(`{label}:`);
-        // Scan elements[1..] of the LR alt in block mode (break label on failure).
-        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
-            gen_scan_element_in_block(w, &alt.elements[ei], ctx, &label);
-        }
-        w.line("break scan_lr_alts;");
-        w.end();
-    }
-    // All LR suffixes failed → exit the outer loop.
-    w.line("pos = start;");
-    w.line("break;");
-    w.end();
-    // Safety: if somehow pos didn't advance (shouldn't happen for valid grammars),
-    // break to avoid infinite loop.
-    w.line("if pos <= start { break; }");
-    w.end();
+    gen_scan_lr_suffix_dispatch(w, rule, lr_indices, ctx);
     w.line("return pos;");
+    w.end();
+    w.blank();
+
+    // scan_X(tokens, pos) — wrapper that allows all precedences.
+    let mut f3 = FnSpec::new(&fn_name);
+    f3.add_param("tokens", "&Array<Token>");
+    f3.add_param("pos", "i32");
+    f3.set_return_type("i32");
+    f3.emit_begin(w);
+    w.line(`return {prec_fn}(tokens, pos, 0);`);
     w.end();
     w.blank();
 }
 
-/// Generate scan code that tries multiple alternatives in order.
-/// Uses an outer labeled block: on success, `break` skips remaining alts.
-/// The last alternative uses `return -1` on failure.
-fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext) {
-    w.line("let mut pos = pos;");
-    w.line("let start = pos;");
-    w.begin("scan_alts:");
-    for let mut i = 0; i < alts.len(); i += 1 {
-        let alt = &alts[i];
-        let is_last = i == alts.len() - 1;
-        if is_last {
-            w.line("pos = start;");
-            for let elem of &alt.elements {
-                gen_scan_element(w, elem, ctx);
+/// Scan-side twin of `gen_lr_suffix_helpers`. Emits `scan_X_lr_N(tokens, pos)`
+/// for each valid LR alternative, scanning its suffix (elements[1..]). Self-
+/// recursive calls compile to `scan_X_prec(tokens, pos, prec)` with the same
+/// precedence value the parse side uses (via `compute_lr_self_ref_prec`).
+fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext) {
+    let fn_name = `scan_{to_snake_case(&rule.name)}`;
+    let prec_fn = `{fn_name}_prec`;
+    let total_lr = lr_indices.len();
+    let lr_suffix_first_tokens = collect_lr_suffix_first_tokens(rule, lr_indices, ctx);
+
+    let mut lr_pos = 0;
+    for let lr_idx_ref of lr_indices {
+        let lr_idx = *lr_idx_ref;
+        let alt = &rule.alternatives[lr_idx];
+        if alt.elements.len() <= 1 {
+            lr_pos += 1;
+            continue;
+        }
+        let own_prec = total_lr - lr_pos;
+        let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+        let inner_min_prec = compute_lr_conflict_min_prec(
+            alt,
+            own_prec,
+            lr_indices,
+            rule,
+            ctx,
+            total_lr,
+        );
+        let last_self_ref_idx = find_last_self_ref_idx(alt, &rule.name);
+
+        let mut f = FnSpec::new(&suffix_fn);
+        f.add_param("tokens", "&Array<Token>");
+        f.add_param("pos", "i32");
+        f.set_return_type("i32");
+        f.emit_begin(w);
+        w.line("let mut pos = pos;");
+
+        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+            let elem = &alt.elements[ei];
+            if let RuleRef(name) = elem {
+                if *name == rule.name {
+                    let prec = compute_lr_self_ref_prec(
+                        alt,
+                        ei,
+                        last_self_ref_idx,
+                        inner_min_prec,
+                        &lr_suffix_first_tokens,
+                    );
+                    w.line(`pos = {prec_fn}(tokens, pos, {prec});`);
+                    w.line("if pos < 0 { return -1; }");
+                    continue;
+                }
             }
+            if let Repeat(rep) = elem {
+                if let Optional = rep.kind {
+                    if is_ruleref_optional(&rep.element) {
+                        let follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
+                        gen_scan_repeat_optional_with_follow(w, rep, ctx, &follow);
+                        continue;
+                    }
+                }
+            }
+            gen_scan_element(w, elem, ctx);
+        }
+        w.line("return pos;");
+        w.end();
+        w.blank();
+        lr_pos += 1;
+    }
+}
+
+/// Scan-side twin of `gen_lr_suffix_dispatch`. Emits the precedence-aware
+/// LR-suffix loop with first-token dispatch. Identical structure to the parse
+/// side, with p.peek_kind() replaced by an inline bounds-checked read into
+/// `suffix_kind` and `result = fn(p, ...)?` replaced by `pos = fn(tokens, pos);
+/// if pos < 0 { return -1; }`.
+fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext) {
+    let fn_name = `scan_{to_snake_case(&rule.name)}`;
+    let d = compute_lr_dispatch_data(rule, lr_indices, ctx);
+
+    w.begin("loop");
+    w.line("let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
+
+    let mut is_first = true;
+    for let mut g = 0; g < d.groups.len(); g += 1 {
+        let group = &d.groups[g];
+
+        let mut union_first: Array<String> = [];
+        for let idx of group {
+            dedup_append_arr(&mut union_first, &d.suffix_first_sets[*idx]);
+        }
+
+        let cond = kind_check_str(&union_first, "suffix_kind");
+        if is_first {
+            w.begin(`if {cond}`);
+            is_first = false;
         } else {
-            let label = `try_{i}`;
-            w.line("pos = start;");
-            w.begin(`{label}:`);
-            for let elem of &alt.elements {
-                gen_scan_element_in_block(w, elem, ctx, &label);
-            }
-            w.line("break scan_alts;");
-            w.end();
+            w.else_begin(`else if {cond}`);
+        }
+
+        if group.len() == 1 {
+            let lr_idx = d.valid_lr_indices[group[0]];
+            let prec = d.lr_precs[group[0]];
+            let suffix_fn = `{fn_name}_lr_{lr_idx}`;
+            gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
+        } else {
+            gen_scan_lr_overlap_dispatch(
+                w,
+                &fn_name,
+                rule,
+                group,
+                &d.valid_lr_indices,
+                &d.lr_precs,
+                &d.suffix_first_sets,
+                ctx,
+            );
         }
     }
+
+    if !is_first {
+        w.else_begin("else");
+        w.line("break;");
+        w.end();
+    } else {
+        w.line("break;");
+    }
+    w.end();  // loop
+}
+
+fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32) {
+    w.begin(`if {prec} >= min_prec`);
+    w.line(`pos = {*suffix_fn}(tokens, pos);`);
+    w.line("if pos < 0 { return -1; }");
+    w.else_begin("else");
+    w.line("break;");
+    w.end();
+}
+
+/// Scan-side twin of `gen_lr_overlap_dispatch`. For each shared-first-token
+/// group, dispatches by first token then by second token (peek_at(1)) to the
+/// correct LR alternative — exactly like the parse side, so scan and parse
+/// agree on which alt applies at every position.
+fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext) {
+    let mut suffix_sets: Array<TreeSet<String>> = [];
+    for let sfs of suffix_first_sets {
+        suffix_sets.push(str_set_from(sfs));
+    }
+
+    let mut emitted = TreeSet::<String>::new();
+    let mut first_branch = true;
+
+    // First pass: unique-token branches.
+    for let mut k = 0; k < group.len(); k += 1 {
+        let this_first = &suffix_first_sets[group[k]];
+        for let mut t = 0; t < this_first.len(); t += 1 {
+            let tk = &this_first[t];
+            if emitted.contains(*tk) {
+                continue;
+            }
+            let mut shared = false;
+            for let mut j = 0; j < group.len(); j += 1 {
+                if j == k {
+                    continue;
+                }
+                if suffix_sets[group[j]].contains(*tk) {
+                    shared = true;
+                }
+            }
+            if !shared {
+                let lr_idx = valid_lr_indices[group[k]];
+                let prec = lr_precs[group[k]];
+                let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
+                if first_branch {
+                    w.begin(`if suffix_kind == {*tk}`);
+                    first_branch = false;
+                } else {
+                    w.else_begin(`else if suffix_kind == {*tk}`);
+                }
+                gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
+                emitted.insert(*tk);
+            }
+        }
+    }
+
+    // Second pass: shared-token branches with second-token sub-dispatch.
+    let mut shared_tokens: Array<String> = [];
+    let mut shared_seen = TreeSet::<String>::new();
+    for let mut k = 0; k < group.len(); k += 1 {
+        let sfs = &suffix_first_sets[group[k]];
+        for let mut ti = 0; ti < sfs.len(); ti += 1 {
+            let tk = &sfs[ti];
+            if emitted.contains(*tk) {
+                continue;
+            }
+            if !shared_seen.contains(*tk) {
+                shared_seen.insert(*tk);
+                shared_tokens.push(*tk);
+            }
+        }
+    }
+    for let mut st = 0; st < shared_tokens.len(); st += 1 {
+        let shared_tk = &shared_tokens[st];
+        if first_branch {
+            w.begin(`if suffix_kind == {*shared_tk}`);
+            first_branch = false;
+        } else {
+            w.else_begin(`else if suffix_kind == {*shared_tk}`);
+        }
+        w.line("let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };");
+        let mut sub_first = true;
+        let mut last_k = -1;
+        for let mut k = 0; k < group.len(); k += 1 {
+            if suffix_sets[group[k]].contains(*shared_tk) {
+                last_k = k;
+            }
+        }
+        for let mut k = 0; k < group.len(); k += 1 {
+            if !suffix_sets[group[k]].contains(*shared_tk) {
+                continue;
+            }
+            let lr_idx = valid_lr_indices[group[k]];
+            let prec = lr_precs[group[k]];
+            let alt = &rule.alternatives[lr_idx];
+            let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
+            if k == last_k {
+                if sub_first {
+                    gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
+                } else {
+                    w.else_begin("else");
+                    gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
+                    w.end();
+                }
+            } else {
+                let second = compute_lr_second_token(shared_tk, &alt.elements, ctx);
+                let sub_cond = kind_check_str(&second, "second_kind");
+                if sub_first {
+                    w.begin(`if {sub_cond}`);
+                    sub_first = false;
+                } else {
+                    w.else_begin(`else if {sub_cond}`);
+                }
+                gen_scan_lr_call_with_prec(w, &suffix_fn, prec);
+            }
+        }
+        emitted.insert(*shared_tk);
+    }
+    if !first_branch {
+        w.end();
+    }
+}
+
+/// Generate scan code for a multi-alt non-LR rule body (or LR atom body).
+/// Mirrors the parse-side `gen_multi_alt_body` peek-dispatch so that an alt
+/// is only attempted when its FIRST set matches `alt_kind` — this turns
+/// rule-level alt selection from linear first-match into O(1) token dispatch.
+///
+/// Strategy: for each alt compute FIRST, then emit a per-alt `if` guard on
+/// `alt_kind`. On inner failure (break `try_i`), fall through to the next
+/// alt (which is itself peek-dispatched). If no alt's FIRST matches or every
+/// try block fails, return -1. Alts with empty FIRST (e.g. starting with
+/// Wildcard or a rule whose FIRST is unenumerable) are attempted
+/// unconditionally as fallbacks.
+fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext) {
+    let n = alts.len();
+    let max_k = 5;
+    let mut all_pos_sets: Array<Array<Array<String>>> = [];
+    for let alt of alts {
+        all_pos_sets.push(ctx.alt_position_first_sets(alt, max_k));
+    }
+
+    // Token-partitioned dispatch, mirroring parse-side `gen_multi_alt_body`
+    // (see e.g. `parse_expr_atom` in the sqlite golden).
+    //
+    // For each depth-0 first token in the union of all alt guards, we
+    // compute which alts claim it. Tokens claimed by the same set of
+    // alts are folded into one partition. Each partition becomes one
+    // dispatch branch:
+    //   - 1 alt in partition → fast-path: commit on success, fail on miss.
+    //   - 2+ alts in partition → mini-tournament over ONLY those alts
+    //     (plus any unguarded alts), picking the longest match.
+    //
+    // This avoids the regression where sharing a single ambiguous pair
+    // (e.g. `column_ref` and `function_call` both starting with an
+    // IDENT-like token) forced every first-token dispatch through an
+    // N-way tournament. Under partitioning:
+    //   - `BIND_PARAMETER` → fast-path to the bind-param alt.
+    //   - `LPAREN` → 3-way tournament among column_ref, function_call,
+    //     paren_expr (the only alts whose depth-0 first-set contains
+    //     LPAREN, via `any_name`'s `'(' any_name ')'` sub-alt).
+    //   - `IDENT`/keyword → 2-way tournament among column_ref and
+    //     function_call only.
+    //
+    // Unguarded alts (empty pos_sets — fully nullable or unpredictable)
+    // ride along as tournament candidates in every partition and in the
+    // fall-through default, matching the existing fallback semantics.
+
+    let mut guarded_idx: Array<i32> = [];
+    let mut unguarded_idx: Array<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        if all_pos_sets[i].len() >= 1 {
+            guarded_idx.push(i);
+        } else {
+            unguarded_idx.push(i);
+        }
+    }
+
+    let mut union_tokens: Array<String> = [];
+    for let i of &guarded_idx {
+        let depth0 = &all_pos_sets[*i][0];
+        for let t of depth0 {
+            if !first_contains(&union_tokens, t) {
+                union_tokens.push(*t);
+            }
+        }
+    }
+
+    let mut groups_alts: Array<Array<i32>> = [];
+    let mut groups_tokens: Array<Array<String>> = [];
+
+    for let t of &union_tokens {
+        let mut claiming: Array<i32> = [];
+        for let i of &guarded_idx {
+            if first_contains(&all_pos_sets[*i][0], t) {
+                claiming.push(*i);
+            }
+        }
+        let mut found: i32 = -1;
+        for let mut g = 0; g < groups_alts.len(); g += 1 {
+            if i32_arrays_equal(&groups_alts[g], &claiming) {
+                found = g;
+                break;
+            }
+        }
+        if found >= 0 {
+            groups_tokens[found].push(*t);
+        } else {
+            groups_alts.push(claiming);
+            let mut seed: Array<String> = [];
+            seed.push(*t);
+            groups_tokens.push(seed);
+        }
+    }
+
+    w.line("let start = pos;");
+    w.line("let mut pos = pos;");
+    w.line("let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
+
+    w.begin("scan_alts:");
+
+    let mut first_branch = true;
+    for let mut g = 0; g < groups_alts.len(); g += 1 {
+        let cond = kind_check_str(&groups_tokens[g], &"alt_kind");
+        if first_branch {
+            w.begin(`if {cond}`);
+            first_branch = false;
+        } else {
+            w.else_begin(`else if {cond}`);
+        }
+        emit_scan_partition_body(w, &groups_alts[g], &unguarded_idx, alts, ctx);
+    }
+
+    if unguarded_idx.len() > 0 {
+        let empty_alts: Array<i32> = [];
+        if first_branch {
+            emit_scan_partition_body(w, &empty_alts, &unguarded_idx, alts, ctx);
+        } else {
+            w.else_begin("else");
+            emit_scan_partition_body(w, &empty_alts, &unguarded_idx, alts, ctx);
+            w.end();
+        }
+    } else if !first_branch {
+        w.else_begin("else");
+        w.line("return -1;");
+        w.end();
+    } else {
+        w.line("return -1;");
+    }
+
     w.end();
     w.line("return pos;");
+}
+
+/// Emit the body of a single partition branch: a mini-tournament over
+/// `guarded_alts` ∪ `unguarded_alts`, falling back to `return -1` if
+/// every candidate fails. When only one candidate exists, commit to it
+/// directly and `break scan_alts` on success.
+fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, unguarded_alts: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) {
+    let total = guarded_alts.len() + unguarded_alts.len();
+    if total == 1 {
+        let i = if guarded_alts.len() == 1 { guarded_alts[0] } else { unguarded_alts[0] };
+        let label = `try_{i}`;
+        w.line("pos = start;");
+        w.begin(`{label}:`);
+        gen_scan_elements_in_block(w, &alts[i].elements, 0, alts[i].elements.len(), ctx, &label);
+        w.line("break scan_alts;");
+        w.end();
+        w.line("return -1;");
+        return;
+    }
+    w.line("let mut best_pos: i32 = -1;");
+    for let i of guarded_alts {
+        let label = `try_{*i}`;
+        w.line("pos = start;");
+        w.begin(`{label}:`);
+        gen_scan_elements_in_block(w, &alts[*i].elements, 0, alts[*i].elements.len(), ctx, &label);
+        w.line("if pos > best_pos { best_pos = pos; }");
+        w.end();
+    }
+    for let i of unguarded_alts {
+        let label = `try_{*i}`;
+        w.line("pos = start;");
+        w.begin(`{label}:`);
+        gen_scan_elements_in_block(w, &alts[*i].elements, 0, alts[*i].elements.len(), ctx, &label);
+        w.line("if pos > best_pos { best_pos = pos; }");
+        w.end();
+    }
+    w.line("if best_pos >= 0 { pos = best_pos; break scan_alts; }");
+    w.line("return -1;");
+}
+
+fn i32_arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for let mut i = 0; i < a.len(); i += 1 {
+        if a[i] != b[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn build_scan_lookahead_condition(pos_sets: &Array<Array<String>>, depth: i32) -> String {
+    let mut cond = String::with_capacity(128);
+    for let mut d = 0; d < depth; d += 1 {
+        if d > 0 {
+            cond.push_str(" && ");
+        }
+        let tokens = &pos_sets[d];
+        if d == 0 {
+            cond.push_str(kind_check_str(tokens, &"alt_kind"));
+        } else {
+            cond.push_str(`pos + {d} < tokens.len() && `);
+            let tok_expr = `tokens[pos + {d}].kind`;
+            cond.push_str(kind_check_str(tokens, &tok_expr));
+        }
+    }
+    return cond;
+}
+
+/// Scan-side twin of `gen_repeat_with_follow`. Subtracts `follow_first`
+/// from the Optional inner's first-set so the Optional does not fire on
+/// tokens that belong to the enclosing sequence's next element — the
+/// same disambiguation the parse side applies to `RuleRef?` optionals.
+/// If the pruned first-set is empty the Optional can never fire, so
+/// nothing is emitted.
+fn gen_scan_repeat_optional_with_follow(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, follow_first: &Array<String>) {
+    let inner = &rep.element;
+    let mut visiting: Array<String> = [];
+    let raw_first = ctx.first_of_element(inner, &mut visiting);
+    let first = subtract_sets(&raw_first, follow_first);
+
+    if first.len() == 0 {
+        return;
+    }
+
+    let check = kind_check_str(&first, &"tokens[pos].kind");
+    w.begin(`if pos < tokens.len() && {check}`);
+    w.line("let sp = pos;");
+    gen_scan_element_assign(w, inner, ctx);
+    w.line("if pos < 0 { pos = sp; }");
+    w.end();
+}
+
+/// Iterate `elements[start..end]` in scan mode and emit each element's
+/// scan code. For Optional(RuleRef) elements we compute a local
+/// follow-set (first-set of elements after `i`) and apply follow-set
+/// pruning — the scan-side twin of the parse-side
+/// `gen_repeat_with_follow` branch in `gen_alt_elements`. All other
+/// elements go through `gen_scan_element` (fail ⇒ `return -1;`).
+fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, end: i32, ctx: &mut GenContext) {
+    for let mut i = start; i < end; i += 1 {
+        let elem = &elements[i];
+        if let Repeat(rep) = elem {
+            if let Optional = rep.kind {
+                if is_ruleref_optional(&rep.element) {
+                    let follow = ctx.first_of_elements_from(elements, i + 1);
+                    gen_scan_repeat_optional_with_follow(w, rep, ctx, &follow);
+                    continue;
+                }
+            }
+        }
+        gen_scan_element(w, elem, ctx);
+    }
+}
+
+/// `gen_scan_elements` variant that routes non-Optional failures through
+/// `break {label};` so the sequence lives inside a labeled block.
+fn gen_scan_elements_in_block(w: &mut CodeWriter, elements: &Array<Element>, start: i32, end: i32, ctx: &mut GenContext, label: &String) {
+    for let mut i = start; i < end; i += 1 {
+        let elem = &elements[i];
+        if let Repeat(rep) = elem {
+            if let Optional = rep.kind {
+                if is_ruleref_optional(&rep.element) {
+                    let follow = ctx.first_of_elements_from(elements, i + 1);
+                    gen_scan_repeat_optional_with_follow(w, rep, ctx, &follow);
+                    continue;
+                }
+            }
+        }
+        gen_scan_element_in_block(w, elem, ctx, label);
+    }
 }
 
 /// Generate scan code for a single element. On failure, emits `return -1;`.
@@ -1436,7 +1912,7 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext) {
         return;
     }
     if let Group(alts) = elem {
-        gen_scan_group(w, alts, ctx, &"return -1;");
+        gen_scan_group(w, alts, ctx, &"return -1;", is_lenient_group(alts));
         return;
     }
 }
@@ -1482,7 +1958,7 @@ fn gen_scan_element_in_block(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCo
         return;
     }
     if let Group(alts) = elem {
-        gen_scan_group(w, alts, ctx, &`break {*label};`);
+        gen_scan_group(w, alts, ctx, &`break {*label};`, is_lenient_group(alts));
         return;
     }
 }
@@ -1495,6 +1971,17 @@ fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext
     let check = kind_check_str(&inner_first, "tokens[pos].kind");
 
     if let Optional = rep.kind {
+        // If the optional's inner has nested optionals (e.g.
+        // `( (schema '.')? table '.' )?`), plain first-set dispatch
+        // is unsound: the inner optional may greedily fire and cause
+        // the outer sequence to fail without trying the shorter shape.
+        // Mirror the parse side's LL(k) shape dispatch.
+        if has_nested_optionals(&rep.element) {
+            if let Group(alts) = &rep.element {
+                gen_scan_optional_with_lookahead(w, &alts[0].elements, ctx);
+                return;
+            }
+        }
         w.begin(`if pos < tokens.len() && {check}`);
         w.line("let sp = pos;");
         gen_scan_element_assign(w, &rep.element, ctx);
@@ -1506,7 +1993,9 @@ fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext
         w.begin(`while pos < tokens.len() && {check}`);
         w.line("let sp = pos;");
         gen_scan_element_assign(w, &rep.element, ctx);
+        // Stop on failure or on 0-advance (lenient inner scan would loop).
         w.line("if pos < 0 { pos = sp; break; }");
+        w.line("if pos == sp { break; }");
         w.end();
         return;
     }
@@ -1517,9 +2006,99 @@ fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext
         w.line("let sp = pos;");
         gen_scan_element_assign(w, &rep.element, ctx);
         w.line("if pos < 0 { pos = sp; break; }");
+        w.line("if pos == sp { break; }");
         w.end();
         return;
     }
+}
+
+/// Scan-side twin of `gen_optional_with_lookahead`. Enumerates 2^n
+/// shape combinations of the optional's inner elements (longest first)
+/// and emits an if/else-if chain that picks the first shape whose
+/// per-position lookahead matches.
+///
+/// Each shape body is wrapped in a labeled block so that an inner
+/// element failure (`pos = -1`) short-circuits the shape instead of
+/// executing later elements at a bogus `pos`.
+fn gen_scan_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<Element>, ctx: &mut GenContext) {
+    let shapes = compute_shapes(group_elements);
+
+    let mut is_first = true;
+    for let mut si = 0; si < shapes.len(); si += 1 {
+        let shape = &shapes[si];
+        let sig = shape_lookahead_signature(shape, group_elements, ctx);
+        if sig.len() == 0 {
+            continue;
+        }
+        let cond = gen_scan_lookahead_condition(&sig);
+
+        if is_first {
+            w.begin(`if {cond}`);
+            is_first = false;
+        } else {
+            w.else_begin(`else if {cond}`);
+        }
+
+        let gc = SCAN_GROUP_COUNTER;
+        SCAN_GROUP_COUNTER += 1;
+        let shape_label = `sol_{gc}`;
+        w.begin(`{shape_label}:`);
+        for let mut k = 0; k < shape.len(); k += 1 {
+            let idx = shape[k];
+            let elem = &group_elements[idx];
+            let actual = unwrap_optional(elem);
+            if let Group(alts) = actual {
+                if alts.len() == 1 {
+                    for let mut j = 0; j < alts[0].elements.len(); j += 1 {
+                        gen_scan_element_in_block(w, &alts[0].elements[j], ctx, &shape_label);
+                    }
+                } else {
+                    gen_scan_element_in_block(w, actual, ctx, &shape_label);
+                }
+            } else {
+                gen_scan_element_in_block(w, actual, ctx, &shape_label);
+            }
+        }
+        w.end();
+    }
+    if !is_first {
+        w.end();
+    }
+}
+
+/// Scan-side twin of `gen_lookahead_condition`. Uses
+/// `tokens[pos + d].kind` (guarded by `pos + d < tokens.len()`) instead
+/// of `p.peek_at(d)`.
+fn gen_scan_lookahead_condition(sig: &Array<Array<String>>) -> String {
+    let mut parts: Array<String> = [];
+    for let mut d = 0; d < sig.len(); d += 1 {
+        let kinds = &sig[d];
+        let idx_expr = if d == 0 { `pos` } else { `pos + {d}` };
+        let check_expr = `tokens[{idx_expr}].kind`;
+        let guard = `{idx_expr} < tokens.len()`;
+        if kinds.len() == 1 {
+            parts.push(`{guard} && {check_expr} == {kinds[0]}`);
+        } else {
+            let mut inner = String::with_capacity(64);
+            inner.push_str(`{guard} && (`);
+            for let mut j = 0; j < kinds.len(); j += 1 {
+                if j > 0 {
+                    inner.push_str(" || ");
+                }
+                inner.push_str(`{check_expr} == {kinds[j]}`);
+            }
+            inner.push_str(")");
+            parts.push(inner);
+        }
+    }
+    let mut result = String::with_capacity(128);
+    for let mut i = 0; i < parts.len(); i += 1 {
+        if i > 0 {
+            result.push_str(" && ");
+        }
+        result.push_str(parts[i]);
+    }
+    return result;
 }
 
 /// Generate scan code for a single element, emitting `fail_stmt` on failure.
@@ -1562,7 +2141,7 @@ fn gen_scan_element_with_fail(w: &mut CodeWriter, elem: &Element, ctx: &mut GenC
         return;
     }
     if let Group(alts) = elem {
-        gen_scan_group(w, alts, ctx, fail_stmt);
+        gen_scan_group(w, alts, ctx, fail_stmt, is_lenient_group(alts));
         return;
     }
 }
@@ -1599,7 +2178,8 @@ fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCont
         return;
     }
     if let Group(alts) = elem {
-        gen_scan_group(w, alts, ctx, &"pos = -1;");
+        // Rep body: must be strict so a 0-advance iteration doesn't infinite-loop.
+        gen_scan_group(w, alts, ctx, &"pos = -1;", false);
         return;
     }
     if let Repeat(rep) = elem {
@@ -1646,7 +2226,12 @@ global mut SCAN_GROUP_COUNTER: i32 = 0;
 ///   - "return -1;"  → top-level scan context (abort whole scan fn)
 ///   - "break LBL;"  → nested inside a labeled try/alt block
 ///   - "pos = -1;"   → assign context (caller checks `pos < 0` afterward)
-fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, fail_stmt: &String) {
+/// When `lenient` is true, the group succeeds with pos unchanged if no
+/// alternative matches (mirrors the parse-side `Option<T> = null` fallback
+/// emitted by `gen_consume_group_store_optional` / `gen_general_group_store_optional`).
+/// Use lenient=true only in contexts that cannot infinite-loop on 0-advance
+/// success (main alt body); use lenient=false inside repeat bodies and rep guards.
+fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {
     if alts.len() == 1 {
         // Single alt: outer `done` wraps inner `body`.
         //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
@@ -1656,14 +2241,20 @@ fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenCo
         SCAN_GROUP_COUNTER += 1;
         let body = `sg_{gc}`;
         let done = `sg_{gc}_done`;
+        let save_var = `sg_{gc}_save`;
+        if lenient {
+            w.line(`let {save_var} = pos;`);
+        }
         w.begin(`{done}:`);
         w.begin(`{body}:`);
-        for let elem of &alts[0].elements {
-            gen_scan_element_in_block(w, elem, ctx, &body);
-        }
+        gen_scan_elements_in_block(w, &alts[0].elements, 0, alts[0].elements.len(), ctx, &body);
         w.line(`break {done};`);
         w.end();
-        w.line(*fail_stmt);
+        if lenient {
+            w.line(`pos = {save_var};`);
+        } else {
+            w.line(*fail_stmt);
+        }
         w.end();
         return;
     }
@@ -1672,21 +2263,103 @@ fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenCo
     SCAN_GROUP_COUNTER += 1;
     let outer = `sg_{gc}`;
     let gp_var = `gp_{gc}`;
+    let best_var = `sg_{gc}_best`;
     w.line(`let {gp_var} = pos;`);
+
+    // Compute per-alt first-sets once for both the lenient gate and
+    // ambiguity detection below.
+    let n = alts.len();
+    let mut first_sets: Array<Array<String>> = [];
+    for let alt of alts {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(alt, &mut visiting));
+    }
+
+    // Mirror the rule-level `gen_scan_multi_alt` longest-match dispatch:
+    // when several alts share a first-token, the first-match winner may
+    // advance a shorter distance than a later alt with the same prefix
+    // (e.g. in `select_core` the FROM group `( table_or_subquery … | join_clause )`
+    // both start with `table_or_subquery` but `join_clause` consumes further
+    // when joins are present). Mark any alt that shares a first-token with
+    // another as ambiguous; ambiguous alts record their advancement into
+    // `best_var` and the group commits to the longest match at the end.
+    // Non-ambiguous alts keep the cheap `break {outer}` fast path since
+    // their first-token uniquely identifies them.
+    let mut is_ambiguous: Array<bool> = [];
+    for let mut i = 0; i < n; i += 1 {
+        is_ambiguous.push(false);
+    }
+    for let mut i = 0; i < n; i += 1 {
+        for let mut j = 0; j < n; j += 1 {
+            if i == j { continue; }
+            if sets_overlap(&first_sets[i], &first_sets[j]) {
+                is_ambiguous[i] = true;
+                is_ambiguous[j] = true;
+            }
+        }
+    }
+    let mut any_ambiguous = false;
+    for let mut i = 0; i < n; i += 1 {
+        if is_ambiguous[i] { any_ambiguous = true; }
+    }
+
+    // For lenient groups, mirror the parse-side first-set gate: if peek is not
+    // in any alt's first set, skip the try-each-alt block without advancing.
+    // This keeps scan_X consistent with parse_X (both 0-advance when no alt
+    // fires), so rep-scan-guard's require_advance check can detect stalls.
+    let mut union_first: Array<String> = [];
+    if lenient {
+        for let fs of &first_sets {
+            dedup_append_arr(&mut union_first, fs);
+        }
+    }
+    let gate_emitted = lenient && union_first.len() > 0;
+    if gate_emitted {
+        let sgk_var = `sgk_{gc}`;
+        w.line(`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
+        let gate = kind_check_str(&union_first, &sgk_var);
+        w.begin(`if {gate}`);
+    }
+
+    if any_ambiguous {
+        w.line(`let mut {best_var} = -1;`);
+    }
+
     w.begin(`{outer}:`);
-    for let mut i = 0; i < alts.len(); i += 1 {
+    for let mut i = 0; i < n; i += 1 {
         let alt = &alts[i];
         let inner = `sg_{gc}_{i}`;
         w.line(`pos = {gp_var};`);
         w.begin(`{inner}:`);
-        for let elem of &alt.elements {
-            gen_scan_element_in_block(w, elem, ctx, &inner);
+        gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &inner);
+        if is_ambiguous[i] {
+            w.line(`if pos > {best_var} \{ {best_var} = pos; \}`);
+        } else {
+            w.line(`break {outer};`);
         }
-        w.line(`break {outer};`);
         w.end();
     }
-    w.line(*fail_stmt);
-    w.end();
+    if any_ambiguous {
+        w.line(`if {best_var} >= 0 \{ pos = {best_var}; break {outer}; \}`);
+    }
+    if lenient {
+        w.line(`pos = {gp_var};`);
+    } else {
+        w.line(*fail_stmt);
+    }
+    w.end();  // close outer labeled block
+
+    if gate_emitted {
+        w.end();  // close the first-set gate
+    }
+}
+
+/// True iff the parse side dispatches `Group(alts)` leniently (produces
+/// `Option<T> = null` on no match rather than failing). Mirrors the if-chain
+/// in `gen_element` at the Group branch: simple-cst and general groups use
+/// the Option wrapper; token-only and single-alt groups do not.
+fn is_lenient_group(alts: &Array<Alternative>) -> bool {
+    return is_simple_cst_group(alts) || is_general_group(alts);
 }
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
@@ -1809,7 +2482,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
         if needs_bt {
             gen_multi_alt_body_bt(w, rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
         } else {
-            gen_multi_alt_body(w, rule, &type_name, ctx);
+            gen_multi_alt_body(w, rule, &type_name, ctx, &non_lr_indices);
         }
         w.end();
         w.blank();
@@ -1847,7 +2520,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
         if needs_bt {
             gen_multi_alt_body_bt(w, rule, &type_name, ctx, &groups, &first_sets, &non_lr_indices);
         } else {
-            gen_multi_alt_body(w, rule, &type_name, ctx);
+            gen_multi_alt_body(w, rule, &type_name, ctx, &non_lr_indices);
         }
         w.end();
         w.blank();
@@ -1926,21 +2599,22 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
     }
 }
 
-fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext) {
+fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext, non_lr_indices: &Array<i32>) {
     let case_names = case_names_for_rule(&rule.alternatives);
 
     let max_k = 5;
     let mut all_pos_sets: Array<Array<Array<String>>> = [];
-    for let alt of rule.alternatives {
-        all_pos_sets.push(ctx.alt_position_first_sets(&alt, max_k));
+    for let idx of non_lr_indices {
+        all_pos_sets.push(ctx.alt_position_first_sets(&rule.alternatives[*idx], max_k));
     }
     let depth = find_needed_depth(&all_pos_sets);
 
     w.line("let kind = p.peek_kind();");
 
-    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        let alt = &rule.alternatives[i];
-        let sname = `{strip_suffix(type_name, "Node")}{case_names[i]}`;
+    for let mut i = 0; i < non_lr_indices.len(); i += 1 {
+        let alt_idx = non_lr_indices[i];
+        let alt = &rule.alternatives[alt_idx];
+        let sname = `{strip_suffix(type_name, "Node")}{case_names[alt_idx]}`;
 
         let pos_sets = &all_pos_sets[i];
         let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
@@ -1952,11 +2626,11 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
             w.begin("scope:");
         }
 
-        ctx.group_counter = ctx.alt_gc_starts[i];
+        ctx.group_counter = ctx.alt_gc_starts[alt_idx];
         gen_alt_body(
             w,
             type_name,
-            Option::<String>::Some(case_names[i]),
+            Option::<String>::Some(case_names[alt_idx]),
             Option::<String>::Some(sname),
             alt,
             ctx,
@@ -2689,16 +3363,18 @@ fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
 /// Returns the name of the outer pos variable (`-1` on scan failure, end-pos on success).
 /// Caller emits `if {pos_var} >= 0 { /* commit parse */ }`.
 fn emit_opt_scan_guard(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
-    return emit_scan_guard_with_prefix(w, inner, ctx, name_counts, &"opt_scan_pos", &"opt_scan");
+    return emit_scan_guard_with_prefix(w, inner, ctx, name_counts, &"opt_scan_pos", &"opt_scan", false);
 }
 
 /// Emit an inline scan guard for a repetition's inner element.
-/// Same shape as emit_opt_scan_guard but uses `rep_scan_*` naming.
+/// Same shape as emit_opt_scan_guard but uses `rep_scan_*` naming. Requires
+/// the scan to advance at least one token; 0-advance is treated as failure
+/// so lenient scans of LR rules (which can no-op at EOF) don't loop forever.
 fn emit_rep_scan_guard(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
-    return emit_scan_guard_with_prefix(w, inner, ctx, name_counts, &"rep_scan_pos", &"rep_scan");
+    return emit_scan_guard_with_prefix(w, inner, ctx, name_counts, &"rep_scan_pos", &"rep_scan", true);
 }
 
-fn emit_scan_guard_with_prefix(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, pos_prefix: &String, label_prefix: &String) -> String {
+fn emit_scan_guard_with_prefix(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, pos_prefix: &String, label_prefix: &String, require_advance: bool) -> String {
     let scan_pos_var = dedup_name(pos_prefix, name_counts);
     let scan_label = dedup_name(label_prefix, name_counts);
     w.line(`let mut {scan_pos_var}: i32 = -1;`);
@@ -2708,14 +3384,16 @@ fn emit_scan_guard_with_prefix(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
     let fail = `break {scan_label};`;
     if let Group(alts) = inner {
         if alts.len() == 1 {
-            for let e of &alts[0].elements {
-                gen_scan_element_with_fail(w, e, ctx, &fail);
-            }
+            gen_scan_elements_in_block(w, &alts[0].elements, 0, alts[0].elements.len(), ctx, &scan_label);
         } else {
-            gen_scan_group(w, alts, ctx, &fail);
+            // Rep guard: must be strict so scan failure terminates the rep loop.
+            gen_scan_group(w, alts, ctx, &fail, false);
         }
     } else {
         gen_scan_element_with_fail(w, inner, ctx, &fail);
+    }
+    if require_advance {
+        w.line(`if pos <= p.pos \{ break {scan_label}; \}`);
     }
     w.line(`{scan_pos_var} = pos;`);
     w.end();
@@ -3601,43 +4279,13 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
                     w.line(`{opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
                 }
             } else {
-                // Backtracking for overlapping alternatives
-                let saved = dedup_name(&"saved_pos", name_counts);
-                let done = dedup_name(&"bt_done", name_counts);
-                w.line(`let {saved} = p.pos;`);
-                w.line(`let mut {done} = false;`);
-
                 let mut sorted_group = group.sorted();
                 sort_group_by_element_count(&mut sorted_group, alts);
 
-                for let mut k = 0; k < sorted_group.len(); k += 1 {
-                    let alt_idx = sorted_group[k];
-                    let is_last = k == sorted_group.len() - 1;
-                    if let RuleRef(rule_name) = &alts[alt_idx].elements[0] {
-                        let fn_name = `parse_{to_snake_case(rule_name)}`;
-                        let case_name = group_case_name(&alts[alt_idx]);
-
-                        if is_last {
-                            w.begin(`if !{done}`);
-                            let local_var = to_snake_case(rule_name);
-                            w.line(`let {local_var} = {fn_name}(p)?;`);
-                            w.line(`{opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
-                            w.end();
-                        } else {
-                            let bt_label = dedup_name(&"bt_try", name_counts);
-                            w.begin(`if !{done}`);
-                            w.begin(`{bt_label}:`);
-                            let r_var = dedup_name(&"opt_r", name_counts);
-                            w.line(`let {r_var} = {fn_name}(p);`);
-                            w.line(`if let Err(_) = {r_var} \{ p.pos = {saved}; break {bt_label}; \}`);
-                            w.line(
-                                `{opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({r_var}.unwrap()));`,
-                            );
-                            w.line(`{done} = true;`);
-                            w.end();  // label
-                            w.end();  // if !done
-                        }
-                    }
+                if rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
+                    gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &opt_var, type_name, ctx, name_counts);
+                } else {
+                    gen_rule_ref_group_backtrack(w, &sorted_group, alts, &opt_var, type_name, ctx, name_counts);
                 }
             }
         }
@@ -3648,6 +4296,117 @@ fn gen_consume_group_store(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &
         w.line(`p.fail("{first_alt_name}")?;`);
         w.end();
         w.line(`let {var_name} = {opt_var}.unwrap();`);
+    }
+}
+
+/// Returns true if every RuleRef in a group of single-RuleRef alts is scannable.
+fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) -> bool {
+    if sorted_group.len() < 2 {
+        return false;
+    }
+    for let idx_ref of sorted_group {
+        let alt = &alts[*idx_ref];
+        if alt.elements.len() != 1 {
+            return false;
+        }
+        if let RuleRef(rule_name) = &alt.elements[0] {
+            let mut visiting: Array<String> = [];
+            if !ctx.is_rule_scannable(rule_name, &mut visiting) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Stage C scan dispatch for RuleRef-only group stores — scans each alt's
+/// rule, picks the longest match, parses only the winner.
+fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let mut scan_pos_vars: Array<String> = [];
+    for let mut k = 0; k < sorted_group.len(); k += 1 {
+        let alt = &alts[sorted_group[k]];
+        let scan_pos_var = dedup_name(&"gd_scan_pos", name_counts);
+        let scan_label = dedup_name(&"gd_scan", name_counts);
+        scan_pos_vars.push(scan_pos_var);
+        w.line(`let mut {scan_pos_var}: i32 = -1;`);
+        w.begin(`{scan_label}:`);
+        w.line("let tokens = &p.tokens;");
+        w.line("let mut pos: i32 = p.pos;");
+        gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &scan_label);
+        w.line(`{scan_pos_var} = pos;`);
+        w.end();
+    }
+
+    let best_i_var = dedup_name(&"gd_best_i", name_counts);
+    let best_p_var = dedup_name(&"gd_best_p", name_counts);
+    w.line(`let mut {best_i_var}: i32 = -1;`);
+    w.line(`let mut {best_p_var}: i32 = -1;`);
+    for let mut k = 0; k < sorted_group.len(); k += 1 {
+        w.begin(`if {scan_pos_vars[k]} > {best_p_var}`);
+        w.line(`{best_p_var} = {scan_pos_vars[k]};`);
+        w.line(`{best_i_var} = {k};`);
+        w.end();
+    }
+
+    for let mut k = 0; k < sorted_group.len(); k += 1 {
+        let alt_idx = sorted_group[k];
+        let is_last = k == sorted_group.len() - 1;
+        if let RuleRef(rule_name) = &alts[alt_idx].elements[0] {
+            let fn_name = `parse_{to_snake_case(rule_name)}`;
+            let case_name = group_case_name(&alts[alt_idx]);
+            let local_var = to_snake_case(rule_name);
+
+            if k == 0 && !is_last {
+                w.begin(`if {best_i_var} == {k}`);
+            } else if is_last {
+                w.else_begin("else");
+            } else {
+                w.else_begin(`else if {best_i_var} == {k}`);
+            }
+            w.line(`let {local_var} = {fn_name}(p)?;`);
+            w.line(`{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
+        }
+    }
+    w.end();
+}
+
+/// Speculative-parse fallback for RuleRef-only groups when scan is unavailable.
+fn gen_rule_ref_group_backtrack(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+    let saved = dedup_name(&"saved_pos", name_counts);
+    let done = dedup_name(&"bt_done", name_counts);
+    w.line(`let {saved} = p.pos;`);
+    w.line(`let mut {done} = false;`);
+
+    for let mut k = 0; k < sorted_group.len(); k += 1 {
+        let alt_idx = sorted_group[k];
+        let is_last = k == sorted_group.len() - 1;
+        if let RuleRef(rule_name) = &alts[alt_idx].elements[0] {
+            let fn_name = `parse_{to_snake_case(rule_name)}`;
+            let case_name = group_case_name(&alts[alt_idx]);
+
+            if is_last {
+                w.begin(`if !{done}`);
+                let local_var = to_snake_case(rule_name);
+                w.line(`let {local_var} = {fn_name}(p)?;`);
+                w.line(`{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
+                w.end();
+            } else {
+                let bt_label = dedup_name(&"bt_try", name_counts);
+                w.begin(`if !{done}`);
+                w.begin(`{bt_label}:`);
+                let r_var = dedup_name(&"opt_r", name_counts);
+                w.line(`let {r_var} = {fn_name}(p);`);
+                w.line(`if let Err(_) = {r_var} \{ p.pos = {saved}; break {bt_label}; \}`);
+                w.line(
+                    `{*opt_var} = Option::<{type_name}>::Some({type_name}::{case_name}({r_var}.unwrap()));`,
+                );
+                w.line(`{done} = true;`);
+                w.end();  // label
+                w.end();  // if !done
+            }
+        }
     }
 }
 
@@ -3696,40 +4455,13 @@ fn gen_consume_group_store_optional(w: &mut CodeWriter, alts: &Array<Alternative
                 w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
             }
         } else {
-            let saved = dedup_name(&"saved_pos", name_counts);
-            let done = dedup_name(&"bt_done", name_counts);
-            w.line(`let {saved} = p.pos;`);
-            w.line(`let mut {done} = false;`);
-
             let mut sorted_group = group.sorted();
             sort_group_by_element_count(&mut sorted_group, alts);
 
-            for let mut k = 0; k < sorted_group.len(); k += 1 {
-                let alt_idx = sorted_group[k];
-                let is_last = k == sorted_group.len() - 1;
-                if let RuleRef(rule_name) = &alts[alt_idx].elements[0] {
-                    let fn_name = `parse_{to_snake_case(rule_name)}`;
-                    let case_name = group_case_name(&alts[alt_idx]);
-
-                    if is_last {
-                        w.begin(`if !{done}`);
-                        let local_var = to_snake_case(rule_name);
-                        w.line(`let {local_var} = {fn_name}(p)?;`);
-                        w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{case_name}({local_var}));`);
-                        w.end();
-                    } else {
-                        let bt_label = dedup_name(&"bt_try", name_counts);
-                        w.begin(`if !{done}`);
-                        w.begin(`{bt_label}:`);
-                        let r_var = dedup_name(&"opt_r", name_counts);
-                        w.line(`let {r_var} = {fn_name}(p);`);
-                        w.line(`if let Err(_) = {r_var} \{ p.pos = {saved}; break {bt_label}; \}`);
-                        w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::{case_name}({r_var}.unwrap()));`);
-                        w.line(`{done} = true;`);
-                        w.end();  // label
-                        w.end();  // if !done
-                    }
-                }
+            if rule_ref_group_all_scannable(&sorted_group, alts, ctx) {
+                gen_rule_ref_group_scan_dispatch(w, &sorted_group, alts, &inner_var, type_name, ctx, name_counts);
+            } else {
+                gen_rule_ref_group_backtrack(w, &sorted_group, alts, &inner_var, type_name, ctx, name_counts);
             }
         }
     }
@@ -4059,10 +4791,7 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
         w.begin(`{scan_label}:`);
         w.line("let tokens = &p.tokens;");
         w.line("let mut pos: i32 = p.pos;");
-        let fail = `break {scan_label};`;
-        for let elem of &alt.elements {
-            gen_scan_element_with_fail(w, elem, ctx, &fail);
-        }
+        gen_scan_elements_in_block(w, &alt.elements, 0, alt.elements.len(), ctx, &scan_label);
         w.line(`{scan_pos_var} = pos;`);
         w.end();
     }
@@ -4247,10 +4976,7 @@ fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array
         w.begin(`{scan_label}:`);
         w.line("let tokens = &p.tokens;");
         w.line("let mut pos: i32 = p.pos;");
-        let fail = `break {scan_label};`;
-        for let mut i = skip; i < alt.elements.len(); i += 1 {
-            gen_scan_element_with_fail(w, &alt.elements[i], ctx, &fail);
-        }
+        gen_scan_elements_in_block(w, &alt.elements, skip, alt.elements.len(), ctx, &scan_label);
         w.line(`{scan_pos_var} = pos;`);
         w.end();
     }
@@ -4327,11 +5053,71 @@ fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &A
     return min_prec;
 }
 
+/// Collect FIRST-of-suffix tokens across all LR alternatives. Used to detect
+/// when a delimiter token following a non-final self-ref is also an LR binary
+/// operator — in which case the self-ref must retain its inner min_prec to
+/// avoid the delimiter being consumed as a binary op at the wrong precedence.
+fn collect_lr_suffix_first_tokens(rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext) -> TreeSet<String> {
+    let mut result = TreeSet::<String>::new();
+    for let lr_i of lr_indices {
+        let lr_alt = &rule.alternatives[*lr_i];
+        if lr_alt.elements.len() > 1 {
+            let sf = ctx.first_of_elements_from(&lr_alt.elements, 1);
+            for let t of sf {
+                result.insert(t);
+            }
+        }
+    }
+    return result;
+}
+
+/// Find the last self-recursive (RuleRef to rule itself) element index in the
+/// given alternative's suffix (elements[1..]). Returns -1 if none.
+fn find_last_self_ref_idx(alt: &Alternative, rule_name: &String) -> i32 {
+    let mut last_self_ref_idx = -1;
+    for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+        if let RuleRef(name) = &alt.elements[ei] {
+            if *name == *rule_name {
+                last_self_ref_idx = ei;
+            }
+        }
+    }
+    return last_self_ref_idx;
+}
+
+/// Compute the min_prec value to use when emitting a self-recursive call at
+/// position `ei` inside an LR suffix. The final self-ref (`ei == last_self_ref_idx`)
+/// uses `inner_min_prec`. Non-final self-refs use 0, unless the next element is
+/// a literal/token that also appears as an LR suffix-first token (e.g. AND in
+/// BETWEEN…AND), in which case `inner_min_prec` is preserved.
+fn compute_lr_self_ref_prec(alt: &Alternative, ei: i32, last_self_ref_idx: i32, inner_min_prec: i32, lr_suffix_first_tokens: &TreeSet<String>) -> i32 {
+    let mut prec = inner_min_prec;
+    if ei != last_self_ref_idx && ei + 1 < alt.elements.len() {
+        let next_elem = &alt.elements[ei + 1];
+        let mut next_is_lr_op = false;
+        if let TokenRef(tn) = next_elem {
+            if lr_suffix_first_tokens.contains(`TK_{*tn}`) {
+                next_is_lr_op = true;
+            }
+        }
+        if let Literal(lit) = next_elem {
+            if lr_suffix_first_tokens.contains(literal_const_name(lit)) {
+                next_is_lr_op = true;
+            }
+        }
+        if !next_is_lr_op {
+            prec = 0;
+        }
+    }
+    return prec;
+}
+
 fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext) {
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
     let prec_fn = `{fn_name}_prec`;
     let case_names = case_names_for_rule(&rule.alternatives);
     let total_lr = lr_indices.len();
+    let lr_suffix_first_tokens = collect_lr_suffix_first_tokens(rule, lr_indices, ctx);
 
     let mut lr_pos = 0;
     for let lr_idx_ref of lr_indices {
@@ -4369,56 +5155,20 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         ctx.group_counter = ctx.alt_gc_starts[lr_idx];
         let gc_lr = ctx.group_counter;
 
-        // Collect all LR suffix first tokens to detect when a delimiter
-        // following a non-final self-ref is also an LR binary operator.
-        let mut lr_suffix_first_tokens = TreeSet::<String>::new();
-        for let lr_i of lr_indices {
-            let lr_alt = &rule.alternatives[*lr_i];
-            if lr_alt.elements.len() > 1 {
-                let sf = ctx.first_of_elements_from(&lr_alt.elements, 1);
-                for let t of sf {
-                    lr_suffix_first_tokens.insert(t);
-                }
-            }
-        }
-
-        // Find the last self-recursive element index in the suffix.
-        let mut last_self_ref_idx = -1;
-        for let mut ei2 = 1; ei2 < alt.elements.len(); ei2 += 1 {
-            if let RuleRef(name2) = &alt.elements[ei2] {
-                if *name2 == rule.name {
-                    last_self_ref_idx = ei2;
-                }
-            }
-        }
+        let last_self_ref_idx = find_last_self_ref_idx(alt, &rule.name);
 
         for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
             if let RuleRef(name) = elem {
                 if *name == rule.name {
                     let field_name = dedup_name(&escape_ident(&to_snake_case(name)), &mut name_counts);
-                    let mut prec = inner_min_prec;
-                    if ei != last_self_ref_idx && ei + 1 < alt.elements.len() {
-                        // Non-final self-ref: use min_prec 0 unless the next
-                        // delimiter token is also an LR operator (e.g. AND in
-                        // BETWEEN...AND). In that case, keep inner_min_prec to
-                        // prevent the delimiter from being consumed as a binary op.
-                        let next_elem = &alt.elements[ei + 1];
-                        let mut next_is_lr_op = false;
-                        if let TokenRef(tn) = next_elem {
-                            if lr_suffix_first_tokens.contains(`TK_{*tn}`) {
-                                next_is_lr_op = true;
-                            }
-                        }
-                        if let Literal(lit) = next_elem {
-                            if lr_suffix_first_tokens.contains(literal_const_name(lit)) {
-                                next_is_lr_op = true;
-                            }
-                        }
-                        if !next_is_lr_op {
-                            prec = 0;
-                        }
-                    }
+                    let prec = compute_lr_self_ref_prec(
+                        alt,
+                        ei,
+                        last_self_ref_idx,
+                        inner_min_prec,
+                        &lr_suffix_first_tokens,
+                    );
                     w.line(`let {field_name} = {prec_fn}(p, {prec})?;`);
                 } else {
                     let elem_fn = `parse_{to_snake_case(name)}`;
@@ -4631,8 +5381,22 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRu
     }
 }
 
-fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext, use_prec: bool) {
-    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+/// Precomputed per-LR-rule dispatch data shared between the parse-side and
+/// scan-side suffix dispatchers. `valid_lr_indices` lists LR alternatives whose
+/// suffix has a non-empty FIRST set (eligible for token-kind dispatch).
+/// `suffix_first_sets[i]` is FIRST(elements[1..]) of the i-th valid alt.
+/// `lr_precs[i]` is its precedence (first alt = highest = N, last = 1).
+/// `groups` partitions the valid alts by FIRST-set overlap so that each group
+/// becomes a single `if suffix_kind matches { ... }` branch; groups of size > 1
+/// are resolved via a second-token (peek_at(1)) sub-dispatch.
+struct LrDispatchData {
+    valid_lr_indices: Array<i32>,
+    suffix_first_sets: Array<Array<String>>,
+    lr_precs: Array<i32>,
+    groups: Array<Array<i32>>,
+}
+
+fn compute_lr_dispatch_data(rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext) -> LrDispatchData {
     let total_lr = lr_indices.len();
 
     let mut valid_lr_indices: Array<i32> = [];
@@ -4660,16 +5424,28 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
 
     let groups = compute_overlap_groups(&suffix_first_sets);
 
+    return LrDispatchData {
+        valid_lr_indices,
+        suffix_first_sets,
+        lr_precs,
+        groups,
+    };
+}
+
+fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext, use_prec: bool) {
+    let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    let d = compute_lr_dispatch_data(rule, lr_indices, ctx);
+
     w.begin("loop");
     w.line("let suffix_kind = p.peek_kind();");
 
     let mut is_first = true;
-    for let mut g = 0; g < groups.len(); g += 1 {
-        let group = &groups[g];
+    for let mut g = 0; g < d.groups.len(); g += 1 {
+        let group = &d.groups[g];
 
         let mut union_first: Array<String> = [];
         for let idx of group {
-            dedup_append_arr(&mut union_first, &suffix_first_sets[*idx]);
+            dedup_append_arr(&mut union_first, &d.suffix_first_sets[*idx]);
         }
 
         let cond = kind_check_str(&union_first, "suffix_kind");
@@ -4681,8 +5457,8 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
         }
 
         if group.len() == 1 {
-            let lr_idx = valid_lr_indices[group[0]];
-            let prec = lr_precs[group[0]];
+            let lr_idx = d.valid_lr_indices[group[0]];
+            let prec = d.lr_precs[group[0]];
             let suffix_fn = `{fn_name}_lr_{lr_idx}`;
             if use_prec {
                 w.begin(`if {prec} >= min_prec`);
@@ -4699,9 +5475,9 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
                 &fn_name,
                 rule,
                 group,
-                &valid_lr_indices,
-                &lr_precs,
-                &suffix_first_sets,
+                &d.valid_lr_indices,
+                &d.lr_precs,
+                &d.suffix_first_sets,
                 ctx,
                 use_prec,
             );

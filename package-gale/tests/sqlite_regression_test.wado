@@ -1,0 +1,27 @@
+use sqlite from "./golden/sqlite.wado";
+
+// The simpler form (expr c.id isolated)
+test "m1 select c.id" {
+    let sql = "SELECT c.id;";
+    let r = sqlite::parse(&sql);
+    if let Err(e) = r { panic(`m1: [{e.span.start},{e.span.end}): {e.message}`); }
+}
+
+// The failure reproducer
+test "m2 select f(c.id)" {
+    let sql = "SELECT f(c.id);";
+    let r = sqlite::parse(&sql);
+    if let Err(e) = r { panic(`m2: [{e.span.start},{e.span.end}): {e.message}`); }
+}
+
+test "m3 select count c.id as comment_count" {
+    let sql = "SELECT COUNT(c.id) AS comment_count FROM comments c;";
+    let r = sqlite::parse(&sql);
+    if let Err(e) = r { panic(`m3: [{e.span.start},{e.span.end}): {e.message}`); }
+}
+
+test "m4 select * from users where active=1" {
+    let sql = "SELECT * FROM users WHERE is_active = 1;";
+    let r = sqlite::parse(&sql);
+    if let Err(e) = r { panic(`m4: [{e.span.start},{e.span.end}): {e.message}`); }
+}
