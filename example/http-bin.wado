@@ -339,6 +339,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     let resp_headers = Fields::new();
     resp_headers.append("server", #file.as_bytes() as FieldValue);
     resp_headers.append("content-type", content_type.as_bytes() as FieldValue);
+    resp_headers.append("trailer", "server-timing".as_bytes() as FieldValue);
     if let Some(a) = allow {
         resp_headers.append("allow", a.as_bytes() as FieldValue);
     }
@@ -348,14 +349,23 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     task return Result::Ok(response);
 
     body_tx.write(body_str.as_bytes());
-
     body_tx.drop();
-    trailers_tx.write(Result::Ok(null));
+
+    // Server-Timing trailer carries the handler's wall-clock time so curious
+    // clients can see it without re-running. Only delivered to clients that
+    // sent `TE: trailers` per RFC 7230 §4.3.
+    let elapsed = MonotonicClock::now() - start_mark;
+    let elapsed_ms = (elapsed as f64) / 1_000_000.0;
+    let trailers = Trailers::new() as Trailers;
+    trailers.append(
+        "server-timing",
+        `app;dur={elapsed_ms:0.3f}`.as_bytes() as FieldValue,
+    );
+    trailers_tx.write(Result::Ok(Option::Some(trailers)));
 
     // Access log: emit request summary as JSON to stderr after the
     // response body has been written out. `log_stderr` appends its own
     // newline so we don't add one here.
-    let elapsed = MonotonicClock::now() - start_mark;
     log_stderr(json::to_string(&AccessLog {
         method: method_name(method),
         path,
