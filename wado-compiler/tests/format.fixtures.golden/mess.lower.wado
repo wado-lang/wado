@@ -3929,7 +3929,7 @@ pub fn log2_pow10(x: i32) -> i32 {
 }
 
 pub fn unpack64(f: f64) -> UnpackResult {
-    let bits: u64 = Box<f64> { value: f }.f64::to_bits() as u64;
+    let bits: u64 = f.f64::to_bits() as u64;
     let mantissa_mask: u64 = 0x000FFFFFFFFFFFFF;
     let exp_mask: u64 = 0x7FF;
     let shift: i32 = (64 - 53);
@@ -3952,7 +3952,7 @@ pub fn unpack64(f: f64) -> UnpackResult {
 }
 
 pub fn unpack32(f: f32) -> UnpackResult {
-    let bits: u32 = Box<f32> { value: f }.f32::to_bits() as u32;
+    let bits: u32 = f.f32::to_bits() as u32;
     let mantissa_mask: u32 = 0x007FFFFF;
     let exp_mask: u32 = 0xFF;
     let shift: i32 = (64 - 24);
@@ -4728,7 +4728,7 @@ pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> 
 }
 
 pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
-    let bits: i64 = Box<f64> { value: f }.f64::to_bits();
+    let bits: i64 = f.f64::to_bits();
     if (bits == 0) {
         return [true, false, SpecialKind::Zero];
     }
@@ -7530,13 +7530,13 @@ fn f32::inspect_into(self: Box<f32>, f: &mut Formatter) {
 }
 
 fn f32::fmt_fixed(self: Box<f32>, precision: i32, f: &mut Formatter) {
-    let v64: f64 = self.value as f64;
-    Box<f64> { value: v64 }.f64::fmt_fixed(precision, f);
+    let v64: Box<f64> = Box<f64> { value: self.value as f64 };
+    v64.f64::fmt_fixed(precision, f);
 }
 
 fn f32::fmt_exp(self: Box<f32>, precision: i32, upper: i32, f: &mut Formatter) {
-    let v64: f64 = self.value as f64;
-    Box<f64> { value: v64 }.f64::fmt_exp(precision, upper, f);
+    let v64: Box<f64> = Box<f64> { value: self.value as f64 };
+    v64.f64::fmt_exp(precision, upper, f);
 }
 
 pub fn f32::to_string(self: Box<f32>) -> String {
@@ -8236,12 +8236,12 @@ pub fn "f64^UpperExp::fmt"(self: Box<f64>, f: &mut Formatter) {
 pub fn "i8^Binary::fmt"(self: Box<i8>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 2, false, "");
 }
 
 pub fn "u8^Binary::fmt"(self: Box<u8>, f: &mut Formatter) {
@@ -8251,12 +8251,12 @@ pub fn "u8^Binary::fmt"(self: Box<u8>, f: &mut Formatter) {
 pub fn "i16^Binary::fmt"(self: Box<i16>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 2, false, "");
 }
 
 pub fn "u16^Binary::fmt"(self: Box<u16>, f: &mut Formatter) {
@@ -8266,49 +8266,49 @@ pub fn "u16^Binary::fmt"(self: Box<u16>, f: &mut Formatter) {
 pub fn "i32^Binary::fmt"(self: Box<i32>, f: &mut Formatter) {
     let v: i32 = self.value;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 2, false, "");
 }
 
 pub fn "u32^Binary::fmt"(self: Box<u32>, f: &mut Formatter) {
     let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
+    let abs_val: Box<i64> = Box<i64> { value: if (val_i32 < 0) {
         (val_i32 as i64 + 4294967296);
     } else {
         val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 2, false, "");
+    } };
+    abs_val.i64::fmt_base(false, f, 2, false, "");
 }
 
 pub fn "i64^Binary::fmt"(self: Box<i64>, f: &mut Formatter) {
     let v: i64 = self.value;
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 2, false, "");
+        let half: Box<i64> = Box<i64> { value: 4611686018427387904 };
+        half.i64::fmt_base(true, f, 2, false, "");
     } else {
-        let abs_val: i64 = if is_neg {
+        let abs_val: Box<i64> = Box<i64> { value: if is_neg {
             (0 - v);
         } else {
             v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "");
+        } };
+        abs_val.i64::fmt_base(is_neg, f, 2, false, "");
     }
 }
 
 pub fn "i8^Octal::fmt"(self: Box<i8>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 8, false, "");
 }
 
 pub fn "u8^Octal::fmt"(self: Box<u8>, f: &mut Formatter) {
@@ -8318,12 +8318,12 @@ pub fn "u8^Octal::fmt"(self: Box<u8>, f: &mut Formatter) {
 pub fn "i16^Octal::fmt"(self: Box<i16>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 8, false, "");
 }
 
 pub fn "u16^Octal::fmt"(self: Box<u16>, f: &mut Formatter) {
@@ -8333,49 +8333,49 @@ pub fn "u16^Octal::fmt"(self: Box<u16>, f: &mut Formatter) {
 pub fn "i32^Octal::fmt"(self: Box<i32>, f: &mut Formatter) {
     let v: i32 = self.value;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 8, false, "");
 }
 
 pub fn "u32^Octal::fmt"(self: Box<u32>, f: &mut Formatter) {
     let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
+    let abs_val: Box<i64> = Box<i64> { value: if (val_i32 < 0) {
         (val_i32 as i64 + 4294967296);
     } else {
         val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 8, false, "");
+    } };
+    abs_val.i64::fmt_base(false, f, 8, false, "");
 }
 
 pub fn "i64^Octal::fmt"(self: Box<i64>, f: &mut Formatter) {
     let v: i64 = self.value;
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 8, false, "");
+        let half: Box<i64> = Box<i64> { value: 4611686018427387904 };
+        half.i64::fmt_base(true, f, 8, false, "");
     } else {
-        let abs_val: i64 = if is_neg {
+        let abs_val: Box<i64> = Box<i64> { value: if is_neg {
             (0 - v);
         } else {
             v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "");
+        } };
+        abs_val.i64::fmt_base(is_neg, f, 8, false, "");
     }
 }
 
 pub fn "i8^LowerHex::fmt"(self: Box<i8>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, false, "");
 }
 
 pub fn "u8^LowerHex::fmt"(self: Box<u8>, f: &mut Formatter) {
@@ -8385,12 +8385,12 @@ pub fn "u8^LowerHex::fmt"(self: Box<u8>, f: &mut Formatter) {
 pub fn "i16^LowerHex::fmt"(self: Box<i16>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, false, "");
 }
 
 pub fn "u16^LowerHex::fmt"(self: Box<u16>, f: &mut Formatter) {
@@ -8400,49 +8400,49 @@ pub fn "u16^LowerHex::fmt"(self: Box<u16>, f: &mut Formatter) {
 pub fn "i32^LowerHex::fmt"(self: Box<i32>, f: &mut Formatter) {
     let v: i32 = self.value;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, false, "");
 }
 
 pub fn "u32^LowerHex::fmt"(self: Box<u32>, f: &mut Formatter) {
     let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
+    let abs_val: Box<i64> = Box<i64> { value: if (val_i32 < 0) {
         (val_i32 as i64 + 4294967296);
     } else {
         val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, false, "");
+    } };
+    abs_val.i64::fmt_base(false, f, 16, false, "");
 }
 
 pub fn "i64^LowerHex::fmt"(self: Box<i64>, f: &mut Formatter) {
     let v: i64 = self.value;
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 16, false, "");
+        let half: Box<i64> = Box<i64> { value: 4611686018427387904 };
+        half.i64::fmt_base(true, f, 16, false, "");
     } else {
-        let abs_val: i64 = if is_neg {
+        let abs_val: Box<i64> = Box<i64> { value: if is_neg {
             (0 - v);
         } else {
             v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "");
+        } };
+        abs_val.i64::fmt_base(is_neg, f, 16, false, "");
     }
 }
 
 pub fn "i8^UpperHex::fmt"(self: Box<i8>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, true, "");
 }
 
 pub fn "u8^UpperHex::fmt"(self: Box<u8>, f: &mut Formatter) {
@@ -8452,12 +8452,12 @@ pub fn "u8^UpperHex::fmt"(self: Box<u8>, f: &mut Formatter) {
 pub fn "i16^UpperHex::fmt"(self: Box<i16>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, true, "");
 }
 
 pub fn "u16^UpperHex::fmt"(self: Box<u16>, f: &mut Formatter) {
@@ -8467,37 +8467,37 @@ pub fn "u16^UpperHex::fmt"(self: Box<u16>, f: &mut Formatter) {
 pub fn "i32^UpperHex::fmt"(self: Box<i32>, f: &mut Formatter) {
     let v: i32 = self.value;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, true, "");
 }
 
 pub fn "u32^UpperHex::fmt"(self: Box<u32>, f: &mut Formatter) {
     let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
+    let abs_val: Box<i64> = Box<i64> { value: if (val_i32 < 0) {
         (val_i32 as i64 + 4294967296);
     } else {
         val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, true, "");
+    } };
+    abs_val.i64::fmt_base(false, f, 16, true, "");
 }
 
 pub fn "i64^UpperHex::fmt"(self: Box<i64>, f: &mut Formatter) {
     let v: i64 = self.value;
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 16, true, "");
+        let half: Box<i64> = Box<i64> { value: 4611686018427387904 };
+        half.i64::fmt_base(true, f, 16, true, "");
     } else {
-        let abs_val: i64 = if is_neg {
+        let abs_val: Box<i64> = Box<i64> { value: if is_neg {
             (0 - v);
         } else {
             v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "");
+        } };
+        abs_val.i64::fmt_base(is_neg, f, 16, true, "");
     }
 }
 
@@ -8520,12 +8520,12 @@ pub fn "u64^UpperHex::fmt"(self: Box<u64>, f: &mut Formatter) {
 pub fn "i8^BinaryAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 2, false, "0b");
 }
 
 pub fn "u8^BinaryAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
@@ -8535,12 +8535,12 @@ pub fn "u8^BinaryAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
 pub fn "i16^BinaryAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 2, false, "0b");
 }
 
 pub fn "u16^BinaryAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
@@ -8550,37 +8550,37 @@ pub fn "u16^BinaryAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
 pub fn "i32^BinaryAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
     let v: i32 = self.value;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 2, false, "0b");
 }
 
 pub fn "u32^BinaryAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
     let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
+    let abs_val: Box<i64> = Box<i64> { value: if (val_i32 < 0) {
         (val_i32 as i64 + 4294967296);
     } else {
         val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 2, false, "0b");
+    } };
+    abs_val.i64::fmt_base(false, f, 2, false, "0b");
 }
 
 pub fn "i64^BinaryAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
     let v: i64 = self.value;
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 2, false, "0b");
+        let half: Box<i64> = Box<i64> { value: 4611686018427387904 };
+        half.i64::fmt_base(true, f, 2, false, "0b");
     } else {
-        let abs_val: i64 = if is_neg {
+        let abs_val: Box<i64> = Box<i64> { value: if is_neg {
             (0 - v);
         } else {
             v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 2, false, "0b");
+        } };
+        abs_val.i64::fmt_base(is_neg, f, 2, false, "0b");
     }
 }
 
@@ -8591,12 +8591,12 @@ pub fn "u64^BinaryAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
 pub fn "i8^OctalAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 8, false, "0o");
 }
 
 pub fn "u8^OctalAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
@@ -8606,12 +8606,12 @@ pub fn "u8^OctalAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
 pub fn "i16^OctalAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 8, false, "0o");
 }
 
 pub fn "u16^OctalAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
@@ -8621,37 +8621,37 @@ pub fn "u16^OctalAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
 pub fn "i32^OctalAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
     let v: i32 = self.value;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 8, false, "0o");
 }
 
 pub fn "u32^OctalAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
     let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
+    let abs_val: Box<i64> = Box<i64> { value: if (val_i32 < 0) {
         (val_i32 as i64 + 4294967296);
     } else {
         val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 8, false, "0o");
+    } };
+    abs_val.i64::fmt_base(false, f, 8, false, "0o");
 }
 
 pub fn "i64^OctalAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
     let v: i64 = self.value;
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 8, false, "0o");
+        let half: Box<i64> = Box<i64> { value: 4611686018427387904 };
+        half.i64::fmt_base(true, f, 8, false, "0o");
     } else {
-        let abs_val: i64 = if is_neg {
+        let abs_val: Box<i64> = Box<i64> { value: if is_neg {
             (0 - v);
         } else {
             v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 8, false, "0o");
+        } };
+        abs_val.i64::fmt_base(is_neg, f, 8, false, "0o");
     }
 }
 
@@ -8662,12 +8662,12 @@ pub fn "u64^OctalAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
 pub fn "i8^LowerHexAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, false, "0x");
 }
 
 pub fn "u8^LowerHexAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
@@ -8677,12 +8677,12 @@ pub fn "u8^LowerHexAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
 pub fn "i16^LowerHexAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, false, "0x");
 }
 
 pub fn "u16^LowerHexAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
@@ -8692,37 +8692,37 @@ pub fn "u16^LowerHexAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
 pub fn "i32^LowerHexAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
     let v: i32 = self.value;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, false, "0x");
 }
 
 pub fn "u32^LowerHexAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
     let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
+    let abs_val: Box<i64> = Box<i64> { value: if (val_i32 < 0) {
         (val_i32 as i64 + 4294967296);
     } else {
         val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, false, "0x");
+    } };
+    abs_val.i64::fmt_base(false, f, 16, false, "0x");
 }
 
 pub fn "i64^LowerHexAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
     let v: i64 = self.value;
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 16, false, "0x");
+        let half: Box<i64> = Box<i64> { value: 4611686018427387904 };
+        half.i64::fmt_base(true, f, 16, false, "0x");
     } else {
-        let abs_val: i64 = if is_neg {
+        let abs_val: Box<i64> = Box<i64> { value: if is_neg {
             (0 - v);
         } else {
             v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, false, "0x");
+        } };
+        abs_val.i64::fmt_base(is_neg, f, 16, false, "0x");
     }
 }
 
@@ -8733,12 +8733,12 @@ pub fn "u64^LowerHexAlt::fmt_alt"(self: Box<u64>, f: &mut Formatter) {
 pub fn "i8^UpperHexAlt::fmt_alt"(self: Box<i8>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, true, "0X");
 }
 
 pub fn "u8^UpperHexAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
@@ -8748,12 +8748,12 @@ pub fn "u8^UpperHexAlt::fmt_alt"(self: Box<u8>, f: &mut Formatter) {
 pub fn "i16^UpperHexAlt::fmt_alt"(self: Box<i16>, f: &mut Formatter) {
     let v: i32 = self.value as i32;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, true, "0X");
 }
 
 pub fn "u16^UpperHexAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
@@ -8763,37 +8763,37 @@ pub fn "u16^UpperHexAlt::fmt_alt"(self: Box<u16>, f: &mut Formatter) {
 pub fn "i32^UpperHexAlt::fmt_alt"(self: Box<i32>, f: &mut Formatter) {
     let v: i32 = self.value;
     let is_neg: bool = (v < 0);
-    let abs_val: i64 = if is_neg {
+    let abs_val: Box<i64> = Box<i64> { value: if is_neg {
         (0 - v as i64);
     } else {
         v as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+    } };
+    abs_val.i64::fmt_base(is_neg, f, 16, true, "0X");
 }
 
 pub fn "u32^UpperHexAlt::fmt_alt"(self: Box<u32>, f: &mut Formatter) {
     let val_i32: i32 = self.value as i32;
-    let abs_val: i64 = if (val_i32 < 0) {
+    let abs_val: Box<i64> = Box<i64> { value: if (val_i32 < 0) {
         (val_i32 as i64 + 4294967296);
     } else {
         val_i32 as i64;
-    };
-    Box<i64> { value: abs_val }.i64::fmt_base(false, f, 16, true, "0X");
+    } };
+    abs_val.i64::fmt_base(false, f, 16, true, "0X");
 }
 
 pub fn "i64^UpperHexAlt::fmt_alt"(self: Box<i64>, f: &mut Formatter) {
     let v: i64 = self.value;
     let is_neg: bool = (v < 0);
     if (v == -9223372036854775808) {
-        let half: i64 = 4611686018427387904;
-        Box<i64> { value: half }.i64::fmt_base(true, f, 16, true, "0X");
+        let half: Box<i64> = Box<i64> { value: 4611686018427387904 };
+        half.i64::fmt_base(true, f, 16, true, "0X");
     } else {
-        let abs_val: i64 = if is_neg {
+        let abs_val: Box<i64> = Box<i64> { value: if is_neg {
             (0 - v);
         } else {
             v;
-        };
-        Box<i64> { value: abs_val }.i64::fmt_base(is_neg, f, 16, true, "0X");
+        } };
+        abs_val.i64::fmt_base(is_neg, f, 16, true, "0X");
     }
 }
 
@@ -10960,8 +10960,8 @@ pub fn String::trim_ascii_start(self: &String) -> String {
         if !(start < self.used) {
             break;
         }
-        let c: char = core::builtin::array_get_u8(self.repr, start) as char;
-        if Box<char> { value: c }.char::is_ascii_whitespace() {
+        let c: Box<char> = Box<char> { value: core::builtin::array_get_u8(self.repr, start) as char };
+        if c.char::is_ascii_whitespace() {
             start = (start + 1);
         } else {
             break;
@@ -10976,8 +10976,8 @@ pub fn String::trim_ascii_end(self: &String) -> String {
         if !(end > 0) {
             break;
         }
-        let c: char = core::builtin::array_get_u8(self.repr, (end - 1)) as char;
-        if Box<char> { value: c }.char::is_ascii_whitespace() {
+        let c: Box<char> = Box<char> { value: core::builtin::array_get_u8(self.repr, (end - 1)) as char };
+        if c.char::is_ascii_whitespace() {
             end = (end - 1);
         } else {
             break;
@@ -10996,9 +10996,9 @@ pub fn String::trim_start(self: &String) -> String {
     loop {
         let __pattern_temp_0: Option<char> = iter."StrCharIter^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let c: char = __variant_payload(__pattern_temp_0, case=0);
-            if Box<char> { value: c }.char::is_whitespace() {
-                let code: u32 = c as u32;
+            let c: Box<char> = Box<char> { value: __variant_payload(__pattern_temp_0, case=0) };
+            if c.char::is_whitespace() {
+                let code: u32 = c.value as u32;
                 if (code < 0x80) {
                     start = (start + 1);
                 } else {
@@ -11060,8 +11060,8 @@ pub fn String::trim_end(self: &String) -> String {
                 };
             };
         };
-        let ch: char = "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
-        if Box<char> { value: ch }.char::is_whitespace() {
+        let ch: Box<char> = Box<char> { value: "core::prelude/primitive.wado::char::from_u32_unchecked"(code) };
+        if ch.char::is_whitespace() {
             end = pos;
         } else {
             break;

@@ -983,9 +983,7 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let s: u64;
     let m_12: u64;
     let e: i32;
-    bits = __inline_f64__to_bits_0: block -> i64 {
-        break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(f);
-    };
+    bits = builtin::i64_reinterpret_f64(f.value);
     raw_mantissa = bits & 4503599627370495_i64;
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
     if raw_exp == 0 {
@@ -1717,7 +1715,7 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
 fn "core:prelude/fpfmt.wado/check_special"(f) {
     let bits: i64;
     let is_neg: bool;
-    bits = builtin::i64_reinterpret_f64(f);
+    bits = builtin::i64_reinterpret_f64(f.value);
     if bits == 0_i64 {
         return 1, 0, 1;
     }
