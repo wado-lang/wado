@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776461717841,
+  "lastUpdate": 1776466988871,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13712,6 +13712,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fa26cbc516d41ff7e120428fb9f97f5cd13f1207"
         },
         "date": 1776461717559,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "24eebd94d9911aeac4123fbc7d56c24550c4c0f0",
+          "message": "Merge pull request #863 from wado-lang/claude/review-agents-refactoring-GcRVK\n\nLSP-friendly compiler: split resolve into annotate + lower_tir",
+          "timestamp": "2026-04-18T07:59:43+09:00",
+          "tree_id": "4abb93f9db34d7d8725b65b748a9888eb342e8a0",
+          "url": "https://github.com/wado-lang/wado/commit/24eebd94d9911aeac4123fbc7d56c24550c4c0f0"
+        },
+        "date": 1776466988577,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
