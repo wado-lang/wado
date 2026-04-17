@@ -397,7 +397,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Track implicit receiver borrowing (`x.method()` where method expects
         // `&self`/`&mut self`) for local values. This keeps address-taken
-        // metadata consistent with explicit `&x` / `&mut x`.
+        // metadata consistent with explicit `&x` / `&mut x`, so later boxing
+        // and alias-sensitive lowering update the caller local instead of a
+        // disconnected temporary.
         let needs_implicit_borrow = !is_ref_impl
             && matches!(self_kind, ast::SelfKind::Ref | ast::SelfKind::MutRef)
             && !matches!(
