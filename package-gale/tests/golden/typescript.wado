@@ -14307,8 +14307,25 @@ fn parse_type_name(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
     let kind = p.peek_kind();
     if kind matches { TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract } {
         if p.peek_kind() matches { TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract } {
-            if parse_type_name_scan_0(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_type_name_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_type_name_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_type_name_bt_0(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_type_name_bt_1(p);
             }
             return parse_type_name_bt_1(p);
         }
@@ -20973,8 +20990,25 @@ fn parse_assignable(p: &mut Parser) -> Result<AssignableNode, ParseError> {
         if p.peek_kind() matches { TK_Identifier | TK_Of | TK_Any | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_Constructor | TK_Namespace | TK_Abstract } {
             return parse_assignable_bt_0(p);
         } else if p.peek_kind() matches { TK_Async | TK_As | TK_From | TK_Yield | TK_Number | TK_Boolean | TK_String | TK_TypeAlias } {
-            if parse_assignable_scan_0(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_assignable_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_assignable_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_assignable_bt_0(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_assignable_bt_1(p);
             }
             return parse_assignable_bt_1(p);
         } else if p.peek_kind() matches { TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_Function_ | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module } {
@@ -21587,8 +21621,25 @@ fn parse_identifier_name(p: &mut Parser) -> Result<IdentifierNameNode, ParseErro
         if p.peek_kind() matches { TK_Identifier | TK_Of | TK_Any | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_Constructor | TK_Namespace | TK_Abstract } {
             return parse_identifier_name_bt_0(p);
         } else if p.peek_kind() matches { TK_Async | TK_As | TK_From | TK_Yield | TK_Number | TK_Boolean | TK_String | TK_TypeAlias } {
-            if parse_identifier_name_scan_0(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_identifier_name_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_identifier_name_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_identifier_name_bt_0(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_identifier_name_bt_1(p);
             }
             return parse_identifier_name_bt_1(p);
         } else if p.peek_kind() matches { TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_Function_ | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral } {
@@ -21680,8 +21731,25 @@ fn parse_identifier(p: &mut Parser) -> Result<IdentifierNode, ParseError> {
         }));
     }
     if kind == TK_Any {
-        if parse_identifier_scan_6(&p.tokens, p.pos) >= 0 {
+        let _sd_tokens = &p.tokens;
+        let _sd_pos = p.pos;
+        let _sd_p_6 = parse_identifier_scan_6(_sd_tokens, _sd_pos);
+        let _sd_p_7 = parse_identifier_scan_7(_sd_tokens, _sd_pos);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_6 > _sd_best_p {
+            _sd_best_p = _sd_p_6;
+            _sd_best_i = 6;
+        }
+        if _sd_p_7 > _sd_best_p {
+            _sd_best_p = _sd_p_7;
+            _sd_best_i = 7;
+        }
+        if _sd_best_i == 6 {
             return parse_identifier_bt_6(p);
+        }
+        if _sd_best_i == 7 {
+            return parse_identifier_bt_7(p);
         }
         return parse_identifier_bt_7(p);
     }
@@ -21820,8 +21888,25 @@ fn parse_identifier_or_key_word(p: &mut Parser) -> Result<IdentifierOrKeyWordNod
     let kind = p.peek_kind();
     if kind matches { TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract } {
         if p.peek_kind() == TK_TypeAlias {
-            if parse_identifier_or_key_word_scan_0(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_identifier_or_key_word_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_identifier_or_key_word_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_identifier_or_key_word_bt_0(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_identifier_or_key_word_bt_1(p);
             }
             return parse_identifier_or_key_word_bt_1(p);
         } else if p.peek_kind() matches { TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_Constructor | TK_Namespace | TK_Abstract } {

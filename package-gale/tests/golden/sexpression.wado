@@ -1293,8 +1293,25 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     }
     if kind == TK_LPAREN {
         if p.peek_kind() == TK_LPAREN {
-            if parse_item_scan_2(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_2 = parse_item_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_item_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 2 {
                 return parse_item_bt_2(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_item_bt_1(p);
             }
             return parse_item_bt_1(p);
         }

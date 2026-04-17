@@ -4605,11 +4605,13 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
 
             if all_have_scans && sorted_indices.len() >= 2 {
                 // All non-last alternatives have scan functions.
-                // Check if ALL scans are full (cover entire alternative).
+                // Check if ALL scans are full (cover entire alternative) —
+                // including the last alt, which we need to scan for
+                // longest-match dispatch.
                 let mut all_full = true;
-                for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
+                for let mut i = 0; i < sorted_indices.len(); i += 1 {
                     let idx = sorted_indices[i];
-                    if !alt_scan_is_full(&alts[idx].elements, ctx) {
+                    if !alt_has_scan(&alts[idx].elements, ctx) || !alt_scan_is_full(&alts[idx].elements, ctx) {
                         all_full = false;
                         break;
                     }
@@ -4617,18 +4619,36 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
 
                 if all_full {
                     // All scans cover entire alternatives — scan success
-                    // guarantees parse success, no save/restore needed.
+                    // guarantees parse success. Use longest-match first-win
+                    // (ANTLR4-compatible): scan each alt, pick the one
+                    // advancing pos the furthest; ties go to the first alt
+                    // in grammar order.
+                    w.line("let _sd_tokens = &p.tokens;");
+                    w.line("let _sd_pos = p.pos;");
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
-                        let is_last = i == sorted_indices.len() - 1;
-                        if is_last {
-                            w.line(`return {*fn_name}_bt_{idx}(p);`);
-                        } else {
-                            w.begin(`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
-                            w.line(`return {*fn_name}_bt_{idx}(p);`);
-                            w.end();
-                        }
+                        w.line(`let _sd_p_{idx} = {*fn_name}_scan_{idx}(_sd_tokens, _sd_pos);`);
                     }
+                    w.line("let mut _sd_best_i: i32 = -1;");
+                    w.line("let mut _sd_best_p: i32 = -1;");
+                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                        let idx = sorted_indices[i];
+                        w.begin(`if _sd_p_{idx} > _sd_best_p`);
+                        w.line(`_sd_best_p = _sd_p_{idx};`);
+                        w.line(`_sd_best_i = {idx};`);
+                        w.end();
+                    }
+                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                        let idx = sorted_indices[i];
+                        w.begin(`if _sd_best_i == {idx}`);
+                        w.line(`return {*fn_name}_bt_{idx}(p);`);
+                        w.end();
+                    }
+                    // Fall through: no alt's scan succeeded. Emit error via
+                    // the last alt's parse path (which produces a useful
+                    // diagnostic).
+                    let last_idx = sorted_indices[sorted_indices.len() - 1];
+                    w.line(`return {*fn_name}_bt_{last_idx}(p);`);
                 } else {
                     // Some scans are partial — scan success is a hint,
                     // not a guarantee. Use save/restore with scan guards.

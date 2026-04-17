@@ -32910,8 +32910,25 @@ fn parse_charset(p: &mut Parser) -> Result<CharsetNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Charset {
-        if parse_charset_scan_0(&p.tokens, p.pos) >= 0 {
+        let _sd_tokens = &p.tokens;
+        let _sd_pos = p.pos;
+        let _sd_p_0 = parse_charset_scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = parse_charset_scan_1(_sd_tokens, _sd_pos);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i == 0 {
             return parse_charset_bt_0(p);
+        }
+        if _sd_best_i == 1 {
+            return parse_charset_bt_1(p);
         }
         return parse_charset_bt_1(p);
     }
@@ -33170,14 +33187,41 @@ fn parse_imports(p: &mut Parser) -> Result<ImportsNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Import {
-        if parse_imports_scan_0(&p.tokens, p.pos) >= 0 {
+        let _sd_tokens = &p.tokens;
+        let _sd_pos = p.pos;
+        let _sd_p_0 = parse_imports_scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = parse_imports_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_2 = parse_imports_scan_2(_sd_tokens, _sd_pos);
+        let _sd_p_3 = parse_imports_scan_3(_sd_tokens, _sd_pos);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_p_2 > _sd_best_p {
+            _sd_best_p = _sd_p_2;
+            _sd_best_i = 2;
+        }
+        if _sd_p_3 > _sd_best_p {
+            _sd_best_p = _sd_p_3;
+            _sd_best_i = 3;
+        }
+        if _sd_best_i == 0 {
             return parse_imports_bt_0(p);
         }
-        if parse_imports_scan_1(&p.tokens, p.pos) >= 0 {
+        if _sd_best_i == 1 {
             return parse_imports_bt_1(p);
         }
-        if parse_imports_scan_2(&p.tokens, p.pos) >= 0 {
+        if _sd_best_i == 2 {
             return parse_imports_bt_2(p);
+        }
+        if _sd_best_i == 3 {
+            return parse_imports_bt_3(p);
         }
         return parse_imports_bt_3(p);
     }
@@ -33382,8 +33426,25 @@ fn parse_namespace_(p: &mut Parser) -> Result<NamespaceNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_Namespace {
-        if parse_namespace__scan_0(&p.tokens, p.pos) >= 0 {
+        let _sd_tokens = &p.tokens;
+        let _sd_pos = p.pos;
+        let _sd_p_0 = parse_namespace__scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = parse_namespace__scan_1(_sd_tokens, _sd_pos);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i == 0 {
             return parse_namespace__bt_0(p);
+        }
+        if _sd_best_i == 1 {
+            return parse_namespace__bt_1(p);
         }
         return parse_namespace__bt_1(p);
     }
@@ -34465,8 +34526,25 @@ fn parse_negation_arg(p: &mut Parser) -> Result<NegationArgNode, ParseError> {
     let kind = p.peek_kind();
     if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR | TK_LIT_PIPE } {
         if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_LIT_STAR | TK_LIT_PIPE } {
-            if parse_negation_arg_scan_0(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_negation_arg_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_negation_arg_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_negation_arg_bt_0(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_negation_arg_bt_1(p);
             }
             return parse_negation_arg_bt_1(p);
         }
@@ -34707,8 +34785,25 @@ fn parse_ruleset(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     let kind = p.peek_kind();
     if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_Hash | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_LIT_COLON | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_LBRACE | TK_LIT_STAR | TK_LIT_PIPE | TK_LIT_DOT | TK_PseudoNot } {
         if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Hash | TK_LIT_LBRACKET | TK_LIT_COLON } {
-            if parse_ruleset_scan_1(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = parse_ruleset_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = parse_ruleset_scan_0(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_best_i == 1 {
                 return parse_ruleset_bt_1(p);
+            }
+            if _sd_best_i == 0 {
+                return parse_ruleset_bt_0(p);
             }
             return parse_ruleset_bt_0(p);
         } else if p.peek_kind() matches { TK_LIT_STAR | TK_LIT_PIPE | TK_LIT_DOT | TK_PseudoNot } {
@@ -34864,8 +34959,25 @@ fn parse_declaration(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     let kind = p.peek_kind();
     if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
-            if parse_declaration_scan_0(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_declaration_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_declaration_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_declaration_bt_0(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_declaration_bt_1(p);
             }
             return parse_declaration_bt_1(p);
         }
@@ -35078,27 +35190,81 @@ fn parse_term(p: &mut Parser) -> Result<TermNode, ParseError> {
     if kind matches { TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension } {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                if parse_term_scan_0(&p.tokens, p.pos) >= 0 {
+                let _sd_tokens = &p.tokens;
+                let _sd_pos = p.pos;
+                let _sd_p_0 = parse_term_scan_0(_sd_tokens, _sd_pos);
+                let _sd_p_1 = parse_term_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_2 = parse_term_scan_2(_sd_tokens, _sd_pos);
+                let _sd_p_11 = parse_term_scan_11(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_0 > _sd_best_p {
+                    _sd_best_p = _sd_p_0;
+                    _sd_best_i = 0;
+                }
+                if _sd_p_1 > _sd_best_p {
+                    _sd_best_p = _sd_p_1;
+                    _sd_best_i = 1;
+                }
+                if _sd_p_2 > _sd_best_p {
+                    _sd_best_p = _sd_p_2;
+                    _sd_best_i = 2;
+                }
+                if _sd_p_11 > _sd_best_p {
+                    _sd_best_p = _sd_p_11;
+                    _sd_best_i = 11;
+                }
+                if _sd_best_i == 0 {
                     return parse_term_bt_0(p);
                 }
-                if parse_term_scan_1(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 1 {
                     return parse_term_bt_1(p);
                 }
-                if parse_term_scan_2(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 2 {
                     return parse_term_bt_2(p);
+                }
+                if _sd_best_i == 11 {
+                    return parse_term_bt_11(p);
                 }
                 return parse_term_bt_11(p);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                if parse_term_scan_0(&p.tokens, p.pos) >= 0 {
+                let _sd_tokens = &p.tokens;
+                let _sd_pos = p.pos;
+                let _sd_p_0 = parse_term_scan_0(_sd_tokens, _sd_pos);
+                let _sd_p_1 = parse_term_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_2 = parse_term_scan_2(_sd_tokens, _sd_pos);
+                let _sd_p_11 = parse_term_scan_11(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_0 > _sd_best_p {
+                    _sd_best_p = _sd_p_0;
+                    _sd_best_i = 0;
+                }
+                if _sd_p_1 > _sd_best_p {
+                    _sd_best_p = _sd_p_1;
+                    _sd_best_i = 1;
+                }
+                if _sd_p_2 > _sd_best_p {
+                    _sd_best_p = _sd_p_2;
+                    _sd_best_i = 2;
+                }
+                if _sd_p_11 > _sd_best_p {
+                    _sd_best_p = _sd_p_11;
+                    _sd_best_i = 11;
+                }
+                if _sd_best_i == 0 {
                     return parse_term_bt_0(p);
                 }
-                if parse_term_scan_1(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 1 {
                     return parse_term_bt_1(p);
                 }
-                if parse_term_scan_2(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 2 {
                     return parse_term_bt_2(p);
+                }
+                if _sd_best_i == 11 {
+                    return parse_term_bt_11(p);
                 }
                 return parse_term_bt_11(p);
             }
@@ -35482,27 +35648,81 @@ fn parse_any_(p: &mut Parser) -> Result<AnyNode, ParseError> {
     if kind matches { TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension } {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                if parse_any__scan_1(&p.tokens, p.pos) >= 0 {
+                let _sd_tokens = &p.tokens;
+                let _sd_pos = p.pos;
+                let _sd_p_1 = parse_any__scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_2 = parse_any__scan_2(_sd_tokens, _sd_pos);
+                let _sd_p_3 = parse_any__scan_3(_sd_tokens, _sd_pos);
+                let _sd_p_4 = parse_any__scan_4(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_1 > _sd_best_p {
+                    _sd_best_p = _sd_p_1;
+                    _sd_best_i = 1;
+                }
+                if _sd_p_2 > _sd_best_p {
+                    _sd_best_p = _sd_p_2;
+                    _sd_best_i = 2;
+                }
+                if _sd_p_3 > _sd_best_p {
+                    _sd_best_p = _sd_p_3;
+                    _sd_best_i = 3;
+                }
+                if _sd_p_4 > _sd_best_p {
+                    _sd_best_p = _sd_p_4;
+                    _sd_best_i = 4;
+                }
+                if _sd_best_i == 1 {
                     return parse_any__bt_1(p);
                 }
-                if parse_any__scan_2(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 2 {
                     return parse_any__bt_2(p);
                 }
-                if parse_any__scan_3(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 3 {
                     return parse_any__bt_3(p);
+                }
+                if _sd_best_i == 4 {
+                    return parse_any__bt_4(p);
                 }
                 return parse_any__bt_4(p);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                if parse_any__scan_1(&p.tokens, p.pos) >= 0 {
+                let _sd_tokens = &p.tokens;
+                let _sd_pos = p.pos;
+                let _sd_p_1 = parse_any__scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_2 = parse_any__scan_2(_sd_tokens, _sd_pos);
+                let _sd_p_3 = parse_any__scan_3(_sd_tokens, _sd_pos);
+                let _sd_p_4 = parse_any__scan_4(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_1 > _sd_best_p {
+                    _sd_best_p = _sd_p_1;
+                    _sd_best_i = 1;
+                }
+                if _sd_p_2 > _sd_best_p {
+                    _sd_best_p = _sd_p_2;
+                    _sd_best_i = 2;
+                }
+                if _sd_p_3 > _sd_best_p {
+                    _sd_best_p = _sd_p_3;
+                    _sd_best_i = 3;
+                }
+                if _sd_p_4 > _sd_best_p {
+                    _sd_best_p = _sd_p_4;
+                    _sd_best_i = 4;
+                }
+                if _sd_best_i == 1 {
                     return parse_any__bt_1(p);
                 }
-                if parse_any__scan_2(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 2 {
                     return parse_any__bt_2(p);
                 }
-                if parse_any__scan_3(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 3 {
                     return parse_any__bt_3(p);
+                }
+                if _sd_best_i == 4 {
+                    return parse_any__bt_4(p);
                 }
                 return parse_any__bt_4(p);
             }
@@ -36163,11 +36383,33 @@ fn parse_supports_condition(p: &mut Parser) -> Result<SupportsConditionNode, Par
     }
     if kind matches { TK_LIT_LPAREN | TK_Function_ } {
         if p.peek_kind() matches { TK_LIT_LPAREN | TK_Function_ } {
-            if parse_supports_condition_scan_1(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = parse_supports_condition_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = parse_supports_condition_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_3 = parse_supports_condition_scan_3(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
+            }
+            if _sd_best_i == 1 {
                 return parse_supports_condition_bt_1(p);
             }
-            if parse_supports_condition_scan_2(&p.tokens, p.pos) >= 0 {
+            if _sd_best_i == 2 {
                 return parse_supports_condition_bt_2(p);
+            }
+            if _sd_best_i == 3 {
+                return parse_supports_condition_bt_3(p);
             }
             return parse_supports_condition_bt_3(p);
         }
@@ -36248,11 +36490,33 @@ fn parse_supports_condition_in_parens(p: &mut Parser) -> Result<SupportsConditio
     let kind = p.peek_kind();
     if kind matches { TK_LIT_LPAREN | TK_Function_ } {
         if p.peek_kind() == TK_LIT_LPAREN {
-            if parse_supports_condition_in_parens_scan_0(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_supports_condition_in_parens_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_supports_condition_in_parens_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = parse_supports_condition_in_parens_scan_2(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i == 0 {
                 return parse_supports_condition_in_parens_bt_0(p);
             }
-            if parse_supports_condition_in_parens_scan_1(&p.tokens, p.pos) >= 0 {
+            if _sd_best_i == 1 {
                 return parse_supports_condition_in_parens_bt_1(p);
+            }
+            if _sd_best_i == 2 {
+                return parse_supports_condition_in_parens_bt_2(p);
             }
             return parse_supports_condition_in_parens_bt_2(p);
         } else if p.peek_kind() == TK_Function_ {
@@ -36749,27 +37013,81 @@ fn parse_calc_value(p: &mut Parser) -> Result<CalcValueNode, ParseError> {
     if kind matches { TK_Plus | TK_Minus | TK_Number | TK_Dimension | TK_UnknownDimension | TK_Percentage } {
         if p.peek_kind() == TK_Plus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                if parse_calc_value_scan_0(&p.tokens, p.pos) >= 0 {
+                let _sd_tokens = &p.tokens;
+                let _sd_pos = p.pos;
+                let _sd_p_0 = parse_calc_value_scan_0(_sd_tokens, _sd_pos);
+                let _sd_p_1 = parse_calc_value_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_2 = parse_calc_value_scan_2(_sd_tokens, _sd_pos);
+                let _sd_p_3 = parse_calc_value_scan_3(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_0 > _sd_best_p {
+                    _sd_best_p = _sd_p_0;
+                    _sd_best_i = 0;
+                }
+                if _sd_p_1 > _sd_best_p {
+                    _sd_best_p = _sd_p_1;
+                    _sd_best_i = 1;
+                }
+                if _sd_p_2 > _sd_best_p {
+                    _sd_best_p = _sd_p_2;
+                    _sd_best_i = 2;
+                }
+                if _sd_p_3 > _sd_best_p {
+                    _sd_best_p = _sd_p_3;
+                    _sd_best_i = 3;
+                }
+                if _sd_best_i == 0 {
                     return parse_calc_value_bt_0(p);
                 }
-                if parse_calc_value_scan_1(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 1 {
                     return parse_calc_value_bt_1(p);
                 }
-                if parse_calc_value_scan_2(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 2 {
                     return parse_calc_value_bt_2(p);
+                }
+                if _sd_best_i == 3 {
+                    return parse_calc_value_bt_3(p);
                 }
                 return parse_calc_value_bt_3(p);
             }
         } else if p.peek_kind() == TK_Minus {
             if p.peek_at(1) matches { TK_Comment | TK_Space } {
-                if parse_calc_value_scan_0(&p.tokens, p.pos) >= 0 {
+                let _sd_tokens = &p.tokens;
+                let _sd_pos = p.pos;
+                let _sd_p_0 = parse_calc_value_scan_0(_sd_tokens, _sd_pos);
+                let _sd_p_1 = parse_calc_value_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_2 = parse_calc_value_scan_2(_sd_tokens, _sd_pos);
+                let _sd_p_3 = parse_calc_value_scan_3(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_0 > _sd_best_p {
+                    _sd_best_p = _sd_p_0;
+                    _sd_best_i = 0;
+                }
+                if _sd_p_1 > _sd_best_p {
+                    _sd_best_p = _sd_p_1;
+                    _sd_best_i = 1;
+                }
+                if _sd_p_2 > _sd_best_p {
+                    _sd_best_p = _sd_p_2;
+                    _sd_best_i = 2;
+                }
+                if _sd_p_3 > _sd_best_p {
+                    _sd_best_p = _sd_p_3;
+                    _sd_best_i = 3;
+                }
+                if _sd_best_i == 0 {
                     return parse_calc_value_bt_0(p);
                 }
-                if parse_calc_value_scan_1(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 1 {
                     return parse_calc_value_bt_1(p);
                 }
-                if parse_calc_value_scan_2(&p.tokens, p.pos) >= 0 {
+                if _sd_best_i == 2 {
                     return parse_calc_value_bt_2(p);
+                }
+                if _sd_best_i == 3 {
+                    return parse_calc_value_bt_3(p);
                 }
                 return parse_calc_value_bt_3(p);
             }
@@ -36926,8 +37244,25 @@ fn parse_font_face_declaration(p: &mut Parser) -> Result<FontFaceDeclarationNode
     let kind = p.peek_kind();
     if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
         if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
-            if parse_font_face_declaration_scan_0(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_font_face_declaration_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_font_face_declaration_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_font_face_declaration_bt_0(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_font_face_declaration_bt_1(p);
             }
             return parse_font_face_declaration_bt_1(p);
         }

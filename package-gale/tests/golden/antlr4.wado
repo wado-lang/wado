@@ -6921,8 +6921,25 @@ fn parse_predicate_option(p: &mut Parser) -> Result<PredicateOptionNode, ParseEr
     let kind = p.peek_kind();
     if kind matches { TK_RULE_REF | TK_TOKEN_REF } {
         if p.peek_kind() matches { TK_RULE_REF | TK_TOKEN_REF } {
-            if parse_predicate_option_scan_0(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_predicate_option_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_predicate_option_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_predicate_option_bt_0(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_predicate_option_bt_1(p);
             }
             return parse_predicate_option_bt_1(p);
         }
@@ -7070,8 +7087,25 @@ fn parse_lexer_atom(p: &mut Parser) -> Result<LexerAtomNode, ParseError> {
     let kind = p.peek_kind();
     if kind matches { TK_STRING_LITERAL | TK_TOKEN_REF } {
         if p.peek_kind() == TK_STRING_LITERAL {
-            if parse_lexer_atom_scan_0(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = parse_lexer_atom_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_lexer_atom_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return parse_lexer_atom_bt_0(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_lexer_atom_bt_1(p);
             }
             return parse_lexer_atom_bt_1(p);
         } else if p.peek_kind() == TK_TOKEN_REF {
@@ -7326,8 +7360,25 @@ fn parse_set_element(p: &mut Parser) -> Result<SetElementNode, ParseError> {
     }
     if kind == TK_STRING_LITERAL {
         if p.peek_kind() == TK_STRING_LITERAL {
-            if parse_set_element_scan_1(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = parse_set_element_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_2 = parse_set_element_scan_2(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i == 1 {
                 return parse_set_element_bt_1(p);
+            }
+            if _sd_best_i == 2 {
+                return parse_set_element_bt_2(p);
             }
             return parse_set_element_bt_2(p);
         }
