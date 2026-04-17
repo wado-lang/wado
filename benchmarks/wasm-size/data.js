@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776417436971,
+  "lastUpdate": 1776418090968,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13400,6 +13400,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4d4a35d72fc8afb2b03150c26091162aa3d52dd1"
         },
         "date": 1776417436685,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fbcb68f5822029a4e99184a4096b09eed3c24bdc",
+          "message": "Merge pull request #853 from wado-lang/claude/profile-parser-performance-Thu7j\n\nperf(gale): eliminate runtime backtracking via scan-based prediction",
+          "timestamp": "2026-04-17T18:24:36+09:00",
+          "tree_id": "ddcc33729ce8cbea1e584c54fc46d4a8ceb98672",
+          "url": "https://github.com/wado-lang/wado/commit/fbcb68f5822029a4e99184a4096b09eed3c24bdc"
+        },
+        "date": 1776418090677,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
