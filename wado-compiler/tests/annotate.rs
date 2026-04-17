@@ -14,13 +14,13 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
 
 #[test]
 fn annotate_indexes_struct_decl_by_symbol_key() {
-    let source = r#"
+    let source = r"
 struct Point { x: i32, y: i32 }
 
 export fn run() {
     let _p = Point { x: 1, y: 2 };
 }
-"#;
+";
     let host = InMemoryHost::new();
     let annotated = block_on(annotate(source, &host, Some("entry.wado"))).unwrap();
 

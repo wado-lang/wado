@@ -807,4 +807,3 @@ pub fn resolve_module<H: CompilerHost>(
     );
     resolver.resolve_module(module, module_source)
 }
-

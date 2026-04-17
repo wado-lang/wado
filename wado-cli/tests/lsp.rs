@@ -324,7 +324,8 @@ fn lsp_definition_same_file() {
     let _init_resp = session.read_message();
     session.send_notification("initialized", json!({}));
 
-    let source = "fn helper() -> i32 {\n    return 42;\n}\n\nexport fn run() {\n    let _ = helper();\n}\n";
+    let source =
+        "fn helper() -> i32 {\n    return 42;\n}\n\nexport fn run() {\n    let _ = helper();\n}\n";
     session.send_notification(
         "textDocument/didOpen",
         json!({
@@ -365,7 +366,11 @@ fn lsp_definition_cross_file() {
     let tmpdir = tempfile::tempdir().unwrap();
     let helper_path = tmpdir.path().join("helper.wado");
     let main_path = tmpdir.path().join("main.wado");
-    std::fs::write(&helper_path, "pub fn helper() -> i32 {\n    return 42;\n}\n").unwrap();
+    std::fs::write(
+        &helper_path,
+        "pub fn helper() -> i32 {\n    return 42;\n}\n",
+    )
+    .unwrap();
     std::fs::write(
         &main_path,
         "use { helper } from \"./helper.wado\";\n\nexport fn run() {\n    let _ = helper();\n}\n",

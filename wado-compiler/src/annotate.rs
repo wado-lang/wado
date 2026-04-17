@@ -259,10 +259,13 @@ pub(crate) async fn annotate_with_logger<H: CompilerHost>(
 ) -> Result<Annotated, Bail> {
     let load_result = {
         let module_loader = loader::ModuleLoader::new(host, LogLevel::default());
-        module_loader.load_all(source, filename).await.map_err(|e| {
-            let _ = logger.error(e);
-            Bail
-        })?
+        module_loader
+            .load_all(source, filename)
+            .await
+            .map_err(|e| {
+                let _ = logger.error(e);
+                Bail
+            })?
     };
 
     annotate_loaded(load_result, logger)

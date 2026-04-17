@@ -204,13 +204,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cm_import: func.attrs.first().and_then(|a| a.cm_import.clone()),
                     });
 
-                    self.symbols.define(
-                        module_source,
-                        func.id,
-                        &func.name,
-                        kind,
-                        Some(func.span),
-                    );
+                    self.symbols
+                        .define(module_source, func.id, &func.name, kind, Some(func.span));
                 }
 
                 Item::Effect(effect) => {

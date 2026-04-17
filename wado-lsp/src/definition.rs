@@ -9,12 +9,12 @@
 //! 4. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`]
 //!    (module URI + identifier span).
 
+use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
 use wado_compiler::lexer::Lexer;
 use wado_compiler::name::ModuleSource;
 use wado_compiler::symbol::Symbol;
 use wado_compiler::token::{Span, TokenKind};
-use wado_compiler::CompilerHost;
 
 use crate::diagnostics::{Position, Range};
 
@@ -40,9 +40,7 @@ pub async fn find_definition<H: CompilerHost>(
     let annotated = annotate(source, host, Some(&filename)).await.ok()?;
 
     let symbol = resolve_ident(&annotated, &filename, &ident)?;
-    let span = annotated
-        .name_span_of(&symbol.defined_at)
-        .or(symbol.span)?;
+    let span = annotated.name_span_of(&symbol.defined_at).or(symbol.span)?;
     let def_uri = symbol_uri(&annotated, symbol, uri)?;
     Some(DefinitionResult {
         uri: def_uri,
@@ -90,11 +88,7 @@ fn token_contains(span: &Span, target_line: usize, target_col: usize) -> bool {
     true
 }
 
-fn resolve_ident<'a>(
-    annotated: &'a Annotated,
-    filename: &str,
-    ident: &str,
-) -> Option<&'a Symbol> {
+fn resolve_ident<'a>(annotated: &'a Annotated, filename: &str, ident: &str) -> Option<&'a Symbol> {
     let entry = &annotated.entry_module_source;
     if let Some(sym) = annotated.symbols.lookup_in_module(entry, ident) {
         return Some(sym);
@@ -177,4 +171,3 @@ fn span_to_range(span: &Span) -> Range {
         },
     }
 }
-

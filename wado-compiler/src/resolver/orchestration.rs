@@ -96,7 +96,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Annotate phase: collect decl-level type information and intern every
     /// declaration in the shared [`TypeTable`]. Produces an [`AnnotateState`]
-    /// that downstream phases (lower_tir, LSP queries) consume read-mostly
+    /// that downstream phases (`lower_tir`, LSP queries) consume read-mostly
     /// via `Rc`.
     pub(crate) fn annotate_modules(
         symbols: &'a SymbolTable,
@@ -247,11 +247,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Second sub-pass: resolve struct fields and newtypes
         for (module_source, module) in modules {
             // Build imported type sources for this module
-            let (imported_type_sources, import_original_names) = Self::build_imported_type_sources(
-                module,
-                module_source,
-                Some(entry_module_source),
-            );
+            let (imported_type_sources, import_original_names) =
+                Self::build_imported_type_sources(module, module_source, Some(entry_module_source));
 
             // Build module-specific flat maps for resolving types in this module
             let mut flat_newtypes = Self::build_module_map(
@@ -634,7 +631,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Without this, decl-only types (e.g., a standalone `struct Unused {}`)
         // would only appear in the table after TIR lowering — too late for the
         // annotate phase to index them by `SymbolKey`.
-        Self::intern_all_decl_types(modules, &all_struct_fields, &all_resource_types, &type_table);
+        Self::intern_all_decl_types(
+            modules,
+            &all_struct_fields,
+            &all_resource_types,
+            &type_table,
+        );
 
         // Populate `TypeTable::type_by_symbol` / `symbol_by_type` so LSP queries
         // can resolve a `SymbolKey` to a decl-backed type without running the
@@ -888,9 +890,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .get(module_source)
                             .and_then(|m| m.get(&struct_decl.name))
                             .map(|info| (info.name.clone(), info.module_source.clone()))
-                            .unwrap_or_else(|| {
-                                (struct_decl.name.clone(), module_source.clone())
-                            });
+                            .unwrap_or_else(|| (struct_decl.name.clone(), module_source.clone()));
                         tt.make_struct(name, ms);
                     }
                     Item::Enum(enum_decl) => {
@@ -904,9 +904,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .get(module_source)
                             .and_then(|m| m.get(&resource_decl.name))
                             .map(|info| (info.name.clone(), info.module_source.clone()))
-                            .unwrap_or_else(|| {
-                                (resource_decl.name.clone(), module_source.clone())
-                            });
+                            .unwrap_or_else(|| (resource_decl.name.clone(), module_source.clone()));
                         tt.make_resource(name, ms);
                     }
                     _ => {}
@@ -922,7 +920,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// This runs as a post-pass over the whole symbol table rather than being
     /// instrumented at each `make_struct` / `make_enum` / ... call site: the
     /// decl-creation sites are spread across resolver/module.rs,
-    /// resolver/type_resolution.rs, resolver/orchestration.rs, resolver/call.rs,
+    /// `resolver/type_resolution.rs`, resolver/orchestration.rs, resolver/call.rs,
     /// and resolver/expr.rs, and threading a `SymbolKey` through every one of
     /// them would churn ~40 call sites. The symbol-table walk is O(symbols) and
     /// touches only declarations, so the cost is negligible.
