@@ -1,0 +1,22 @@
+// Regression: mutating trait methods on primitive receivers must update caller local.
+
+trait Bump {
+    fn bump(&mut self);
+}
+
+impl Bump for i32 {
+    fn bump(&mut self) {
+        *self = *self + 1;
+    }
+}
+
+export fn run() {
+    let mut x = 1;
+    x.bump();
+    assert x == 2;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

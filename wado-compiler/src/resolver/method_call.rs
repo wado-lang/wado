@@ -395,6 +395,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return_type = self.substitute_newtype_in_type(return_type, base_type_id, newtype_id);
         }
 
+        // Track implicit `&mut self` borrowing for primitive local receivers.
+        // Primitive values are copied by default in Wasm GC, so `x.bump()`
+        // must mark `x` as address-taken to preserve mutation semantics.
+        let needs_implicit_mut_borrow_on_primitive_local = !is_ref_impl
+            && matches!(self_kind, ast::SelfKind::MutRef)
+            && !matches!(
+                self.type_table.borrow().get(receiver.type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
+            && matches!(
+                self.type_table
+                    .borrow()
+                    .get(self.get_base_type(receiver.type_id)),
+                ResolvedType::Primitive(_)
+            );
+        if needs_implicit_mut_borrow_on_primitive_local
+            && let TirExprKind::Local { index, .. } = &receiver.kind
+        {
+            ctx.address_taken_locals.insert(*index);
+        }
+
         // Adjust receiver based on what the method expects (self_kind)
         receiver =
             self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, method_call.span);
