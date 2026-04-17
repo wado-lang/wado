@@ -628,8 +628,15 @@ impl JsonDeserializer {
     }
 
     pub fn skip_whitespace(&mut self) {
+        // Fast exit when next byte isn't whitespace. All JSON whitespace bytes
+        // (space 0x20, tab 0x09, LF 0x0A, CR 0x0D) are <= 0x20, so the single
+        // comparison `b > 32` is enough to reject non-whitespace without
+        // checking each character individually.
         while self.pos < self.input.len() {
             let b = self.input.get_byte(self.pos) as i32;
+            if b > 32 {
+                return;
+            }
             if b == ' ' as i32 || b == '\t' as i32 || b == '\n' as i32 || b == '\r' as i32 {
                 self.pos += 1;
             } else {
@@ -656,24 +663,26 @@ impl JsonDeserializer {
 
     pub fn expect_literal(&mut self, lit: String) -> Result<(), DeserializeError> {
         let start = self.pos;
-        for let b of lit.bytes() {
-            if self.pos >= self.input.len() {
-                return Result::Err(DeserializeError::eof(self.pos as i64));
-            }
-            if self.input.get_byte(self.pos) != b {
+        let lit_len = lit.len();
+        if self.pos + lit_len > self.input.len() {
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        for let mut i = 0; i < lit_len; i += 1 {
+            if self.input.get_byte(self.pos + i) != lit.get_byte(i) {
                 return Result::Err(DeserializeError::malformed(
                     `expected '{lit}'`,
                     start as i64,
                 ));
             }
-            self.pos += 1;
         }
+        self.pos += lit_len;
         return Result::Ok(());
     }
 
     pub fn read_json_string(&mut self) -> Result<String, DeserializeError> {
         self.skip_whitespace();
-        if self.pos >= self.input.len() {
+        let input_len = self.input.len();
+        if self.pos >= input_len {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         if self.input.get_byte(self.pos) as i32 != '"' as i32 {
@@ -688,7 +697,7 @@ impl JsonDeserializer {
         // This lets us pre-size the allocation exactly, avoiding repeated grow() calls.
         let prefix_start = self.pos;
         let mut scan_pos = self.pos;
-        while scan_pos < self.input.len() {
+        while scan_pos < input_len {
             let sb = self.input.get_byte(scan_pos) as i32;
             if sb == '"' as i32 || sb == '\\' as i32 {
                 break;
@@ -698,7 +707,7 @@ impl JsonDeserializer {
         let prefix_len = scan_pos - prefix_start;
 
         // Fast path: no escapes — allocate exactly the right size and copy raw bytes.
-        if scan_pos < self.input.len() && self.input.get_byte(scan_pos) as i32 == '"' as i32 {
+        if scan_pos < input_len && self.input.get_byte(scan_pos) as i32 == '"' as i32 {
             let mut result = String::with_capacity(prefix_len);
             let start = result.internal_reserve_uninit(prefix_len);
             for let mut i = 0; i < prefix_len; i += 1 {
@@ -717,53 +726,60 @@ impl JsonDeserializer {
         }
         self.pos = scan_pos;
 
-        while self.pos < self.input.len() {
+        loop {
+            // Scan for next terminator or escape. Bytes between escapes are already
+            // valid UTF-8 (the input is valid UTF-8), so we can copy them as raw bytes
+            // without per-byte UTF-8 decoding.
+            let chunk_start = self.pos;
+            while self.pos < self.input.len() {
+                let b = self.input.get_byte(self.pos) as i32;
+                if b == '"' as i32 || b == '\\' as i32 {
+                    break;
+                }
+                self.pos += 1;
+            }
+            let chunk_len = self.pos - chunk_start;
+            if chunk_len > 0 {
+                let start = result.internal_reserve_uninit(chunk_len);
+                for let mut i = 0; i < chunk_len; i += 1 {
+                    result.set_byte(start + i, self.input.get_byte(chunk_start + i));
+                }
+            }
+
+            if self.pos >= self.input.len() {
+                return Result::Err(DeserializeError::eof(self.pos as i64));
+            }
             let b = self.input.get_byte(self.pos) as i32;
             if b == '"' as i32 {
                 self.pos += 1;
                 return Result::Ok(result);
             }
-            if b == '\\' as i32 {
-                self.pos += 1;
-                if self.pos >= self.input.len() {
-                    return Result::Err(DeserializeError::eof(self.pos as i64));
-                }
-                let esc = self.input.get_byte(self.pos) as u8 as char;
-                match esc {
-                    '"' => result.push('"'),
-                    '\\' => result.push('\\'),
-                    '/' => result.push('/'),
-                    'n' => result.push('\n'),
-                    'r' => result.push('\r'),
-                    't' => result.push('\t'),
-                    'b' => result.push(8 as u8 as char),
-                    'f' => result.push(12 as u8 as char),
-                    'u' => match self.read_unicode_escape() {
-                        Ok(c) => result.push(c),
-                        Err(e) => return Result::Err(e),
-                    },
-                    _ => return Result::Err(DeserializeError::malformed(
-                        `invalid escape '\\{esc}'`,
-                        self.pos as i64,
-                    )),
-                }
-                self.pos += 1;
-            } else {
-                // Decode a full UTF-8 character from the input bytes.
-                // The input String is valid UTF-8, so char_at_byte always succeeds
-                // unless we're past the end of the buffer.
-                match self.input.char_at_byte(self.pos) {
-                    Some(c) => {
-                        result.push(c);
-                        self.pos += c.len_utf8();
-                    },
-                    None => return Result::Err(
-                        DeserializeError::eof(self.pos as i64),
-                    ),
-                }
+            // b == '\\'
+            self.pos += 1;
+            if self.pos >= self.input.len() {
+                return Result::Err(DeserializeError::eof(self.pos as i64));
             }
+            let esc = self.input.get_byte(self.pos) as u8 as char;
+            match esc {
+                '"' => result.push('"'),
+                '\\' => result.push('\\'),
+                '/' => result.push('/'),
+                'n' => result.push('\n'),
+                'r' => result.push('\r'),
+                't' => result.push('\t'),
+                'b' => result.push(8 as u8 as char),
+                'f' => result.push(12 as u8 as char),
+                'u' => match self.read_unicode_escape() {
+                    Ok(c) => result.push(c),
+                    Err(e) => return Result::Err(e),
+                },
+                _ => return Result::Err(DeserializeError::malformed(
+                    `invalid escape '\\{esc}'`,
+                    self.pos as i64,
+                )),
+            }
+            self.pos += 1;
         }
-        return Result::Err(DeserializeError::eof(self.pos as i64));
     }
 
     fn read_unicode_escape(&mut self) -> Result<char, DeserializeError> {
@@ -1471,92 +1487,134 @@ impl JsonDeserializer {
         return Result::Err(DeserializeError::eof(self.pos as i64));
     }
 
+    /// Inline check for "true" / "false" / "null". Assumes first byte already matched.
+    /// Returns Ok if the literal matches and advances pos past it.
+    fn expect_true(&mut self) -> Result<(), DeserializeError> {
+        if self.pos + 4 <= self.input.len()
+            && self.input.get_byte(self.pos + 1) as i32 == 'r' as i32
+            && self.input.get_byte(self.pos + 2) as i32 == 'u' as i32
+            && self.input.get_byte(self.pos + 3) as i32 == 'e' as i32 {
+            self.pos += 4;
+            return Result::Ok(());
+        }
+        return Result::Err(DeserializeError::malformed("expected 'true'", self.pos as i64));
+    }
+
+    fn expect_false(&mut self) -> Result<(), DeserializeError> {
+        if self.pos + 5 <= self.input.len()
+            && self.input.get_byte(self.pos + 1) as i32 == 'a' as i32
+            && self.input.get_byte(self.pos + 2) as i32 == 'l' as i32
+            && self.input.get_byte(self.pos + 3) as i32 == 's' as i32
+            && self.input.get_byte(self.pos + 4) as i32 == 'e' as i32 {
+            self.pos += 5;
+            return Result::Ok(());
+        }
+        return Result::Err(DeserializeError::malformed("expected 'false'", self.pos as i64));
+    }
+
+    fn expect_null(&mut self) -> Result<(), DeserializeError> {
+        if self.pos + 4 <= self.input.len()
+            && self.input.get_byte(self.pos + 1) as i32 == 'u' as i32
+            && self.input.get_byte(self.pos + 2) as i32 == 'l' as i32
+            && self.input.get_byte(self.pos + 3) as i32 == 'l' as i32 {
+            self.pos += 4;
+            return Result::Ok(());
+        }
+        return Result::Err(DeserializeError::malformed("expected 'null'", self.pos as i64));
+    }
+
     /// Skips the next JSON value without allocating.
     pub fn skip_value(&mut self) -> Result<(), DeserializeError> {
         self.skip_whitespace();
         if self.pos >= self.input.len() {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_byte(self.pos) as u8 as char;
-        match b {
-            '"' => return self.skip_string(),
-            't' => return self.expect_literal("true"),
-            'f' => return self.expect_literal("false"),
-            'n' => return self.expect_literal("null"),
-            '[' => {
-                self.pos += 1;
-                self.skip_whitespace();
-                if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == ']' as i32 {
-                    self.pos += 1;
-                    return Result::Ok(());
-                }
-                loop {
-                    self.skip_value()?;
-                    self.skip_whitespace();
-                    if self.pos >= self.input.len() {
-                        return Result::Err(DeserializeError::eof(self.pos as i64));
-                    }
-                    let c = self.input.get_byte(self.pos) as u8 as char;
-                    match c {
-                        ']' => {
-                            self.pos += 1;
-                            return Result::Ok(());
-                        },
-                        ',' => self.pos += 1,
-                        _ => return Result::Err(DeserializeError::malformed(
-                            "expected ',' or ']'",
-                            self.pos as i64,
-                        )),
-                    }
-                }
-            },
-            '{' => {
-                self.pos += 1;
-                self.skip_whitespace();
-                if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '}' as i32 {
-                    self.pos += 1;
-                    return Result::Ok(());
-                }
-                loop {
-                    self.skip_whitespace();
-                    if self.pos >= self.input.len() || self.input.get_byte(self.pos) as i32 != '"' as i32 {
-                        return Result::Err(DeserializeError::malformed(
-                            "expected string key",
-                            self.pos as i64,
-                        ));
-                    }
-                    self.skip_string()?;
-                    self.expect_char(':' as i32)?;
-                    self.skip_value()?;
-                    self.skip_whitespace();
-                    if self.pos >= self.input.len() {
-                        return Result::Err(DeserializeError::eof(self.pos as i64));
-                    }
-                    let c = self.input.get_byte(self.pos) as u8 as char;
-                    match c {
-                        '}' => {
-                            self.pos += 1;
-                            return Result::Ok(());
-                        },
-                        ',' => self.pos += 1,
-                        _ => return Result::Err(DeserializeError::malformed(
-                            "expected ',' or '}'",
-                            self.pos as i64,
-                        )),
-                    }
-                }
-            },
-            _ => {
-                if b == '-' || '0' <= b <= '9' {
-                    self.skip_number();
-                    return Result::Ok(());
-                }
-                return Result::Err(DeserializeError::malformed(
-                    `unexpected character '{b}'`,
-                    self.pos as i64,
-                ));
-            },
+        let b = self.input.get_byte(self.pos) as i32;
+        if b == '"' as i32 {
+            return self.skip_string();
         }
+        if b == 't' as i32 {
+            return self.expect_true();
+        }
+        if b == 'f' as i32 {
+            return self.expect_false();
+        }
+        if b == 'n' as i32 {
+            return self.expect_null();
+        }
+        if b == '[' as i32 {
+            self.pos += 1;
+            self.skip_whitespace();
+            if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == ']' as i32 {
+                self.pos += 1;
+                return Result::Ok(());
+            }
+            loop {
+                self.skip_value()?;
+                self.skip_whitespace();
+                if self.pos >= self.input.len() {
+                    return Result::Err(DeserializeError::eof(self.pos as i64));
+                }
+                let c = self.input.get_byte(self.pos) as i32;
+                if c == ']' as i32 {
+                    self.pos += 1;
+                    return Result::Ok(());
+                }
+                if c == ',' as i32 {
+                    self.pos += 1;
+                } else {
+                    return Result::Err(DeserializeError::malformed(
+                        "expected ',' or ']'",
+                        self.pos as i64,
+                    ));
+                }
+            }
+        }
+        if b == '{' as i32 {
+            self.pos += 1;
+            self.skip_whitespace();
+            if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '}' as i32 {
+                self.pos += 1;
+                return Result::Ok(());
+            }
+            loop {
+                self.skip_whitespace();
+                if self.pos >= self.input.len() || self.input.get_byte(self.pos) as i32 != '"' as i32 {
+                    return Result::Err(DeserializeError::malformed(
+                        "expected string key",
+                        self.pos as i64,
+                    ));
+                }
+                self.skip_string()?;
+                self.expect_char(':' as i32)?;
+                self.skip_value()?;
+                self.skip_whitespace();
+                if self.pos >= self.input.len() {
+                    return Result::Err(DeserializeError::eof(self.pos as i64));
+                }
+                let c = self.input.get_byte(self.pos) as i32;
+                if c == '}' as i32 {
+                    self.pos += 1;
+                    return Result::Ok(());
+                }
+                if c == ',' as i32 {
+                    self.pos += 1;
+                } else {
+                    return Result::Err(DeserializeError::malformed(
+                        "expected ',' or '}'",
+                        self.pos as i64,
+                    ));
+                }
+            }
+        }
+        if b == '-' as i32 || ('0' as i32 <= b && b <= '9' as i32) {
+            self.skip_number();
+            return Result::Ok(());
+        }
+        return Result::Err(DeserializeError::malformed(
+            "unexpected character in JSON value",
+            self.pos as i64,
+        ));
     }
 }
 
@@ -1622,7 +1680,11 @@ impl DeserializeMap for JsonMapAccess {
         }
         self.first = false;
         let key = self.de.read_json_string()?;
-        self.de.expect_char(':' as i32)?;
+        if self.de.pos < self.de.input.len() && self.de.input.get_byte(self.de.pos) as i32 == ':' as i32 {
+            self.de.pos += 1;
+        } else {
+            self.de.expect_char(':' as i32)?;
+        }
         return Result::Ok(Option::Some(key));
     }
 
@@ -1641,18 +1703,25 @@ impl DeserializeStruct for JsonStructAccess {
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        if self.de.input.get_byte(self.de.pos) as i32 == '}' as i32 {
+        let b = self.de.input.get_byte(self.de.pos) as i32;
+        if b == '}' as i32 {
             return Result::Ok(null);
         }
         if !self.first {
-            self.de.expect_char(',' as i32)?;
+            if b != ',' as i32 {
+                return Result::Err(DeserializeError::malformed(
+                    "expected ',' or '}'",
+                    self.de.pos as i64,
+                ));
+            }
+            self.de.pos += 1;
+            self.de.skip_whitespace();
         }
         self.first = false;
 
         // Fast path: scan JSON string key without allocating.
         // For unescaped keys (the common case), we pass the byte range
         // directly to the lookup function, avoiding String allocation entirely.
-        self.de.skip_whitespace();
         if self.de.pos >= self.de.input.len() || self.de.input.get_byte(self.de.pos) as i32 != '"' as i32 {
             return Result::Err(DeserializeError::unexpected_type(
                 "expected string key",
@@ -1678,7 +1747,11 @@ impl DeserializeStruct for JsonStructAccess {
             // Fast path: key has no escapes, compare directly from input buffer
             let key_end = self.de.pos;
             self.de.pos += 1;  // skip closing '"'
-            self.de.expect_char(':' as i32)?;
+            if self.de.pos < self.de.input.len() && self.de.input.get_byte(self.de.pos) as i32 == ':' as i32 {
+                self.de.pos += 1;
+            } else {
+                self.de.expect_char(':' as i32)?;
+            }
             let idx = match (self.lookup)(&self.de.input, key_start, key_end) {
                 Some(i) => i,
                 None => -1,
@@ -1895,20 +1968,18 @@ impl Deserializer for JsonDeserializer {
         if self.pos >= self.input.len() {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_byte(self.pos) as u8 as char;
-        match b {
-            't' => {
-                self.expect_literal("true")?;
-                return Result::Ok(true);
-            },
-            'f' => {
-                self.expect_literal("false")?;
-                return Result::Ok(false);
-            },
-            _ => return Result::Err(
-                DeserializeError::unexpected_type("expected bool", self.pos as i64),
-            ),
+        let b = self.input.get_byte(self.pos) as i32;
+        if b == 't' as i32 {
+            self.expect_true()?;
+            return Result::Ok(true);
         }
+        if b == 'f' as i32 {
+            self.expect_false()?;
+            return Result::Ok(false);
+        }
+        return Result::Err(
+            DeserializeError::unexpected_type("expected bool", self.pos as i64),
+        );
     }
 
     fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
