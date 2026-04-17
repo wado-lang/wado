@@ -61,19 +61,19 @@ Deserialize twitter.json (631 KB).
 
 | Implementation           |    Time | vs best |
 | ------------------------ | ------: | ------: |
-| serde_json (Rust native) | 0.81 ms |   1.00x |
-| JSON.parse (Node)        | 1.65 ms |   2.04x |
-| **Wado** core:json       | 17.3 ms |  21.36x |
+| serde_json (Rust native) | 1.30 ms |   1.00x |
+| JSON.parse (Node)        | 2.69 ms |   2.07x |
+| **Wado** core:json       | 18.3 ms |  14.08x |
 
 ## JSON: canada
 
 Deserialize canada.json (2.3 MB, geographic coordinates).
 
-| Implementation           |    Time | vs best |
-| ------------------------ | ------: | ------: |
-| serde_json (Rust native) | 8.18 ms |   1.00x |
-| JSON.parse (Node)        | 11.3 ms |   1.38x |
-| **Wado** core:json       | 79.2 ms |   9.68x |
+| Implementation           |     Time | vs best |
+| ------------------------ | -------: | ------: |
+| serde_json (Rust native) |  16.4 ms |   1.00x |
+| JSON.parse (Node)        |  25.3 ms |   1.54x |
+| **Wado** core:json       | 168.4 ms |  10.27x |
 
 ## JSON: catalog
 
@@ -81,9 +81,9 @@ Deserialize citm_catalog.json (1.7 MB, event catalog).
 
 | Implementation           |    Time | vs best |
 | ------------------------ | ------: | ------: |
-| serde_json (Rust native) | 2.34 ms |   1.00x |
-| JSON.parse (Node)        | 4.61 ms |   1.97x |
-| **Wado** core:json       | 38.6 ms |  16.50x |
+| serde_json (Rust native) | 3.59 ms |   1.00x |
+| JSON.parse (Node)        | 8.66 ms |   2.41x |
+| **Wado** core:json       | 62.3 ms |  17.35x |
 
 ## SQL Parse
 
