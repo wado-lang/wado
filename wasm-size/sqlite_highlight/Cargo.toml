@@ -1,0 +1,22 @@
+[package]
+name = "sqlite_highlight_bench"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "sqlite_highlight"
+path = "sqlite_highlight.rs"
+
+[dependencies]
+tree-sitter = "0.26"
+tree-sitter-highlight = "0.26"
+tree-sitter-sequel = "0.3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

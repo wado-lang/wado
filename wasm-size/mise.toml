@@ -79,6 +79,21 @@ if rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
     cp hello_world/target/wasm32-wasip1/release/hello_world.wasm "$OUT_DIR/hello_world_rust.wasm"
     cp pi_approx/target/wasm32-wasip1/release/pi_approx.wasm "$OUT_DIR/pi_approx_rust.wasm"
     cp zlib/target/wasm32-wasip1/release/zlib_bench.wasm "$OUT_DIR/zlib_rust.wasm"
+
+    # tree-sitter-sequel depends on a C parser: needs wasi-sdk (clang + wasi-sysroot).
+    SDK_DIR=""
+    if command -v clang >/dev/null 2>&1; then
+        SDK_DIR="$(cd "$(dirname "$(command -v clang)")/.." 2>/dev/null && pwd)"
+    fi
+    if [ -n "$SDK_DIR" ] && [ -d "$SDK_DIR/share/wasi-sysroot" ]; then
+        CC_wasm32_wasip1="$SDK_DIR/bin/clang" \
+        CFLAGS_wasm32_wasip1="--sysroot=$SDK_DIR/share/wasi-sysroot" \
+        AR_wasm32_wasip1="$SDK_DIR/bin/llvm-ar" \
+            (cd sqlite_highlight && cargo build --release --target wasm32-wasip1)
+        cp sqlite_highlight/target/wasm32-wasip1/release/sqlite_highlight.wasm "$OUT_DIR/sqlite_highlight_rust.wasm"
+    else
+        echo "SKIP: sqlite_highlight Rust (needs wasi-sdk for tree-sitter C parser)"
+    fi
 else
     echo "SKIP: Rust (rustup target add wasm32-wasip1)"
 fi
@@ -129,19 +144,27 @@ if [ -f hello_world/hello_world.wado ]; then
     cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/hello_world_wado.wasm" hello_world/hello_world.wado
     cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/pi_approx_wado.wasm" pi_approx/pi_approx.wado
     cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/zlib_wado.wasm" zlib/zlib.wado
+    cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/sqlite_highlight_wado.wasm" sqlite_highlight/sqlite_highlight.wado
 else
     echo "SKIP: Wado (source files not found)"
 fi
 """
 
 [tasks.gen-test-data]
-description = "Generate test data for zlib benchmarks (compress README.md)"
+description = "Generate test data for zlib and sqlite_highlight benchmarks"
 run = """
 #!/usr/bin/env bash
 set -e
 mkdir -p "$OUT_DIR"
 gzip -c README.md > "$OUT_DIR/test.gz"
 echo "Generated $OUT_DIR/test.gz from README.md ($(wc -c < README.md | tr -d ' ') -> $(wc -c < "$OUT_DIR/test.gz" | tr -d ' ') bytes)"
+
+# Minimal SQL sample for sqlite_highlight validation.
+cat > "$OUT_DIR/sample.sql" <<'SQL'
+-- sample SQL for syntax highlighting
+SELECT id, name FROM users WHERE active = 1 ORDER BY id DESC LIMIT 10;
+SQL
+echo "Generated $OUT_DIR/sample.sql"
 """
 
 [tasks.build-all]
@@ -202,6 +225,34 @@ if [ "$FAIL" -ne 0 ]; then
     echo "ERROR: Some zlib programs produced incorrect output"
     exit 1
 fi
+
+# sqlite_highlight: feed a small SQL sample and verify non-empty HTML output.
+echo ""
+echo "=== sqlite_highlight Verification (produce HTML from sample.sql) ==="
+for f in "$OUT_DIR"/sqlite_highlight_*.wasm; do
+    if [ ! -f "$f" ]; then continue; fi
+    lang=$(basename "$f" .wasm | sed 's/sqlite_highlight_//')
+    printf "%-12s " "$lang:"
+
+    if [[ "$f" == *_wado.wasm ]]; then
+        $WADO_CLI run sqlite_highlight/sqlite_highlight.wado < "$OUT_DIR/sample.sql" > "$OUT_DIR/sqlite_highlight_${lang}_out.html" 2>/dev/null
+    else
+        $WASMTIME "$f" < "$OUT_DIR/sample.sql" > "$OUT_DIR/sqlite_highlight_${lang}_out.html" 2>/dev/null
+    fi
+
+    if [ -s "$OUT_DIR/sqlite_highlight_${lang}_out.html" ]; then
+        echo "OK ($(wc -c < "$OUT_DIR/sqlite_highlight_${lang}_out.html" | tr -d ' ') bytes HTML)"
+    else
+        echo "FAIL (no output)"
+        FAIL=1
+    fi
+done
+
+if [ "$FAIL" -ne 0 ]; then
+    echo ""
+    echo "ERROR: Some sqlite_highlight programs produced incorrect output"
+    exit 1
+fi
 """
 
 [tasks.report-wasm-size]
@@ -209,13 +260,13 @@ description = "Build all and report Wasm sizes"
 depends = ["build-all", "validate"]
 run = """
 #!/usr/bin/env bash
-PROGRAMS="hello_world pi_approx zlib"
+PROGRAMS="hello_world pi_approx zlib sqlite_highlight"
 
 echo ""
 echo "=== Wasm Size Report ==="
 echo ""
-echo "| Program      | Language       | Size (bytes) |"
-echo "|--------------|----------------|--------------|"
+echo "| Program          | Language       | Size (bytes) |"
+echo "|------------------|----------------|--------------|"
 for prog in $PROGRAMS; do
     for f in "$OUT_DIR"/${prog}_*.wasm; do
         if [ -f "$f" ]; then
@@ -224,7 +275,7 @@ for prog in $PROGRAMS; do
             printf "%s\t%s\t%s\n" "$size" "$prog" "$lang"
         fi
     done | sort -n | while IFS=$'\t' read -r size prog lang; do
-        printf "| %-12s | %-14s | %12s |\n" "$prog" "$lang" "$size"
+        printf "| %-16s | %-14s | %12s |\n" "$prog" "$lang" "$size"
     done
 done
 echo ""
@@ -235,7 +286,7 @@ description = "Clean build artifacts"
 run = """
 #!/usr/bin/env bash
 rm -rf "$OUT_DIR"
-rm -rf hello_world/target pi_approx/target zlib/target
+rm -rf hello_world/target pi_approx/target zlib/target sqlite_highlight/target
 rm -rf hello_world/_build pi_approx/_build
 """
 

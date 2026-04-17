@@ -1,0 +1,26 @@
+// Syntax highlight (Wado): Gale-generated highlighter from SQLite.g4.
+//
+// Reads SQL from stdin and writes HTML-highlighted output to stdout.
+// Size-comparable counterpart to sqlite_highlight.rs (tree-sitter-sequel).
+
+use { print, Stdout } from "core:cli";
+use { Stdin } from "wasi:cli";
+use sqlite from "../../package-gale/tests/golden/sqlite_highlight.wado";
+
+export fn run() with Stdout, Stdin {
+    let [stream, _done] = Stdin::read_via_stream();
+    let mut bytes: Array<u8> = [];
+    loop {
+        let chunk = stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            bytes.push(b);
+        }
+    }
+    stream.drop();
+
+    let input = String::from_utf8_unchecked(bytes);
+    print(sqlite::highlight(&input));
+}
