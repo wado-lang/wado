@@ -20435,28 +20435,48 @@ fn parse_single_expression_lr_25(p: &mut Parser, left: SingleExpressionNode, sta
             lit___,
         }));
     } else if grp_kind == TK_LIT_GT {
-        let saved_pos = p.pos;
-        let mut bt_done = false;
-        if !bt_done {
-            bt_try: {
-                let _bt_r = p.expect(TK_LIT_GT);
-                if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                let gt = _bt_r.unwrap();
-                let _bt_r_2 = p.expect(TK_LIT_GT);
-                if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
-                let gt_2 = _bt_r_2.unwrap();
-                let _bt_r_3 = p.expect(TK_LIT_GT);
-                if let Err(_) = _bt_r_3 { p.pos = saved_pos; break bt_try; }
-                let gt_3 = _bt_r_3.unwrap();
-                group_0_inner = Option::<SingleExpressionGroup0>::Some(SingleExpressionGroup0::Alt2(SingleExpressionGroup0Alt2 {
-                    gt,
-                    gt_2,
-                    gt_3,
-                }));
-                bt_done = true;
-            }
+        let mut gd_scan_pos: i32 = -1;
+        gd_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_GT { break gd_scan; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_GT { break gd_scan; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_GT { break gd_scan; }
+            pos += 1;
+            gd_scan_pos = pos;
         }
-        if !bt_done {
+        let mut gd_scan_pos_2: i32 = -1;
+        gd_scan_2: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_GT { break gd_scan_2; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_GT { break gd_scan_2; }
+            pos += 1;
+            gd_scan_pos_2 = pos;
+        }
+        let mut gd_best_i: i32 = -1;
+        let mut gd_best_p: i32 = -1;
+        if gd_scan_pos > gd_best_p {
+            gd_best_p = gd_scan_pos;
+            gd_best_i = 0;
+        }
+        if gd_scan_pos_2 > gd_best_p {
+            gd_best_p = gd_scan_pos_2;
+            gd_best_i = 1;
+        }
+        if gd_best_i == 0 {
+            let gt = p.expect(TK_LIT_GT)?;
+            let gt_2 = p.expect(TK_LIT_GT)?;
+            let gt_3 = p.expect(TK_LIT_GT)?;
+            group_0_inner = Option::<SingleExpressionGroup0>::Some(SingleExpressionGroup0::Alt2(SingleExpressionGroup0Alt2 {
+                gt,
+                gt_2,
+                gt_3,
+            }));
+        } else {
             let gt = p.expect(TK_LIT_GT)?;
             let gt_2 = p.expect(TK_LIT_GT)?;
             group_0_inner = Option::<SingleExpressionGroup0>::Some(SingleExpressionGroup0::Alt1(SingleExpressionGroup0Alt1 {

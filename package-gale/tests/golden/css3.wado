@@ -36106,72 +36106,114 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
         let mut group_0_opt: Option<BlockGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ | TK_LIT_PIPE | TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACE | TK_Media | TK_Page | TK_FontFace | TK_Keyframes | TK_Supports | TK_Viewport | TK_CounterStyle | TK_FontFeatureValues | TK_AtKeyword } {
-            let saved_pos = p.pos;
-            let mut bt_done = false;
-            if !bt_done {
-                bt_try: {
-                    let _bt_r = p.expect(TK_AtKeyword);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                    let atkeyword = _bt_r.unwrap();
-                    let _bt_r_2 = parse_ws(p);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
-                    let ws = _bt_r_2.unwrap();
-                    group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt4(BlockGroup0Alt4 {
-                        atkeyword,
-                        ws,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos: i32 = -1;
+            gd_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_AtKeyword { break gd_scan; }
+                pos += 1;
+                pos = scan_ws(tokens, pos);
+                if pos < 0 { break gd_scan; }
+                gd_scan_pos = pos;
             }
-            if !bt_done {
-                bt_try_2: {
-                    let _bt_r = p.expect(TK_LIT_SEMI);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_2; }
-                    let semicolon = _bt_r.unwrap();
-                    let _bt_r_2 = parse_ws(p);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_2; }
-                    let ws = _bt_r_2.unwrap();
-                    group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt5(BlockGroup0Alt5 {
-                        semicolon,
-                        ws,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_SEMI { break gd_scan_2; }
+                pos += 1;
+                pos = scan_ws(tokens, pos);
+                if pos < 0 { break gd_scan_2; }
+                gd_scan_pos_2 = pos;
             }
-            if !bt_done {
-                bt_try_3: {
-                    let _bt_r = parse_any_(p);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_3; }
-                    let any_ = _bt_r.unwrap();
-                    group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt2(BlockGroup0Alt2 {
-                        any_,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_3: i32 = -1;
+            gd_scan_3: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_any_(tokens, pos);
+                if pos < 0 { break gd_scan_3; }
+                gd_scan_pos_3 = pos;
             }
-            if !bt_done {
-                bt_try_4: {
-                    let _bt_r = parse_block(p);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_4; }
-                    let block = _bt_r.unwrap();
-                    group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt3(BlockGroup0Alt3 {
-                        block,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_4: i32 = -1;
+            gd_scan_4: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_block(tokens, pos);
+                if pos < 0 { break gd_scan_4; }
+                gd_scan_pos_4 = pos;
             }
-            if !bt_done {
-                bt_try_5: {
-                    let _bt_r = parse_declaration_list(p);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_5; }
-                    let declaration_list = _bt_r.unwrap();
-                    group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt0(BlockGroup0Alt0 {
-                        declaration_list,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_5: i32 = -1;
+            gd_scan_5: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_declaration_list(tokens, pos);
+                if pos < 0 { break gd_scan_5; }
+                gd_scan_pos_5 = pos;
             }
-            if !bt_done {
+            let mut gd_scan_pos_6: i32 = -1;
+            gd_scan_6: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_nested_statement(tokens, pos);
+                if pos < 0 { break gd_scan_6; }
+                gd_scan_pos_6 = pos;
+            }
+            let mut gd_best_i: i32 = -1;
+            let mut gd_best_p: i32 = -1;
+            if gd_scan_pos > gd_best_p {
+                gd_best_p = gd_scan_pos;
+                gd_best_i = 0;
+            }
+            if gd_scan_pos_2 > gd_best_p {
+                gd_best_p = gd_scan_pos_2;
+                gd_best_i = 1;
+            }
+            if gd_scan_pos_3 > gd_best_p {
+                gd_best_p = gd_scan_pos_3;
+                gd_best_i = 2;
+            }
+            if gd_scan_pos_4 > gd_best_p {
+                gd_best_p = gd_scan_pos_4;
+                gd_best_i = 3;
+            }
+            if gd_scan_pos_5 > gd_best_p {
+                gd_best_p = gd_scan_pos_5;
+                gd_best_i = 4;
+            }
+            if gd_scan_pos_6 > gd_best_p {
+                gd_best_p = gd_scan_pos_6;
+                gd_best_i = 5;
+            }
+            if gd_best_i == 0 {
+                let atkeyword = p.expect(TK_AtKeyword)?;
+                let ws = parse_ws(p)?;
+                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt4(BlockGroup0Alt4 {
+                    atkeyword,
+                    ws,
+                }));
+            } else if gd_best_i == 1 {
+                let semicolon = p.expect(TK_LIT_SEMI)?;
+                let ws = parse_ws(p)?;
+                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt5(BlockGroup0Alt5 {
+                    semicolon,
+                    ws,
+                }));
+            } else if gd_best_i == 2 {
+                let any_ = parse_any_(p)?;
+                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt2(BlockGroup0Alt2 {
+                    any_,
+                }));
+            } else if gd_best_i == 3 {
+                let block = parse_block(p)?;
+                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt3(BlockGroup0Alt3 {
+                    block,
+                }));
+            } else if gd_best_i == 4 {
+                let declaration_list = parse_declaration_list(p)?;
+                group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt0(BlockGroup0Alt0 {
+                    declaration_list,
+                }));
+            } else {
                 let nested_statement = parse_nested_statement(p)?;
                 group_0_opt = Option::<BlockGroup0>::Some(BlockGroup0::Alt1(BlockGroup0Alt1 {
                     nested_statement,

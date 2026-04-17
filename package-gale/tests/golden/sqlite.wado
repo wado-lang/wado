@@ -11054,31 +11054,59 @@ fn parse_analyze_stmt(p: &mut Parser) -> Result<AnalyzeStmtNode, ParseError> {
         let mut group_0_opt: Option<AnalyzeStmtGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
-            let saved_pos = p.pos;
-            let mut bt_done = false;
-            if !bt_done {
-                bt_try: {
-                    let _bt_r = parse_database_name(p);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                    let database_name = _bt_r.unwrap();
-                    group_0_opt = Option::<AnalyzeStmtGroup0>::Some(AnalyzeStmtGroup0::Alt0(AnalyzeStmtGroup0Alt0 {
-                        database_name,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos: i32 = -1;
+            gd_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_database_name(tokens, pos);
+                if pos < 0 { break gd_scan; }
+                gd_scan_pos = pos;
             }
-            if !bt_done {
-                bt_try_2: {
-                    let _bt_r = parse_table_or_index_name(p);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_2; }
-                    let table_or_index_name = _bt_r.unwrap();
-                    group_0_opt = Option::<AnalyzeStmtGroup0>::Some(AnalyzeStmtGroup0::Alt1(AnalyzeStmtGroup0Alt1 {
-                        table_or_index_name,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_table_or_index_name(tokens, pos);
+                if pos < 0 { break gd_scan_2; }
+                gd_scan_pos_2 = pos;
             }
-            if !bt_done {
+            let mut gd_scan_pos_3: i32 = -1;
+            gd_scan_3: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_database_name(tokens, pos);
+                if pos < 0 { break gd_scan_3; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break gd_scan_3; }
+                pos += 1;
+                pos = scan_table_or_index_name(tokens, pos);
+                if pos < 0 { break gd_scan_3; }
+                gd_scan_pos_3 = pos;
+            }
+            let mut gd_best_i: i32 = -1;
+            let mut gd_best_p: i32 = -1;
+            if gd_scan_pos > gd_best_p {
+                gd_best_p = gd_scan_pos;
+                gd_best_i = 0;
+            }
+            if gd_scan_pos_2 > gd_best_p {
+                gd_best_p = gd_scan_pos_2;
+                gd_best_i = 1;
+            }
+            if gd_scan_pos_3 > gd_best_p {
+                gd_best_p = gd_scan_pos_3;
+                gd_best_i = 2;
+            }
+            if gd_best_i == 0 {
+                let database_name = parse_database_name(p)?;
+                group_0_opt = Option::<AnalyzeStmtGroup0>::Some(AnalyzeStmtGroup0::Alt0(AnalyzeStmtGroup0Alt0 {
+                    database_name,
+                }));
+            } else if gd_best_i == 1 {
+                let table_or_index_name = parse_table_or_index_name(p)?;
+                group_0_opt = Option::<AnalyzeStmtGroup0>::Some(AnalyzeStmtGroup0::Alt1(AnalyzeStmtGroup0Alt1 {
+                    table_or_index_name,
+                }));
+            } else {
                 let database_name = parse_database_name(p)?;
                 let dot = p.expect(TK_LIT_DOT)?;
                 let table_or_index_name = parse_table_or_index_name(p)?;
@@ -12503,104 +12531,146 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
     let mut group_0_inner: Option<InsertStmtGroup0> = null;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_INSERT {
-        let saved_pos = p.pos;
-        let mut bt_done = false;
-        if !bt_done {
-            bt_try: {
-                let _bt_r = p.expect(TK_K_INSERT);
-                if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                let k_insert = _bt_r.unwrap();
-                let _bt_r_2 = p.expect(TK_K_OR);
-                if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
-                let k_or = _bt_r_2.unwrap();
-                let _bt_r_3 = p.expect(TK_K_REPLACE);
-                if let Err(_) = _bt_r_3 { p.pos = saved_pos; break bt_try; }
-                let k_replace = _bt_r_3.unwrap();
-                group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt2(InsertStmtGroup0Alt2 {
-                    k_insert,
-                    k_or,
-                    k_replace,
-                }));
-                bt_done = true;
-            }
+        let mut gd_scan_pos: i32 = -1;
+        gd_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INSERT { break gd_scan; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_REPLACE { break gd_scan; }
+            pos += 1;
+            gd_scan_pos = pos;
         }
-        if !bt_done {
-            bt_try_2: {
-                let _bt_r = p.expect(TK_K_INSERT);
-                if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_2; }
-                let k_insert = _bt_r.unwrap();
-                let _bt_r_2 = p.expect(TK_K_OR);
-                if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_2; }
-                let k_or = _bt_r_2.unwrap();
-                let _bt_r_3 = p.expect(TK_K_ROLLBACK);
-                if let Err(_) = _bt_r_3 { p.pos = saved_pos; break bt_try_2; }
-                let k_rollback = _bt_r_3.unwrap();
-                group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt3(InsertStmtGroup0Alt3 {
-                    k_insert,
-                    k_or,
-                    k_rollback,
-                }));
-                bt_done = true;
-            }
+        let mut gd_scan_pos_2: i32 = -1;
+        gd_scan_2: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INSERT { break gd_scan_2; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_2; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { break gd_scan_2; }
+            pos += 1;
+            gd_scan_pos_2 = pos;
         }
-        if !bt_done {
-            bt_try_3: {
-                let _bt_r = p.expect(TK_K_INSERT);
-                if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_3; }
-                let k_insert = _bt_r.unwrap();
-                let _bt_r_2 = p.expect(TK_K_OR);
-                if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_3; }
-                let k_or = _bt_r_2.unwrap();
-                let _bt_r_3 = p.expect(TK_K_ABORT);
-                if let Err(_) = _bt_r_3 { p.pos = saved_pos; break bt_try_3; }
-                let k_abort = _bt_r_3.unwrap();
-                group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt4(InsertStmtGroup0Alt4 {
-                    k_insert,
-                    k_or,
-                    k_abort,
-                }));
-                bt_done = true;
-            }
+        let mut gd_scan_pos_3: i32 = -1;
+        gd_scan_3: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INSERT { break gd_scan_3; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_3; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_ABORT { break gd_scan_3; }
+            pos += 1;
+            gd_scan_pos_3 = pos;
         }
-        if !bt_done {
-            bt_try_4: {
-                let _bt_r = p.expect(TK_K_INSERT);
-                if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_4; }
-                let k_insert = _bt_r.unwrap();
-                let _bt_r_2 = p.expect(TK_K_OR);
-                if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_4; }
-                let k_or = _bt_r_2.unwrap();
-                let _bt_r_3 = p.expect(TK_K_FAIL);
-                if let Err(_) = _bt_r_3 { p.pos = saved_pos; break bt_try_4; }
-                let k_fail = _bt_r_3.unwrap();
-                group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt5(InsertStmtGroup0Alt5 {
-                    k_insert,
-                    k_or,
-                    k_fail,
-                }));
-                bt_done = true;
-            }
+        let mut gd_scan_pos_4: i32 = -1;
+        gd_scan_4: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INSERT { break gd_scan_4; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_4; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_FAIL { break gd_scan_4; }
+            pos += 1;
+            gd_scan_pos_4 = pos;
         }
-        if !bt_done {
-            bt_try_5: {
-                let _bt_r = p.expect(TK_K_INSERT);
-                if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_5; }
-                let k_insert = _bt_r.unwrap();
-                let _bt_r_2 = p.expect(TK_K_OR);
-                if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_5; }
-                let k_or = _bt_r_2.unwrap();
-                let _bt_r_3 = p.expect(TK_K_IGNORE);
-                if let Err(_) = _bt_r_3 { p.pos = saved_pos; break bt_try_5; }
-                let k_ignore = _bt_r_3.unwrap();
-                group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt6(InsertStmtGroup0Alt6 {
-                    k_insert,
-                    k_or,
-                    k_ignore,
-                }));
-                bt_done = true;
-            }
+        let mut gd_scan_pos_5: i32 = -1;
+        gd_scan_5: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INSERT { break gd_scan_5; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_5; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_IGNORE { break gd_scan_5; }
+            pos += 1;
+            gd_scan_pos_5 = pos;
         }
-        if !bt_done {
+        let mut gd_scan_pos_6: i32 = -1;
+        gd_scan_6: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_K_INSERT { break gd_scan_6; }
+            pos += 1;
+            gd_scan_pos_6 = pos;
+        }
+        let mut gd_best_i: i32 = -1;
+        let mut gd_best_p: i32 = -1;
+        if gd_scan_pos > gd_best_p {
+            gd_best_p = gd_scan_pos;
+            gd_best_i = 0;
+        }
+        if gd_scan_pos_2 > gd_best_p {
+            gd_best_p = gd_scan_pos_2;
+            gd_best_i = 1;
+        }
+        if gd_scan_pos_3 > gd_best_p {
+            gd_best_p = gd_scan_pos_3;
+            gd_best_i = 2;
+        }
+        if gd_scan_pos_4 > gd_best_p {
+            gd_best_p = gd_scan_pos_4;
+            gd_best_i = 3;
+        }
+        if gd_scan_pos_5 > gd_best_p {
+            gd_best_p = gd_scan_pos_5;
+            gd_best_i = 4;
+        }
+        if gd_scan_pos_6 > gd_best_p {
+            gd_best_p = gd_scan_pos_6;
+            gd_best_i = 5;
+        }
+        if gd_best_i == 0 {
+            let k_insert = p.expect(TK_K_INSERT)?;
+            let k_or = p.expect(TK_K_OR)?;
+            let k_replace = p.expect(TK_K_REPLACE)?;
+            group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt2(InsertStmtGroup0Alt2 {
+                k_insert,
+                k_or,
+                k_replace,
+            }));
+        } else if gd_best_i == 1 {
+            let k_insert = p.expect(TK_K_INSERT)?;
+            let k_or = p.expect(TK_K_OR)?;
+            let k_rollback = p.expect(TK_K_ROLLBACK)?;
+            group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt3(InsertStmtGroup0Alt3 {
+                k_insert,
+                k_or,
+                k_rollback,
+            }));
+        } else if gd_best_i == 2 {
+            let k_insert = p.expect(TK_K_INSERT)?;
+            let k_or = p.expect(TK_K_OR)?;
+            let k_abort = p.expect(TK_K_ABORT)?;
+            group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt4(InsertStmtGroup0Alt4 {
+                k_insert,
+                k_or,
+                k_abort,
+            }));
+        } else if gd_best_i == 3 {
+            let k_insert = p.expect(TK_K_INSERT)?;
+            let k_or = p.expect(TK_K_OR)?;
+            let k_fail = p.expect(TK_K_FAIL)?;
+            group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt5(InsertStmtGroup0Alt5 {
+                k_insert,
+                k_or,
+                k_fail,
+            }));
+        } else if gd_best_i == 4 {
+            let k_insert = p.expect(TK_K_INSERT)?;
+            let k_or = p.expect(TK_K_OR)?;
+            let k_ignore = p.expect(TK_K_IGNORE)?;
+            group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt6(InsertStmtGroup0Alt6 {
+                k_insert,
+                k_or,
+                k_ignore,
+            }));
+        } else {
             let k_insert = p.expect(TK_K_INSERT)?;
             group_0_inner = Option::<InsertStmtGroup0>::Some(InsertStmtGroup0::Alt0(InsertStmtGroup0Alt0 {
                 k_insert,
@@ -12674,18 +12744,18 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
     let mut group_1_inner: Option<InsertStmtGroup1> = null;
     let grp_kind_2 = p.peek_kind();
     if grp_kind_2 matches { TK_K_VALUES | TK_K_WITH | TK_K_SELECT } {
-        let saved_pos_2 = p.pos;
-        let mut bt_done_2 = false;
-        if !bt_done_2 {
-            bt_try_6: {
+        let saved_pos = p.pos;
+        let mut bt_done = false;
+        if !bt_done {
+            bt_try: {
                 let _bt_r = p.expect(TK_K_VALUES);
-                if let Err(_) = _bt_r { p.pos = saved_pos_2; break bt_try_6; }
+                if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
                 let k_values = _bt_r.unwrap();
                 let _bt_r_2 = p.expect(TK_LIT_LPAREN);
-                if let Err(_) = _bt_r_2 { p.pos = saved_pos_2; break bt_try_6; }
+                if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
                 let lparen = _bt_r_2.unwrap();
                 let _bt_r_3 = parse_expr(p);
-                if let Err(_) = _bt_r_3 { p.pos = saved_pos_2; break bt_try_6; }
+                if let Err(_) = _bt_r_3 { p.pos = saved_pos; break bt_try; }
                 let expr = _bt_r_3.unwrap();
                 let mut comma_expr_list: Array<CommaExprItem> = [];
                 while p.peek_kind() == TK_LIT_COMMA {
@@ -12698,7 +12768,7 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
                     comma_expr_list.push(comma_expr);
                 }
                 let _bt_r_4 = p.expect(TK_LIT_RPAREN);
-                if let Err(_) = _bt_r_4 { p.pos = saved_pos_2; break bt_try_6; }
+                if let Err(_) = _bt_r_4 { p.pos = saved_pos; break bt_try; }
                 let rparen = _bt_r_4.unwrap();
                 let mut comma_lparen_expr_item_rparen_list: Array<CommaLparenExprItemListRparenItem> = [];
                 while p.peek_kind() == TK_LIT_COMMA {
@@ -12733,10 +12803,10 @@ fn parse_insert_stmt(p: &mut Parser) -> Result<InsertStmtNode, ParseError> {
                     rparen,
                     comma_lparen_expr_item_rparen_list,
                 }));
-                bt_done_2 = true;
+                bt_done = true;
             }
         }
-        if !bt_done_2 {
+        if !bt_done {
             let select_stmt = parse_select_stmt(p)?;
             group_1_inner = Option::<InsertStmtGroup1>::Some(InsertStmtGroup1::Alt1(InsertStmtGroup1Alt1 {
                 select_stmt,
@@ -12904,20 +12974,66 @@ fn parse_reindex_stmt(p: &mut Parser) -> Result<ReindexStmtNode, ParseError> {
         let mut group_0_opt: Option<ReindexStmtGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
-            let saved_pos = p.pos;
-            let mut bt_done = false;
-            if !bt_done {
-                bt_try: {
-                    let _bt_r = parse_collation_name(p);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                    let collation_name = _bt_r.unwrap();
-                    group_0_opt = Option::<ReindexStmtGroup0>::Some(ReindexStmtGroup0::Alt0(ReindexStmtGroup0Alt0 {
-                        collation_name,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos: i32 = -1;
+            gd_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_collation_name(tokens, pos);
+                if pos < 0 { break gd_scan; }
+                gd_scan_pos = pos;
             }
-            if !bt_done {
+            let mut gd_scan_pos_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
+                    let sp = pos;
+                    sg_213_done: {
+                        sg_213: {
+                            pos = scan_database_name(tokens, pos);
+                            if pos < 0 { break sg_213; }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_213; }
+                            pos += 1;
+                            break sg_213_done;
+                        }
+                        pos = -1;
+                    }
+                    if pos < 0 { pos = sp; }
+                }
+                let gp_214 = pos;
+                sg_214: {
+                    pos = gp_214;
+                    sg_214_0: {
+                        pos = scan_table_name(tokens, pos);
+                        if pos < 0 { break sg_214_0; }
+                        break sg_214;
+                    }
+                    pos = gp_214;
+                    sg_214_1: {
+                        pos = scan_index_name(tokens, pos);
+                        if pos < 0 { break sg_214_1; }
+                        break sg_214;
+                    }
+                    break gd_scan_2;
+                }
+                gd_scan_pos_2 = pos;
+            }
+            let mut gd_best_i: i32 = -1;
+            let mut gd_best_p: i32 = -1;
+            if gd_scan_pos > gd_best_p {
+                gd_best_p = gd_scan_pos;
+                gd_best_i = 0;
+            }
+            if gd_scan_pos_2 > gd_best_p {
+                gd_best_p = gd_scan_pos_2;
+                gd_best_i = 1;
+            }
+            if gd_best_i == 0 {
+                let collation_name = parse_collation_name(p)?;
+                group_0_opt = Option::<ReindexStmtGroup0>::Some(ReindexStmtGroup0::Alt0(ReindexStmtGroup0Alt0 {
+                    collation_name,
+                }));
+            } else {
                 let mut opt_scan_pos: i32 = -1;
                 opt_scan: {
                     let tokens = &p.tokens;
@@ -13217,19 +13333,19 @@ fn parse_select_or_values(p: &mut Parser) -> Result<SelectOrValuesNode, ParseErr
         opt_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            let gp_213 = pos;
-            sg_213: {
-                pos = gp_213;
-                sg_213_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DISTINCT { break sg_213_0; }
+            let gp_215 = pos;
+            sg_215: {
+                pos = gp_215;
+                sg_215_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DISTINCT { break sg_215_0; }
                     pos += 1;
-                    break sg_213;
+                    break sg_215;
                 }
-                pos = gp_213;
-                sg_213_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_ALL { break sg_213_1; }
+                pos = gp_215;
+                sg_215_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_ALL { break sg_215_1; }
                     pos += 1;
-                    break sg_213;
+                    break sg_215;
                 }
                 break opt_scan;
             }
@@ -13425,47 +13541,47 @@ fn parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        let gp_214 = pos;
-        sg_214: {
-            pos = gp_214;
-            sg_214_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_214_0; }
+        let gp_216 = pos;
+        sg_216: {
+            pos = gp_216;
+            sg_216_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_216_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { break sg_214_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { break sg_216_0; }
                 pos += 1;
-                break sg_214;
+                break sg_216;
             }
-            pos = gp_214;
-            sg_214_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_214_1; }
+            pos = gp_216;
+            sg_216_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_216_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_ABORT { break sg_214_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ABORT { break sg_216_1; }
                 pos += 1;
-                break sg_214;
+                break sg_216;
             }
-            pos = gp_214;
-            sg_214_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_214_2; }
+            pos = gp_216;
+            sg_216_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_216_2; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_REPLACE { break sg_214_2; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_REPLACE { break sg_216_2; }
                 pos += 1;
-                break sg_214;
+                break sg_216;
             }
-            pos = gp_214;
-            sg_214_3: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_214_3; }
+            pos = gp_216;
+            sg_216_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_216_3; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_FAIL { break sg_214_3; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_FAIL { break sg_216_3; }
                 pos += 1;
-                break sg_214;
+                break sg_216;
             }
-            pos = gp_214;
-            sg_214_4: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_214_4; }
+            pos = gp_216;
+            sg_216_4: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_216_4; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_IGNORE { break sg_214_4; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_IGNORE { break sg_216_4; }
                 pos += 1;
-                break sg_214;
+                break sg_216;
             }
             break opt_scan;
         }
@@ -13475,69 +13591,107 @@ fn parse_update_stmt(p: &mut Parser) -> Result<UpdateStmtNode, ParseError> {
         let mut group_0_opt: Option<UpdateStmtGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_OR {
-            let saved_pos = p.pos;
-            let mut bt_done = false;
-            if !bt_done {
-                bt_try: {
-                    let _bt_r = p.expect(TK_K_OR);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                    let k_or = _bt_r.unwrap();
-                    let _bt_r_2 = p.expect(TK_K_ROLLBACK);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
-                    let k_rollback = _bt_r_2.unwrap();
-                    group_0_opt = Option::<UpdateStmtGroup0>::Some(UpdateStmtGroup0::Alt0(UpdateStmtGroup0Alt0 {
-                        k_or,
-                        k_rollback,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos: i32 = -1;
+            gd_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { break gd_scan; }
+                pos += 1;
+                gd_scan_pos = pos;
             }
-            if !bt_done {
-                bt_try_2: {
-                    let _bt_r = p.expect(TK_K_OR);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_2; }
-                    let k_or = _bt_r.unwrap();
-                    let _bt_r_2 = p.expect(TK_K_ABORT);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_2; }
-                    let k_abort = _bt_r_2.unwrap();
-                    group_0_opt = Option::<UpdateStmtGroup0>::Some(UpdateStmtGroup0::Alt1(UpdateStmtGroup0Alt1 {
-                        k_or,
-                        k_abort,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_2; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ABORT { break gd_scan_2; }
+                pos += 1;
+                gd_scan_pos_2 = pos;
             }
-            if !bt_done {
-                bt_try_3: {
-                    let _bt_r = p.expect(TK_K_OR);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_3; }
-                    let k_or = _bt_r.unwrap();
-                    let _bt_r_2 = p.expect(TK_K_REPLACE);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_3; }
-                    let k_replace = _bt_r_2.unwrap();
-                    group_0_opt = Option::<UpdateStmtGroup0>::Some(UpdateStmtGroup0::Alt2(UpdateStmtGroup0Alt2 {
-                        k_or,
-                        k_replace,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_3: i32 = -1;
+            gd_scan_3: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_3; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_REPLACE { break gd_scan_3; }
+                pos += 1;
+                gd_scan_pos_3 = pos;
             }
-            if !bt_done {
-                bt_try_4: {
-                    let _bt_r = p.expect(TK_K_OR);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_4; }
-                    let k_or = _bt_r.unwrap();
-                    let _bt_r_2 = p.expect(TK_K_FAIL);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_4; }
-                    let k_fail = _bt_r_2.unwrap();
-                    group_0_opt = Option::<UpdateStmtGroup0>::Some(UpdateStmtGroup0::Alt3(UpdateStmtGroup0Alt3 {
-                        k_or,
-                        k_fail,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_4: i32 = -1;
+            gd_scan_4: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_4; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_FAIL { break gd_scan_4; }
+                pos += 1;
+                gd_scan_pos_4 = pos;
             }
-            if !bt_done {
+            let mut gd_scan_pos_5: i32 = -1;
+            gd_scan_5: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_5; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_IGNORE { break gd_scan_5; }
+                pos += 1;
+                gd_scan_pos_5 = pos;
+            }
+            let mut gd_best_i: i32 = -1;
+            let mut gd_best_p: i32 = -1;
+            if gd_scan_pos > gd_best_p {
+                gd_best_p = gd_scan_pos;
+                gd_best_i = 0;
+            }
+            if gd_scan_pos_2 > gd_best_p {
+                gd_best_p = gd_scan_pos_2;
+                gd_best_i = 1;
+            }
+            if gd_scan_pos_3 > gd_best_p {
+                gd_best_p = gd_scan_pos_3;
+                gd_best_i = 2;
+            }
+            if gd_scan_pos_4 > gd_best_p {
+                gd_best_p = gd_scan_pos_4;
+                gd_best_i = 3;
+            }
+            if gd_scan_pos_5 > gd_best_p {
+                gd_best_p = gd_scan_pos_5;
+                gd_best_i = 4;
+            }
+            if gd_best_i == 0 {
+                let k_or = p.expect(TK_K_OR)?;
+                let k_rollback = p.expect(TK_K_ROLLBACK)?;
+                group_0_opt = Option::<UpdateStmtGroup0>::Some(UpdateStmtGroup0::Alt0(UpdateStmtGroup0Alt0 {
+                    k_or,
+                    k_rollback,
+                }));
+            } else if gd_best_i == 1 {
+                let k_or = p.expect(TK_K_OR)?;
+                let k_abort = p.expect(TK_K_ABORT)?;
+                group_0_opt = Option::<UpdateStmtGroup0>::Some(UpdateStmtGroup0::Alt1(UpdateStmtGroup0Alt1 {
+                    k_or,
+                    k_abort,
+                }));
+            } else if gd_best_i == 2 {
+                let k_or = p.expect(TK_K_OR)?;
+                let k_replace = p.expect(TK_K_REPLACE)?;
+                group_0_opt = Option::<UpdateStmtGroup0>::Some(UpdateStmtGroup0::Alt2(UpdateStmtGroup0Alt2 {
+                    k_or,
+                    k_replace,
+                }));
+            } else if gd_best_i == 3 {
+                let k_or = p.expect(TK_K_OR)?;
+                let k_fail = p.expect(TK_K_FAIL)?;
+                group_0_opt = Option::<UpdateStmtGroup0>::Some(UpdateStmtGroup0::Alt3(UpdateStmtGroup0Alt3 {
+                    k_or,
+                    k_fail,
+                }));
+            } else {
                 let k_or = p.expect(TK_K_OR)?;
                 let k_ignore = p.expect(TK_K_IGNORE)?;
                 group_0_opt = Option::<UpdateStmtGroup0>::Some(UpdateStmtGroup0::Alt4(UpdateStmtGroup0Alt4 {
@@ -13612,47 +13766,47 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        let gp_215 = pos;
-        sg_215: {
-            pos = gp_215;
-            sg_215_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_215_0; }
+        let gp_217 = pos;
+        sg_217: {
+            pos = gp_217;
+            sg_217_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_217_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { break sg_215_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { break sg_217_0; }
                 pos += 1;
-                break sg_215;
+                break sg_217;
             }
-            pos = gp_215;
-            sg_215_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_215_1; }
+            pos = gp_217;
+            sg_217_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_217_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_ABORT { break sg_215_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ABORT { break sg_217_1; }
                 pos += 1;
-                break sg_215;
+                break sg_217;
             }
-            pos = gp_215;
-            sg_215_2: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_215_2; }
+            pos = gp_217;
+            sg_217_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_217_2; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_REPLACE { break sg_215_2; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_REPLACE { break sg_217_2; }
                 pos += 1;
-                break sg_215;
+                break sg_217;
             }
-            pos = gp_215;
-            sg_215_3: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_215_3; }
+            pos = gp_217;
+            sg_217_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_217_3; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_FAIL { break sg_215_3; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_FAIL { break sg_217_3; }
                 pos += 1;
-                break sg_215;
+                break sg_217;
             }
-            pos = gp_215;
-            sg_215_4: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_215_4; }
+            pos = gp_217;
+            sg_217_4: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break sg_217_4; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_IGNORE { break sg_215_4; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_IGNORE { break sg_217_4; }
                 pos += 1;
-                break sg_215;
+                break sg_217;
             }
             break opt_scan;
         }
@@ -13662,69 +13816,107 @@ fn parse_update_stmt_limited(p: &mut Parser) -> Result<UpdateStmtLimitedNode, Pa
         let mut group_0_opt: Option<UpdateStmtLimitedGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_OR {
-            let saved_pos = p.pos;
-            let mut bt_done = false;
-            if !bt_done {
-                bt_try: {
-                    let _bt_r = p.expect(TK_K_OR);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                    let k_or = _bt_r.unwrap();
-                    let _bt_r_2 = p.expect(TK_K_ROLLBACK);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
-                    let k_rollback = _bt_r_2.unwrap();
-                    group_0_opt = Option::<UpdateStmtLimitedGroup0>::Some(UpdateStmtLimitedGroup0::Alt0(UpdateStmtLimitedGroup0Alt0 {
-                        k_or,
-                        k_rollback,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos: i32 = -1;
+            gd_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { break gd_scan; }
+                pos += 1;
+                gd_scan_pos = pos;
             }
-            if !bt_done {
-                bt_try_2: {
-                    let _bt_r = p.expect(TK_K_OR);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_2; }
-                    let k_or = _bt_r.unwrap();
-                    let _bt_r_2 = p.expect(TK_K_ABORT);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_2; }
-                    let k_abort = _bt_r_2.unwrap();
-                    group_0_opt = Option::<UpdateStmtLimitedGroup0>::Some(UpdateStmtLimitedGroup0::Alt1(UpdateStmtLimitedGroup0Alt1 {
-                        k_or,
-                        k_abort,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_2; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ABORT { break gd_scan_2; }
+                pos += 1;
+                gd_scan_pos_2 = pos;
             }
-            if !bt_done {
-                bt_try_3: {
-                    let _bt_r = p.expect(TK_K_OR);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_3; }
-                    let k_or = _bt_r.unwrap();
-                    let _bt_r_2 = p.expect(TK_K_REPLACE);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_3; }
-                    let k_replace = _bt_r_2.unwrap();
-                    group_0_opt = Option::<UpdateStmtLimitedGroup0>::Some(UpdateStmtLimitedGroup0::Alt2(UpdateStmtLimitedGroup0Alt2 {
-                        k_or,
-                        k_replace,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_3: i32 = -1;
+            gd_scan_3: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_3; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_REPLACE { break gd_scan_3; }
+                pos += 1;
+                gd_scan_pos_3 = pos;
             }
-            if !bt_done {
-                bt_try_4: {
-                    let _bt_r = p.expect(TK_K_OR);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try_4; }
-                    let k_or = _bt_r.unwrap();
-                    let _bt_r_2 = p.expect(TK_K_FAIL);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try_4; }
-                    let k_fail = _bt_r_2.unwrap();
-                    group_0_opt = Option::<UpdateStmtLimitedGroup0>::Some(UpdateStmtLimitedGroup0::Alt3(UpdateStmtLimitedGroup0Alt3 {
-                        k_or,
-                        k_fail,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos_4: i32 = -1;
+            gd_scan_4: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_4; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_FAIL { break gd_scan_4; }
+                pos += 1;
+                gd_scan_pos_4 = pos;
             }
-            if !bt_done {
+            let mut gd_scan_pos_5: i32 = -1;
+            gd_scan_5: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { break gd_scan_5; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_IGNORE { break gd_scan_5; }
+                pos += 1;
+                gd_scan_pos_5 = pos;
+            }
+            let mut gd_best_i: i32 = -1;
+            let mut gd_best_p: i32 = -1;
+            if gd_scan_pos > gd_best_p {
+                gd_best_p = gd_scan_pos;
+                gd_best_i = 0;
+            }
+            if gd_scan_pos_2 > gd_best_p {
+                gd_best_p = gd_scan_pos_2;
+                gd_best_i = 1;
+            }
+            if gd_scan_pos_3 > gd_best_p {
+                gd_best_p = gd_scan_pos_3;
+                gd_best_i = 2;
+            }
+            if gd_scan_pos_4 > gd_best_p {
+                gd_best_p = gd_scan_pos_4;
+                gd_best_i = 3;
+            }
+            if gd_scan_pos_5 > gd_best_p {
+                gd_best_p = gd_scan_pos_5;
+                gd_best_i = 4;
+            }
+            if gd_best_i == 0 {
+                let k_or = p.expect(TK_K_OR)?;
+                let k_rollback = p.expect(TK_K_ROLLBACK)?;
+                group_0_opt = Option::<UpdateStmtLimitedGroup0>::Some(UpdateStmtLimitedGroup0::Alt0(UpdateStmtLimitedGroup0Alt0 {
+                    k_or,
+                    k_rollback,
+                }));
+            } else if gd_best_i == 1 {
+                let k_or = p.expect(TK_K_OR)?;
+                let k_abort = p.expect(TK_K_ABORT)?;
+                group_0_opt = Option::<UpdateStmtLimitedGroup0>::Some(UpdateStmtLimitedGroup0::Alt1(UpdateStmtLimitedGroup0Alt1 {
+                    k_or,
+                    k_abort,
+                }));
+            } else if gd_best_i == 2 {
+                let k_or = p.expect(TK_K_OR)?;
+                let k_replace = p.expect(TK_K_REPLACE)?;
+                group_0_opt = Option::<UpdateStmtLimitedGroup0>::Some(UpdateStmtLimitedGroup0::Alt2(UpdateStmtLimitedGroup0Alt2 {
+                    k_or,
+                    k_replace,
+                }));
+            } else if gd_best_i == 3 {
+                let k_or = p.expect(TK_K_OR)?;
+                let k_fail = p.expect(TK_K_FAIL)?;
+                group_0_opt = Option::<UpdateStmtLimitedGroup0>::Some(UpdateStmtLimitedGroup0::Alt3(UpdateStmtLimitedGroup0Alt3 {
+                    k_or,
+                    k_fail,
+                }));
+            } else {
                 let k_or = p.expect(TK_K_OR)?;
                 let k_ignore = p.expect(TK_K_IGNORE)?;
                 group_0_opt = Option::<UpdateStmtLimitedGroup0>::Some(UpdateStmtLimitedGroup0::Alt4(UpdateStmtLimitedGroup0Alt4 {
@@ -13957,31 +14149,31 @@ fn parse_type_name(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        let gp_216 = pos;
-        sg_216: {
-            pos = gp_216;
-            sg_216_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break sg_216_0; }
+        let gp_218 = pos;
+        sg_218: {
+            pos = gp_218;
+            sg_218_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break sg_218_0; }
                 pos += 1;
                 pos = scan_signed_number(tokens, pos);
-                if pos < 0 { break sg_216_0; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break sg_216_0; }
+                if pos < 0 { break sg_218_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break sg_218_0; }
                 pos += 1;
-                break sg_216;
+                break sg_218;
             }
-            pos = gp_216;
-            sg_216_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break sg_216_1; }
+            pos = gp_218;
+            sg_218_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break sg_218_1; }
                 pos += 1;
                 pos = scan_signed_number(tokens, pos);
-                if pos < 0 { break sg_216_1; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_216_1; }
+                if pos < 0 { break sg_218_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_218_1; }
                 pos += 1;
                 pos = scan_signed_number(tokens, pos);
-                if pos < 0 { break sg_216_1; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break sg_216_1; }
+                if pos < 0 { break sg_218_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break sg_218_1; }
                 pos += 1;
-                break sg_216;
+                break sg_218;
             }
             break opt_scan;
         }
@@ -13991,36 +14183,58 @@ fn parse_type_name(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
         let mut group_0_opt: Option<TypeNameGroup0> = null;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_LPAREN {
-            let saved_pos = p.pos;
-            let mut bt_done = false;
-            if !bt_done {
-                bt_try: {
-                    let _bt_r = p.expect(TK_LIT_LPAREN);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                    let lparen = _bt_r.unwrap();
-                    let _bt_r_2 = parse_signed_number(p);
-                    if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
-                    let signed_number = _bt_r_2.unwrap();
-                    let _bt_r_3 = p.expect(TK_LIT_COMMA);
-                    if let Err(_) = _bt_r_3 { p.pos = saved_pos; break bt_try; }
-                    let comma = _bt_r_3.unwrap();
-                    let _bt_r_4 = parse_signed_number(p);
-                    if let Err(_) = _bt_r_4 { p.pos = saved_pos; break bt_try; }
-                    let signed_number_2 = _bt_r_4.unwrap();
-                    let _bt_r_5 = p.expect(TK_LIT_RPAREN);
-                    if let Err(_) = _bt_r_5 { p.pos = saved_pos; break bt_try; }
-                    let rparen = _bt_r_5.unwrap();
-                    group_0_opt = Option::<TypeNameGroup0>::Some(TypeNameGroup0::Alt1(TypeNameGroup0Alt1 {
-                        lparen,
-                        signed_number,
-                        comma,
-                        signed_number_2,
-                        rparen,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos: i32 = -1;
+            gd_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break gd_scan; }
+                pos += 1;
+                pos = scan_signed_number(tokens, pos);
+                if pos < 0 { break gd_scan; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break gd_scan; }
+                pos += 1;
+                pos = scan_signed_number(tokens, pos);
+                if pos < 0 { break gd_scan; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break gd_scan; }
+                pos += 1;
+                gd_scan_pos = pos;
             }
-            if !bt_done {
+            let mut gd_scan_pos_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break gd_scan_2; }
+                pos += 1;
+                pos = scan_signed_number(tokens, pos);
+                if pos < 0 { break gd_scan_2; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break gd_scan_2; }
+                pos += 1;
+                gd_scan_pos_2 = pos;
+            }
+            let mut gd_best_i: i32 = -1;
+            let mut gd_best_p: i32 = -1;
+            if gd_scan_pos > gd_best_p {
+                gd_best_p = gd_scan_pos;
+                gd_best_i = 0;
+            }
+            if gd_scan_pos_2 > gd_best_p {
+                gd_best_p = gd_scan_pos_2;
+                gd_best_i = 1;
+            }
+            if gd_best_i == 0 {
+                let lparen = p.expect(TK_LIT_LPAREN)?;
+                let signed_number = parse_signed_number(p)?;
+                let comma = p.expect(TK_LIT_COMMA)?;
+                let signed_number_2 = parse_signed_number(p)?;
+                let rparen = p.expect(TK_LIT_RPAREN)?;
+                group_0_opt = Option::<TypeNameGroup0>::Some(TypeNameGroup0::Alt1(TypeNameGroup0Alt1 {
+                    lparen,
+                    signed_number,
+                    comma,
+                    signed_number_2,
+                    rparen,
+                }));
+            } else {
                 let lparen = p.expect(TK_LIT_LPAREN)?;
                 let signed_number = parse_signed_number(p)?;
                 let rparen = p.expect(TK_LIT_RPAREN)?;
@@ -14068,19 +14282,19 @@ fn parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, Parse
         opt_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            let gp_217 = pos;
-            sg_217: {
-                pos = gp_217;
-                sg_217_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_ASC { break sg_217_0; }
+            let gp_219 = pos;
+            sg_219: {
+                pos = gp_219;
+                sg_219_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_ASC { break sg_219_0; }
                     pos += 1;
-                    break sg_217;
+                    break sg_219;
                 }
-                pos = gp_217;
-                sg_217_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DESC { break sg_217_1; }
+                pos = gp_219;
+                sg_219_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DESC { break sg_219_1; }
                     pos += 1;
-                    break sg_217;
+                    break sg_219;
                 }
                 break opt_scan;
             }
@@ -14143,20 +14357,38 @@ fn parse_column_constraint(p: &mut Parser) -> Result<ColumnConstraintNode, Parse
         let mut group_1_inner: Option<ColumnConstraintGroup1> = null;
         let grp_kind = p.peek_kind();
         if grp_kind matches { TK_LIT_PLUS | TK_LIT_MINUS | TK_NUMERIC_LITERAL | TK_STRING_LITERAL | TK_BLOB_LITERAL | TK_K_NULL | TK_K_CURRENT_TIME | TK_K_CURRENT_DATE | TK_K_CURRENT_TIMESTAMP } {
-            let saved_pos = p.pos;
-            let mut bt_done = false;
-            if !bt_done {
-                bt_try: {
-                    let _bt_r = parse_signed_number(p);
-                    if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                    let signed_number = _bt_r.unwrap();
-                    group_1_inner = Option::<ColumnConstraintGroup1>::Some(ColumnConstraintGroup1::Alt0(ColumnConstraintGroup1Alt0 {
-                        signed_number,
-                    }));
-                    bt_done = true;
-                }
+            let mut gd_scan_pos: i32 = -1;
+            gd_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_signed_number(tokens, pos);
+                if pos < 0 { break gd_scan; }
+                gd_scan_pos = pos;
             }
-            if !bt_done {
+            let mut gd_scan_pos_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_literal_value(tokens, pos);
+                if pos < 0 { break gd_scan_2; }
+                gd_scan_pos_2 = pos;
+            }
+            let mut gd_best_i: i32 = -1;
+            let mut gd_best_p: i32 = -1;
+            if gd_scan_pos > gd_best_p {
+                gd_best_p = gd_scan_pos;
+                gd_best_i = 0;
+            }
+            if gd_scan_pos_2 > gd_best_p {
+                gd_best_p = gd_scan_pos_2;
+                gd_best_i = 1;
+            }
+            if gd_best_i == 0 {
+                let signed_number = parse_signed_number(p)?;
+                group_1_inner = Option::<ColumnConstraintGroup1>::Some(ColumnConstraintGroup1::Alt0(ColumnConstraintGroup1Alt0 {
+                    signed_number,
+                }));
+            } else {
                 let literal_value = parse_literal_value(p)?;
                 group_1_inner = Option::<ColumnConstraintGroup1>::Some(ColumnConstraintGroup1::Alt1(ColumnConstraintGroup1Alt1 {
                     literal_value,
@@ -14337,23 +14569,23 @@ fn parse_expr_scan_21(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind matches { TK_K_NOT | TK_K_EXISTS } {
         let sp = pos;
-        sg_218_done: {
-            sg_218: {
+        sg_220_done: {
+            sg_220: {
                 if pos < tokens.len() && tokens[pos].kind == TK_K_NOT {
                     let sp = pos;
-                    sg_219_done: {
-                        sg_219: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { break sg_219; }
+                    sg_221_done: {
+                        sg_221: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { break sg_221; }
                             pos += 1;
-                            break sg_219_done;
+                            break sg_221_done;
                         }
                         pos = -1;
                     }
                     if pos < 0 { pos = sp; }
                 }
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_EXISTS { break sg_218; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_EXISTS { break sg_220; }
                 pos += 1;
-                break sg_218_done;
+                break sg_220_done;
             }
             pos = -1;
         }
@@ -14553,27 +14785,27 @@ fn parse_expr_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
         let sp = pos;
-        sg_220_done: {
-            sg_220: {
+        sg_222_done: {
+            sg_222: {
                 if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
                     let sp = pos;
-                    sg_221_done: {
-                        sg_221: {
+                    sg_223_done: {
+                        sg_223: {
                             pos = scan_database_name(tokens, pos);
-                            if pos < 0 { break sg_221; }
-                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_221; }
+                            if pos < 0 { break sg_223; }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_223; }
                             pos += 1;
-                            break sg_221_done;
+                            break sg_223_done;
                         }
                         pos = -1;
                     }
                     if pos < 0 { pos = sp; }
                 }
                 pos = scan_table_name(tokens, pos);
-                if pos < 0 { break sg_220; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_220; }
+                if pos < 0 { break sg_222; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_222; }
                 pos += 1;
-                break sg_220_done;
+                break sg_222_done;
             }
             pos = -1;
         }
@@ -15263,77 +15495,77 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            let gp_222 = pos;
-            sg_222: {
-                pos = gp_222;
-                sg_222_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_ON { break sg_222_0; }
+            let gp_224 = pos;
+            sg_224: {
+                pos = gp_224;
+                sg_224_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_ON { break sg_224_0; }
                     pos += 1;
-                    let gp_223 = pos;
-                    sg_223: {
-                        pos = gp_223;
-                        sg_223_0: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_DELETE { break sg_223_0; }
+                    let gp_225 = pos;
+                    sg_225: {
+                        pos = gp_225;
+                        sg_225_0: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_DELETE { break sg_225_0; }
                             pos += 1;
-                            break sg_223;
+                            break sg_225;
                         }
-                        pos = gp_223;
-                        sg_223_1: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_UPDATE { break sg_223_1; }
+                        pos = gp_225;
+                        sg_225_1: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_UPDATE { break sg_225_1; }
                             pos += 1;
-                            break sg_223;
+                            break sg_225;
                         }
-                        break sg_222_0;
+                        break sg_224_0;
                     }
-                    let gp_224 = pos;
-                    sg_224: {
-                        pos = gp_224;
-                        sg_224_0: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_SET { break sg_224_0; }
+                    let gp_226 = pos;
+                    sg_226: {
+                        pos = gp_226;
+                        sg_226_0: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_SET { break sg_226_0; }
                             pos += 1;
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_NULL { break sg_224_0; }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_NULL { break sg_226_0; }
                             pos += 1;
-                            break sg_224;
+                            break sg_226;
                         }
-                        pos = gp_224;
-                        sg_224_1: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_SET { break sg_224_1; }
+                        pos = gp_226;
+                        sg_226_1: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_SET { break sg_226_1; }
                             pos += 1;
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFAULT { break sg_224_1; }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFAULT { break sg_226_1; }
                             pos += 1;
-                            break sg_224;
+                            break sg_226;
                         }
-                        pos = gp_224;
-                        sg_224_2: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_CASCADE { break sg_224_2; }
+                        pos = gp_226;
+                        sg_226_2: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_CASCADE { break sg_226_2; }
                             pos += 1;
-                            break sg_224;
+                            break sg_226;
                         }
-                        pos = gp_224;
-                        sg_224_3: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_RESTRICT { break sg_224_3; }
+                        pos = gp_226;
+                        sg_226_3: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_RESTRICT { break sg_226_3; }
                             pos += 1;
-                            break sg_224;
+                            break sg_226;
                         }
-                        pos = gp_224;
-                        sg_224_4: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_NO { break sg_224_4; }
+                        pos = gp_226;
+                        sg_226_4: {
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_NO { break sg_226_4; }
                             pos += 1;
-                            if pos >= tokens.len() || tokens[pos].kind != TK_K_ACTION { break sg_224_4; }
+                            if pos >= tokens.len() || tokens[pos].kind != TK_K_ACTION { break sg_226_4; }
                             pos += 1;
-                            break sg_224;
+                            break sg_226;
                         }
-                        break sg_222_0;
+                        break sg_224_0;
                     }
-                    break sg_222;
+                    break sg_224;
                 }
-                pos = gp_222;
-                sg_222_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_MATCH { break sg_222_1; }
+                pos = gp_224;
+                sg_224_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_MATCH { break sg_224_1; }
                     pos += 1;
                     pos = scan_name(tokens, pos);
-                    if pos < 0 { break sg_222_1; }
-                    break sg_222;
+                    if pos < 0 { break sg_224_1; }
+                    break sg_224;
                 }
                 break rep_scan;
             }
@@ -15348,24 +15580,44 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
             let mut group_1_inner: Option<ForeignKeyClauseGroup1> = null;
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_SET {
-                let saved_pos = p.pos;
-                let mut bt_done = false;
-                if !bt_done {
-                    bt_try: {
-                        let _bt_r = p.expect(TK_K_SET);
-                        if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                        let k_set = _bt_r.unwrap();
-                        let _bt_r_2 = p.expect(TK_K_NULL);
-                        if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
-                        let k_null = _bt_r_2.unwrap();
-                        group_1_inner = Option::<ForeignKeyClauseGroup1>::Some(ForeignKeyClauseGroup1::Alt0(ForeignKeyClauseGroup1Alt0 {
-                            k_set,
-                            k_null,
-                        }));
-                        bt_done = true;
-                    }
+                let mut gd_scan_pos: i32 = -1;
+                gd_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_SET { break gd_scan; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_NULL { break gd_scan; }
+                    pos += 1;
+                    gd_scan_pos = pos;
                 }
-                if !bt_done {
+                let mut gd_scan_pos_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_SET { break gd_scan_2; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFAULT { break gd_scan_2; }
+                    pos += 1;
+                    gd_scan_pos_2 = pos;
+                }
+                let mut gd_best_i: i32 = -1;
+                let mut gd_best_p: i32 = -1;
+                if gd_scan_pos > gd_best_p {
+                    gd_best_p = gd_scan_pos;
+                    gd_best_i = 0;
+                }
+                if gd_scan_pos_2 > gd_best_p {
+                    gd_best_p = gd_scan_pos_2;
+                    gd_best_i = 1;
+                }
+                if gd_best_i == 0 {
+                    let k_set = p.expect(TK_K_SET)?;
+                    let k_null = p.expect(TK_K_NULL)?;
+                    group_1_inner = Option::<ForeignKeyClauseGroup1>::Some(ForeignKeyClauseGroup1::Alt0(ForeignKeyClauseGroup1Alt0 {
+                        k_set,
+                        k_null,
+                    }));
+                } else {
                     let k_set = p.expect(TK_K_SET)?;
                     let k_default = p.expect(TK_K_DEFAULT)?;
                     group_1_inner = Option::<ForeignKeyClauseGroup1>::Some(ForeignKeyClauseGroup1::Alt1(ForeignKeyClauseGroup1Alt1 {
@@ -15419,23 +15671,23 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
         opt_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            let gp_225 = pos;
-            sg_225: {
-                pos = gp_225;
-                sg_225_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break sg_225_0; }
+            let gp_227 = pos;
+            sg_227: {
+                pos = gp_227;
+                sg_227_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break sg_227_0; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRED { break sg_225_0; }
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRED { break sg_227_0; }
                     pos += 1;
-                    break sg_225;
+                    break sg_227;
                 }
-                pos = gp_225;
-                sg_225_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break sg_225_1; }
+                pos = gp_227;
+                sg_227_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break sg_227_1; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_IMMEDIATE { break sg_225_1; }
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_IMMEDIATE { break sg_227_1; }
                     pos += 1;
-                    break sg_225;
+                    break sg_227;
                 }
                 break opt_scan;
             }
@@ -15445,24 +15697,44 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
             let mut group_2_opt: Option<ForeignKeyClauseGroup2> = null;
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_INITIALLY {
-                let saved_pos = p.pos;
-                let mut bt_done = false;
-                if !bt_done {
-                    bt_try: {
-                        let _bt_r = p.expect(TK_K_INITIALLY);
-                        if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                        let k_initially = _bt_r.unwrap();
-                        let _bt_r_2 = p.expect(TK_K_DEFERRED);
-                        if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
-                        let k_deferred = _bt_r_2.unwrap();
-                        group_2_opt = Option::<ForeignKeyClauseGroup2>::Some(ForeignKeyClauseGroup2::Alt0(ForeignKeyClauseGroup2Alt0 {
-                            k_initially,
-                            k_deferred,
-                        }));
-                        bt_done = true;
-                    }
+                let mut gd_scan_pos: i32 = -1;
+                gd_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break gd_scan; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRED { break gd_scan; }
+                    pos += 1;
+                    gd_scan_pos = pos;
                 }
-                if !bt_done {
+                let mut gd_scan_pos_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break gd_scan_2; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_IMMEDIATE { break gd_scan_2; }
+                    pos += 1;
+                    gd_scan_pos_2 = pos;
+                }
+                let mut gd_best_i: i32 = -1;
+                let mut gd_best_p: i32 = -1;
+                if gd_scan_pos > gd_best_p {
+                    gd_best_p = gd_scan_pos;
+                    gd_best_i = 0;
+                }
+                if gd_scan_pos_2 > gd_best_p {
+                    gd_best_p = gd_scan_pos_2;
+                    gd_best_i = 1;
+                }
+                if gd_best_i == 0 {
+                    let k_initially = p.expect(TK_K_INITIALLY)?;
+                    let k_deferred = p.expect(TK_K_DEFERRED)?;
+                    group_2_opt = Option::<ForeignKeyClauseGroup2>::Some(ForeignKeyClauseGroup2::Alt0(ForeignKeyClauseGroup2Alt0 {
+                        k_initially,
+                        k_deferred,
+                    }));
+                } else {
                     let k_initially = p.expect(TK_K_INITIALLY)?;
                     let k_immediate = p.expect(TK_K_IMMEDIATE)?;
                     group_2_opt = Option::<ForeignKeyClauseGroup2>::Some(ForeignKeyClauseGroup2::Alt1(ForeignKeyClauseGroup2Alt1 {
@@ -15492,23 +15764,23 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
         opt_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            let gp_226 = pos;
-            sg_226: {
-                pos = gp_226;
-                sg_226_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break sg_226_0; }
+            let gp_228 = pos;
+            sg_228: {
+                pos = gp_228;
+                sg_228_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break sg_228_0; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRED { break sg_226_0; }
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRED { break sg_228_0; }
                     pos += 1;
-                    break sg_226;
+                    break sg_228;
                 }
-                pos = gp_226;
-                sg_226_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break sg_226_1; }
+                pos = gp_228;
+                sg_228_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break sg_228_1; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_IMMEDIATE { break sg_226_1; }
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_IMMEDIATE { break sg_228_1; }
                     pos += 1;
-                    break sg_226;
+                    break sg_228;
                 }
                 break opt_scan;
             }
@@ -15518,24 +15790,44 @@ fn parse_foreign_key_clause(p: &mut Parser) -> Result<ForeignKeyClauseNode, Pars
             let mut group_2_opt: Option<ForeignKeyClauseGroup2> = null;
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_INITIALLY {
-                let saved_pos = p.pos;
-                let mut bt_done = false;
-                if !bt_done {
-                    bt_try: {
-                        let _bt_r = p.expect(TK_K_INITIALLY);
-                        if let Err(_) = _bt_r { p.pos = saved_pos; break bt_try; }
-                        let k_initially = _bt_r.unwrap();
-                        let _bt_r_2 = p.expect(TK_K_DEFERRED);
-                        if let Err(_) = _bt_r_2 { p.pos = saved_pos; break bt_try; }
-                        let k_deferred = _bt_r_2.unwrap();
-                        group_2_opt = Option::<ForeignKeyClauseGroup2>::Some(ForeignKeyClauseGroup2::Alt0(ForeignKeyClauseGroup2Alt0 {
-                            k_initially,
-                            k_deferred,
-                        }));
-                        bt_done = true;
-                    }
+                let mut gd_scan_pos: i32 = -1;
+                gd_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break gd_scan; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DEFERRED { break gd_scan; }
+                    pos += 1;
+                    gd_scan_pos = pos;
                 }
-                if !bt_done {
+                let mut gd_scan_pos_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INITIALLY { break gd_scan_2; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_IMMEDIATE { break gd_scan_2; }
+                    pos += 1;
+                    gd_scan_pos_2 = pos;
+                }
+                let mut gd_best_i: i32 = -1;
+                let mut gd_best_p: i32 = -1;
+                if gd_scan_pos > gd_best_p {
+                    gd_best_p = gd_scan_pos;
+                    gd_best_i = 0;
+                }
+                if gd_scan_pos_2 > gd_best_p {
+                    gd_best_p = gd_scan_pos_2;
+                    gd_best_i = 1;
+                }
+                if gd_best_i == 0 {
+                    let k_initially = p.expect(TK_K_INITIALLY)?;
+                    let k_deferred = p.expect(TK_K_DEFERRED)?;
+                    group_2_opt = Option::<ForeignKeyClauseGroup2>::Some(ForeignKeyClauseGroup2::Alt0(ForeignKeyClauseGroup2Alt0 {
+                        k_initially,
+                        k_deferred,
+                    }));
+                } else {
                     let k_initially = p.expect(TK_K_INITIALLY)?;
                     let k_immediate = p.expect(TK_K_IMMEDIATE)?;
                     group_2_opt = Option::<ForeignKeyClauseGroup2>::Some(ForeignKeyClauseGroup2::Alt1(ForeignKeyClauseGroup2Alt1 {
@@ -15645,19 +15937,19 @@ fn parse_indexed_column(p: &mut Parser) -> Result<IndexedColumnNode, ParseError>
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        let gp_227 = pos;
-        sg_227: {
-            pos = gp_227;
-            sg_227_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_ASC { break sg_227_0; }
+        let gp_229 = pos;
+        sg_229: {
+            pos = gp_229;
+            sg_229_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ASC { break sg_229_0; }
                 pos += 1;
-                break sg_227;
+                break sg_229;
             }
-            pos = gp_227;
-            sg_227_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_DESC { break sg_227_1; }
+            pos = gp_229;
+            sg_229_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_DESC { break sg_229_1; }
                 pos += 1;
-                break sg_227;
+                break sg_229;
             }
             break opt_scan;
         }
@@ -15856,25 +16148,25 @@ fn parse_qualified_table_name(p: &mut Parser) -> Result<QualifiedTableNameNode, 
     opt_scan_2: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        let gp_228 = pos;
-        sg_228: {
-            pos = gp_228;
-            sg_228_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_228_0; }
+        let gp_230 = pos;
+        sg_230: {
+            pos = gp_230;
+            sg_230_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_230_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_BY { break sg_228_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_BY { break sg_230_0; }
                 pos += 1;
                 pos = scan_index_name(tokens, pos);
-                if pos < 0 { break sg_228_0; }
-                break sg_228;
+                if pos < 0 { break sg_230_0; }
+                break sg_230;
             }
-            pos = gp_228;
-            sg_228_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { break sg_228_1; }
+            pos = gp_230;
+            sg_230_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { break sg_230_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_228_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_230_1; }
                 pos += 1;
-                break sg_228;
+                break sg_230;
             }
             break opt_scan_2;
         }
@@ -15928,19 +16220,19 @@ fn parse_ordering_term(p: &mut Parser) -> Result<OrderingTermNode, ParseError> {
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        let gp_229 = pos;
-        sg_229: {
-            pos = gp_229;
-            sg_229_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_ASC { break sg_229_0; }
+        let gp_231 = pos;
+        sg_231: {
+            pos = gp_231;
+            sg_231_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_ASC { break sg_231_0; }
                 pos += 1;
-                break sg_229;
+                break sg_231;
             }
-            pos = gp_229;
-            sg_229_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_DESC { break sg_229_1; }
+            pos = gp_231;
+            sg_231_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_DESC { break sg_231_1; }
                 pos += 1;
-                break sg_229;
+                break sg_231;
             }
             break opt_scan;
         }
@@ -16366,13 +16658,13 @@ fn parse_table_or_subquery_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
         let sp = pos;
-        sg_230_done: {
-            sg_230: {
+        sg_232_done: {
+            sg_232: {
                 pos = scan_schema_name(tokens, pos);
-                if pos < 0 { break sg_230; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_230; }
+                if pos < 0 { break sg_232; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_232; }
                 pos += 1;
-                break sg_230_done;
+                break sg_232_done;
             }
             pos = -1;
         }
@@ -16437,25 +16729,25 @@ fn parse_table_or_subquery_bt_0(p: &mut Parser) -> Result<TableOrSubqueryNode, P
     opt_scan_2: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        let gp_231 = pos;
-        sg_231: {
-            pos = gp_231;
-            sg_231_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_231_0; }
+        let gp_233 = pos;
+        sg_233: {
+            pos = gp_233;
+            sg_233_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_233_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_BY { break sg_231_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_BY { break sg_233_0; }
                 pos += 1;
                 pos = scan_index_name(tokens, pos);
-                if pos < 0 { break sg_231_0; }
-                break sg_231;
+                if pos < 0 { break sg_233_0; }
+                break sg_233;
             }
-            pos = gp_231;
-            sg_231_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { break sg_231_1; }
+            pos = gp_233;
+            sg_233_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { break sg_233_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_231_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_233_1; }
                 pos += 1;
-                break sg_231;
+                break sg_233;
             }
             break opt_scan_2;
         }
@@ -16496,13 +16788,13 @@ fn parse_table_or_subquery_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind matches { TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_STRING_LITERAL | TK_LIT_LPAREN } {
         let sp = pos;
-        sg_232_done: {
-            sg_232: {
+        sg_234_done: {
+            sg_234: {
                 pos = scan_schema_name(tokens, pos);
-                if pos < 0 { break sg_232; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_232; }
+                if pos < 0 { break sg_234; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_234; }
                 pos += 1;
-                break sg_232_done;
+                break sg_234_done;
             }
             pos = -1;
         }
@@ -16512,16 +16804,16 @@ fn parse_table_or_subquery_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos].kind matches { TK_K_AS | TK_IDENTIFIER | TK_STRING_LITERAL | TK_LIT_LPAREN } {
         let sp = pos;
-        sg_233_done: {
-            sg_233: {
+        sg_235_done: {
+            sg_235: {
                 if pos < tokens.len() && tokens[pos].kind == TK_K_AS {
                     let sp = pos;
                     if pos >= tokens.len() || tokens[pos].kind != TK_K_AS { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
                 pos = scan_table_alias(tokens, pos);
-                if pos < 0 { break sg_233; }
-                break sg_233_done;
+                if pos < 0 { break sg_235; }
+                break sg_235_done;
             }
             pos = -1;
         }
@@ -16529,25 +16821,25 @@ fn parse_table_or_subquery_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     }
     if pos < tokens.len() && tokens[pos].kind matches { TK_K_INDEXED | TK_K_NOT } {
         let sp = pos;
-        let gp_234 = pos;
-        sg_234: {
-            pos = gp_234;
-            sg_234_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_234_0; }
+        let gp_236 = pos;
+        sg_236: {
+            pos = gp_236;
+            sg_236_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_236_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_BY { break sg_234_0; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_BY { break sg_236_0; }
                 pos += 1;
                 pos = scan_index_name(tokens, pos);
-                if pos < 0 { break sg_234_0; }
-                break sg_234;
+                if pos < 0 { break sg_236_0; }
+                break sg_236;
             }
-            pos = gp_234;
-            sg_234_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { break sg_234_1; }
+            pos = gp_236;
+            sg_236_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_NOT { break sg_236_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_234_1; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_K_INDEXED { break sg_236_1; }
                 pos += 1;
-                break sg_234;
+                break sg_236;
             }
             pos = -1;
         }
@@ -16650,30 +16942,30 @@ fn parse_join_operator(p: &mut Parser) -> Result<JoinOperatorNode, ParseError> {
         opt_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            let gp_235 = pos;
-            sg_235: {
-                pos = gp_235;
-                sg_235_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_LEFT { break sg_235_0; }
+            let gp_237 = pos;
+            sg_237: {
+                pos = gp_237;
+                sg_237_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_LEFT { break sg_237_0; }
                     pos += 1;
                     if pos < tokens.len() && tokens[pos].kind == TK_K_OUTER {
                         let sp = pos;
                         if pos >= tokens.len() || tokens[pos].kind != TK_K_OUTER { pos = -1; } else { pos += 1; }
                         if pos < 0 { pos = sp; }
                     }
-                    break sg_235;
+                    break sg_237;
                 }
-                pos = gp_235;
-                sg_235_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INNER { break sg_235_1; }
+                pos = gp_237;
+                sg_237_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_INNER { break sg_237_1; }
                     pos += 1;
-                    break sg_235;
+                    break sg_237;
                 }
-                pos = gp_235;
-                sg_235_2: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_CROSS { break sg_235_2; }
+                pos = gp_237;
+                sg_237_2: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_CROSS { break sg_237_2; }
                     pos += 1;
-                    break sg_235;
+                    break sg_237;
                 }
                 break opt_scan;
             }
@@ -16790,19 +17082,19 @@ fn parse_select_core(p: &mut Parser) -> Result<SelectCoreNode, ParseError> {
         opt_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            let gp_236 = pos;
-            sg_236: {
-                pos = gp_236;
-                sg_236_0: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DISTINCT { break sg_236_0; }
+            let gp_238 = pos;
+            sg_238: {
+                pos = gp_238;
+                sg_238_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_DISTINCT { break sg_238_0; }
                     pos += 1;
-                    break sg_236;
+                    break sg_238;
                 }
-                pos = gp_236;
-                sg_236_1: {
-                    if pos >= tokens.len() || tokens[pos].kind != TK_K_ALL { break sg_236_1; }
+                pos = gp_238;
+                sg_238_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_K_ALL { break sg_238_1; }
                     pos += 1;
-                    break sg_236;
+                    break sg_238;
                 }
                 break opt_scan;
             }
@@ -17062,19 +17354,19 @@ fn parse_signed_number(p: &mut Parser) -> Result<SignedNumberNode, ParseError> {
     opt_scan: {
         let tokens = &p.tokens;
         let mut pos: i32 = p.pos;
-        let gp_237 = pos;
-        sg_237: {
-            pos = gp_237;
-            sg_237_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break sg_237_0; }
+        let gp_239 = pos;
+        sg_239: {
+            pos = gp_239;
+            sg_239_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PLUS { break sg_239_0; }
                 pos += 1;
-                break sg_237;
+                break sg_239;
             }
-            pos = gp_237;
-            sg_237_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { break sg_237_1; }
+            pos = gp_239;
+            sg_239_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_MINUS { break sg_239_1; }
                 pos += 1;
-                break sg_237;
+                break sg_239;
             }
             break opt_scan;
         }

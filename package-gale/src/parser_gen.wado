@@ -3963,6 +3963,35 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, alt_
 
 /// Backtracking for overlapping alts in a general group — try each, store on success.
 fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+    // Stage C/2: longest-match scan dispatch when every alt is fully
+    // scannable. Replaces speculative parse + bt_try with non-allocating
+    // scan, then parses only the winner.
+    let mut all_scannable = sorted_group.len() >= 2;
+    if all_scannable {
+        for let mut k = 0; k < sorted_group.len(); k += 1 {
+            let alt = &alts[sorted_group[k]];
+            if alt.elements.len() == 0 {
+                all_scannable = false;
+                break;
+            }
+            for let elem of &alt.elements {
+                let mut visiting: Array<String> = [];
+                if !ctx.is_element_scannable(elem, &mut visiting) {
+                    all_scannable = false;
+                    break;
+                }
+            }
+            if !all_scannable {
+                break;
+            }
+        }
+    }
+
+    if all_scannable {
+        gen_general_group_scan_dispatch(w, alts, sorted_group, type_name, inner_var, ctx, name_counts, group_index);
+        return;
+    }
+
     let saved = dedup_name(&"saved_pos", name_counts);
     let done = dedup_name(&"bt_done", name_counts);
     w.line(`let {saved} = p.pos;`);
@@ -4016,6 +4045,71 @@ fn gen_general_group_backtrack(w: &mut CodeWriter, alts: &Array<Alternative>, so
     }
 }
 
+/// Longest-match first-win scan dispatch for general groups (overlapping
+/// alts). All alts are known to be fully scannable; we scan each inline,
+/// pick the longest, parse only the winner and store into `inner_var`.
+fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, sorted_group: &Array<i32>, type_name: &String, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, group_index: i32) {
+    let mut scan_pos_vars: Array<String> = [];
+    for let mut k = 0; k < sorted_group.len(); k += 1 {
+        let alt = &alts[sorted_group[k]];
+        let scan_pos_var = dedup_name(&"gd_scan_pos", name_counts);
+        let scan_label = dedup_name(&"gd_scan", name_counts);
+        scan_pos_vars.push(scan_pos_var);
+        w.line(`let mut {scan_pos_var}: i32 = -1;`);
+        w.begin(`{scan_label}:`);
+        w.line("let tokens = &p.tokens;");
+        w.line("let mut pos: i32 = p.pos;");
+        let fail = `break {scan_label};`;
+        for let elem of &alt.elements {
+            gen_scan_element_with_fail(w, elem, ctx, &fail);
+        }
+        w.line(`{scan_pos_var} = pos;`);
+        w.end();
+    }
+
+    let best_i_var = dedup_name(&"gd_best_i", name_counts);
+    let best_p_var = dedup_name(&"gd_best_p", name_counts);
+    w.line(`let mut {best_i_var}: i32 = -1;`);
+    w.line(`let mut {best_p_var}: i32 = -1;`);
+    for let mut k = 0; k < sorted_group.len(); k += 1 {
+        w.begin(`if {scan_pos_vars[k]} > {best_p_var}`);
+        w.line(`{best_p_var} = {scan_pos_vars[k]};`);
+        w.line(`{best_i_var} = {k};`);
+        w.end();
+    }
+
+    let gc_entry = ctx.group_counter;
+    for let mut k = 0; k < sorted_group.len(); k += 1 {
+        let alt_idx = sorted_group[k];
+        let alt = &alts[alt_idx];
+        let is_last = k == sorted_group.len() - 1;
+        let struct_name = general_group_alt_struct_name(&ctx.current_rule_name, group_index, alt_idx);
+
+        if k == 0 && !is_last {
+            w.begin(`if {best_i_var} == {k}`);
+        } else if is_last {
+            w.else_begin("else");
+        } else {
+            w.else_begin(`else if {best_i_var} == {k}`);
+        }
+
+        ctx.group_counter = gc_entry;
+        let mut nc: Array<[String, i32]> = [];
+        let gc_alt = ctx.group_counter;
+        gen_elements_with_non_greedy(w, &alt.elements, ctx, &mut nc);
+        w.line(`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
+        w.indent();
+        ctx.group_counter = gc_alt;
+        let mut assign_nc: Array<[String, i32]> = [];
+        for let elem of &alt.elements {
+            gen_field_assignment(w, elem, &mut assign_nc, ctx);
+        }
+        w.dedent();
+        w.line("}));");
+    }
+    w.end();
+}
+
 fn gen_backtracking_body(w: &mut CodeWriter, group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
     // Build prediction tree for the group alternatives.
     let mut pred_indices: Array<i32> = [];
@@ -4061,6 +4155,37 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
     if let Backtrack(indices) = node {
         let mut sorted = indices.sorted();
         sort_group_by_element_count(&mut sorted, alts);
+
+        // Stage C/2: if every alt's remaining elements are fully scannable,
+        // use longest-match first-win scan dispatch instead of speculative
+        // parse with bt_try labels. This eliminates per-alt ParseError
+        // construction and token-array rewind.
+        let mut all_scannable = sorted.len() >= 2;
+        if all_scannable {
+            for let mut k = 0; k < sorted.len(); k += 1 {
+                let alt = &alts[sorted[k]];
+                if skip >= alt.elements.len() {
+                    all_scannable = false;
+                    break;
+                }
+                for let mut i = skip; i < alt.elements.len(); i += 1 {
+                    let mut visiting: Array<String> = [];
+                    if !ctx.is_element_scannable(&alt.elements[i], &mut visiting) {
+                        all_scannable = false;
+                        break;
+                    }
+                }
+                if !all_scannable {
+                    break;
+                }
+            }
+        }
+
+        if all_scannable {
+            gen_group_scan_dispatch(w, &sorted, alts, ctx, name_counts, skip);
+            return;
+        }
+
         let saved_var = dedup_name(&"saved_pos", name_counts);
         let done_var = dedup_name(&"bt_done", name_counts);
         w.line(`let {saved_var} = p.pos;`);
@@ -4105,6 +4230,58 @@ fn gen_group_prediction_code_skip(w: &mut CodeWriter, node: &PredictionNode, alt
         }
         w.end();
     }
+}
+
+/// Emit longest-match first-win scan dispatch for group-level alternatives.
+/// Each alt's remaining elements (from `skip`) are scanned inline. The alt
+/// whose scan advances furthest is parsed; ties go to the first in sorted
+/// order. If all scans fail, the last alt is parsed to surface a real error.
+fn gen_group_scan_dispatch(w: &mut CodeWriter, sorted: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, skip: i32) {
+    let mut scan_pos_vars: Array<String> = [];
+    for let mut k = 0; k < sorted.len(); k += 1 {
+        let alt = &alts[sorted[k]];
+        let scan_pos_var = dedup_name(&"gd_scan_pos", name_counts);
+        let scan_label = dedup_name(&"gd_scan", name_counts);
+        scan_pos_vars.push(scan_pos_var);
+        w.line(`let mut {scan_pos_var}: i32 = -1;`);
+        w.begin(`{scan_label}:`);
+        w.line("let tokens = &p.tokens;");
+        w.line("let mut pos: i32 = p.pos;");
+        let fail = `break {scan_label};`;
+        for let mut i = skip; i < alt.elements.len(); i += 1 {
+            gen_scan_element_with_fail(w, &alt.elements[i], ctx, &fail);
+        }
+        w.line(`{scan_pos_var} = pos;`);
+        w.end();
+    }
+
+    let best_i_var = dedup_name(&"gd_best_i", name_counts);
+    let best_p_var = dedup_name(&"gd_best_p", name_counts);
+    w.line(`let mut {best_i_var}: i32 = -1;`);
+    w.line(`let mut {best_p_var}: i32 = -1;`);
+    for let mut k = 0; k < sorted.len(); k += 1 {
+        w.begin(`if {scan_pos_vars[k]} > {best_p_var}`);
+        w.line(`{best_p_var} = {scan_pos_vars[k]};`);
+        w.line(`{best_i_var} = {k};`);
+        w.end();
+    }
+
+    for let mut k = 0; k < sorted.len(); k += 1 {
+        let alt = &alts[sorted[k]];
+        let is_last = k == sorted.len() - 1;
+        if k == 0 && !is_last {
+            w.begin(`if {best_i_var} == {k}`);
+        } else if is_last {
+            w.else_begin("else");
+        } else {
+            w.else_begin(`else if {best_i_var} == {k}`);
+        }
+        let mut nc: Array<[String, i32]> = [];
+        for let mut i = skip; i < alt.elements.len(); i += 1 {
+            gen_element(w, &alt.elements[i], ctx, &mut nc);
+        }
+    }
+    w.end();
 }
 
 fn compute_lr_conflict_min_prec(alt: &Alternative, own_prec: i32, lr_indices: &Array<i32>, rule: &ParserRule, ctx: &mut GenContext, total_lr: i32) -> i32 {
