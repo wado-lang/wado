@@ -1529,92 +1529,90 @@ impl JsonDeserializer {
         if self.pos >= self.input.len() {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_byte(self.pos) as i32;
-        if b == '"' as i32 {
-            return self.skip_string();
-        }
-        if b == 't' as i32 {
-            return self.expect_true();
-        }
-        if b == 'f' as i32 {
-            return self.expect_false();
-        }
-        if b == 'n' as i32 {
-            return self.expect_null();
-        }
-        if b == '[' as i32 {
-            self.pos += 1;
-            self.skip_whitespace();
-            if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == ']' as i32 {
+        let b = self.input.get_byte(self.pos) as u8 as char;
+        match b {
+            '"' => return self.skip_string(),
+            't' => return self.expect_true(),
+            'f' => return self.expect_false(),
+            'n' => return self.expect_null(),
+            '[' => {
                 self.pos += 1;
-                return Result::Ok(());
-            }
-            loop {
-                self.skip_value()?;
                 self.skip_whitespace();
-                if self.pos >= self.input.len() {
-                    return Result::Err(DeserializeError::eof(self.pos as i64));
-                }
-                let c = self.input.get_byte(self.pos) as i32;
-                if c == ']' as i32 {
+                if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == ']' as i32 {
                     self.pos += 1;
                     return Result::Ok(());
                 }
-                if c == ',' as i32 {
-                    self.pos += 1;
-                } else {
-                    return Result::Err(DeserializeError::malformed(
-                        "expected ',' or ']'",
-                        self.pos as i64,
-                    ));
+                loop {
+                    self.skip_value()?;
+                    self.skip_whitespace();
+                    if self.pos >= self.input.len() {
+                        return Result::Err(DeserializeError::eof(self.pos as i64));
+                    }
+                    let c = self.input.get_byte(self.pos) as i32;
+                    if c == ']' as i32 {
+                        self.pos += 1;
+                        return Result::Ok(());
+                    }
+                    if c == ',' as i32 {
+                        self.pos += 1;
+                    } else {
+                        return Result::Err(DeserializeError::malformed(
+                            "expected ',' or ']'",
+                            self.pos as i64,
+                        ));
+                    }
                 }
-            }
-        }
-        if b == '{' as i32 {
-            self.pos += 1;
-            self.skip_whitespace();
-            if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '}' as i32 {
+            },
+            '{' => {
                 self.pos += 1;
-                return Result::Ok(());
-            }
-            loop {
                 self.skip_whitespace();
-                if self.pos >= self.input.len() || self.input.get_byte(self.pos) as i32 != '"' as i32 {
-                    return Result::Err(DeserializeError::malformed(
-                        "expected string key",
-                        self.pos as i64,
-                    ));
-                }
-                self.skip_string()?;
-                self.expect_char(':' as i32)?;
-                self.skip_value()?;
-                self.skip_whitespace();
-                if self.pos >= self.input.len() {
-                    return Result::Err(DeserializeError::eof(self.pos as i64));
-                }
-                let c = self.input.get_byte(self.pos) as i32;
-                if c == '}' as i32 {
+                if self.pos < self.input.len() && self.input.get_byte(self.pos) as i32 == '}' as i32 {
                     self.pos += 1;
                     return Result::Ok(());
                 }
-                if c == ',' as i32 {
-                    self.pos += 1;
-                } else {
-                    return Result::Err(DeserializeError::malformed(
-                        "expected ',' or '}'",
-                        self.pos as i64,
-                    ));
+                loop {
+                    self.skip_whitespace();
+                    if self.pos >= self.input.len() || self.input.get_byte(self.pos) as i32 != '"' as i32 {
+                        return Result::Err(DeserializeError::malformed(
+                            "expected string key",
+                            self.pos as i64,
+                        ));
+                    }
+                    self.skip_string()?;
+                    self.expect_char(':' as i32)?;
+                    self.skip_value()?;
+                    self.skip_whitespace();
+                    if self.pos >= self.input.len() {
+                        return Result::Err(DeserializeError::eof(self.pos as i64));
+                    }
+                    let c = self.input.get_byte(self.pos) as i32;
+                    if c == '}' as i32 {
+                        self.pos += 1;
+                        return Result::Ok(());
+                    }
+                    if c == ',' as i32 {
+                        self.pos += 1;
+                    } else {
+                        return Result::Err(DeserializeError::malformed(
+                            "expected ',' or '}'",
+                            self.pos as i64,
+                        ));
+                    }
                 }
-            }
+            },
+            '-' => {
+                self.skip_number();
+                return Result::Ok(());
+            },
+            c && c >= '0' && c <= '9' => {
+                self.skip_number();
+                return Result::Ok(());
+            },
+            _ => return Result::Err(DeserializeError::malformed(
+                "unexpected character in JSON value",
+                self.pos as i64,
+            )),
         }
-        if b == '-' as i32 || ('0' as i32 <= b && b <= '9' as i32) {
-            self.skip_number();
-            return Result::Ok(());
-        }
-        return Result::Err(DeserializeError::malformed(
-            "unexpected character in JSON value",
-            self.pos as i64,
-        ));
     }
 }
 
