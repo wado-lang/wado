@@ -2818,7 +2818,9 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let s: u64;
     let m_12: u64;
     let e: i32;
-    bits = builtin::i64_reinterpret_f64(f.value);
+    bits = __inline_f64__to_bits_0: block -> i64 {
+        break __inline_f64__to_bits_0: builtin::i64_reinterpret_f64(f);
+    };
     raw_mantissa = bits & 4503599627370495_i64;
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
     if raw_exp == 0 {
@@ -3550,7 +3552,7 @@ fn "core:prelude/fpfmt.wado/write_decimal_prec"(buf, d, p, nd, precision) {
 fn "core:prelude/fpfmt.wado/check_special"(f) {
     let bits: i64;
     let is_neg: bool;
-    bits = builtin::i64_reinterpret_f64(f.value);
+    bits = builtin::i64_reinterpret_f64(f);
     if bits == 0_i64 {
         return 1, 0, 1;
     }
@@ -4284,13 +4286,15 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
 fn "core:prelude/primitive.wado/i32^LowerHex::fmt"(self, f) {
     let v: i32;
     let is_neg: bool;
+    let abs_val: i64;
     v = self;
     is_neg = v < 0;
-    "core:prelude/primitive.wado/i64::fmt_base"((if is_neg -> i64 {
+    abs_val = (if is_neg -> i64 {
         0_i64 - builtin::i64_extend_i32_s(v);
     } else {
         builtin::i64_extend_i32_s(v);
-    }), is_neg, f, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
+    });
+    "core:prelude/primitive.wado/i64::fmt_base"(abs_val, is_neg, f, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
 }
 
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -4701,16 +4705,20 @@ fn "core:prelude/string.wado/StrSplitIter^Iterator::next"(self) {
 fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    if v.value != v.value {
+    let __local_5: ref "core:prelude/types.wado//Box<f64>";
+    if v != v {
         return struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
     }
-    if ((v.value - v.value) == 0) == 0 {
+    if __inline_f64__is_finite_1: block -> bool {
+        __local_5 = struct.new "core:prelude/types.wado//Box<f64>" { value: v };
+        break __inline_f64__is_finite_1: (v - v) == 0;
+    } == 0 {
         return struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
     }
     "core:prelude/string.wado/String::push_str"(self, __tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/f64::fmt_into"(v.value, __local_3);
+        "core:prelude/primitive.wado/f64::fmt_into"(v, __local_3);
         break __tmpl: __local_2;
     });
     return ref.null none;
