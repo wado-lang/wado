@@ -1,4 +1,5 @@
 pub mod analyze;
+pub mod annotate;
 pub mod ast;
 pub mod bind;
 pub mod builtin_registry;
@@ -40,6 +41,7 @@ pub mod wir_visitor;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
+pub use annotate::{Annotated, Definition, annotate};
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use compiler_host::{
