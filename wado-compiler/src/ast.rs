@@ -7,21 +7,12 @@ use crate::token::Span;
 /// significance (items, named members, parameters).
 ///
 /// The parser assigns ids in DFS order starting from `0`; ids for a given
-/// module are densely packed in `0..Module::ast_id_count()`.
-///
-/// Synthetic nodes that did not originate from a parse (e.g. compiler-built
-/// builtins or test fixtures) use [`AstId::SYNTHETIC`] and do not participate
-/// in position-based lookups.
+/// module are densely packed in `0..Module::ast_id_count()`. Every AST node
+/// observed by the compiler has a real id within its module — there is no
+/// sentinel value. Builtin modules (`lib/core/*.wado`) are parsed like any
+/// other module and receive their own dense id range.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstId(pub u32);
-
-impl AstId {
-    /// Sentinel id for AST nodes that were not produced by the parser
-    /// (compiler-synthesised builtins, test fixtures, etc.). These nodes do
-    /// not appear in `Module::ast_id_count()` accounting and are excluded
-    /// from position lookups.
-    pub const SYNTHETIC: AstId = AstId(u32::MAX);
-}
 
 /// Discriminator for the kind of AST node an [`AstPtr`] points to.
 ///
@@ -82,8 +73,7 @@ pub struct Module {
     /// Paths referenced by `#include_str` and `#include_bytes` literals, collected during parsing.
     include_paths: IndexSet<String>,
     /// Total number of [`AstId`]s allocated for this module during parsing.
-    /// Real ids occupy the range `0..ast_id_count`; synthetic nodes use
-    /// [`AstId::SYNTHETIC`] and are not counted.
+    /// Ids occupy the range `0..ast_id_count`.
     ast_id_count: u32,
 }
 
@@ -164,20 +154,18 @@ impl Module {
     }
 
     /// Returns the total number of [`AstId`]s allocated for this module.
-    /// Real ids occupy `0..ast_id_count()`; synthetic nodes are not counted.
+    /// Ids occupy `0..ast_id_count()`.
     pub fn ast_id_count(&self) -> u32 {
         self.ast_id_count
     }
 
     /// Find the [`AstId`] of the smallest id-bearing AST node whose span
-    /// contains the given 1-based `(line, column)` position.
-    ///
-    /// Synthetic nodes ([`AstId::SYNTHETIC`]) are excluded. Returns `None`
+    /// contains the given 1-based `(line, column)` position. Returns `None`
     /// if no id-bearing node contains the position.
     pub fn ast_id_at(&self, line: usize, column: usize) -> Option<AstId> {
         let mut best: Option<(AstId, Span)> = None;
         let mut visitor = |id: AstId, span: Span| {
-            if id == AstId::SYNTHETIC || !span_contains(span, line, column) {
+            if !span_contains(span, line, column) {
                 return;
             }
             match best {
@@ -1896,7 +1884,6 @@ test "addition" {
         let mut seen: IndexSet<AstId> = IndexSet::default();
         for id in &ids {
             assert!(seen.insert(*id), "duplicate id: {id:?}");
-            assert_ne!(*id, AstId::SYNTHETIC);
             assert!(
                 id.0 < m.ast_id_count(),
                 "id {} out of range (count={})",
