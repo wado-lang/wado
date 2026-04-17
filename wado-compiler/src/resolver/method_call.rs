@@ -395,18 +395,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return_type = self.substitute_newtype_in_type(return_type, base_type_id, newtype_id);
         }
 
-        // Track implicit receiver borrowing (`x.method()` where method expects
-        // `&self`/`&mut self`) for local values. This keeps address-taken
-        // metadata consistent with explicit `&x` / `&mut x`, so later boxing
-        // and alias-sensitive lowering update the caller local instead of a
-        // disconnected temporary.
-        let needs_implicit_borrow = !is_ref_impl
-            && matches!(self_kind, ast::SelfKind::Ref | ast::SelfKind::MutRef)
+        // Track implicit `&mut self` borrowing for primitive local receivers.
+        // Primitive values are copied by default in Wasm GC, so `x.bump()`
+        // must mark `x` as address-taken to preserve mutation semantics.
+        let needs_implicit_mut_borrow_on_primitive_local = !is_ref_impl
+            && matches!(self_kind, ast::SelfKind::MutRef)
             && !matches!(
                 self.type_table.borrow().get(receiver.type_id),
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
+            && matches!(
+                self.type_table
+                    .borrow()
+                    .get(self.get_base_type(receiver.type_id)),
+                ResolvedType::Primitive(_)
             );
-        if needs_implicit_borrow && let TirExprKind::Local { index, .. } = &receiver.kind {
+        if needs_implicit_mut_borrow_on_primitive_local
+            && let TirExprKind::Local { index, .. } = &receiver.kind
+        {
             ctx.address_taken_locals.insert(*index);
         }
 
