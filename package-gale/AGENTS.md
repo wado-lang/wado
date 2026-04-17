@@ -214,6 +214,26 @@ Commit the updated golden files.
 - To use expansion correctly, the prediction must map expanded tokens back to the decision point's lookahead depth (essentially an ATN simulator)
 - `sll_dedup_by_alt` is too aggressive for expanded configs — alternatives sharing sub-rules get merged
 
+### Removing the LR Gate in `is_rule_scannable` without Smarter Stage C (2026-04)
+
+**Goal:** Drop the "has-left-recursive-alt" guard at `gen_context.wado:is_rule_scannable` so Stage C group-level dispatch can activate for `sql_stmt`'s statement-type alternation (nine shared-first-token alts that all transitively reference the LR rule `expr`). Expected: eliminate the last nine `bt_try` blocks in `sqlite.wado`.
+
+**What was tried:** Generated faithful scan-side twins of the parser's precedence-climbing infrastructure (`scan_X_atom` / `scan_X_prec` / `scan_X_lr_N`), mirroring `parse_X_prec` with token-kind dispatch, `peek_at(1)` overlap dispatch, and precedence guards. Then removed the LR gate in `is_rule_scannable`.
+
+**Why it failed:**
+
+- `bt_try` count on `sqlite.wado` dropped 54 → 38 as expected, but `sqlite_parse` regressed **14,379 → 136,947 µs/iter (10×)**.
+- Root cause: Stage C uses a **tournament dispatch** (scan every candidate alt to completion, then pick the longest match). For `sql_stmt`'s nine statement-type alts that all share first tokens on `{WITH, SELECT, DELETE, INSERT, REPLACE, UPDATE, VALUES}`, the tournament runs nine full LR scans per statement. Each scan is a deep precedence-climbing traversal over every suffix operator, so the total cost is `O(statement_length × 9)` — no matter which alt actually matches.
+- `bt_try` wins here by being **first-success-wins**: when alt 1 parses cleanly, alts 2..9 are never touched. The scan-based tournament has no such short-circuit.
+
+**What remains:** The faithful `scan_X_atom` / `scan_X_prec` / `scan_X_lr_N` generators are correct and committed — they fix a real divergence bug where the old naive scan could commit to the wrong LR alt on shared-first-token suffixes (e.g. `K_NOT K_IN` vs `K_NOT K_LIKE` vs `K_NOT K_BETWEEN` under `expr`). The LR gate in `is_rule_scannable` is kept, with a docstring explaining the cost tradeoff. Net win: `sqlite_parse` 14,883 → 11,826 µs (−21%) from other scan improvements, not from LR unlock.
+
+**Lessons:**
+
+- `bt_try` is not strictly worse than scan-dispatch: ordered-lazy first-success-wins beats exhaustive tournament whenever alts are not mutually-exclusive-by-first-token and the cost of the wrong scan is large.
+- Faithful scan semantics (correctness) and cheap Stage C dispatch (performance) are **independent concerns**. Solving one does not unlock the other.
+- Before removing the LR gate, Stage C needs one of: (a) k=2/3 lookahead partitioning to shrink the candidate set before the tournament, (b) first-success-wins mode when alt first-sets are disjoint within a group, or (c) ATN-style adaptive prediction. See `TODO.md` for the plan.
+
 ## On-Task-Done
 
 When completing a task, run from the project root:
