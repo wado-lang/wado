@@ -5291,13 +5291,31 @@ fn parse_grammar_spec(p: &mut Parser) -> Result<GrammarSpecNode, ParseError> {
     let start = p.peek().span.start;
     let grammar_decl = parse_grammar_decl(p)?;
     let mut prequel_construct_list: Array<PrequelConstructNode> = [];
-    while p.peek_kind() matches { TK_OPTIONS | TK_IMPORT | TK_TOKENS | TK_CHANNELS | TK_AT } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_prequel_construct(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let prequel_construct = parse_prequel_construct(p)?;
         prequel_construct_list.push(prequel_construct);
     }
     let rules = parse_rules(p)?;
     let mut mode_spec_list: Array<ModeSpecNode> = [];
-    while p.peek_kind() == TK_MODE {
+    loop {
+        let mut rep_scan_pos_2: i32 = -1;
+        rep_scan_2: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_mode_spec(tokens, pos);
+            if pos < 0 { break rep_scan_2; }
+            rep_scan_pos_2 = pos;
+        }
+        if rep_scan_pos_2 < 0 { break; }
         let mode_spec = parse_mode_spec(p)?;
         mode_spec_list.push(mode_spec);
     }
@@ -5409,7 +5427,18 @@ fn parse_options_spec(p: &mut Parser) -> Result<OptionsSpecNode, ParseError> {
     let start = p.peek().span.start;
     let options = p.expect(TK_OPTIONS)?;
     let mut option_semi_list: Array<OptionSemiItem> = [];
-    while p.peek_kind() matches { TK_RULE_REF | TK_TOKEN_REF } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_option(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { break rep_scan; }
+            pos += 1;
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let option = parse_option(p)?;
         let semi = p.expect(TK_SEMI)?;
         let option_semi = OptionSemiItem {
@@ -5446,7 +5475,18 @@ fn parse_option_value(p: &mut Parser) -> Result<OptionValueNode, ParseError> {
     if kind matches { TK_RULE_REF | TK_TOKEN_REF } {
         let identifier = parse_identifier(p)?;
         let mut dot_identifier_list: Array<DotIdentifierItem> = [];
-        while p.peek_kind() == TK_DOT {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_DOT { break rep_scan; }
+                pos += 1;
+                pos = scan_identifier(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let dot = p.expect(TK_DOT)?;
             let identifier = parse_identifier(p)?;
             let dot_identifier = DotIdentifierItem {
@@ -5494,7 +5534,18 @@ fn parse_delegate_grammars(p: &mut Parser) -> Result<DelegateGrammarsNode, Parse
     let import_ = p.expect(TK_IMPORT)?;
     let delegate_grammar = parse_delegate_grammar(p)?;
     let mut comma_delegate_grammar_list: Array<CommaDelegateGrammarItem> = [];
-    while p.peek_kind() == TK_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
+            pos += 1;
+            pos = scan_delegate_grammar(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
         let delegate_grammar = parse_delegate_grammar(p)?;
         let comma_delegate_grammar = CommaDelegateGrammarItem {
@@ -5614,7 +5665,18 @@ fn parse_id_list(p: &mut Parser) -> Result<IdListNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
     let mut comma_identifier_list: Array<CommaIdentifierItem> = [];
-    while p.peek_kind() == TK_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
+            pos += 1;
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
         let identifier = parse_identifier(p)?;
         let comma_identifier = CommaIdentifierItem {
@@ -5640,23 +5702,24 @@ fn parse_id_list(p: &mut Parser) -> Result<IdListNode, ParseError> {
 fn parse_action_(p: &mut Parser) -> Result<ActionNode, ParseError> {
     let start = p.peek().span.start;
     let at = p.expect(TK_AT)?;
-    let action_scope_name_coloncolon: Option<ActionScopeNameColoncolonItem> = if p.peek_kind() matches { TK_RULE_REF | TK_TOKEN_REF | TK_LEXER | TK_PARSER } {
-        let opt_saved = p.pos;
-        let mut opt_result: Option<ActionScopeNameColoncolonItem> = null;
-        opt_bt: {
-            let _bt_r = parse_action_scope_name(p);
-            if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-            let action_scope_name = _bt_r.unwrap();
-            let _bt_r_2 = p.expect(TK_COLONCOLON);
-            if let Err(_) = _bt_r_2 { p.pos = opt_saved; break opt_bt; }
-            let coloncolon = _bt_r_2.unwrap();
-            let action_scope_name_coloncolon = ActionScopeNameColoncolonItem {
-                action_scope_name,
-                coloncolon,
-            };
-            opt_result = Option::<ActionScopeNameColoncolonItem>::Some(action_scope_name_coloncolon);
-        }
-        opt_result
+    let mut opt_scan_pos: i32 = -1;
+    opt_scan: {
+        let tokens = &p.tokens;
+        let mut pos: i32 = p.pos;
+        pos = scan_action_scope_name(tokens, pos);
+        if pos < 0 { break opt_scan; }
+        if pos >= tokens.len() || tokens[pos].kind != TK_COLONCOLON { break opt_scan; }
+        pos += 1;
+        opt_scan_pos = pos;
+    }
+    let action_scope_name_coloncolon: Option<ActionScopeNameColoncolonItem> = if opt_scan_pos >= 0 {
+        let action_scope_name = parse_action_scope_name(p)?;
+        let coloncolon = p.expect(TK_COLONCOLON)?;
+        let action_scope_name_coloncolon = ActionScopeNameColoncolonItem {
+            action_scope_name,
+            coloncolon,
+        };
+        Option::<ActionScopeNameColoncolonItem>::Some(action_scope_name_coloncolon)
     } else {
         null
     };
@@ -5734,7 +5797,16 @@ fn parse_mode_spec(p: &mut Parser) -> Result<ModeSpecNode, ParseError> {
     let identifier = parse_identifier(p)?;
     let semi = p.expect(TK_SEMI)?;
     let mut lexer_rule_spec_list: Array<LexerRuleSpecNode> = [];
-    while p.peek_kind() matches { TK_FRAGMENT | TK_TOKEN_REF } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_lexer_rule_spec(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let lexer_rule_spec = parse_lexer_rule_spec(p)?;
         lexer_rule_spec_list.push(lexer_rule_spec);
     }
@@ -5750,7 +5822,16 @@ fn parse_mode_spec(p: &mut Parser) -> Result<ModeSpecNode, ParseError> {
 fn parse_rules(p: &mut Parser) -> Result<RulesNode, ParseError> {
     let start = p.peek().span.start;
     let mut rule_spec_list: Array<RuleSpecNode> = [];
-    while p.peek_kind() matches { TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_FRAGMENT | TK_RULE_REF | TK_TOKEN_REF } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_rule_spec(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let rule_spec = parse_rule_spec(p)?;
         rule_spec_list.push(rule_spec);
     }
@@ -5849,7 +5930,16 @@ fn parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseErr
         null
     };
     let mut rule_prequel_list: Array<RulePrequelNode> = [];
-    while p.peek_kind() matches { TK_OPTIONS | TK_AT } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_rule_prequel(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let rule_prequel = parse_rule_prequel(p)?;
         rule_prequel_list.push(rule_prequel);
     }
@@ -5876,7 +5966,16 @@ fn parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseErr
 fn parse_exception_group(p: &mut Parser) -> Result<ExceptionGroupNode, ParseError> {
     let start = p.peek().span.start;
     let mut exception_handler_list: Array<ExceptionHandlerNode> = [];
-    while p.peek_kind() == TK_CATCH {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_exception_handler(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let exception_handler = parse_exception_handler(p)?;
         exception_handler_list.push(exception_handler);
     }
@@ -5957,7 +6056,18 @@ fn parse_throws_spec(p: &mut Parser) -> Result<ThrowsSpecNode, ParseError> {
     let throws = p.expect(TK_THROWS)?;
     let qualified_identifier = parse_qualified_identifier(p)?;
     let mut comma_qualified_identifier_list: Array<CommaQualifiedIdentifierItem> = [];
-    while p.peek_kind() == TK_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
+            pos += 1;
+            pos = scan_qualified_identifier(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
         let qualified_identifier = parse_qualified_identifier(p)?;
         let comma_qualified_identifier = CommaQualifiedIdentifierItem {
@@ -6002,7 +6112,18 @@ fn parse_rule_modifiers(p: &mut Parser) -> Result<RuleModifiersNode, ParseError>
     let start = p.peek().span.start;
     let mut rule_modifier_list: Array<RuleModifierNode> = [];
     let mut _plus_first = true;
-    while _plus_first || p.peek_kind() matches { TK_PUBLIC | TK_PRIVATE | TK_PROTECTED | TK_FRAGMENT } {
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_rule_modifier(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
         _plus_first = false;
         let rule_modifier = parse_rule_modifier(p)?;
         rule_modifier_list.push(rule_modifier);
@@ -6064,7 +6185,18 @@ fn parse_rule_alt_list(p: &mut Parser) -> Result<RuleAltListNode, ParseError> {
     let start = p.peek().span.start;
     let labeled_alt = parse_labeled_alt(p)?;
     let mut or_labeled_alt_list: Array<OrLabeledAltItem> = [];
-    while p.peek_kind() == TK_OR {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_OR { break rep_scan; }
+            pos += 1;
+            pos = scan_labeled_alt(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let or = p.expect(TK_OR)?;
         let labeled_alt = parse_labeled_alt(p)?;
         let or_labeled_alt = OrLabeledAltItem {
@@ -6143,7 +6275,18 @@ fn parse_lexer_alt_list(p: &mut Parser) -> Result<LexerAltListNode, ParseError> 
     let start = p.peek().span.start;
     let lexer_alt = parse_lexer_alt(p)?;
     let mut or_lexer_alt_list: Array<OrLexerAltItem> = [];
-    while p.peek_kind() == TK_OR {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_OR { break rep_scan; }
+            pos += 1;
+            pos = scan_lexer_alt(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let or = p.expect(TK_OR)?;
         let lexer_alt = parse_lexer_alt(p)?;
         let or_lexer_alt = OrLexerAltItem {
@@ -6194,7 +6337,18 @@ fn parse_lexer_elements(p: &mut Parser) -> Result<LexerElementsNode, ParseError>
     if kind matches { TK_STRING_LITERAL | TK_TOKEN_REF | TK_NOT | TK_LEXER_CHAR_SET | TK_DOT | TK_LPAREN | TK_ACTION } {
         let mut lexer_element_list: Array<LexerElementNode> = [];
         let mut _plus_first = true;
-        while _plus_first || p.peek_kind() matches { TK_STRING_LITERAL | TK_TOKEN_REF | TK_NOT | TK_LEXER_CHAR_SET | TK_DOT | TK_LPAREN | TK_ACTION } {
+        loop {
+            if !_plus_first {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_lexer_element(tokens, pos);
+                    if pos < 0 { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+            }
             _plus_first = false;
             let lexer_element = parse_lexer_element(p)?;
             lexer_element_list.push(lexer_element);
@@ -6286,7 +6440,18 @@ fn parse_lexer_commands(p: &mut Parser) -> Result<LexerCommandsNode, ParseError>
     let rarrow = p.expect(TK_RARROW)?;
     let lexer_command = parse_lexer_command(p)?;
     let mut comma_lexer_command_list: Array<CommaLexerCommandItem> = [];
-    while p.peek_kind() == TK_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
+            pos += 1;
+            pos = scan_lexer_command(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
         let lexer_command = parse_lexer_command(p)?;
         let comma_lexer_command = CommaLexerCommandItem {
@@ -6424,7 +6589,18 @@ fn parse_alt_list(p: &mut Parser) -> Result<AltListNode, ParseError> {
     let start = p.peek().span.start;
     let alternative = parse_alternative(p)?;
     let mut or_alternative_list: Array<OrAlternativeItem> = [];
-    while p.peek_kind() == TK_OR {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_OR { break rep_scan; }
+            pos += 1;
+            pos = scan_alternative(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let or = p.expect(TK_OR)?;
         let alternative = parse_alternative(p)?;
         let or_alternative = OrAlternativeItem {
@@ -6452,7 +6628,18 @@ fn parse_alternative(p: &mut Parser) -> Result<AlternativeNode, ParseError> {
         };
         let mut element_list: Array<ElementNode> = [];
         let mut _plus_first = true;
-        while _plus_first || p.peek_kind() matches { TK_RULE_REF | TK_TOKEN_REF | TK_STRING_LITERAL | TK_NOT | TK_DOT | TK_LPAREN | TK_ACTION } {
+        loop {
+            if !_plus_first {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_element(tokens, pos);
+                    if pos < 0 { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+            }
             _plus_first = false;
             let element = parse_element(p)?;
             element_list.push(element);
@@ -6621,7 +6808,18 @@ fn parse_predicate_options(p: &mut Parser) -> Result<PredicateOptionsNode, Parse
     let lt = p.expect(TK_LT)?;
     let predicate_option = parse_predicate_option(p)?;
     let mut comma_predicate_option_list: Array<CommaPredicateOptionItem> = [];
-    while p.peek_kind() == TK_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
+            pos += 1;
+            pos = scan_predicate_option(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
         let predicate_option = parse_predicate_option(p)?;
         let comma_predicate_option = CommaPredicateOptionItem {
@@ -7035,7 +7233,18 @@ fn parse_block_set(p: &mut Parser) -> Result<BlockSetNode, ParseError> {
     let lparen = p.expect(TK_LPAREN)?;
     let set_element = parse_set_element(p)?;
     let mut or_set_element_list: Array<OrSetElementItem> = [];
-    while p.peek_kind() == TK_OR {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_OR { break rep_scan; }
+            pos += 1;
+            pos = scan_set_element(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let or = p.expect(TK_OR)?;
         let set_element = parse_set_element(p)?;
         let or_set_element = OrSetElementItem {
@@ -7148,7 +7357,16 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
             null
         };
         let mut rule_action_list: Array<RuleActionNode> = [];
-        while p.peek_kind() == TK_AT {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_rule_action(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let rule_action = parse_rule_action(p)?;
             rule_action_list.push(rule_action);
         }
@@ -7162,7 +7380,16 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
     } else if p.peek_kind() == TK_AT && p.peek_at(1) == TK_COLON {
         let options_spec: Option<OptionsSpecNode> = null;
         let mut rule_action_list: Array<RuleActionNode> = [];
-        while p.peek_kind() == TK_AT {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_rule_action(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let rule_action = parse_rule_action(p)?;
             rule_action_list.push(rule_action);
         }
@@ -7291,7 +7518,18 @@ fn parse_element_options(p: &mut Parser) -> Result<ElementOptionsNode, ParseErro
     let lt = p.expect(TK_LT)?;
     let element_option = parse_element_option(p)?;
     let mut comma_element_option_list: Array<CommaElementOptionItem> = [];
-    while p.peek_kind() == TK_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
+            pos += 1;
+            pos = scan_element_option(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
         let element_option = parse_element_option(p)?;
         let comma_element_option = CommaElementOptionItem {
@@ -7437,7 +7675,18 @@ fn parse_qualified_identifier(p: &mut Parser) -> Result<QualifiedIdentifierNode,
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
     let mut dot_identifier_list: Array<DotIdentifierItem> = [];
-    while p.peek_kind() == TK_DOT {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_DOT { break rep_scan; }
+            pos += 1;
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let dot = p.expect(TK_DOT)?;
         let identifier = parse_identifier(p)?;
         let dot_identifier = DotIdentifierItem {

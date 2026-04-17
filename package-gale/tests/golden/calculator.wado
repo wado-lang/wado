@@ -1786,7 +1786,32 @@ fn parse_expression(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let multiplying_expression = parse_multiplying_expression(p)?;
     let mut item_multiplying_expression_list: Array<ItemMultiplyingExpressionItem> = [];
-    while p.peek_kind() matches { TK_PLUS | TK_MINUS } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            let gp_6 = pos;
+            sg_6: {
+                pos = gp_6;
+                sg_6_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_PLUS { break sg_6_0; }
+                    pos += 1;
+                    break sg_6;
+                }
+                pos = gp_6;
+                sg_6_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_MINUS { break sg_6_1; }
+                    pos += 1;
+                    break sg_6;
+                }
+                break rep_scan;
+            }
+            pos = scan_multiplying_expression(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let plus_or_minus = p.advance();
         let multiplying_expression = parse_multiplying_expression(p)?;
         let item_multiplying_expression = ItemMultiplyingExpressionItem {
@@ -1806,7 +1831,32 @@ fn parse_multiplying_expression(p: &mut Parser) -> Result<MultiplyingExpressionN
     let start = p.peek().span.start;
     let pow_expression = parse_pow_expression(p)?;
     let mut item_pow_expression_list: Array<ItemPowExpressionItem> = [];
-    while p.peek_kind() matches { TK_TIMES | TK_DIV } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            let gp_7 = pos;
+            sg_7: {
+                pos = gp_7;
+                sg_7_0: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_TIMES { break sg_7_0; }
+                    pos += 1;
+                    break sg_7;
+                }
+                pos = gp_7;
+                sg_7_1: {
+                    if pos >= tokens.len() || tokens[pos].kind != TK_DIV { break sg_7_1; }
+                    pos += 1;
+                    break sg_7;
+                }
+                break rep_scan;
+            }
+            pos = scan_pow_expression(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let times_or_div = p.advance();
         let pow_expression = parse_pow_expression(p)?;
         let item_pow_expression = ItemPowExpressionItem {
@@ -1826,7 +1876,18 @@ fn parse_pow_expression(p: &mut Parser) -> Result<PowExpressionNode, ParseError>
     let start = p.peek().span.start;
     let signed_atom = parse_signed_atom(p)?;
     let mut pow_signed_atom_list: Array<PowSignedAtomItem> = [];
-    while p.peek_kind() == TK_POW {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_POW { break rep_scan; }
+            pos += 1;
+            pos = scan_signed_atom(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let pow = p.expect(TK_POW)?;
         let signed_atom = parse_signed_atom(p)?;
         let pow_signed_atom = PowSignedAtomItem {
@@ -1981,7 +2042,18 @@ fn parse_func_(p: &mut Parser) -> Result<FuncNode, ParseError> {
     let lparen = p.expect(TK_LPAREN)?;
     let expression = parse_expression(p)?;
     let mut comma_expression_list: Array<CommaExpressionItem> = [];
-    while p.peek_kind() == TK_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
+            pos += 1;
+            pos = scan_expression(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
         let expression = parse_expression(p)?;
         let comma_expression = CommaExpressionItem {

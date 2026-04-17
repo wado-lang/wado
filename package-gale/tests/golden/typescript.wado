@@ -13700,14 +13700,31 @@ fn parse_type__bt_1(p: &mut Parser) -> Result<TypeNode, ParseError> {
 
 fn parse_type__bt_0(p: &mut Parser) -> Result<TypeNode, ParseError> {
     let start = p.peek().span.start;
-    let pipe_or_amp: Option<Token> = if p.peek_kind() matches { TK_LIT_PIPE | TK_LIT_AMP } {
-        let opt_saved = p.pos;
-        let mut opt_result: Option<Token> = null;
-        opt_bt: {
-            let pipe_or_amp = p.advance();
-            opt_result = Option::<Token>::Some(pipe_or_amp);
+    let mut opt_scan_pos: i32 = -1;
+    opt_scan: {
+        let tokens = &p.tokens;
+        let mut pos: i32 = p.pos;
+        let gp_80 = pos;
+        sg_80: {
+            pos = gp_80;
+            sg_80_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPE { break sg_80_0; }
+                pos += 1;
+                break sg_80;
+            }
+            pos = gp_80;
+            sg_80_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AMP { break sg_80_1; }
+                pos += 1;
+                break sg_80;
+            }
+            break opt_scan;
         }
-        opt_result
+        opt_scan_pos = pos;
+    }
+    let pipe_or_amp: Option<Token> = if opt_scan_pos >= 0 {
+        let pipe_or_amp = p.advance();
+        Option::<Token>::Some(pipe_or_amp)
     } else {
         null
     };
@@ -13723,19 +13740,19 @@ fn parse_type__scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_PIPE | TK_LIT_AMP } {
         let sp = pos;
-        let gp_80 = pos;
-        sg_80: {
-            pos = gp_80;
-            sg_80_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPE { break sg_80_0; }
+        let gp_81 = pos;
+        sg_81: {
+            pos = gp_81;
+            sg_81_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPE { break sg_81_0; }
                 pos += 1;
-                break sg_80;
+                break sg_81;
             }
-            pos = gp_80;
-            sg_80_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AMP { break sg_80_1; }
+            pos = gp_81;
+            sg_81_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_AMP { break sg_81_1; }
                 pos += 1;
-                break sg_80;
+                break sg_81;
             }
             pos = -1;
         }
@@ -14324,14 +14341,31 @@ fn parse_object_type(p: &mut Parser) -> Result<ObjectTypeNode, ParseError> {
 fn parse_type_body(p: &mut Parser) -> Result<TypeBodyNode, ParseError> {
     let start = p.peek().span.start;
     let type_member_list = parse_type_member_list(p)?;
-    let semicolon_or_comma: Option<Token> = if p.peek_kind() matches { TK_SemiColon | TK_LIT_COMMA } {
-        let opt_saved = p.pos;
-        let mut opt_result: Option<Token> = null;
-        opt_bt: {
-            let semicolon_or_comma = p.advance();
-            opt_result = Option::<Token>::Some(semicolon_or_comma);
+    let mut opt_scan_pos: i32 = -1;
+    opt_scan: {
+        let tokens = &p.tokens;
+        let mut pos: i32 = p.pos;
+        let gp_82 = pos;
+        sg_82: {
+            pos = gp_82;
+            sg_82_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_SemiColon { break sg_82_0; }
+                pos += 1;
+                break sg_82;
+            }
+            pos = gp_82;
+            sg_82_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_82_1; }
+                pos += 1;
+                break sg_82;
+            }
+            break opt_scan;
         }
-        opt_result
+        opt_scan_pos = pos;
+    }
+    let semicolon_or_comma: Option<Token> = if opt_scan_pos >= 0 {
+        let semicolon_or_comma = p.advance();
+        Option::<Token>::Some(semicolon_or_comma)
     } else {
         null
     };
@@ -14596,7 +14630,20 @@ fn parse_type_query_expression_bt_1(p: &mut Parser) -> Result<TypeQueryExpressio
     let start = p.peek().span.start;
     let mut identifier_name_dot_list: Array<IdentifierNameDotItem> = [];
     let mut _plus_first = true;
-    while _plus_first || p.peek_kind() matches { TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_Function_ | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral } {
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_identifier_name(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break rep_scan; }
+                pos += 1;
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
         _plus_first = false;
         let identifier_name = parse_identifier_name(p)?;
         let dot = p.expect(TK_LIT_DOT)?;
@@ -14616,25 +14663,25 @@ fn parse_type_query_expression_bt_1(p: &mut Parser) -> Result<TypeQueryExpressio
 
 fn parse_type_query_expression_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
-    sg_81_done: {
-        sg_81: {
+    sg_83_done: {
+        sg_83: {
             pos = scan_identifier_name(tokens, pos);
-            if pos < 0 { break sg_81; }
-            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_81; }
+            if pos < 0 { break sg_83; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_83; }
             pos += 1;
-            break sg_81_done;
+            break sg_83_done;
         }
         return -1;
     }
     while pos < tokens.len() && tokens[pos].kind matches { TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_Function_ | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral } {
         let sp = pos;
-        sg_82_done: {
-            sg_82: {
+        sg_84_done: {
+            sg_84: {
                 pos = scan_identifier_name(tokens, pos);
-                if pos < 0 { break sg_82; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_82; }
+                if pos < 0 { break sg_84; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break sg_84; }
                 pos += 1;
-                break sg_82_done;
+                break sg_84_done;
             }
             pos = -1;
         }
@@ -15448,10 +15495,37 @@ fn parse_namespace_name(p: &mut Parser) -> Result<NamespaceNameNode, ParseError>
     let start = p.peek().span.start;
     let identifier = parse_identifier(p)?;
     let mut dot_identifier_list: Array<DotListIdentifierItem> = [];
-    while p.peek_kind() == TK_LIT_DOT {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break rep_scan; }
+            pos += 1;
+            while pos < tokens.len() && tokens[pos].kind == TK_LIT_DOT {
+                let sp = pos;
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { pos = -1; } else { pos += 1; }
+                if pos < 0 { pos = sp; break; }
+            }
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let mut dot_list: Array<Token> = [];
         let mut _plus_first = true;
-        while _plus_first || p.peek_kind() == TK_LIT_DOT {
+        loop {
+            if !_plus_first {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { break rep_scan; }
+                    pos += 1;
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+            }
             _plus_first = false;
             let dot = p.expect(TK_LIT_DOT)?;
             dot_list.push(dot);
@@ -16572,7 +16646,18 @@ fn parse_import_module_items(p: &mut Parser) -> Result<ImportModuleItemsNode, Pa
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let mut import_alias_name_comma_list: Array<ImportAliasNameCommaItem> = [];
-    while p.peek_kind() matches { TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_Function_ | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_import_alias_name(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
+            pos += 1;
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let import_alias_name = parse_import_alias_name(p)?;
         let comma = p.expect(TK_LIT_COMMA)?;
         let import_alias_name_comma = ImportAliasNameCommaItem {
@@ -16905,7 +16990,18 @@ fn parse_export_module_items(p: &mut Parser) -> Result<ExportModuleItemsNode, Pa
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let mut export_alias_name_comma_list: Array<ExportAliasNameCommaItem> = [];
-    while p.peek_kind() matches { TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_Function_ | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Await | TK_ReadOnly | TK_Require | TK_Module | TK_NullLiteral | TK_BooleanLiteral | TK_StringLiteral } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_export_alias_name(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
+            pos += 1;
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let export_alias_name = parse_export_alias_name(p)?;
         let comma = p.expect(TK_LIT_COMMA)?;
         let export_alias_name_comma = ExportAliasNameCommaItem {
@@ -17687,12 +17783,16 @@ fn parse_var_modifier(p: &mut Parser) -> Result<VarModifierNode, ParseError> {
 fn parse_continue_statement(p: &mut Parser) -> Result<ContinueStatementNode, ParseError> {
     let start = p.peek().span.start;
     let continue_ = p.expect(TK_Continue)?;
-    if p.peek_kind() matches { TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract } {
-        let opt_saved = p.pos;
-        opt_bt: {
-            let opt_r = parse_identifier(p);
-            if let Err(_) = opt_r { p.pos = opt_saved; break opt_bt; }
-        }
+    let mut opt_scan_pos: i32 = -1;
+    opt_scan: {
+        let tokens = &p.tokens;
+        let mut pos: i32 = p.pos;
+        pos = scan_identifier(tokens, pos);
+        if pos < 0 { break opt_scan; }
+        opt_scan_pos = pos;
+    }
+    if opt_scan_pos >= 0 {
+        let identifier = parse_identifier(p)?;
     }
     let eos = parse_eos(p)?;
     return Result::<ContinueStatementNode, ParseError>::Ok(ContinueStatementNode {
@@ -17705,12 +17805,16 @@ fn parse_continue_statement(p: &mut Parser) -> Result<ContinueStatementNode, Par
 fn parse_break_statement(p: &mut Parser) -> Result<BreakStatementNode, ParseError> {
     let start = p.peek().span.start;
     let break_ = p.expect(TK_Break)?;
-    if p.peek_kind() matches { TK_Identifier | TK_Async | TK_As | TK_From | TK_Yield | TK_Of | TK_Any | TK_Number | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Never | TK_Undefined | TK_Object | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Abstract } {
-        let opt_saved = p.pos;
-        opt_bt: {
-            let opt_r = parse_identifier(p);
-            if let Err(_) = opt_r { p.pos = opt_saved; break opt_bt; }
-        }
+    let mut opt_scan_pos: i32 = -1;
+    opt_scan: {
+        let tokens = &p.tokens;
+        let mut pos: i32 = p.pos;
+        pos = scan_identifier(tokens, pos);
+        if pos < 0 { break opt_scan; }
+        opt_scan_pos = pos;
+    }
+    if opt_scan_pos >= 0 {
+        let identifier = parse_identifier(p)?;
     }
     let eos = parse_eos(p)?;
     return Result::<BreakStatementNode, ParseError>::Ok(BreakStatementNode {
@@ -18900,7 +19004,16 @@ fn parse_array_literal(p: &mut Parser) -> Result<ArrayLiteralNode, ParseError> {
 fn parse_element_list(p: &mut Parser) -> Result<ElementListNode, ParseError> {
     let start = p.peek().span.start;
     let mut comma_list: Array<Token> = [];
-    while p.peek_kind() == TK_LIT_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
+            pos += 1;
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA)?;
         comma_list.push(comma);
     }
@@ -18914,7 +19027,18 @@ fn parse_element_list(p: &mut Parser) -> Result<ElementListNode, ParseError> {
     while p.peek_kind() == TK_LIT_COMMA {
         let mut comma_list: Array<Token> = [];
         let mut _plus_first = true;
-        while _plus_first || p.peek_kind() == TK_LIT_COMMA {
+        loop {
+            if !_plus_first {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
+                    pos += 1;
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+            }
             _plus_first = false;
             let comma = p.expect(TK_LIT_COMMA)?;
             comma_list.push(comma);
@@ -18927,7 +19051,16 @@ fn parse_element_list(p: &mut Parser) -> Result<ElementListNode, ParseError> {
         comma_array_element_list.push(comma_array_element);
     }
     let mut comma_list_2: Array<Token> = [];
-    while p.peek_kind() == TK_LIT_COMMA {
+    loop {
+        let mut rep_scan_pos_2: i32 = -1;
+        rep_scan_2: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan_2; }
+            pos += 1;
+            rep_scan_pos_2 = pos;
+        }
+        if rep_scan_pos_2 < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA)?;
         comma_list_2.push(comma);
     }
@@ -20762,13 +20895,13 @@ fn parse_as_expression_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos].kind == TK_LIT_LBRACKET {
         let sp = pos;
-        sg_83_done: {
-            sg_83: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break sg_83; }
+        sg_85_done: {
+            sg_85: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { break sg_85; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break sg_83; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break sg_85; }
                 pos += 1;
-                break sg_83_done;
+                break sg_85_done;
             }
             pos = -1;
         }

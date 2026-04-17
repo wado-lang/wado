@@ -1212,7 +1212,16 @@ fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     let start = p.peek().span.start;
     let mut item_list: Array<ItemNode> = [];
-    while p.peek_kind() matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT | TK_LPAREN } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_item(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let item = parse_item(p)?;
         item_list.push(item);
     }
@@ -1301,7 +1310,16 @@ fn parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
     let mut item_list: Array<ItemNode> = [];
-    while p.peek_kind() matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT | TK_LPAREN } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_item(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let item = parse_item(p)?;
         item_list.push(item);
     }

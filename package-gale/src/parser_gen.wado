@@ -2089,6 +2089,8 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
     let inner = &rep.element;
     let mut visiting: Array<String> = [];
     let first = ctx.first_of_element(inner, &mut visiting);
+    let mut visiting_scan: Array<String> = [];
+    let scannable = ctx.is_element_scannable(inner, &mut visiting_scan);
 
     // `(items+=item)*` / `items+=item+` / `items+=item?` — the list label
     // already implies Array, so use the label name directly and push the
@@ -2099,21 +2101,46 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
             let lab_name = dedup_name(&escape_ident(&to_snake_case(&lab.name)), name_counts);
             w.line(`let mut {lab_name}: Array<{inner_info.1}> = [];`);
             if let Star = rep.kind {
-                w.begin(`while {first_check_str(&first)}`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_element(w, &lab.element, ctx, &mut nc);
-                w.line(`{lab_name}.push({inner_info.0});`);
-                w.end();
+                if scannable {
+                    w.begin("loop");
+                    let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                    w.line(`if {scan_pos_var} < 0 \{ break; \}`);
+                    let mut nc: Array<[String, i32]> = [];
+                    gen_element(w, &lab.element, ctx, &mut nc);
+                    w.line(`{lab_name}.push({inner_info.0});`);
+                    w.end();
+                } else {
+                    w.begin(`while {first_check_str(&first)}`);
+                    let mut nc: Array<[String, i32]> = [];
+                    gen_element(w, &lab.element, ctx, &mut nc);
+                    w.line(`{lab_name}.push({inner_info.0});`);
+                    w.end();
+                }
             }
             if let Plus = rep.kind {
-                let plus_flag = dedup_name(&"_plus_first", name_counts);
-                w.line(`let mut {plus_flag} = true;`);
-                w.begin(`while {plus_flag} || {first_check_str(&first)}`);
-                w.line(`{plus_flag} = false;`);
-                let mut nc: Array<[String, i32]> = [];
-                gen_element(w, &lab.element, ctx, &mut nc);
-                w.line(`{lab_name}.push({inner_info.0});`);
-                w.end();
+                if scannable {
+                    let plus_flag = dedup_name(&"_plus_first", name_counts);
+                    w.line(`let mut {plus_flag} = true;`);
+                    w.begin("loop");
+                    w.begin(`if !{plus_flag}`);
+                    let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                    w.line(`if {scan_pos_var} < 0 \{ break; \}`);
+                    w.end();
+                    w.line(`{plus_flag} = false;`);
+                    let mut nc: Array<[String, i32]> = [];
+                    gen_element(w, &lab.element, ctx, &mut nc);
+                    w.line(`{lab_name}.push({inner_info.0});`);
+                    w.end();
+                } else {
+                    let plus_flag = dedup_name(&"_plus_first", name_counts);
+                    w.line(`let mut {plus_flag} = true;`);
+                    w.begin(`while {plus_flag} || {first_check_str(&first)}`);
+                    w.line(`{plus_flag} = false;`);
+                    let mut nc: Array<[String, i32]> = [];
+                    gen_element(w, &lab.element, ctx, &mut nc);
+                    w.line(`{lab_name}.push({inner_info.0});`);
+                    w.end();
+                }
             }
             if let Optional = rep.kind {
                 w.begin(`if {first_check_str(&first)}`);
@@ -2137,33 +2164,68 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
         if let Star = rep.kind {
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
             w.line(`let mut {list_name}: Array<{field_info.1}> = [];`);
-            w.begin(`while {first_check_str(&first)}`);
-            let mut nc: Array<[String, i32]> = [];
-            if is_group_store {
-                ctx.group_counter = gc_before;
-                gen_group_store_any(w, inner, ctx, &mut nc);
+            if scannable {
+                w.begin("loop");
+                let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                w.line(`if {scan_pos_var} < 0 \{ break; \}`);
+                let mut nc: Array<[String, i32]> = [];
+                if is_group_store {
+                    ctx.group_counter = gc_before;
+                    gen_group_store_any(w, inner, ctx, &mut nc);
+                } else {
+                    gen_element(w, inner, ctx, &mut nc);
+                }
+                w.line(`{list_name}.push({field_info.0});`);
+                w.end();
             } else {
-                gen_element(w, inner, ctx, &mut nc);
+                w.begin(`while {first_check_str(&first)}`);
+                let mut nc: Array<[String, i32]> = [];
+                if is_group_store {
+                    ctx.group_counter = gc_before;
+                    gen_group_store_any(w, inner, ctx, &mut nc);
+                } else {
+                    gen_element(w, inner, ctx, &mut nc);
+                }
+                w.line(`{list_name}.push({field_info.0});`);
+                w.end();
             }
-            w.line(`{list_name}.push({field_info.0});`);
-            w.end();
         }
         if let Plus = rep.kind {
             let list_name = dedup_name(&`{field_info.0}_list`, name_counts);
-            let plus_flag = dedup_name(&"_plus_first", name_counts);
             w.line(`let mut {list_name}: Array<{field_info.1}> = [];`);
-            w.line(`let mut {plus_flag} = true;`);
-            w.begin(`while {plus_flag} || {first_check_str(&first)}`);
-            w.line(`{plus_flag} = false;`);
-            let mut nc: Array<[String, i32]> = [];
-            if is_group_store {
-                ctx.group_counter = gc_before;
-                gen_group_store_any(w, inner, ctx, &mut nc);
+            if scannable {
+                let plus_flag = dedup_name(&"_plus_first", name_counts);
+                w.line(`let mut {plus_flag} = true;`);
+                w.begin("loop");
+                w.begin(`if !{plus_flag}`);
+                let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                w.line(`if {scan_pos_var} < 0 \{ break; \}`);
+                w.end();
+                w.line(`{plus_flag} = false;`);
+                let mut nc: Array<[String, i32]> = [];
+                if is_group_store {
+                    ctx.group_counter = gc_before;
+                    gen_group_store_any(w, inner, ctx, &mut nc);
+                } else {
+                    gen_element(w, inner, ctx, &mut nc);
+                }
+                w.line(`{list_name}.push({field_info.0});`);
+                w.end();
             } else {
-                gen_element(w, inner, ctx, &mut nc);
+                let plus_flag = dedup_name(&"_plus_first", name_counts);
+                w.line(`let mut {plus_flag} = true;`);
+                w.begin(`while {plus_flag} || {first_check_str(&first)}`);
+                w.line(`{plus_flag} = false;`);
+                let mut nc: Array<[String, i32]> = [];
+                if is_group_store {
+                    ctx.group_counter = gc_before;
+                    gen_group_store_any(w, inner, ctx, &mut nc);
+                } else {
+                    gen_element(w, inner, ctx, &mut nc);
+                }
+                w.line(`{list_name}.push({field_info.0});`);
+                w.end();
             }
-            w.line(`{list_name}.push({field_info.0});`);
-            w.end();
         }
         if let Optional = rep.kind {
             let type_str = field_info.1;
@@ -2183,18 +2245,42 @@ fn gen_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, nam
         }
     } else {
         if let Star = rep.kind {
-            w.begin(`while {first_check_str(&first)}`);
-            let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, ctx, &mut nc);
-            w.end();
+            if scannable {
+                w.begin("loop");
+                let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                w.line(`if {scan_pos_var} < 0 \{ break; \}`);
+                let mut nc: Array<[String, i32]> = [];
+                gen_element(w, inner, ctx, &mut nc);
+                w.end();
+            } else {
+                w.begin(`while {first_check_str(&first)}`);
+                let mut nc: Array<[String, i32]> = [];
+                gen_element(w, inner, ctx, &mut nc);
+                w.end();
+            }
         }
         if let Plus = rep.kind {
-            gen_element(w, inner, ctx, name_counts);
-            w.begin(`while {first_check_str(&first)}`);
-            let mut nc: Array<[String, i32]> = [];
-            gen_element(w, inner, ctx, &mut nc);
-            w.end();
+            if scannable {
+                let plus_flag = dedup_name(&"_plus_first", name_counts);
+                w.line(`let mut {plus_flag} = true;`);
+                w.begin("loop");
+                w.begin(`if !{plus_flag}`);
+                let scan_pos_var = emit_rep_scan_guard(w, inner, ctx, name_counts);
+                w.line(`if {scan_pos_var} < 0 \{ break; \}`);
+                w.end();
+                w.line(`{plus_flag} = false;`);
+                let mut nc: Array<[String, i32]> = [];
+                gen_element(w, inner, ctx, &mut nc);
+                w.end();
+            } else {
+                gen_element(w, inner, ctx, name_counts);
+                w.begin(`while {first_check_str(&first)}`);
+                let mut nc: Array<[String, i32]> = [];
+                gen_element(w, inner, ctx, &mut nc);
+                w.end();
+            }
         }
+
         if let Optional = rep.kind {
             gen_optional_with_backtrack(w, inner, ctx, &first, name_counts);
         }
@@ -2587,6 +2673,55 @@ fn optional_lookahead_tokens(inner: &Element, max_depth: i32) -> Array<String> {
     return tokens;
 }
 
+/// Emit an inline scan guard for an optional's inner element.
+///
+/// Emits code of the form:
+/// ```
+/// let mut opt_scan_pos_N: i32 = -1;
+/// opt_scan_N: {
+///     let tokens = &p.tokens;
+///     let mut pos: i32 = p.pos;
+///     /* inline scan of inner; on fail: break opt_scan_N; */
+///     opt_scan_pos_N = pos;
+/// }
+/// ```
+///
+/// Returns the name of the outer pos variable (`-1` on scan failure, end-pos on success).
+/// Caller emits `if {pos_var} >= 0 { /* commit parse */ }`.
+fn emit_opt_scan_guard(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
+    return emit_scan_guard_with_prefix(w, inner, ctx, name_counts, &"opt_scan_pos", &"opt_scan");
+}
+
+/// Emit an inline scan guard for a repetition's inner element.
+/// Same shape as emit_opt_scan_guard but uses `rep_scan_*` naming.
+fn emit_rep_scan_guard(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
+    return emit_scan_guard_with_prefix(w, inner, ctx, name_counts, &"rep_scan_pos", &"rep_scan");
+}
+
+fn emit_scan_guard_with_prefix(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, pos_prefix: &String, label_prefix: &String) -> String {
+    let scan_pos_var = dedup_name(pos_prefix, name_counts);
+    let scan_label = dedup_name(label_prefix, name_counts);
+    w.line(`let mut {scan_pos_var}: i32 = -1;`);
+    w.begin(`{scan_label}:`);
+    w.line("let tokens = &p.tokens;");
+    w.line("let mut pos: i32 = p.pos;");
+    let fail = `break {scan_label};`;
+    if let Group(alts) = inner {
+        if alts.len() == 1 {
+            for let e of &alts[0].elements {
+                gen_scan_element_with_fail(w, e, ctx, &fail);
+            }
+        } else {
+            gen_scan_group(w, alts, ctx, &fail);
+        }
+    } else {
+        gen_scan_element_with_fail(w, inner, ctx, &fail);
+    }
+    w.line(`{scan_pos_var} = pos;`);
+    w.end();
+    return scan_pos_var;
+}
+
 fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, first: &Array<String>, name_counts: &mut Array<[String, i32]>) {
     if has_nested_optionals(inner) {
         if let Group(alts) = inner {
@@ -2616,6 +2751,28 @@ fn gen_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
         if let Group(alts) = inner {
             for let mut i = 0; i < alts[0].elements.len(); i += 1 {
                 gen_element(w, &alts[0].elements[i], ctx, &mut nc);
+            }
+        } else {
+            gen_element(w, inner, ctx, &mut nc);
+        }
+        w.end();
+        return;
+    }
+
+    // Scan-based guard: when the inner is fully scannable (no LR rule refs),
+    // predict with an inline scan and commit-parse unconditionally.
+    let mut visiting: Array<String> = [];
+    if ctx.is_element_scannable(inner, &mut visiting) {
+        let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
+        w.begin(`if {scan_pos_var} >= 0`);
+        let mut nc: Array<[String, i32]> = [];
+        if let Group(alts) = inner {
+            if alts.len() == 1 {
+                for let elem of alts[0].elements {
+                    gen_element(w, &elem, ctx, &mut nc);
+                }
+            } else {
+                gen_element(w, inner, ctx, &mut nc);
             }
         } else {
             gen_element(w, inner, ctx, &mut nc);
@@ -2872,6 +3029,46 @@ fn gen_absent_optional_field(w: &mut CodeWriter, elem: &Element, name_counts: &m
 ///       result
 ///   } else { null };
 fn gen_storable_optional_with_backtrack(w: &mut CodeWriter, inner: &Element, ctx: &mut GenContext, first: &Array<String>, name_counts: &mut Array<[String, i32]>, type_str: &String, opt_name: &String, field_name: &String) {
+    // Scan-based guard: when the inner is fully scannable, predict with an
+    // inline scan and commit-parse without any backtracking machinery.
+    let mut visiting: Array<String> = [];
+    if ctx.is_element_scannable(inner, &mut visiting) {
+        let scan_pos_var = emit_opt_scan_guard(w, inner, ctx, name_counts);
+        w.begin(`let {opt_name}: Option<{type_str}> = if {scan_pos_var} >= 0`);
+
+        if let Group(alts) = inner {
+            if is_single_alt_group(alts) {
+                let alt = &alts[0];
+                let mut elem_nc: Array<[String, i32]> = [];
+                let gc_start = ctx.group_counter;
+                for let elem of &alt.elements {
+                    gen_element(w, elem, ctx, &mut elem_nc);
+                }
+                let struct_type_name = single_alt_group_type_name(alt);
+                let struct_field_name = single_alt_group_field_name(alt);
+                w.line(`let {struct_field_name} = {struct_type_name} \{`);
+                w.indent();
+                ctx.group_counter = gc_start;
+                let mut assign_nc: Array<[String, i32]> = [];
+                for let elem of &alt.elements {
+                    gen_field_assignment(w, elem, &mut assign_nc, ctx);
+                }
+                w.dedent();
+                w.line("};");
+                w.line(`Option::<{type_str}>::Some({field_name})`);
+            } else {
+                let mut nc: Array<[String, i32]> = [];
+                gen_group_store_any(w, inner, ctx, &mut nc);
+                w.line(`Option::<{type_str}>::Some({field_name})`);
+            }
+        }
+
+        w.else_begin("else");
+        w.line("null");
+        w.end_with(";");
+        return;
+    }
+
     w.begin(`let {opt_name}: Option<{type_str}> = if {first_check_str(first)}`);
 
     let saved = dedup_name(&"opt_saved", name_counts);

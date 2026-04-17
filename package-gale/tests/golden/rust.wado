@@ -15478,7 +15478,16 @@ fn scan_shr(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_crate(p: &mut Parser) -> Result<CrateNode, ParseError> {
     let start = p.peek().span.start;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -15515,7 +15524,16 @@ fn parse_delim_token_tree(p: &mut Parser) -> Result<DelimTokenTreeNode, ParseErr
     if kind == TK_LPAREN {
         let lparen = p.expect(TK_LPAREN)?;
         let mut token_tree_list: Array<TokenTreeNode> = [];
-        while p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_DOLLAR | TK_LPAREN | TK_LSQUAREBRACKET | TK_LCURLYBRACE } {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_token_tree(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let token_tree = parse_token_tree(p)?;
             token_tree_list.push(token_tree);
         }
@@ -15530,7 +15548,16 @@ fn parse_delim_token_tree(p: &mut Parser) -> Result<DelimTokenTreeNode, ParseErr
     if kind == TK_LSQUAREBRACKET {
         let lsquarebracket = p.expect(TK_LSQUAREBRACKET)?;
         let mut token_tree_list: Array<TokenTreeNode> = [];
-        while p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_DOLLAR | TK_LPAREN | TK_LSQUAREBRACKET | TK_LCURLYBRACE } {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_token_tree(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let token_tree = parse_token_tree(p)?;
             token_tree_list.push(token_tree);
         }
@@ -15545,7 +15572,16 @@ fn parse_delim_token_tree(p: &mut Parser) -> Result<DelimTokenTreeNode, ParseErr
     if kind == TK_LCURLYBRACE {
         let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
         let mut token_tree_list: Array<TokenTreeNode> = [];
-        while p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_DOLLAR | TK_LPAREN | TK_LSQUAREBRACKET | TK_LCURLYBRACE } {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_token_tree(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let token_tree = parse_token_tree(p)?;
             token_tree_list.push(token_tree);
         }
@@ -15570,7 +15606,18 @@ fn parse_token_tree(p: &mut Parser) -> Result<TokenTreeNode, ParseError> {
     if kind matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_DOLLAR } {
         let mut token_tree_token_list: Array<TokenTreeTokenNode> = [];
         let mut _plus_first = true;
-        while _plus_first || p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_DOLLAR } {
+        loop {
+            if !_plus_first {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_token_tree_token(tokens, pos);
+                    if pos < 0 { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+            }
             _plus_first = false;
             let token_tree_token = parse_token_tree_token(p)?;
             token_tree_token_list.push(token_tree_token);
@@ -15675,7 +15722,16 @@ fn parse_macro_invocation_semi_bt_0(p: &mut Parser) -> Result<MacroInvocationSem
     let not = p.expect(TK_NOT)?;
     let lparen = p.expect(TK_LPAREN)?;
     let mut token_tree_list: Array<TokenTreeNode> = [];
-    while p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_DOLLAR | TK_LPAREN | TK_LSQUAREBRACKET | TK_LCURLYBRACE } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_token_tree(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let token_tree = parse_token_tree(p)?;
         token_tree_list.push(token_tree);
     }
@@ -15718,7 +15774,16 @@ fn parse_macro_invocation_semi_bt_1(p: &mut Parser) -> Result<MacroInvocationSem
     let not = p.expect(TK_NOT)?;
     let lsquarebracket = p.expect(TK_LSQUAREBRACKET)?;
     let mut token_tree_list: Array<TokenTreeNode> = [];
-    while p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_DOLLAR | TK_LPAREN | TK_LSQUAREBRACKET | TK_LCURLYBRACE } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_token_tree(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let token_tree = parse_token_tree(p)?;
         token_tree_list.push(token_tree);
     }
@@ -15761,7 +15826,16 @@ fn parse_macro_invocation_semi_bt_2(p: &mut Parser) -> Result<MacroInvocationSem
     let not = p.expect(TK_NOT)?;
     let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
     let mut token_tree_list: Array<TokenTreeNode> = [];
-    while p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_DOLLAR | TK_LPAREN | TK_LSQUAREBRACKET | TK_LCURLYBRACE } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_token_tree(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let token_tree = parse_token_tree(p)?;
         token_tree_list.push(token_tree);
     }
@@ -15937,7 +16011,18 @@ fn parse_macro_rules(p: &mut Parser) -> Result<MacroRulesNode, ParseError> {
     let start = p.peek().span.start;
     let macro_rule = parse_macro_rule(p)?;
     let mut semi_macro_rule_list: Array<SemiMacroRuleItem> = [];
-    while p.peek_kind() == TK_SEMI {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_SEMI { break rep_scan; }
+            pos += 1;
+            pos = scan_macro_rule(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let semi = p.expect(TK_SEMI)?;
         let macro_rule = parse_macro_rule(p)?;
         let semi_macro_rule = SemiMacroRuleItem {
@@ -15979,7 +16064,16 @@ fn parse_macro_matcher(p: &mut Parser) -> Result<MacroMatcherNode, ParseError> {
     if kind == TK_LPAREN {
         let lparen = p.expect(TK_LPAREN)?;
         let mut macro_match_list: Array<MacroMatchNode> = [];
-        while p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_LPAREN | TK_LSQUAREBRACKET | TK_LCURLYBRACE | TK_DOLLAR } {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_macro_match(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let macro_match = parse_macro_match(p)?;
             macro_match_list.push(macro_match);
         }
@@ -15994,7 +16088,16 @@ fn parse_macro_matcher(p: &mut Parser) -> Result<MacroMatcherNode, ParseError> {
     if kind == TK_LSQUAREBRACKET {
         let lsquarebracket = p.expect(TK_LSQUAREBRACKET)?;
         let mut macro_match_list: Array<MacroMatchNode> = [];
-        while p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_LPAREN | TK_LSQUAREBRACKET | TK_LCURLYBRACE | TK_DOLLAR } {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_macro_match(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let macro_match = parse_macro_match(p)?;
             macro_match_list.push(macro_match);
         }
@@ -16009,7 +16112,16 @@ fn parse_macro_matcher(p: &mut Parser) -> Result<MacroMatcherNode, ParseError> {
     if kind == TK_LCURLYBRACE {
         let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
         let mut macro_match_list: Array<MacroMatchNode> = [];
-        while p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_LPAREN | TK_LSQUAREBRACKET | TK_LCURLYBRACE | TK_DOLLAR } {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_macro_match(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let macro_match = parse_macro_match(p)?;
             macro_match_list.push(macro_match);
         }
@@ -16034,7 +16146,18 @@ fn parse_macro_match_bt_3(p: &mut Parser) -> Result<MacroMatchNode, ParseError> 
     let lparen = p.expect(TK_LPAREN)?;
     let mut macro_match_list: Array<MacroMatchNode> = [];
     let mut _plus_first = true;
-    while _plus_first || p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION | TK_LPAREN | TK_LSQUAREBRACKET | TK_LCURLYBRACE | TK_DOLLAR } {
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_macro_match(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
         _plus_first = false;
         let macro_match = parse_macro_match(p)?;
         macro_match_list.push(macro_match);
@@ -16144,7 +16267,18 @@ fn parse_macro_match(p: &mut Parser) -> Result<MacroMatchNode, ParseError> {
     if kind matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION } {
         let mut macro_match_token_list: Array<MacroMatchTokenNode> = [];
         let mut _plus_first = true;
-        while _plus_first || p.peek_kind() matches { TK_KW_AS | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFVALUE | TK_KW_SELFTYPE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHERE | TK_KW_WHILE | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_DYN | TK_KW_ABSTRACT | TK_KW_BECOME | TK_KW_BOX | TK_KW_DO | TK_KW_FINAL | TK_KW_MACRO | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_TYPEOF | TK_KW_UNSIZED | TK_KW_VIRTUAL | TK_KW_YIELD | TK_KW_TRY | TK_KW_UNION | TK_KW_STATICLIFETIME | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_KW_UNDERLINELIFETIME | TK_KW_DOLLARCRATE | TK_LIFETIME_OR_LABEL | TK_CHAR_LITERAL | TK_STRING_LITERAL | TK_RAW_STRING_LITERAL | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_RAW_BYTE_STRING_LITERAL | TK_INTEGER_LITERAL | TK_FLOAT_LITERAL | TK_MINUS | TK_SLASH | TK_PERCENT | TK_CARET | TK_NOT | TK_AND | TK_OR | TK_ANDAND | TK_OROR | TK_PLUSEQ | TK_MINUSEQ | TK_STAREQ | TK_SLASHEQ | TK_PERCENTEQ | TK_CARETEQ | TK_ANDEQ | TK_OREQ | TK_SHLEQ | TK_SHREQ | TK_EQ | TK_EQEQ | TK_NE | TK_GT | TK_LT | TK_GE | TK_LE | TK_AT | TK_UNDERSCORE | TK_DOT | TK_DOTDOT | TK_DOTDOTDOT | TK_DOTDOTEQ | TK_COMMA | TK_SEMI | TK_COLON | TK_PATHSEP | TK_RARROW | TK_FATARROW | TK_POUND | TK_STAR | TK_PLUS | TK_QUESTION } {
+        loop {
+            if !_plus_first {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_macro_match_token(tokens, pos);
+                    if pos < 0 { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+            }
             _plus_first = false;
             let macro_match_token = parse_macro_match_token(p)?;
             macro_match_token_list.push(macro_match_token);
@@ -16363,7 +16497,16 @@ fn parse_macro_transcriber(p: &mut Parser) -> Result<MacroTranscriberNode, Parse
 fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -16548,7 +16691,16 @@ fn parse_module(p: &mut Parser) -> Result<ModuleNode, ParseError> {
     } else if grp_kind == TK_LCURLYBRACE {
         let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
         let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-        while p.peek_kind() == TK_POUND {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_inner_attribute(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let inner_attribute = parse_inner_attribute(p)?;
             inner_attribute_list.push(inner_attribute);
         }
@@ -16765,7 +16917,18 @@ fn parse_use_tree_bt_0(p: &mut Parser) -> Result<UseTreeNode, ParseError> {
         let use_tree_item_comma: Option<UseTreeItemListCommaOptItem> = if (p.peek_kind() == TK_PATHSEP || p.peek_kind() == TK_NON_KEYWORD_IDENTIFIER || p.peek_kind() == TK_RAW_IDENTIFIER || p.peek_kind() == TK_KW_MACRORULES || p.peek_kind() == TK_KW_SUPER || p.peek_kind() == TK_KW_SELFVALUE || p.peek_kind() == TK_KW_CRATE || p.peek_kind() == TK_KW_DOLLARCRATE || p.peek_kind() == TK_STAR || p.peek_kind() == TK_LCURLYBRACE) && p.peek_at(1) == TK_COMMA && p.peek_at(2) == TK_COMMA {
             let use_tree = parse_use_tree(p)?;
             let mut comma_use_tree_list: Array<CommaUseTreeItem> = [];
-            while p.peek_kind() == TK_COMMA {
+            loop {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
+                    pos += 1;
+                    pos = scan_use_tree(tokens, pos);
+                    if pos < 0 { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
                 let comma = p.expect(TK_COMMA)?;
                 let use_tree = parse_use_tree(p)?;
                 let comma_use_tree = CommaUseTreeItem {
@@ -16804,7 +16967,18 @@ fn parse_use_tree_bt_0(p: &mut Parser) -> Result<UseTreeNode, ParseError> {
         } else if (p.peek_kind() == TK_PATHSEP || p.peek_kind() == TK_NON_KEYWORD_IDENTIFIER || p.peek_kind() == TK_RAW_IDENTIFIER || p.peek_kind() == TK_KW_MACRORULES || p.peek_kind() == TK_KW_SUPER || p.peek_kind() == TK_KW_SELFVALUE || p.peek_kind() == TK_KW_CRATE || p.peek_kind() == TK_KW_DOLLARCRATE || p.peek_kind() == TK_STAR || p.peek_kind() == TK_LCURLYBRACE) && p.peek_at(1) == TK_COMMA {
             let use_tree = parse_use_tree(p)?;
             let mut comma_use_tree_list: Array<CommaUseTreeItem> = [];
-            while p.peek_kind() == TK_COMMA {
+            loop {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
+                    pos += 1;
+                    pos = scan_use_tree(tokens, pos);
+                    if pos < 0 { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
                 let comma = p.expect(TK_COMMA)?;
                 let use_tree = parse_use_tree(p)?;
                 let comma_use_tree = CommaUseTreeItem {
@@ -17202,7 +17376,16 @@ fn parse_function_parameters(p: &mut Parser) -> Result<FunctionParametersNode, P
 fn parse_self_param(p: &mut Parser) -> Result<SelfParamNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -17288,7 +17471,16 @@ fn parse_typed_self(p: &mut Parser) -> Result<TypedSelfNode, ParseError> {
 fn parse_function_param(p: &mut Parser) -> Result<FunctionParamNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -17561,7 +17753,16 @@ fn parse_struct_fields(p: &mut Parser) -> Result<StructFieldsNode, ParseError> {
 fn parse_struct_field(p: &mut Parser) -> Result<StructFieldNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -17614,7 +17815,16 @@ fn parse_tuple_fields(p: &mut Parser) -> Result<TupleFieldsNode, ParseError> {
 fn parse_tuple_field(p: &mut Parser) -> Result<TupleFieldNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -17699,7 +17909,16 @@ fn parse_enum_items(p: &mut Parser) -> Result<EnumItemsNode, ParseError> {
 fn parse_enum_item(p: &mut Parser) -> Result<EnumItemNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -17935,7 +18154,16 @@ fn parse_trait_(p: &mut Parser) -> Result<TraitNode, ParseError> {
     };
     let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -18015,7 +18243,16 @@ fn parse_inherent_impl(p: &mut Parser) -> Result<InherentImplNode, ParseError> {
     };
     let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -18070,7 +18307,16 @@ fn parse_trait_impl(p: &mut Parser) -> Result<TraitImplNode, ParseError> {
     };
     let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -18114,7 +18360,16 @@ fn parse_extern_block(p: &mut Parser) -> Result<ExternBlockNode, ParseError> {
     };
     let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -18139,7 +18394,16 @@ fn parse_extern_block(p: &mut Parser) -> Result<ExternBlockNode, ParseError> {
 fn parse_external_item(p: &mut Parser) -> Result<ExternalItemNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -18266,7 +18530,16 @@ fn parse_generic_params(p: &mut Parser) -> Result<GenericParamsNode, ParseError>
 fn parse_generic_param(p: &mut Parser) -> Result<GenericParamNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -18506,7 +18779,16 @@ fn parse_for_lifetimes(p: &mut Parser) -> Result<ForLifetimesNode, ParseError> {
 fn parse_associated_item(p: &mut Parser) -> Result<AssociatedItemNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -18744,7 +19026,16 @@ fn parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
 fn parse_let_statement(p: &mut Parser) -> Result<LetStatementNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -18848,7 +19139,18 @@ fn parse_expression_bt_0(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
     let mut _plus_first = true;
-    while _plus_first || p.peek_kind() == TK_POUND {
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_outer_attribute(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
         _plus_first = false;
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
@@ -18920,7 +19222,16 @@ fn parse_expression_bt_32(p: &mut Parser) -> Result<ExpressionNode, ParseError> 
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -18951,7 +19262,16 @@ fn parse_expression_bt_34(p: &mut Parser) -> Result<ExpressionNode, ParseError> 
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -19176,7 +19496,16 @@ fn parse_expression_atom(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     if kind == TK_LSQUAREBRACKET {
         let lsquarebracket = p.expect(TK_LSQUAREBRACKET)?;
         let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-        while p.peek_kind() == TK_POUND {
+        loop {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.tokens;
+                let mut pos: i32 = p.pos;
+                pos = scan_inner_attribute(tokens, pos);
+                if pos < 0 { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             let inner_attribute = parse_inner_attribute(p)?;
             inner_attribute_list.push(inner_attribute);
         }
@@ -19816,7 +20145,18 @@ fn parse_expression_with_block(p: &mut Parser) -> Result<ExpressionWithBlockNode
     if kind == TK_POUND {
         let mut outer_attribute_list: Array<OuterAttributeNode> = [];
         let mut _plus_first = true;
-        while _plus_first || p.peek_kind() == TK_POUND {
+        loop {
+            if !_plus_first {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_outer_attribute(tokens, pos);
+                    if pos < 0 { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
+            }
             _plus_first = false;
             let outer_attribute = parse_outer_attribute(p)?;
             outer_attribute_list.push(outer_attribute);
@@ -19987,7 +20327,16 @@ fn parse_block_expression(p: &mut Parser) -> Result<BlockExpressionNode, ParseEr
     let start = p.peek().span.start;
     let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -20288,7 +20637,16 @@ fn parse_struct_expr_struct(p: &mut Parser) -> Result<StructExprStructNode, Pars
     let path_in_expression = parse_path_in_expression(p)?;
     let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -20377,7 +20735,16 @@ fn parse_struct_expr_fields(p: &mut Parser) -> Result<StructExprFieldsNode, Pars
 fn parse_struct_expr_field(p: &mut Parser) -> Result<StructExprFieldNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -20441,7 +20808,16 @@ fn parse_struct_expr_tuple(p: &mut Parser) -> Result<StructExprTupleNode, ParseE
     let path_in_expression = parse_path_in_expression(p)?;
     let lparen = p.expect(TK_LPAREN)?;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -20973,7 +21349,16 @@ fn parse_closure_parameters(p: &mut Parser) -> Result<ClosureParametersNode, Par
 fn parse_closure_param(p: &mut Parser) -> Result<ClosureParamNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -21212,7 +21597,16 @@ fn parse_match_expression(p: &mut Parser) -> Result<MatchExpressionNode, ParseEr
     let expression = parse_expression(p)?;
     let lcurlybrace = p.expect(TK_LCURLYBRACE)?;
     let mut inner_attribute_list: Array<InnerAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_inner_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let inner_attribute = parse_inner_attribute(p)?;
         inner_attribute_list.push(inner_attribute);
     }
@@ -21321,7 +21715,16 @@ fn parse_match_arm_expression(p: &mut Parser) -> Result<MatchArmExpressionNode, 
 fn parse_match_arm(p: &mut Parser) -> Result<MatchArmNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -22095,7 +22498,16 @@ fn parse_struct_pattern_fields(p: &mut Parser) -> Result<StructPatternFieldsNode
 fn parse_struct_pattern_field(p: &mut Parser) -> Result<StructPatternFieldNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -22164,7 +22576,16 @@ fn parse_struct_pattern_field(p: &mut Parser) -> Result<StructPatternFieldNode, 
 fn parse_struct_pattern_et_cetera(p: &mut Parser) -> Result<StructPatternEtCeteraNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -22972,38 +23393,64 @@ fn parse_maybe_named_function_parameters(p: &mut Parser) -> Result<MaybeNamedFun
 fn parse_maybe_named_param(p: &mut Parser) -> Result<MaybeNamedParamNode, ParseError> {
     let start = p.peek().span.start;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
-    let item_colon: Option<ItemColonItem> = if p.peek_kind() matches { TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES | TK_UNDERSCORE } {
-        let opt_saved = p.pos;
-        let mut opt_result: Option<ItemColonItem> = null;
-        opt_bt: {
-            let mut group_0_inner: Option<MaybeNamedParamGroup0> = null;
-            let grp_kind = p.peek_kind();
-            if grp_kind matches { TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES } {
-                let identifier = parse_identifier(p)?;
-                group_0_inner = Option::<MaybeNamedParamGroup0>::Some(MaybeNamedParamGroup0::Alt0(MaybeNamedParamGroup0Alt0 {
-                    identifier,
-                }));
-            } else if grp_kind == TK_UNDERSCORE {
-                let underscore = p.expect(TK_UNDERSCORE)?;
-                group_0_inner = Option::<MaybeNamedParamGroup0>::Some(MaybeNamedParamGroup0::Alt1(MaybeNamedParamGroup0Alt1 {
-                    underscore,
-                }));
+    let mut opt_scan_pos: i32 = -1;
+    opt_scan: {
+        let tokens = &p.tokens;
+        let mut pos: i32 = p.pos;
+        let gp_123 = pos;
+        sg_123: {
+            pos = gp_123;
+            sg_123_0: {
+                pos = scan_identifier(tokens, pos);
+                if pos < 0 { break sg_123_0; }
+                break sg_123;
             }
-            let group_0 = group_0_inner;
-            let _bt_r = p.expect(TK_COLON);
-            if let Err(_) = _bt_r { p.pos = opt_saved; break opt_bt; }
-            let colon = _bt_r.unwrap();
-            let item_colon = ItemColonItem {
-                group_0,
-                colon,
-            };
-            opt_result = Option::<ItemColonItem>::Some(item_colon);
+            pos = gp_123;
+            sg_123_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_UNDERSCORE { break sg_123_1; }
+                pos += 1;
+                break sg_123;
+            }
+            break opt_scan;
         }
-        opt_result
+        if pos >= tokens.len() || tokens[pos].kind != TK_COLON { break opt_scan; }
+        pos += 1;
+        opt_scan_pos = pos;
+    }
+    let item_colon: Option<ItemColonItem> = if opt_scan_pos >= 0 {
+        let mut group_0_inner: Option<MaybeNamedParamGroup0> = null;
+        let grp_kind = p.peek_kind();
+        if grp_kind matches { TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_KW_MACRORULES } {
+            let identifier = parse_identifier(p)?;
+            group_0_inner = Option::<MaybeNamedParamGroup0>::Some(MaybeNamedParamGroup0::Alt0(MaybeNamedParamGroup0Alt0 {
+                identifier,
+            }));
+        } else if grp_kind == TK_UNDERSCORE {
+            let underscore = p.expect(TK_UNDERSCORE)?;
+            group_0_inner = Option::<MaybeNamedParamGroup0>::Some(MaybeNamedParamGroup0::Alt1(MaybeNamedParamGroup0Alt1 {
+                underscore,
+            }));
+        }
+        let group_0 = group_0_inner;
+        let colon = p.expect(TK_COLON)?;
+        let item_colon = ItemColonItem {
+            group_0,
+            colon,
+        };
+        Option::<ItemColonItem>::Some(item_colon)
     } else {
         null
     };
@@ -23031,7 +23478,16 @@ fn parse_maybe_named_function_parameters_variadic(p: &mut Parser) -> Result<Mayb
     let maybe_named_param = parse_maybe_named_param(p)?;
     let comma = p.expect(TK_COMMA)?;
     let mut outer_attribute_list: Array<OuterAttributeNode> = [];
-    while p.peek_kind() == TK_POUND {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_outer_attribute(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let outer_attribute = parse_outer_attribute(p)?;
         outer_attribute_list.push(outer_attribute);
     }
@@ -23219,7 +23675,18 @@ fn parse_trait_bound(p: &mut Parser) -> Result<TraitBoundNode, ParseError> {
 fn parse_lifetime_bounds(p: &mut Parser) -> Result<LifetimeBoundsNode, ParseError> {
     let start = p.peek().span.start;
     let mut lifetime_plus_list: Array<LifetimePlusItem> = [];
-    while p.peek_kind() matches { TK_LIFETIME_OR_LABEL | TK_KW_STATICLIFETIME | TK_KW_UNDERLINELIFETIME } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_lifetime(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            if pos >= tokens.len() || tokens[pos].kind != TK_PLUS { break rep_scan; }
+            pos += 1;
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let lifetime = parse_lifetime(p)?;
         let plus = p.expect(TK_PLUS)?;
         let lifetime_plus = LifetimePlusItem {
@@ -23282,7 +23749,18 @@ fn parse_simple_path(p: &mut Parser) -> Result<SimplePathNode, ParseError> {
     };
     let simple_path_segment = parse_simple_path_segment(p)?;
     let mut pathsep_simple_path_segment_list: Array<PathsepSimplePathSegmentItem> = [];
-    while p.peek_kind() == TK_PATHSEP {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_PATHSEP { break rep_scan; }
+            pos += 1;
+            pos = scan_simple_path_segment(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let pathsep = p.expect(TK_PATHSEP)?;
         let simple_path_segment = parse_simple_path_segment(p)?;
         let pathsep_simple_path_segment = PathsepSimplePathSegmentItem {
@@ -23763,7 +24241,18 @@ fn parse_generic_args_lifetimes(p: &mut Parser) -> Result<GenericArgsLifetimesNo
     let start = p.peek().span.start;
     let lifetime = parse_lifetime(p)?;
     let mut comma_lifetime_list: Array<CommaLifetimeItem> = [];
-    while p.peek_kind() == TK_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break rep_scan; }
+            pos += 1;
+            pos = scan_lifetime(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
         let lifetime = parse_lifetime(p)?;
         let comma_lifetime = CommaLifetimeItem {
