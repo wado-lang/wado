@@ -509,6 +509,24 @@ pub struct TypeTable {
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
+    /// Canonical map: declared-type symbol → `TypeId`.
+    ///
+    /// Populated by the resolver whenever it creates a decl-backed type
+    /// (`make_struct`, `make_enum`, `make_variant`, `make_flags`,
+    /// `make_newtype`, `make_resource`) via [`TypeTable::register_decl_type`].
+    /// Lets LSP-style queries translate a [`SymbolKey`] — the canonical
+    /// identity of a declaration — to the `TypeId` it represents without
+    /// searching by name.
+    ///
+    /// Monomorphized instances are NOT entered here; the base generic's key
+    /// still resolves to the base `TypeId`. Use `symbol_of_type` to walk from
+    /// any decl-backed `TypeId` (including monomorphizations) back to the
+    /// declaring symbol.
+    type_by_symbol: IndexMap<crate::symbol::SymbolKey, TypeId>,
+    /// Inverse of `type_by_symbol` plus monomorphization tracking: every
+    /// decl-backed `TypeId` — including monomorphized instances —
+    /// maps to the [`SymbolKey`] of its declaring AST node.
+    symbol_by_type: IndexMap<TypeId, crate::symbol::SymbolKey>,
 }
 
 impl Default for TypeTable {
@@ -566,6 +584,8 @@ impl TypeTable {
             redirects: IndexMap::default(),
             newtype_to_base_name: IndexMap::default(),
             struct_name_index: IndexMap::default(),
+            type_by_symbol: IndexMap::default(),
+            symbol_by_type: IndexMap::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -688,6 +708,87 @@ impl TypeTable {
             .copied()
     }
 
+    /// Register the `(SymbolKey -> TypeId)` mapping for a declared type.
+    ///
+    /// Called by the resolver right after constructing the `TypeId` that
+    /// represents a user-declared type (struct, enum, variant, flags,
+    /// newtype, resource). Both directions of the map are populated:
+    /// forward `type_by_symbol[key] = type_id` and inverse
+    /// `symbol_by_type[type_id] = key`.
+    pub fn register_decl_type(&mut self, key: crate::symbol::SymbolKey, type_id: TypeId) {
+        self.type_by_symbol.insert(key.clone(), type_id);
+        self.symbol_by_type.insert(type_id, key);
+    }
+
+    /// Register a monomorphized `TypeId` as pointing at its generic base symbol.
+    ///
+    /// Monomorphized types do not have their own `AstId` — they are synthesized
+    /// from a generic declaration. Registering `(mono_type_id -> base_key)` on
+    /// `symbol_by_type` lets LSP queries walk any decl-backed `TypeId` back to
+    /// the declaring AST node. The forward `type_by_symbol` index is NOT
+    /// updated: that keeps the base generic's `TypeId` as the canonical entry.
+    pub fn register_mono_type(&mut self, base_key: crate::symbol::SymbolKey, type_id: TypeId) {
+        self.symbol_by_type.insert(type_id, base_key);
+    }
+
+    /// Canonical `TypeId` for a declared-type [`SymbolKey`].
+    ///
+    /// Returns `None` if the symbol is not a decl-backed type, or if the
+    /// resolver has not yet created a `TypeId` for it.
+    pub fn type_of_symbol(&self, key: &crate::symbol::SymbolKey) -> Option<TypeId> {
+        self.type_by_symbol.get(key).copied()
+    }
+
+    /// Walk a decl-backed `TypeId` (including monomorphizations) back to the
+    /// declaring [`SymbolKey`].
+    pub fn symbol_of_type(&self, type_id: TypeId) -> Option<&crate::symbol::SymbolKey> {
+        self.symbol_by_type.get(&type_id)
+    }
+
+    /// Find the `TypeId` of a user-declared type (struct, enum, variant, flags,
+    /// newtype, resource) by its source-level name and owning module. Returns
+    /// only non-monomorphized declarations — monomorphized generic instances
+    /// are skipped because they do not correspond to an `AstId` of their own.
+    pub fn find_decl_type_by_name(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<TypeId> {
+        if let Some(id) = self.find_struct_by_name(name, module_source) {
+            return Some(id);
+        }
+        for (&type_id, resolved) in &self.types {
+            let matches = match resolved {
+                ResolvedType::Enum {
+                    name: n,
+                    module_source: ms,
+                }
+                | ResolvedType::Resource {
+                    name: n,
+                    module_source: ms,
+                }
+                | ResolvedType::Flags {
+                    name: n,
+                    module_source: ms,
+                }
+                | ResolvedType::Variant {
+                    name: n,
+                    module_source: ms,
+                }
+                | ResolvedType::Newtype {
+                    name: n,
+                    module_source: ms,
+                    ..
+                } => n == name && ms == module_source,
+                _ => false,
+            };
+            if matches {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
     /// Find the `module_source` where a type with the given name is defined.
     /// Searches `struct_name_index` first, then falls back to scanning for
     /// `GenericInstance` types (for generic struct base names like "`IterFilter`").
@@ -715,9 +816,12 @@ impl TypeTable {
     ///
     /// This physically removes entries from the backing `IndexMap`s so that
     /// subsequent iterations (e.g. WIR type registration) no longer see them.
-    /// The intern map and struct name index are rebuilt to stay consistent.
+    /// The intern map and secondary indices are rebuilt to stay consistent.
     pub fn retain(&mut self, keep: &IndexSet<TypeId>) {
         self.types.retain(|id, _| keep.contains(id));
+        // Retain SymbolKey indices to surviving TypeIds only.
+        self.symbol_by_type.retain(|id, _| keep.contains(id));
+        self.type_by_symbol.retain(|_, id| keep.contains(id));
         // Rebuild intern map from the surviving entries.
         self.intern_map.clear();
         self.struct_name_index.clear();

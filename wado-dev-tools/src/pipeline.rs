@@ -12,12 +12,20 @@ use crate::template::Template;
 
 const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
+/// Default worker count: half of the logical CPUs (min 1). Each worker owns a
+/// 16 MB stack and runs the full compiler, so saturating every core is wasteful
+/// and starves the supervising shell on constrained sandboxes.
+fn default_num_workers() -> usize {
+    let logical = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(4);
+    (logical / 2).max(1)
+}
+
 /// Per-worker slot tracking which file is currently being compiled.
 static ACTIVE_FILES: std::sync::LazyLock<Vec<std::sync::Mutex<Option<(String, Instant)>>>> =
     std::sync::LazyLock::new(|| {
-        let n = std::thread::available_parallelism()
-            .map(std::num::NonZero::get)
-            .unwrap_or(4);
+        let n = default_num_workers();
         (0..n).map(|_| std::sync::Mutex::new(None)).collect()
     });
 
@@ -107,9 +115,7 @@ pub fn run_pipeline(
     #[cfg(unix)]
     install_signal_handlers();
 
-    let num_workers = std::thread::available_parallelism()
-        .map(std::num::NonZero::get)
-        .unwrap_or(4);
+    let num_workers = default_num_workers();
 
     // Force ACTIVE_FILES initialization with correct worker count
     let _ = &*ACTIVE_FILES;

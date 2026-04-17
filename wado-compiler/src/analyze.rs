@@ -11,7 +11,7 @@ use crate::logger::{Bail, Logger};
 use crate::name::{ModuleSource, resolve_import, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
-    ResourceSymbol, StructSymbol, Symbol, SymbolId, SymbolKind, SymbolTable, TraitSymbol,
+    ResourceSymbol, StructSymbol, Symbol, SymbolKey, SymbolKind, SymbolTable, TraitSymbol,
     VariantSymbol, WorldExportSymbol, WorldImportSymbol, WorldSymbol,
 };
 use crate::token::Span;
@@ -205,7 +205,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     });
 
                     self.symbols
-                        .define(&func.name, kind, module_source, Some(func.span));
+                        .define(module_source, func.id, &func.name, kind, Some(func.span));
                 }
 
                 Item::Effect(effect) => {
@@ -217,8 +217,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cm_import: effect_cm_import,
                     });
 
-                    self.symbols
-                        .define(&effect.name, kind, module_source, Some(effect.span));
+                    self.symbols.define(
+                        module_source,
+                        effect.id,
+                        &effect.name,
+                        kind,
+                        Some(effect.span),
+                    );
 
                     // Also register each effect method as a function symbol
                     // with the fully qualified name "{Effect}.{method}"
@@ -237,9 +242,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         // Register as "{Effect}::{method}"
                         let qualified_name = format!("{}::{}", effect.name, method.name);
                         self.symbols.define(
+                            module_source,
+                            method.id,
                             &qualified_name,
                             func_kind,
-                            module_source,
                             Some(method.span),
                         );
                     }
@@ -251,9 +257,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     });
 
                     self.symbols.define(
+                        module_source,
+                        struct_decl.id,
                         &struct_decl.name,
                         kind,
-                        module_source,
                         Some(struct_decl.span),
                     );
                 }
@@ -263,8 +270,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cases: enum_decl.cases.iter().map(|c| c.name.clone()).collect(),
                     });
 
-                    self.symbols
-                        .define(&enum_decl.name, kind, module_source, Some(enum_decl.span));
+                    self.symbols.define(
+                        module_source,
+                        enum_decl.id,
+                        &enum_decl.name,
+                        kind,
+                        Some(enum_decl.span),
+                    );
                 }
 
                 Item::Variant(variant_decl) => {
@@ -273,9 +285,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     });
 
                     self.symbols.define(
+                        module_source,
+                        variant_decl.id,
                         &variant_decl.name,
                         kind,
-                        module_source,
                         Some(variant_decl.span),
                     );
                 }
@@ -291,9 +304,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     });
 
                     self.symbols.define(
+                        module_source,
+                        trait_decl.id,
                         &trait_decl.name,
                         kind,
-                        module_source,
                         Some(trait_decl.span),
                     );
                 }
@@ -303,8 +317,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         aliased_type: "unknown".to_string(), // TODO: store actual type
                     });
 
-                    self.symbols
-                        .define(&newtype.name, kind, module_source, Some(newtype.span));
+                    self.symbols.define(
+                        module_source,
+                        newtype.id,
+                        &newtype.name,
+                        kind,
+                        Some(newtype.span),
+                    );
                 }
 
                 Item::Resource(resource) => {
@@ -313,8 +332,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cm_import: resource.attrs.first().and_then(|a| a.cm_import.clone()),
                     });
 
-                    self.symbols
-                        .define(&resource.name, kind, module_source, Some(resource.span));
+                    self.symbols.define(
+                        module_source,
+                        resource.id,
+                        &resource.name,
+                        kind,
+                        Some(resource.span),
+                    );
 
                     // Register each resource method as a function symbol
                     // with the fully qualified name "{Resource}::{method}"
@@ -332,9 +356,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         // Register as "{Resource}::{method}"
                         let qualified_name = format!("{}::{}", resource.name, method.name);
                         self.symbols.define(
+                            module_source,
+                            method.id,
                             &qualified_name,
                             func_kind,
-                            module_source,
                             Some(method.span),
                         );
                     }
@@ -362,8 +387,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             .collect(),
                     });
 
-                    self.symbols
-                        .define(&world.name, kind, module_source, Some(world.span));
+                    self.symbols.define(
+                        module_source,
+                        world.id,
+                        &world.name,
+                        kind,
+                        Some(world.span),
+                    );
                 }
 
                 Item::Use(_) => {
@@ -380,9 +410,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     });
 
                     self.symbols.define(
+                        module_source,
+                        flags_decl.id,
                         &flags_decl.name,
                         kind,
-                        module_source,
                         Some(flags_decl.span),
                     );
                 }
@@ -397,8 +428,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         is_mut: global.mutable,
                     });
 
-                    self.symbols
-                        .define(&global.name, kind, module_source, Some(global.span));
+                    self.symbols.define(
+                        module_source,
+                        global.id,
+                        &global.name,
+                        kind,
+                        Some(global.span),
+                    );
                 }
 
                 Item::TupleTypeDecl(_) => {
@@ -616,9 +652,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             if let Some(symbol) =
                                 self.symbols.lookup_in_module(&module_source, name)
                             {
-                                let symbol_id = symbol.id;
+                                let key = symbol.defined_at.clone();
                                 let import_name = alias.as_ref().unwrap_or(name);
-                                self.symbols.register_import(import_name, symbol_id);
+                                self.symbols.register_import(import_name, key);
                             } else {
                                 self.logger.error(AnalyzeError::ImportNotFound {
                                     module_source: module_source.clone(),
@@ -636,10 +672,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 if let Some(symbol) =
                                     self.symbols.lookup_in_module(&module_source, &lookup_name)
                                 {
-                                    let symbol_id = symbol.id;
+                                    let key = symbol.defined_at.clone();
                                     let import_name =
                                         func_item.alias.as_ref().unwrap_or(&func_item.name);
-                                    self.symbols.register_import(import_name, symbol_id);
+                                    self.symbols.register_import(import_name, key);
                                 } else {
                                     self.logger.error(AnalyzeError::ImportNotFound {
                                         module_source: module_source.clone(),
@@ -656,14 +692,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         UseItem::Namespace { .. } => {
                             // Namespace import: register all pub symbols from source module
                             // The desugar phase has already stripped ns:: prefixes from idents
-                            let symbols: Vec<(String, SymbolId)> = self
+                            let symbols: Vec<(String, SymbolKey)> = self
                                 .symbols
                                 .get_module_symbols(&module_source)
                                 .into_iter()
-                                .map(|s| (s.name.clone(), s.id))
+                                .map(|s| (s.name.clone(), s.defined_at.clone()))
                                 .collect();
-                            for (sym_name, sym_id) in symbols {
-                                self.symbols.register_import(&sym_name, sym_id);
+                            for (sym_name, sym_key) in symbols {
+                                self.symbols.register_import(&sym_name, sym_key);
                             }
                         }
                     }

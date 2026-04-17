@@ -317,6 +317,153 @@ fn lsp_did_close_clears_diagnostics() {
 }
 
 #[test]
+fn lsp_definition_same_file() {
+    let mut session = LspSession::start();
+
+    session.send_request("initialize", json!({ "capabilities": {} }));
+    let _init_resp = session.read_message();
+    session.send_notification("initialized", json!({}));
+
+    let source =
+        "fn helper() -> i32 {\n    return 42;\n}\n\nexport fn run() {\n    let _ = helper();\n}\n";
+    session.send_notification(
+        "textDocument/didOpen",
+        json!({
+            "textDocument": {
+                "uri": "file:///tmp/lsp_def_same.wado",
+                "languageId": "wado",
+                "version": 1,
+                "text": source,
+            }
+        }),
+    );
+    let _diag = session.read_message();
+
+    let id = session.send_request(
+        "textDocument/definition",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_def_same.wado" },
+            "position": { "line": 5, "character": 13 }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+
+    let result = &resp["result"];
+    assert!(
+        !result.is_null(),
+        "definition should be found, got: {result}"
+    );
+    assert_eq!(result["uri"], "file:///tmp/lsp_def_same.wado");
+    assert_eq!(result["range"]["start"]["line"], 0);
+    assert_eq!(result["range"]["start"]["character"], 3);
+
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_definition_cross_file() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let helper_path = tmpdir.path().join("helper.wado");
+    let main_path = tmpdir.path().join("main.wado");
+    std::fs::write(
+        &helper_path,
+        "pub fn helper() -> i32 {\n    return 42;\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &main_path,
+        "use { helper } from \"./helper.wado\";\n\nexport fn run() {\n    let _ = helper();\n}\n",
+    )
+    .unwrap();
+
+    let helper_uri = format!("file://{}", helper_path.display());
+    let main_uri = format!("file://{}", main_path.display());
+
+    let mut session = LspSession::start();
+    session.send_request("initialize", json!({ "capabilities": {} }));
+    let _init_resp = session.read_message();
+    session.send_notification("initialized", json!({}));
+
+    let source = std::fs::read_to_string(&main_path).unwrap();
+    session.send_notification(
+        "textDocument/didOpen",
+        json!({
+            "textDocument": {
+                "uri": main_uri,
+                "languageId": "wado",
+                "version": 1,
+                "text": source,
+            }
+        }),
+    );
+    let _diag = session.read_message();
+
+    let id = session.send_request(
+        "textDocument/definition",
+        json!({
+            "textDocument": { "uri": main_uri },
+            "position": { "line": 3, "character": 13 }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+
+    let result = &resp["result"];
+    assert!(
+        !result.is_null(),
+        "cross-file definition should be found, got: {result}"
+    );
+    assert_eq!(result["uri"], helper_uri);
+    assert_eq!(result["range"]["start"]["line"], 0);
+
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_hover_function_signature() {
+    let mut session = LspSession::start();
+
+    session.send_request("initialize", json!({ "capabilities": {} }));
+    let _init_resp = session.read_message();
+    session.send_notification("initialized", json!({}));
+
+    let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n\nexport fn run() {\n    let _ = add(1, 2);\n}\n";
+    session.send_notification(
+        "textDocument/didOpen",
+        json!({
+            "textDocument": {
+                "uri": "file:///tmp/lsp_hover.wado",
+                "languageId": "wado",
+                "version": 1,
+                "text": source,
+            }
+        }),
+    );
+    let _diag = session.read_message();
+
+    let id = session.send_request(
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_hover.wado" },
+            "position": { "line": 5, "character": 13 }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+
+    let result = &resp["result"];
+    assert!(!result.is_null(), "hover should be found, got: {result}");
+    let contents = result["contents"]["value"].as_str().unwrap();
+    assert!(
+        contents.contains("fn add(a: i32, b: i32) -> i32"),
+        "hover should show signature, got: {contents}"
+    );
+
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
 fn lsp_unknown_method_returns_error() {
     let mut session = LspSession::start();
 

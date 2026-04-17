@@ -11,7 +11,7 @@ use crate::token::Span;
 
 /// Struct field info: module source and field definitions
 #[derive(Clone)]
-pub(super) struct StructFieldInfo {
+pub(crate) struct StructFieldInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
@@ -36,7 +36,7 @@ pub(super) struct VariantCaseData {
 
 /// Variant info: module source, type parameters, and cases
 #[derive(Clone)]
-pub(super) struct VariantInfo {
+pub(crate) struct VariantInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
@@ -57,7 +57,7 @@ pub(super) struct EnumCaseData {
 
 /// Enum info: module source and cases (enums have no type parameters or payloads)
 #[derive(Clone)]
-pub(super) struct EnumInfo {
+pub(crate) struct EnumInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
@@ -93,7 +93,7 @@ pub(super) struct FlagsMemberData {
 
 /// Flags type info: newtype `TypeId` and members
 #[derive(Clone)]
-pub(super) struct FlagsInfo {
+pub(crate) struct FlagsInfo {
     pub(super) type_id: TypeId,
     pub(super) members: Vec<FlagsMemberData>,
 }
@@ -103,7 +103,7 @@ pub(super) struct FlagsInfo {
 /// Keep it for when wasi:sockets registration is re-enabled.
 #[allow(dead_code)]
 #[derive(Clone)]
-pub(super) struct ResourceInfo {
+pub(crate) struct ResourceInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
@@ -113,7 +113,7 @@ pub(super) struct ResourceInfo {
 
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
 #[derive(Clone)]
-pub(super) struct GenericNewtypeInfo {
+pub(crate) struct GenericNewtypeInfo {
     pub(super) module_source: ModuleSource,
     pub(super) type_params: Vec<String>,
     pub(super) base_type_ast: ast::Type,

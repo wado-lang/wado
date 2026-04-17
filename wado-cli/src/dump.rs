@@ -450,7 +450,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     if opts.show_symbols {
         println!("=== Symbol Table ===");
         for symbol in result.symbols.all_symbols() {
-            let module_path = symbol.module_source.to_string();
+            let module_path = symbol.module_source().to_string();
             let kind_str = match &symbol.kind {
                 wado_compiler::symbol::SymbolKind::Function(f) => {
                     let effects = if f.effects.is_empty() {
@@ -536,8 +536,8 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 }
             };
             println!(
-                "  [{}] {} :: {} = {}",
-                symbol.id.0, module_path, symbol.name, kind_str
+                "  [ast#{}] {} :: {} = {}",
+                symbol.defined_at.ast_id.0, module_path, symbol.name, kind_str
             );
         }
         println!();

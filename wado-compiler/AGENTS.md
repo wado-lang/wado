@@ -117,51 +117,31 @@ Tests for standard library logic live alongside implementations in `lib/`. These
 
 This crate must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules in production code. CI enforces this with a wasm32 build check.
 
-## Refactoring Plan: LSP-Friendly Compiler Architecture
+## LSP-Friendly Compiler Architecture
 
-### Motivation
+Pipeline:
 
-The current pipeline (`parse → bind → desugar → load → analyze → resolve → TIR → monomorphize → lower → optimize → codegen`) treats **resolve as AST → TIR lowering**. This is fine for batch compilation but hostile to LSP:
+```
+parse → bind → desugar → load → analyze → annotate → lower_tir → monomorphize → lower → optimize → codegen
+```
 
-- TIR is a transformed tree, losing 1:1 correspondence with source AST. `position → type` / `position → symbol` queries have no direct path.
-- Symbols lack source-file/URI info, so cross-file navigation cannot be assembled.
+- `annotate` is AST-preserving type resolution; returns `Annotated` (see `src/annotate.rs`). Used by both LSP and batch compilation.
+- `lower_tir` emits TIR from `&Annotated`; used only by batch compilation.
+- `(ModuleSource, AstId)` (`SymbolKey`) is the canonical identity for every semantic entity that originates in source. There is no `AstId::SYNTHETIC`; builtins live in `ModuleSource::Builtin` with their own dense ID range.
+- AST is the source of truth: `annotate` attaches facts, never mutates or moves AST nodes. Decl-backed `ResolvedType` variants and `Symbol` both carry `defined_at: SymbolKey`.
+- The `codegen.rs` principle still holds: codegen consumes `Package` without knowledge of earlier phases.
 
-### Design Context
+Entry points:
 
-Coding agents write most of the code, so keystroke-level incremental analysis is low priority. However humans read code extensively, so full navigation and comprehension features (hover, go-to-definition, find-references, semantic tokens) are essential. Occasional human editing means some completion support is desirable but not critical.
+- `wado_compiler::annotate(source, host, filename) -> Annotated` — LSP path; skips `monomorphize` / `lower` / `optimize` / `codegen`.
+- `wado_compiler::compile_with_options(...)` — batch path; calls `annotate_loaded` + `lower_tir` + `Package::new`, so registries build once.
 
-This means a simple **"recompute on file change, cache per-document"** model is sufficient: parse + bind + resolve runs once per `didChange`/`didSave` (typically tens of milliseconds for a single file), and results are cached until the next change. No demand-driven incremental framework (salsa) is needed at this scale.
+`wado-lsp` caches `Annotated` per document and invalidates on `didChange` / `didClose`. `Engine::{definition, hover, diagnostics}` all go through `annotate` — cross-file navigation falls out for free because `Annotated` already contains every transitively-loaded module.
 
-### Target Architecture (remaining work)
+### Next
 
-- ✅ **Phase 1 (done):** Introduce stable `AstId` (module-local, parse-stable) and `AstPtr` (position-resolvable). Parser assigns dense, deterministic IDs to symbol-bearing AST nodes; `Module::ast_id_at(line, column)` provides innermost-containing-node lookup.
-- Rework `SymbolTable` / `TypeTable` to be keyed by `AstId` rather than consumed during TIR construction.
-- Split `resolve` into: (a) _annotate_ AST with `SymbolTable`/`TypeTable` (no lowering), (b) _lower_ to TIR as a later phase.
-- Expose a query API: `position → AstId`, `AstId → Symbol`, `AstId → ResolvedType`, `Symbol → defining AstId + source URI`.
-- Add a **lightweight analysis entry point** (parse + bind + resolve, no monomorphize/lower/codegen) for LSP use.
-- Add source URI to `Symbol` so cross-file definition results can be returned.
-- LSP caches analysis results per document and invalidates on change.
+1. **Extend `AstId` coverage to `Expr` / `Stmt` / `Type` nodes.** Required for expression-level hover — today hover only answers for symbol-bearing items.
+2. **Build out LSP features on the query API:** completion, rename, references, call-hierarchy. The infrastructure is in place; these are additive.
+3. **(Deferred)** Salsa / demand-driven incrementalization, only if per-file reanalysis becomes a bottleneck. The architecture is designed to be wrappable in salsa queries with minimal restructuring; not planned.
 
-### Phase 1 follow-up notes
-
-Follow-up PRs should cover:
-
-- `SymbolTable`/`TypeTable` → AstId-keyed storage.
-- `resolve` split into _annotate_ (AST-preserving) and _lower_ (AST→TIR).
-- Extend `AstId` coverage to `Expr`, `Stmt`, `Type` when TypeTable refactor lands.
-- LSP-side caching layer that consumes `Module::ast_id_at` for hover/go-to-def.
-
-### Future: Incremental Analysis (salsa)
-
-If the project grows to hundreds of files and per-file reanalysis becomes a bottleneck, the architecture above is designed to be wrappable in salsa queries with minimal restructuring. This is not planned for the foreseeable future.
-
-### Principles
-
-- **AST is the source of truth.** Semantic info is attached, not substituted.
-- **Every semantic entity points back to source.** `Symbol`, `ResolvedType`, TIR nodes carry `AstId` (and transitively `Span` + URI).
-- **The `codegen.rs` principle still holds.** Codegen consumes TIR without knowledge of earlier phases; what changes is how and when TIR is produced.
-
-### Scope Boundaries
-
-- This plan does **not** change the language, `Package` format, or codegen output.
-- Batch compilation (`wado compile`) continues to work by driving the query chain end-to-end.
+Out of scope for this track: language changes, `Package` format changes, codegen output changes.

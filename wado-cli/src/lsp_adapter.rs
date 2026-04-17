@@ -146,22 +146,23 @@ pub fn diagnostics_to_json(diagnostics: &[Diagnostic]) -> Value {
     )
 }
 
+/// Build a silent filesystem host rooted at the directory containing `uri`.
+pub fn host_for_uri(uri: &str) -> FilesystemCompilerHost {
+    let filename = uri.strip_prefix("file://").unwrap_or(uri);
+    let base_path = std::path::Path::new(filename)
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    FilesystemCompilerHost::silent(base_path)
+}
+
 /// Publish diagnostics for a document.
 pub async fn publish_diagnostics<W: AsyncWrite + Unpin>(
     engine: &wado_lsp::Engine,
     uri: &str,
     writer: &mut W,
 ) -> Result<(), String> {
-    let filename = if let Some(path) = uri.strip_prefix("file://") {
-        path
-    } else {
-        uri
-    };
-    let base_path = std::path::Path::new(filename)
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
-    let host = FilesystemCompilerHost::silent(base_path);
+    let host = host_for_uri(uri);
 
     let diagnostics = engine.diagnostics(uri, &host).await;
 

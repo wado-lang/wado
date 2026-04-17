@@ -194,7 +194,7 @@ mod tests {
         let mut registry = WorldRegistry::new();
 
         let world = WorldDecl {
-            id: crate::ast::AstId::SYNTHETIC,
+            id: crate::ast::AstId(0),
             name: "Command".to_string(),
             is_pub: false,
             attrs: vec![Attribute {

@@ -202,42 +202,42 @@ variant core:prelude/types.wado//Option<FieldSizePayload> {  // TypeId(32)
     None,
 }
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(33)
-    Some(i32),
-    None,
-}
-
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(34)
-    discriminant: i32,
-    payload_0: i32,
-}
-
-variant core:prelude/types.wado//Result<Response,ErrorCode> {  // TypeId(35)
+variant core:prelude/types.wado//Result<Response,ErrorCode> {  // TypeId(33)
     Ok(i32),
     Err(ref "wasi:http/types.wado//ErrorCode"),
 }
 
-struct core:prelude/types.wado//Result<Response,ErrorCode>::Ok {  // TypeId(36)
+struct core:prelude/types.wado//Result<Response,ErrorCode>::Ok {  // TypeId(34)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<Response,ErrorCode>::Err {  // TypeId(37)
+struct core:prelude/types.wado//Result<Response,ErrorCode>::Err {  // TypeId(35)
     discriminant: i32,
     payload_0: ref "wasi:http/types.wado//ErrorCode",
 }
 
-variant core:prelude/types.wado//Result<unit,unit> {  // TypeId(38)
+variant core:prelude/types.wado//Result<unit,unit> {  // TypeId(36)
     Ok,
     Err,
 }
 
-variant core:prelude/types.wado//Option<Stream<u8>> {  // TypeId(39)
+variant core:prelude/types.wado//Option<Stream<u8>> {  // TypeId(37)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<Stream<u8>>::Some {  // TypeId(40)
+struct core:prelude/types.wado//Option<Stream<u8>>::Some {  // TypeId(38)
+    discriminant: i32,
+    payload_0: i32,
+}
+
+variant core:prelude/types.wado//Option<RequestOptions> {  // TypeId(39)
+    Some(i32),
+    None,
+}
+
+struct core:prelude/types.wado//Option<RequestOptions>::Some {  // TypeId(40)
     discriminant: i32,
     payload_0: i32,
 }
@@ -292,7 +292,7 @@ type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(64)
 
 type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(65)
 
-type "functype//wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<i32>") -> [i32, i32];  // TypeId(66)
+type "functype//wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<RequestOptions>") -> [i32, i32];  // TypeId(66)
 
 type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(67)
 
@@ -461,7 +461,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-with-body.wado/handle"() {
     trailers_tx = builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64);
     let __sroa___pattern_temp_1_0: i32;
     let __sroa___pattern_temp_1_1: i32;
-    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = "wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future, struct.new "core:prelude/types.wado//Option<i32>" { 1 });
+    multivalue_bind [__sroa___pattern_temp_1_0, __sroa___pattern_temp_1_1] = "wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, trailers_future, struct.new "core:prelude/types.wado//Option<RequestOptions>" { 1 });
     out_req = __sroa___pattern_temp_1_0;
     drop("wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__Request_set_scheme"(out_req, struct.new "wasi:http/types.wado//Scheme" { 0 }));
     drop("wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__Request_set_authority"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("localhost"), used: 9 }));
@@ -807,10 +807,10 @@ fn "wado-compiler/tests/fixtures/http-client-send-with-body.wado/__cm_binding__R
     if ref.test "core:prelude/types.wado//Option<Stream<u8>>::Some"(contents) {
         __contents_inner0 = ref.cast "core:prelude/types.wado//Option<Stream<u8>>::Some"(contents).payload_0;
     }
-    __options_disc = ref.test "core:prelude/types.wado//Option<i32>::Some"(options);
+    __options_disc = ref.test "core:prelude/types.wado//Option<RequestOptions>::Some"(options);
     __options_inner0 = 0;
-    if ref.test "core:prelude/types.wado//Option<i32>::Some"(options) {
-        __options_inner0 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(options).payload_0;
+    if ref.test "core:prelude/types.wado//Option<RequestOptions>::Some"(options) {
+        __options_inner0 = ref.cast "core:prelude/types.wado//Option<RequestOptions>::Some"(options).payload_0;
     }
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Request::new"(headers, __contents_disc, __contents_inner0, trailers, __options_disc, __options_inner0, __outptr);

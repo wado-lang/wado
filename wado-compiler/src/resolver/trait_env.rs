@@ -43,7 +43,7 @@ pub(super) type ResourceStaticMethodIndex =
 /// Contains pre-built indices for fast lookup of trait implementations,
 /// trait declarations, and blanket impls. Built once before resolution
 /// begins and shared (via `Arc`) across all module resolvers.
-pub(super) struct TraitEnv {
+pub(crate) struct TraitEnv {
     /// Type name → impl blocks that implement traits for that type.
     pub(super) impl_index: TraitImplIndex,
     /// Trait name → trait declaration location.
@@ -564,7 +564,7 @@ mod tests {
 
     fn type_param(name: &str) -> GenericParam {
         GenericParam {
-            id: crate::ast::AstId::SYNTHETIC,
+            id: crate::ast::AstId(0),
             name: name.to_string(),
             name_span: dummy_span(),
             is_effect: false,
@@ -590,7 +590,7 @@ mod tests {
 
     fn impl_block(type_params: Vec<GenericParam>, trait_type: Type, self_type: Type) -> ImplBlock {
         ImplBlock {
-            id: crate::ast::AstId::SYNTHETIC,
+            id: crate::ast::AstId(0),
             type_params,
             trait_type: Some(trait_type),
             ty: self_type,
