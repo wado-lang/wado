@@ -61,7 +61,7 @@ pub use name::ModuleSource;
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
-pub use resolver::{Resolver, TypeError, resolve_to_project};
+pub use resolver::{Resolver, TypeError};
 pub use token::Span;
 
 use std::cell::RefCell;
@@ -256,33 +256,36 @@ fn compile_after_load<H: CompilerHost>(
     logger: &Logger<'_, H>,
     filename: Option<String>,
 ) -> Result<(Vec<u8>, ast::Module, Option<wir::WirPackage>), Bail> {
-    // === Phase 2: Analyze all modules ===
-    let symbols = {
-        let _span = logger.span("analyze");
-        let mut analyzer = Analyzer::new(logger);
-        analyzer.analyze_loaded_modules(
-            &load_result.modules,
-            &load_result.entry_module_source,
-            load_result.implicit_modules.clone(),
-        )?;
-        analyzer.into_symbols()
-    };
-
     let module_name = filename.unwrap_or_else(|| "module".to_string());
+    let implicit_modules = load_result.implicit_modules.clone();
+    let included_files = load_result.included_files.clone();
+    let entry_ast = load_result.entry_ast.clone();
 
-    // === Phase 6: Resolve all modules to Package ===
-    let package = {
-        let _span = logger.span("resolve");
-        resolve_to_project(
-            symbols,
-            &load_result.modules,
-            load_result.entry_module_source.clone(),
-            load_result.implicit_modules.clone(),
-            module_name,
-            logger,
-            &load_result.included_files,
-        )?
-    };
+    // === Phases 2 + 6a: Analyze + Annotate ===
+    // `annotate` performs analyze and the type-resolution half of the old
+    // `resolve` phase, producing a reusable `Annotated` value.
+    let annotated = annotate::annotate_loaded(load_result, logger)?;
+
+    // === Phase 6b: Lower AST to TIR ===
+    let tir_modules = annotate::lower_tir(&annotated, logger, &included_files)?;
+
+    let annotate::Annotated {
+        entry_module_source,
+        symbols,
+        state,
+        ..
+    } = annotated;
+
+    let package = Package::new(
+        entry_module_source,
+        tir_modules,
+        symbols,
+        implicit_modules,
+        module_name,
+        state.wasi_registry,
+        state.world_registry,
+        state.builtin_registry,
+    );
 
     // Apply options to package (must be before synthesis)
     let mut package = package;
@@ -426,7 +429,7 @@ fn compile_after_load<H: CompilerHost>(
     // Return the original (non-desugared) entry AST for tooling
     Ok((
         wasm,
-        load_result.entry_ast,
+        entry_ast,
         if options.retain_wir {
             Some(wir_package)
         } else {

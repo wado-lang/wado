@@ -18,8 +18,9 @@ use crate::loader;
 use crate::logger::{Bail, Logger};
 use crate::name::ModuleSource;
 use crate::resolver::Resolver;
+use crate::resolver::orchestration::AnnotateState;
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::{ResolvedType, TirModule, TypeTable};
 use crate::token::Span;
 
 /// A ready-to-query analysis result.
@@ -27,13 +28,17 @@ use crate::token::Span;
 /// `Annotated` owns every piece of semantic state produced by the analysis
 /// pipeline. The AST modules are preserved verbatim (so positions,
 /// [`AstId`]s, and spans resolve against the same tree the parser saw).
-/// [`SymbolTable`] and [`TypeTable`] are owned (no shared `Rc<RefCell<…>>`),
-/// so the value is freely cloneable and freely borrowable by LSP queries.
+/// [`SymbolTable`] is owned; [`TypeTable`] is exposed as an immutable
+/// snapshot taken at the end of the annotate phase. LSP queries read the
+/// snapshot. The lowering pipeline consumes the shared `state` field to
+/// continue interning types into the same table without invalidating the
+/// snapshot.
 pub struct Annotated {
     pub entry_module_source: ModuleSource,
     pub modules: IndexMap<ModuleSource, Module>,
     pub symbols: SymbolTable,
     pub types: TypeTable,
+    pub(crate) state: AnnotateState,
 }
 
 /// A definition location, assembled from a [`SymbolKey`].
@@ -239,7 +244,19 @@ pub async fn annotate<H: CompilerHost>(
     if let Some(f) = filename {
         logger.set_file(f);
     }
+    annotate_with_logger(source, host, filename, &logger).await
+}
 
+/// Internal variant of [`annotate`] that reuses an existing [`Logger`].
+///
+/// `compile_with_options` uses this to run annotate + lower under a single
+/// logger session so diagnostics stay contextualized.
+pub(crate) async fn annotate_with_logger<H: CompilerHost>(
+    source: &str,
+    host: &H,
+    filename: Option<&str>,
+    logger: &Logger<'_, H>,
+) -> Result<Annotated, Bail> {
     let load_result = {
         let module_loader = loader::ModuleLoader::new(host, LogLevel::default());
         module_loader.load_all(source, filename).await.map_err(|e| {
@@ -248,9 +265,19 @@ pub async fn annotate<H: CompilerHost>(
         })?
     };
 
+    annotate_loaded(load_result, logger)
+}
+
+/// Run analyze + resolve on a pre-loaded module set and return the resulting
+/// [`Annotated`]. Used by `compile_with_options` which loads modules once and
+/// also needs to inspect the entry AST for `#![TODO]` detection.
+pub(crate) fn annotate_loaded<H: CompilerHost>(
+    load_result: loader::LoadResult,
+    logger: &Logger<'_, H>,
+) -> Result<Annotated, Bail> {
     let symbols = {
         let _span = logger.span("analyze");
-        let mut analyzer = Analyzer::new(&logger);
+        let mut analyzer = Analyzer::new(logger);
         analyzer.analyze_loaded_modules(
             &load_result.modules,
             &load_result.entry_module_source,
@@ -259,29 +286,50 @@ pub async fn annotate<H: CompilerHost>(
         analyzer.into_symbols()
     };
 
-    let tir_modules = {
-        let _span = logger.span("resolve");
-        Resolver::resolve_all_modules(
+    let state = {
+        let _span = logger.span("resolve/annotate");
+        Resolver::annotate_modules(
             &symbols,
             &load_result.modules,
-            load_result.entry_module_source.clone(),
-            &logger,
-            &load_result.included_files,
+            &load_result.entry_module_source,
+            logger,
         )?
     };
 
-    // TIR modules share a single Rc<RefCell<TypeTable>>. Clone its contents
-    // out so `Annotated` owns the table directly — no interior mutability.
-    let types = tir_modules
-        .values()
-        .next()
-        .map(|m| m.type_table.borrow().clone())
-        .unwrap_or_else(TypeTable::new);
+    // Take an immutable snapshot of the type table at the end of annotate.
+    // LSP queries read this snapshot; lowering continues to intern into the
+    // shared `Rc<RefCell<TypeTable>>` held by `state.type_table`.
+    let types = state.type_table.borrow().clone();
 
     Ok(Annotated {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
         symbols,
         types,
+        state,
     })
+}
+
+/// Lower an [`Annotated`] snapshot to TIR modules.
+///
+/// Reads `annotated.state` to resolve every item in every module. New types
+/// created during lowering (anonymous structs, monomorphic instances) are
+/// interned into the shared [`TypeTable`] behind `state.type_table`; the
+/// public `annotated.types` snapshot is NOT updated because callers that
+/// drive `lower_tir` (e.g. `compile_with_options`) no longer read the
+/// snapshot after this point.
+pub(crate) fn lower_tir<H: CompilerHost>(
+    annotated: &Annotated,
+    logger: &Logger<'_, H>,
+    included_files: &IndexMap<[String; 2], Vec<u8>>,
+) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
+    let _span = logger.span("resolve/lower_tir");
+    Resolver::lower_tir_from_state(
+        &annotated.state,
+        &annotated.symbols,
+        &annotated.modules,
+        annotated.entry_module_source.clone(),
+        logger,
+        included_files,
+    )
 }

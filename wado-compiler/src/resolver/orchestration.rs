@@ -1,7 +1,23 @@
 //! Multi-module resolution orchestration.
 //!
-//! This module handles resolving all modules in dependency order,
-//! including topological sorting and cross-module type collection.
+//! Resolution runs in two phases:
+//!
+//! - [`Resolver::annotate_modules`] collects decl-level type information
+//!   (struct field maps, variant cases, flags, newtypes, resource methods)
+//!   and interns every declaration in the shared [`TypeTable`]. It also
+//!   populates [`TypeTable::type_by_symbol`]/[`TypeTable::symbol_by_type`]
+//!   so LSP queries can resolve a [`SymbolKey`] to a decl-backed type
+//!   without running TIR lowering. The output is an [`AnnotateState`] that
+//!   both `lower_tir` and the LSP consume.
+//! - [`Resolver::lower_tir_from_state`] reads that state and produces one
+//!   [`TirModule`] per source module. It does not mutate the annotate
+//!   output; all new types created during lowering (anonymous structs,
+//!   monomorphic instances) are written through the shared
+//!   `Rc<RefCell<TypeTable>>`.
+//!
+//! This split keeps the annotate phase self-contained and cheap enough to
+//! run on every `didChange` while reusing its results for the full
+//! compilation pipeline.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -18,14 +34,48 @@ use crate::logger::{Bail, Logger};
 use crate::name::{self as name, ModuleSource};
 use crate::symbol::SymbolTable;
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
+use crate::world_registry::WorldRegistry;
 
 use super::Resolver;
+use super::trait_env::TraitEnv;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ModuleTypeMaps,
     ResourceInfo, StructFieldInfo, TypeError, VariantCaseData, VariantInfo,
 };
 
+/// Analysis state produced by [`Resolver::annotate_modules`] and consumed by
+/// [`Resolver::lower_tir_from_state`].
+///
+/// All expensive maps are stored behind `Rc` so the state is cheap to share
+/// between LSP queries and the lowering pipeline without cloning the
+/// underlying data. The [`TypeTable`] itself is behind `Rc<RefCell<…>>`
+/// because lowering interns additional types (anonymous structs,
+/// monomorphized instances) into the same table.
+pub(crate) struct AnnotateState {
+    pub(crate) type_table: Rc<RefCell<TypeTable>>,
+    pub(crate) trait_env: Arc<TraitEnv>,
+    pub(crate) sorted_sources: Vec<ModuleSource>,
+    pub(crate) all_newtypes: Rc<IndexMap<ModuleSource, IndexMap<String, TypeId>>>,
+    pub(crate) all_generic_newtypes:
+        Rc<IndexMap<ModuleSource, IndexMap<String, GenericNewtypeInfo>>>,
+    pub(crate) all_struct_fields: Rc<IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>>,
+    pub(crate) all_variant_cases: Rc<IndexMap<ModuleSource, IndexMap<String, VariantInfo>>>,
+    pub(crate) all_enum_cases: Rc<IndexMap<ModuleSource, IndexMap<String, EnumInfo>>>,
+    pub(crate) all_flags_cases: Rc<IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>>,
+    pub(crate) all_resource_types: Rc<IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>>,
+    pub(crate) wasi_registry: &'static WasiRegistry,
+    pub(crate) world_registry: &'static WorldRegistry,
+    pub(crate) builtin_registry: BuiltinRegistry,
+    pub(crate) global_known_type_names: IndexSet<String>,
+    pub(crate) all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
+}
+
 impl<'a, H: CompilerHost> Resolver<'a, H> {
+    /// Run the full resolve pipeline: annotate, then lower to TIR.
+    ///
+    /// This is a thin wrapper over [`Resolver::annotate_modules`] +
+    /// [`Resolver::lower_tir_from_state`]. Callers that want access to the
+    /// annotate output (e.g. LSP) should call the two phases separately.
     pub(crate) fn resolve_all_modules(
         symbols: &'a SymbolTable,
         modules: &'a IndexMap<ModuleSource, Module>,
@@ -33,8 +83,27 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         logger: &'a Logger<'a, H>,
         included_files: &'a IndexMap<[String; 2], Vec<u8>>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
-        let mut result = IndexMap::default();
+        let state = Self::annotate_modules(symbols, modules, &entry_module_source, logger)?;
+        Self::lower_tir_from_state(
+            &state,
+            symbols,
+            modules,
+            entry_module_source,
+            logger,
+            included_files,
+        )
+    }
 
+    /// Annotate phase: collect decl-level type information and intern every
+    /// declaration in the shared [`TypeTable`]. Produces an [`AnnotateState`]
+    /// that downstream phases (lower_tir, LSP queries) consume read-mostly
+    /// via `Rc`.
+    pub(crate) fn annotate_modules(
+        symbols: &'a SymbolTable,
+        modules: &'a IndexMap<ModuleSource, Module>,
+        entry_module_source: &ModuleSource,
+        logger: &'a Logger<'a, H>,
+    ) -> Result<AnnotateState, Bail> {
         // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
         let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> =
@@ -181,7 +250,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             let (imported_type_sources, import_original_names) = Self::build_imported_type_sources(
                 module,
                 module_source,
-                Some(&entry_module_source),
+                Some(entry_module_source),
             );
 
             // Build module-specific flat maps for resolving types in this module
@@ -460,7 +529,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let sorted_sources =
             Self::topological_sort_modules(modules, &all_struct_fields, &type_table.borrow());
 
-        let (wasi_registry, _) = {
+        let (wasi_registry, world_registry) = {
             let _span = logger.span("resolve/wasi_registry");
             WasiRegistry::build_from_stdlib()
         };
@@ -559,9 +628,56 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .map(|(src, module)| (src.clone(), Self::build_func_index(&module.items)))
             .collect();
 
-        // Second pass: resolve each module with per-module function_return_types and imports
+        // Intern every declaration in the TypeTable so `find_decl_type_by_name`
+        // (used by `register_symbol_key_type_indices` below) resolves for every
+        // symbol, including types that aren't referenced as a field anywhere.
+        // Without this, decl-only types (e.g., a standalone `struct Unused {}`)
+        // would only appear in the table after TIR lowering — too late for the
+        // annotate phase to index them by `SymbolKey`.
+        Self::intern_all_decl_types(modules, &all_struct_fields, &all_resource_types, &type_table);
+
+        // Populate `TypeTable::type_by_symbol` / `symbol_by_type` so LSP queries
+        // can resolve a `SymbolKey` to a decl-backed type without running the
+        // lower phase.
+        Self::register_symbol_key_type_indices(symbols, &type_table);
+
+        Ok(AnnotateState {
+            type_table,
+            trait_env,
+            sorted_sources,
+            all_newtypes,
+            all_generic_newtypes,
+            all_struct_fields,
+            all_variant_cases,
+            all_enum_cases,
+            all_flags_cases,
+            all_resource_types,
+            wasi_registry,
+            world_registry,
+            builtin_registry,
+            global_known_type_names,
+            all_module_func_indices,
+        })
+    }
+
+    /// Lower phase: emit one [`TirModule`] per source module using the state
+    /// produced by [`Resolver::annotate_modules`]. Errors are collected in the
+    /// logger; the function returns [`Bail`] if any module failed.
+    pub(crate) fn lower_tir_from_state(
+        state: &AnnotateState,
+        symbols: &'a SymbolTable,
+        modules: &'a IndexMap<ModuleSource, Module>,
+        entry_module_source: ModuleSource,
+        logger: &'a Logger<'a, H>,
+        included_files: &'a IndexMap<[String; 2], Vec<u8>>,
+    ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
+        let mut result = IndexMap::default();
+
+        // Per-module resolution: build each TirModule using the shared type
+        // table and the annotate-phase decl maps. Errors are emitted to the
+        // logger; we keep going so one broken module doesn't mask others.
         let _span = logger.span("resolve/modules");
-        for module_source in &sorted_sources {
+        for module_source in &state.sorted_sources {
             let module = modules.get(module_source).expect("module should exist");
 
             // Build imported type sources and module-specific flat maps for this module
@@ -571,43 +687,43 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 Some(&entry_module_source),
             );
             let newtypes = Self::build_module_map(
-                &all_newtypes,
+                &state.all_newtypes,
                 module_source,
                 &imported_type_sources,
                 &import_original_names,
             );
             let generic_newtype_defs = Self::build_module_map(
-                &all_generic_newtypes,
+                &state.all_generic_newtypes,
                 module_source,
                 &imported_type_sources,
                 &import_original_names,
             );
             let struct_fields = Self::build_module_map(
-                &all_struct_fields,
+                &state.all_struct_fields,
                 module_source,
                 &imported_type_sources,
                 &import_original_names,
             );
             let variant_cases = Self::build_module_map(
-                &all_variant_cases,
+                &state.all_variant_cases,
                 module_source,
                 &imported_type_sources,
                 &import_original_names,
             );
             let enum_cases = Self::build_module_map(
-                &all_enum_cases,
+                &state.all_enum_cases,
                 module_source,
                 &imported_type_sources,
                 &import_original_names,
             );
             let flags_cases = Self::build_module_map(
-                &all_flags_cases,
+                &state.all_flags_cases,
                 module_source,
                 &imported_type_sources,
                 &import_original_names,
             );
             let resource_types = Self::build_module_map(
-                &all_resource_types,
+                &state.all_resource_types,
                 module_source,
                 &imported_type_sources,
                 &import_original_names,
@@ -621,7 +737,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     let return_type = if let Some(ret_ty) = &func.return_type {
                         Self::resolve_type_static(
                             ret_ty,
-                            &mut type_table.borrow_mut(),
+                            &mut state.type_table.borrow_mut(),
                             &newtypes,
                             &struct_fields,
                             &resource_types,
@@ -680,7 +796,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
 
             let mut resolver = Resolver {
-                type_table: Rc::clone(&type_table),
+                type_table: Rc::clone(&state.type_table),
                 symbols,
                 loaded_modules: modules,
                 newtypes,
@@ -690,12 +806,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 enum_cases,
                 flags_cases,
                 resource_types,
-                all_newtypes: Rc::clone(&all_newtypes),
-                all_struct_fields: Rc::clone(&all_struct_fields),
-                all_variant_cases: Rc::clone(&all_variant_cases),
-                all_enum_cases: Rc::clone(&all_enum_cases),
-                all_flags_cases: Rc::clone(&all_flags_cases),
-                all_resource_types: Rc::clone(&all_resource_types),
+                all_newtypes: Rc::clone(&state.all_newtypes),
+                all_struct_fields: Rc::clone(&state.all_struct_fields),
+                all_variant_cases: Rc::clone(&state.all_variant_cases),
+                all_enum_cases: Rc::clone(&state.all_enum_cases),
+                all_flags_cases: Rc::clone(&state.all_flags_cases),
+                all_resource_types: Rc::clone(&state.all_resource_types),
                 function_return_types,
                 imported_functions,
                 namespace_imports,
@@ -712,21 +828,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 generic_function_resolved_return_types: IndexMap::default(),
                 generic_method_params: IndexMap::default(),
                 generic_method_resolved_param_types: IndexMap::default(),
-                wasi_registry,
-                builtin_registry: &builtin_registry,
+                wasi_registry: state.wasi_registry,
+                builtin_registry: &state.builtin_registry,
                 current_module_globals: IndexMap::default(),
                 imported_globals: IndexMap::default(),
                 associated_constants: IndexMap::default(),
                 module_type_maps_cache: IndexMap::default(),
-                trait_env: Arc::clone(&trait_env),
+                trait_env: Arc::clone(&state.trait_env),
                 included_files,
-                known_type_names_cache: global_known_type_names.clone(),
+                known_type_names_cache: state.global_known_type_names.clone(),
                 indexing_trait_cache: IndexMap::default(),
                 trait_check_stack: RefCell::new(Vec::new()),
                 method_info_cache: IndexMap::default(),
                 pending_anonymous_structs: Vec::new(),
                 current_module_func_index: IndexMap::default(), // Built in resolve_module
-                loaded_module_func_indices: all_module_func_indices.clone(),
+                loaded_module_func_indices: state.all_module_func_indices.clone(),
             };
             // known_type_names_cache is pre-computed globally; no per-module rebuild needed
 
@@ -741,10 +857,62 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
-        Self::register_symbol_key_type_indices(symbols, &type_table);
-
         drop(_span);
         logger.ok_or_bail(result)
+    }
+
+    /// Intern every declaration (struct/enum/variant/resource) in the type
+    /// table so that `find_decl_type_by_name` returns a `TypeId` for every
+    /// declared symbol. Flags and newtypes are already interned during the
+    /// annotate second sub-pass, so this covers only the remaining four kinds.
+    ///
+    /// Generic structs with type parameters use the mangled monomorphic form
+    /// at each usage site; the base decl is interned here with the canonical
+    /// name so `register_symbol_key_type_indices` can resolve the owning
+    /// symbol. Monomorphizations created during lowering are separate
+    /// `TypeId`s and do not collide with this base entry.
+    fn intern_all_decl_types(
+        modules: &IndexMap<ModuleSource, Module>,
+        all_struct_fields: &IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
+        all_resource_types: &IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>,
+        type_table: &Rc<RefCell<TypeTable>>,
+    ) {
+        for (module_source, module) in modules {
+            let mut tt = type_table.borrow_mut();
+            for item in &module.items {
+                match item {
+                    Item::Struct(struct_decl) => {
+                        // Resolve via struct_fields so the canonical name/module
+                        // from `StructFieldInfo` wins over anything else.
+                        let (name, ms) = all_struct_fields
+                            .get(module_source)
+                            .and_then(|m| m.get(&struct_decl.name))
+                            .map(|info| (info.name.clone(), info.module_source.clone()))
+                            .unwrap_or_else(|| {
+                                (struct_decl.name.clone(), module_source.clone())
+                            });
+                        tt.make_struct(name, ms);
+                    }
+                    Item::Enum(enum_decl) => {
+                        tt.make_enum(enum_decl.name.clone(), module_source.clone());
+                    }
+                    Item::Variant(variant_decl) => {
+                        tt.make_variant(variant_decl.name.clone(), module_source.clone());
+                    }
+                    Item::Resource(resource_decl) => {
+                        let (name, ms) = all_resource_types
+                            .get(module_source)
+                            .and_then(|m| m.get(&resource_decl.name))
+                            .map(|info| (info.name.clone(), info.module_source.clone()))
+                            .unwrap_or_else(|| {
+                                (resource_decl.name.clone(), module_source.clone())
+                            });
+                        tt.make_resource(name, ms);
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 
     /// Populate `TypeTable::type_by_symbol` / `symbol_by_type` by walking every

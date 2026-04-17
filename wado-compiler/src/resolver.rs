@@ -18,7 +18,7 @@ mod method_call;
 mod method_lookup;
 mod module;
 mod operators;
-mod orchestration;
+pub(crate) mod orchestration;
 mod stmt;
 mod template;
 mod trait_env;
@@ -40,7 +40,6 @@ use crate::compiler_host::CompilerHost;
 use crate::component_model::WasiRegistry;
 use crate::logger::{Bail, Logger};
 use crate::name::{self as name, MethodName, ModuleSource};
-use crate::package::Package;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TirNewtype, TypeId,
@@ -809,42 +808,3 @@ pub fn resolve_module<H: CompilerHost>(
     resolver.resolve_module(module, module_source)
 }
 
-/// Resolve all modules and return a Package ready for lowering.
-///
-/// This is the main entry point for the resolve phase. It resolves all modules
-/// to TIR and packages them into a Package struct.
-pub fn resolve_to_project<H: CompilerHost>(
-    symbols: SymbolTable,
-    modules: &IndexMap<ModuleSource, Module>,
-    entry_module_source: ModuleSource,
-    implicit_modules: IndexSet<ModuleSource>,
-    module_name: String,
-    logger: &Logger<H>,
-    included_files: &IndexMap<[String; 2], Vec<u8>>,
-) -> Result<Package, Bail> {
-    let tir_modules = Resolver::resolve_all_modules(
-        &symbols,
-        modules,
-        entry_module_source.clone(),
-        logger,
-        included_files,
-    )?;
-
-    let (wasi_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
-
-    // Build builtin registry (uses a temporary type table for type resolution)
-    let temp_type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
-    let builtin_registry =
-        crate::builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
-
-    Ok(Package::new(
-        entry_module_source,
-        tir_modules,
-        symbols,
-        implicit_modules,
-        module_name,
-        wasi_registry,
-        world_registry,
-        builtin_registry,
-    ))
-}

@@ -43,7 +43,7 @@ pub(super) type ResourceStaticMethodIndex =
 /// Contains pre-built indices for fast lookup of trait implementations,
 /// trait declarations, and blanket impls. Built once before resolution
 /// begins and shared (via `Arc`) across all module resolvers.
-pub(super) struct TraitEnv {
+pub(crate) struct TraitEnv {
     /// Type name → impl blocks that implement traits for that type.
     pub(super) impl_index: TraitImplIndex,
     /// Trait name → trait declaration location.
