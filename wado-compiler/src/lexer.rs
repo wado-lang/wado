@@ -390,7 +390,14 @@ impl<'a> Lexer<'a> {
 
         Ok(Token::new(
             kind,
-            Span::with_end_line(start, self.pos, start_line, start_column, self.line),
+            Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
         ))
     }
 
@@ -534,7 +541,14 @@ impl<'a> Lexer<'a> {
         Comment {
             text,
             kind,
-            span: Span::new(start, self.pos, start_line, start_column),
+            span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
         }
     }
 
@@ -552,7 +566,14 @@ impl<'a> Lexer<'a> {
                 None => {
                     return Err(LexError {
                         message: "unterminated block comment".to_string(),
-                        span: Span::new(start, self.pos, start_line, start_column),
+                        span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
                     });
                 }
                 Some((_, '*')) => {
@@ -564,7 +585,14 @@ impl<'a> Lexer<'a> {
                         return Ok(Comment {
                             text,
                             kind: CommentKind::Block,
-                            span: Span::new(start, self.pos, start_line, start_column),
+                            span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
                         });
                     }
                 }
@@ -752,7 +780,14 @@ impl<'a> Lexer<'a> {
             if !matches!(self.peek_char(), Some('0'..='9')) {
                 return Err(LexError {
                     message: "expected digit after exponent".to_string(),
-                    span: Span::new(start, self.pos, start_line, start_column),
+                    span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
                 });
             }
             while let Some((_, ch)) = self.peek() {
@@ -789,7 +824,14 @@ impl<'a> Lexer<'a> {
         if self.pos == digit_start {
             return Err(LexError {
                 message: "expected hex digit after 0x".to_string(),
-                span: Span::new(start, self.pos, start_line, start_column),
+                span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
             });
         }
 
@@ -817,7 +859,14 @@ impl<'a> Lexer<'a> {
         if self.pos == digit_start {
             return Err(LexError {
                 message: "expected binary digit after 0b".to_string(),
-                span: Span::new(start, self.pos, start_line, start_column),
+                span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
             });
         }
 
@@ -845,7 +894,14 @@ impl<'a> Lexer<'a> {
         if self.pos == digit_start {
             return Err(LexError {
                 message: "expected octal digit after 0o".to_string(),
-                span: Span::new(start, self.pos, start_line, start_column),
+                span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
             });
         }
 
@@ -867,7 +923,14 @@ impl<'a> Lexer<'a> {
                 None => {
                     return Err(LexError {
                         message: "unterminated string literal".to_string(),
-                        span: Span::new(start, self.pos, start_line, start_column),
+                        span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
                     });
                 }
                 Some((_, '"')) => {
@@ -937,7 +1000,14 @@ impl<'a> Lexer<'a> {
                 None => {
                     return Err(LexError {
                         message: "unterminated template string".to_string(),
-                        span: Span::new(start, self.pos, start_line, start_column),
+                        span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
                     });
                 }
                 Some((_, '\\')) => {
@@ -1032,7 +1102,14 @@ impl<'a> Lexer<'a> {
             let Some((_, ch)) = self.peek() else {
                 return Err(LexError {
                     message: "unterminated template string".to_string(),
-                    span: Span::new(start, self.pos, start_line, start_column),
+                    span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
                 });
             };
             self.advance();
@@ -1088,13 +1165,27 @@ impl<'a> Lexer<'a> {
             None => {
                 return Err(LexError {
                     message: "unterminated character literal".to_string(),
-                    span: Span::new(start, self.pos, start_line, start_column),
+                    span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
                 });
             }
             Some((_, '\'')) => {
                 return Err(LexError {
                     message: "empty character literal".to_string(),
-                    span: Span::new(start, self.pos, start_line, start_column),
+                    span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
                 });
             }
             Some((_, '\\')) => {
@@ -1111,7 +1202,14 @@ impl<'a> Lexer<'a> {
         if self.peek_char() != Some('\'') {
             return Err(LexError {
                 message: "unterminated character literal".to_string(),
-                span: Span::new(start, self.pos, start_line, start_column),
+                span: Span::with_end(
+                start,
+                self.pos,
+                start_line,
+                start_column,
+                self.line,
+                self.column,
+            ),
             });
         }
         self.advance(); // consume closing '

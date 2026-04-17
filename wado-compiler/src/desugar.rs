@@ -160,6 +160,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
 fn desugar_global(global: &GlobalDecl, _ctx: &mut DesugarContext) -> GlobalDecl {
     GlobalDecl {
         name: global.name.clone(),
+        name_span: global.name_span,
         ty: global.ty.clone(),
         initializer: desugar_expr(&global.initializer),
         mutable: global.mutable,
@@ -172,6 +173,7 @@ fn desugar_global(global: &GlobalDecl, _ctx: &mut DesugarContext) -> GlobalDecl 
 fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
     Function {
         name: func.name.clone(),
+        name_span: func.name_span,
         is_pub: func.is_pub,
         is_export: func.is_export,
         is_async: func.is_async,
@@ -215,6 +217,7 @@ fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
 fn desugar_trait(trait_decl: &TraitDecl, ctx: &mut DesugarContext) -> TraitDecl {
     TraitDecl {
         name: trait_decl.name.clone(),
+        name_span: trait_decl.name_span,
         is_pub: trait_decl.is_pub,
         type_params: trait_decl.type_params.clone(),
         associated_types: trait_decl.associated_types.clone(),
@@ -308,6 +311,7 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
     match stmt {
         Stmt::Let(l) => Stmt::Let(LetStmt {
             pattern: desugar_pattern(&l.pattern),
+            name_span: l.name_span,
             is_mut: l.is_mut,
             is_reactive: l.is_reactive,
             ty: l.ty.clone(),
@@ -1065,6 +1069,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     for (var_name, _source, expr) in &intermediates {
         stmts.push(Stmt::Let(LetStmt {
             pattern: Pattern::Ident(var_name.clone()),
+            name_span: span,
             is_mut: false,
             is_reactive: false,
             ty: None,
@@ -1081,6 +1086,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     let cond_var = "__cond".to_string();
     stmts.push(Stmt::Let(LetStmt {
         pattern: Pattern::Ident(cond_var.clone()),
+        name_span: span,
         is_mut: false,
         is_reactive: false,
         ty: None,

@@ -269,6 +269,7 @@ mod tests {
 
         let func = Function {
             name: "stream_new".to_string(),
+            name_span: make_span(),
             is_pub: false,
             is_export: false,
             is_async: false,
@@ -303,6 +304,7 @@ mod tests {
 
         let func = Function {
             name: "unreachable".to_string(),
+            name_span: make_span(),
             is_pub: false,
             is_export: false,
             is_async: false,
@@ -332,6 +334,7 @@ mod tests {
 
         let func = Function {
             name: "stream_write".to_string(),
+            name_span: make_span(),
             is_pub: false,
             is_export: false,
             is_async: false,
@@ -340,6 +343,7 @@ mod tests {
             params: vec![
                 Param {
                     name: "tx".to_string(),
+                    name_span: make_span(),
                     ty: Type::Named(NamedType {
                         name: "i32".to_string(),
                         span: make_span(),
@@ -350,6 +354,7 @@ mod tests {
                 },
                 Param {
                     name: "ptr".to_string(),
+                    name_span: make_span(),
                     ty: Type::Named(NamedType {
                         name: "i32".to_string(),
                         span: make_span(),
@@ -360,6 +365,7 @@ mod tests {
                 },
                 Param {
                     name: "len".to_string(),
+                    name_span: make_span(),
                     ty: Type::Named(NamedType {
                         name: "i32".to_string(),
                         span: make_span(),
