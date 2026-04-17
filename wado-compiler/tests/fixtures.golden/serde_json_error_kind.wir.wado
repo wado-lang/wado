@@ -926,6 +926,10 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {
                 __local_4 = _hfs_pos_8;
                 break __inline_String__get_byte_1: builtin::array_get_u8(_licm_repr_7, __local_4);
             };
+            if b > 32 {
+                self.pos = _hfs_pos_8;
+                return;
+            }
             if (if (if (if b == 32 -> i32 {
                 1;
             } else {
@@ -1036,10 +1040,10 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     _licm_used_47 = _licm_input_46.used;
     _licm_repr_48 = _licm_input_46.repr;
     _hfs_pos_51 = self.pos;
-    b115: block {
-        l116: loop {
+    b116: block {
+        l117: loop {
             if _hfs_pos_51 >= _licm_used_47 {
-                break b115;
+                break b116;
             }
             b = __inline_String__get_byte_8: block -> u8 {
                 __local_28 = _hfs_pos_51;
@@ -1066,11 +1070,11 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                 if b == 46 {
                     _hfs_pos_51 = _hfs_pos_51 + 1;
                     _hfs_pos_49 = _hfs_pos_51;
-                    b124: block {
-                        l125: loop {
+                    b125: block {
+                        l126: loop {
                             if _hfs_pos_49 >= _licm_used_47 {
                                 self.pos = _hfs_pos_51;
-                                break b124;
+                                break b125;
                             }
                             b2 = __inline_String__get_byte_10: block -> u8 {
                                 __local_31 = _hfs_pos_49;
@@ -1086,9 +1090,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                                 _hfs_pos_49 = _hfs_pos_49 + 1;
                             } else {
                                 self.pos = _hfs_pos_51;
-                                break b124;
+                                break b125;
                             }
-                            continue l125;
+                            continue l126;
                         };
                     };
                     _hfs_pos_51 = _hfs_pos_49;
@@ -1119,11 +1123,11 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                             }
                         }
                         _hfs_pos_50 = _hfs_pos_51;
-                        b134: block {
-                            l135: loop {
+                        b135: block {
+                            l136: loop {
                                 if _hfs_pos_50 >= _licm_used_47 {
                                     self.pos = _hfs_pos_51;
-                                    break b134;
+                                    break b135;
                                 }
                                 b3 = __inline_String__get_byte_16: block -> u8 {
                                     __local_40 = _hfs_pos_50;
@@ -1138,9 +1142,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                                     _hfs_pos_50 = _hfs_pos_50 + 1;
                                 } else {
                                     self.pos = _hfs_pos_51;
-                                    break b134;
+                                    break b135;
                                 }
-                                continue l135;
+                                continue l136;
                             };
                         };
                         _hfs_pos_51 = _hfs_pos_50;
@@ -1178,9 +1182,9 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                 self.pos = _hfs_pos_51;
                 return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Ok" { discriminant: 0, payload_0: builtin::i32_trunc_f64_s(v_signed) };
             } else {
-                break b115;
+                break b116;
             }
-            continue l116;
+            continue l117;
         };
     };
     self.pos = _hfs_pos_51;
@@ -1197,13 +1201,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l146: loop {
+            l147: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l146;
+                continue l147;
             };
         };
     };
