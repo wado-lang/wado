@@ -395,6 +395,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return_type = self.substitute_newtype_in_type(return_type, base_type_id, newtype_id);
         }
 
+        // Track implicit receiver borrowing (`x.method()` where method expects
+        // `&self`/`&mut self`) for local values. This keeps address-taken
+        // metadata consistent with explicit `&x` / `&mut x`.
+        let needs_implicit_borrow = !is_ref_impl
+            && matches!(self_kind, ast::SelfKind::Ref | ast::SelfKind::MutRef)
+            && !matches!(
+                self.type_table.borrow().get(receiver.type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            );
+        if needs_implicit_borrow && let TirExprKind::Local { index, .. } = &receiver.kind {
+            ctx.address_taken_locals.insert(*index);
+        }
+
         // Adjust receiver based on what the method expects (self_kind)
         receiver =
             self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, method_call.span);
