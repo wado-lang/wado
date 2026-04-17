@@ -1252,15 +1252,27 @@ fn alt_scan_is_full(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
 
 fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
     for let rule of grammar.parser_rules {
-        let mut visiting: Array<String> = [];
-        if ctx.is_rule_scannable(&rule.name, &mut visiting) {
-            gen_scan_function(w, &rule, ctx);
-        }
+        gen_scan_function(w, &rule, ctx);
     }
 }
 
 fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     let fn_name = `scan_{to_snake_case(&rule.name)}`;
+
+    let mut lr_indices: Array<i32> = [];
+    let mut non_lr_indices: Array<i32> = [];
+    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+        if is_left_recursive(&rule.alternatives[i], &rule.name) {
+            lr_indices.push(i);
+        } else {
+            non_lr_indices.push(i);
+        }
+    }
+
+    if lr_indices.len() > 0 {
+        gen_scan_lr_rule(w, rule, &lr_indices, &non_lr_indices, ctx);
+        return;
+    }
 
     let mut f = FnSpec::new(&fn_name);
     f.add_param("tokens", "&Array<Token>");
@@ -1278,6 +1290,78 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext
         gen_scan_multi_alt(w, &rule.alternatives, ctx);
     }
 
+    w.end();
+    w.blank();
+}
+
+/// Generate scan functions for a left-recursive rule:
+///   - scan_X_atom: scans non-LR alternatives (first-match)
+///   - scan_X: calls atom, then greedily consumes LR suffixes
+/// Termination is guaranteed because each LR suffix must consume at least one
+/// token beyond the leading self-reference.
+fn gen_scan_lr_rule(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, non_lr_indices: &Array<i32>, ctx: &mut GenContext) {
+    let fn_name = `scan_{to_snake_case(&rule.name)}`;
+    let atom_name = `{fn_name}_atom`;
+
+    // scan_X_atom: tries each non-LR alt
+    let mut fa = FnSpec::new(&atom_name);
+    fa.add_param("tokens", "&Array<Token>");
+    fa.add_param("pos", "i32");
+    fa.set_return_type("i32");
+    fa.emit_begin(w);
+    let mut non_lr_alts: Array<Alternative> = [];
+    for let idx of non_lr_indices {
+        non_lr_alts.push(rule.alternatives[*idx]);
+    }
+    if non_lr_alts.len() == 0 {
+        w.line("return -1;");
+    } else if non_lr_alts.len() == 1 {
+        w.line("let mut pos = pos;");
+        for let elem of &non_lr_alts[0].elements {
+            gen_scan_element(w, elem, ctx);
+        }
+        w.line("return pos;");
+    } else {
+        gen_scan_multi_alt(w, &non_lr_alts, ctx);
+    }
+    w.end();
+    w.blank();
+
+    // scan_X: atom then greedy LR suffix loop
+    let mut f = FnSpec::new(&fn_name);
+    f.add_param("tokens", "&Array<Token>");
+    f.add_param("pos", "i32");
+    f.set_return_type("i32");
+    f.emit_begin(w);
+    w.line(`let mut pos = {atom_name}(tokens, pos);`);
+    w.line("if pos < 0 { return -1; }");
+    w.begin("loop");
+    w.line("let start = pos;");
+    // Inline an "LR-suffix" try: for each LR alt, try its tail (elements[1..]).
+    // On any success, update pos and continue outer loop. On all failures, break.
+    w.begin("scan_lr_alts:");
+    for let mut i = 0; i < lr_indices.len(); i += 1 {
+        let alt_idx = lr_indices[i];
+        let alt = &rule.alternatives[alt_idx];
+        let label = `try_lr_{i}`;
+        w.line("pos = start;");
+        w.begin(`{label}:`);
+        // Scan elements[1..] of the LR alt in block mode (break label on failure).
+        for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+            gen_scan_element_in_block(w, &alt.elements[ei], ctx, &label);
+        }
+        w.line("break scan_lr_alts;");
+        w.end();
+    }
+    // All LR suffixes failed → exit the outer loop.
+    w.line("pos = start;");
+    w.line("break;");
+    w.end();
+    // Safety: if somehow pos didn't advance (shouldn't happen for valid grammars),
+    // break to avoid infinite loop.
+    w.line("if pos <= start { break; }");
+    w.end();
+    w.line("return pos;");
     w.end();
     w.blank();
 }
@@ -1348,11 +1432,11 @@ fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext) {
         return;
     }
     if let Repeat(rep) = elem {
-        gen_scan_repeat(w, rep, ctx);
+        gen_scan_repeat(w, rep, ctx, &"return -1;");
         return;
     }
     if let Group(alts) = elem {
-        gen_scan_group(w, alts, ctx);
+        gen_scan_group(w, alts, ctx, &"return -1;");
         return;
     }
 }
@@ -1394,16 +1478,18 @@ fn gen_scan_element_in_block(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCo
         return;
     }
     if let Repeat(rep) = elem {
-        gen_scan_repeat(w, rep, ctx);
+        gen_scan_repeat(w, rep, ctx, &`break {*label};`);
         return;
     }
     if let Group(alts) = elem {
-        gen_scan_group(w, alts, ctx);
+        gen_scan_group(w, alts, ctx, &`break {*label};`);
         return;
     }
 }
 
-fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext) {
+/// `fail_stmt` describes how to report failure to the caller when the
+/// mandatory first iteration of `+` fails (Optional/Star never fail).
+fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
     let mut visiting: Array<String> = [];
     let inner_first = ctx.first_of_element(&rep.element, &mut visiting);
     let check = kind_check_str(&inner_first, "tokens[pos].kind");
@@ -1425,13 +1511,58 @@ fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext
         return;
     }
     if let Plus = rep.kind {
-        // First iteration is mandatory.
-        gen_scan_element(w, &rep.element, ctx);
+        // First iteration is mandatory: its failure goes through fail_stmt.
+        gen_scan_element_with_fail(w, &rep.element, ctx, fail_stmt);
         w.begin(`while pos < tokens.len() && {check}`);
         w.line("let sp = pos;");
         gen_scan_element_assign(w, &rep.element, ctx);
         w.line("if pos < 0 { pos = sp; break; }");
         w.end();
+        return;
+    }
+}
+
+/// Generate scan code for a single element, emitting `fail_stmt` on failure.
+fn gen_scan_element_with_fail(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fail_stmt: &String) {
+    if let Label(lab) = elem {
+        gen_scan_element_with_fail(w, &lab.element, ctx, fail_stmt);
+        return;
+    }
+    if let TokenRef(name) = elem {
+        let const_name = `TK_{name}`;
+        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ {*fail_stmt} \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let Literal(text) = elem {
+        let const_name = literal_const_name(text);
+        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ {*fail_stmt} \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let RuleRef(name) = elem {
+        let fn_name = `scan_{to_snake_case(name)}`;
+        w.line(`pos = {fn_name}(tokens, pos);`);
+        w.line(`if pos < 0 \{ {*fail_stmt} \}`);
+        return;
+    }
+    if let Wildcard = elem {
+        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF \{ {*fail_stmt} \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let Not(ne) = elem {
+        let check = not_scan_check(&ne.element);
+        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ {*fail_stmt} \}`);
+        w.line("pos += 1;");
+        return;
+    }
+    if let Repeat(rep) = elem {
+        gen_scan_repeat(w, rep, ctx, fail_stmt);
+        return;
+    }
+    if let Group(alts) = elem {
+        gen_scan_group(w, alts, ctx, fail_stmt);
         return;
     }
 }
@@ -1468,11 +1599,11 @@ fn gen_scan_element_assign(w: &mut CodeWriter, elem: &Element, ctx: &mut GenCont
         return;
     }
     if let Group(alts) = elem {
-        gen_scan_group(w, alts, ctx);
+        gen_scan_group(w, alts, ctx, &"pos = -1;");
         return;
     }
     if let Repeat(rep) = elem {
-        gen_scan_repeat(w, rep, ctx);
+        gen_scan_repeat(w, rep, ctx, &"pos = -1;");
         return;
     }
 }
@@ -1509,14 +1640,34 @@ fn not_scan_check(inner: &Element) -> String {
 
 global mut SCAN_GROUP_COUNTER: i32 = 0;
 
-fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext) {
+/// Generate scan code for a Group (choice of alternatives).
+/// `fail_stmt` is emitted when the group exhausts all alternatives without a
+/// match. Typical values:
+///   - "return -1;"  → top-level scan context (abort whole scan fn)
+///   - "break LBL;"  → nested inside a labeled try/alt block
+///   - "pos = -1;"   → assign context (caller checks `pos < 0` afterward)
+fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, fail_stmt: &String) {
     if alts.len() == 1 {
+        // Single alt: outer `done` wraps inner `body`.
+        //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
+        // Element failure → break sg_N, falls to fail_stmt.
+        // Success → break sg_N_done, skips fail_stmt.
+        let gc = SCAN_GROUP_COUNTER;
+        SCAN_GROUP_COUNTER += 1;
+        let body = `sg_{gc}`;
+        let done = `sg_{gc}_done`;
+        w.begin(`{done}:`);
+        w.begin(`{body}:`);
         for let elem of &alts[0].elements {
-            gen_scan_element(w, elem, ctx);
+            gen_scan_element_in_block(w, elem, ctx, &body);
         }
+        w.line(`break {done};`);
+        w.end();
+        w.line(*fail_stmt);
+        w.end();
         return;
     }
-    // Multi-alternative group: try each alternative.
+    // Multi-alternative group: try each alternative, fall through to fail.
     let gc = SCAN_GROUP_COUNTER;
     SCAN_GROUP_COUNTER += 1;
     let outer = `sg_{gc}`;
@@ -1525,23 +1676,16 @@ fn gen_scan_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenCo
     w.begin(`{outer}:`);
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
-        let is_last = i == alts.len() - 1;
-        if is_last {
-            w.line(`pos = {gp_var};`);
-            for let elem of &alt.elements {
-                gen_scan_element(w, elem, ctx);
-            }
-        } else {
-            let inner = `sg_{gc}_{i}`;
-            w.line(`pos = {gp_var};`);
-            w.begin(`{inner}:`);
-            for let elem of &alt.elements {
-                gen_scan_element_in_block(w, elem, ctx, &inner);
-            }
-            w.line(`break {outer};`);
-            w.end();
+        let inner = `sg_{gc}_{i}`;
+        w.line(`pos = {gp_var};`);
+        w.begin(`{inner}:`);
+        for let elem of &alt.elements {
+            gen_scan_element_in_block(w, elem, ctx, &inner);
         }
+        w.line(`break {outer};`);
+        w.end();
     }
+    w.line(*fail_stmt);
     w.end();
 }
 

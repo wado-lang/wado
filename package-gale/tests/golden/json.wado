@@ -1078,10 +1078,16 @@ fn scan_obj(tokens: &Array<Token>, pos: i32) -> i32 {
             if pos < 0 { break try_0; }
             while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
                 let sp = pos;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
-                pos += 1;
-                pos = scan_pair(tokens, pos);
-                if pos < 0 { return -1; }
+                sg_0_done: {
+                    sg_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_0; }
+                        pos += 1;
+                        pos = scan_pair(tokens, pos);
+                        if pos < 0 { break sg_0; }
+                        break sg_0_done;
+                    }
+                    pos = -1;
+                }
                 if pos < 0 { pos = sp; break; }
             }
             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { break try_0; }
@@ -1120,10 +1126,16 @@ fn scan_arr(tokens: &Array<Token>, pos: i32) -> i32 {
             if pos < 0 { break try_0; }
             while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
                 let sp = pos;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
-                pos += 1;
-                pos = scan_value(tokens, pos);
-                if pos < 0 { return -1; }
+                sg_1_done: {
+                    sg_1: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_1; }
+                        pos += 1;
+                        pos = scan_value(tokens, pos);
+                        if pos < 0 { break sg_1; }
+                        break sg_1_done;
+                    }
+                    pos = -1;
+                }
                 if pos < 0 { pos = sp; break; }
             }
             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break try_0; }
@@ -1229,10 +1241,16 @@ fn parse_obj_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
-        pos += 1;
-        pos = scan_pair(tokens, pos);
-        if pos < 0 { return -1; }
+        sg_2_done: {
+            sg_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_2; }
+                pos += 1;
+                pos = scan_pair(tokens, pos);
+                if pos < 0 { break sg_2; }
+                break sg_2_done;
+            }
+            pos = -1;
+        }
         if pos < 0 { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
@@ -1346,10 +1364,16 @@ fn parse_arr_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
-        pos += 1;
-        pos = scan_value(tokens, pos);
-        if pos < 0 { return -1; }
+        sg_3_done: {
+            sg_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_3; }
+                pos += 1;
+                pos = scan_value(tokens, pos);
+                if pos < 0 { break sg_3; }
+                break sg_3_done;
+            }
+            pos = -1;
+        }
         if pos < 0 { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }

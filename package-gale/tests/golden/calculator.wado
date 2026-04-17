@@ -1470,20 +1470,30 @@ fn scan_expression(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind matches { TK_PLUS | TK_MINUS } {
         let sp = pos;
-        let gp_0 = pos;
-        sg_0: {
-            pos = gp_0;
-            sg_0_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_PLUS { break sg_0_0; }
-                pos += 1;
-                break sg_0;
+        sg_0_done: {
+            sg_0: {
+                let gp_1 = pos;
+                sg_1: {
+                    pos = gp_1;
+                    sg_1_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_PLUS { break sg_1_0; }
+                        pos += 1;
+                        break sg_1;
+                    }
+                    pos = gp_1;
+                    sg_1_1: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_MINUS { break sg_1_1; }
+                        pos += 1;
+                        break sg_1;
+                    }
+                    break sg_0;
+                }
+                pos = scan_multiplying_expression(tokens, pos);
+                if pos < 0 { break sg_0; }
+                break sg_0_done;
             }
-            pos = gp_0;
-            if pos >= tokens.len() || tokens[pos].kind != TK_MINUS { return -1; }
-            pos += 1;
+            pos = -1;
         }
-        pos = scan_multiplying_expression(tokens, pos);
-        if pos < 0 { return -1; }
         if pos < 0 { pos = sp; break; }
     }
     return pos;
@@ -1495,20 +1505,30 @@ fn scan_multiplying_expression(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind matches { TK_TIMES | TK_DIV } {
         let sp = pos;
-        let gp_1 = pos;
-        sg_1: {
-            pos = gp_1;
-            sg_1_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_TIMES { break sg_1_0; }
-                pos += 1;
-                break sg_1;
+        sg_2_done: {
+            sg_2: {
+                let gp_3 = pos;
+                sg_3: {
+                    pos = gp_3;
+                    sg_3_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_TIMES { break sg_3_0; }
+                        pos += 1;
+                        break sg_3;
+                    }
+                    pos = gp_3;
+                    sg_3_1: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_DIV { break sg_3_1; }
+                        pos += 1;
+                        break sg_3;
+                    }
+                    break sg_2;
+                }
+                pos = scan_pow_expression(tokens, pos);
+                if pos < 0 { break sg_2; }
+                break sg_2_done;
             }
-            pos = gp_1;
-            if pos >= tokens.len() || tokens[pos].kind != TK_DIV { return -1; }
-            pos += 1;
+            pos = -1;
         }
-        pos = scan_pow_expression(tokens, pos);
-        if pos < 0 { return -1; }
         if pos < 0 { pos = sp; break; }
     }
     return pos;
@@ -1520,10 +1540,16 @@ fn scan_pow_expression(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_POW {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_POW { return -1; }
-        pos += 1;
-        pos = scan_signed_atom(tokens, pos);
-        if pos < 0 { return -1; }
+        sg_4_done: {
+            sg_4: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_POW { break sg_4; }
+                pos += 1;
+                pos = scan_signed_atom(tokens, pos);
+                if pos < 0 { break sg_4; }
+                break sg_4_done;
+            }
+            pos = -1;
+        }
         if pos < 0 { pos = sp; break; }
     }
     return pos;
@@ -1642,10 +1668,16 @@ fn scan_func_(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_COMMA {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { return -1; }
-        pos += 1;
-        pos = scan_expression(tokens, pos);
-        if pos < 0 { return -1; }
+        sg_5_done: {
+            sg_5: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_COMMA { break sg_5; }
+                pos += 1;
+                pos = scan_expression(tokens, pos);
+                if pos < 0 { break sg_5; }
+                break sg_5_done;
+            }
+            pos = -1;
+        }
         if pos < 0 { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
