@@ -16,6 +16,7 @@ pub struct GenContext {
     rule_index: TreeMap<String, i32>,
     first_cache: TreeMap<String, Array<String>>,
     single_token_cache: TreeMap<String, bool>,
+    nullable_cache: TreeMap<String, bool>,
     scannable_cache: TreeMap<String, bool>,
     pub current_rule_name: String,
     pub group_counter: i32,
@@ -38,6 +39,7 @@ impl GenContext {
             rule_index,
             first_cache: TreeMap::<String, Array<String>>::new(),
             single_token_cache: TreeMap::<String, bool>::new(),
+            nullable_cache: TreeMap::<String, bool>::new(),
             scannable_cache: TreeMap::<String, bool>::new(),
             current_rule_name: "",
             group_counter: 0,
@@ -139,35 +141,162 @@ impl GenContext {
         return result;
     }
 
+    /// Returns FIRST sets indexed by INPUT TOKEN position relative to the alt start.
+    ///
+    /// Invariant: `result[d]` is the set of possible first tokens at input offset `d`
+    /// **assuming the alt matches successfully up to that point**. Guards built from
+    /// this mapping are sound disambiguators for caller-side lookahead.
+    ///
+    /// To maintain the element-pos-to-input-pos alignment, we only advance past an
+    /// element if it is guaranteed to consume exactly 1 input token (non-nullable,
+    /// single-token). Nullable or multi-token elements halt accumulation — the
+    /// caller gets a shorter (but always sound) sequence.
     pub fn alt_position_first_sets(&mut self, alt: &Alternative, max_depth: i32) -> Array<Array<String>> {
         let mut result: Array<Array<String>> = [];
         let mut start = 0;
         while result.len() < max_depth && start < alt.elements.len() {
-            if result.len() > 0 && is_nullable(&alt.elements[start]) {
+            // If the tail from `start` onwards is entirely nullable, the alt
+            // can match 0 tokens from this offset — input[result.len()] is in
+            // the follow-set, which `first` doesn't include. Guard would be
+            // unsound. Halt.
+            if self.tail_is_nullable_deep(&alt.elements, start) {
                 break;
             }
-
-            let first = self.first_of_elements_from(&alt.elements, start);
+            // Deep first-set: accumulate across deeply-nullable elements so the
+            // set covers every token that can legitimately appear at this offset
+            // when the alt matches.
+            let first = self.deep_first_of_elements_from(&alt.elements, start);
             if first.len() == 0 {
                 break;
             }
             result.push(first);
-            let mut skipped_nullable = false;
-            while start < alt.elements.len() {
-                let was_nullable = is_nullable(&alt.elements[start]);
-                if was_nullable {
-                    skipped_nullable = true;
-                }
-                start += 1;
-                if !was_nullable {
-                    break;
-                }
+
+            // Advance past element[start] only if it consumes exactly 1 token;
+            // otherwise result[d+1] would not align with input offset d+1.
+            let mut visiting: Array<String> = [];
+            if !self.element_is_single_token(&alt.elements[start], &mut visiting) {
+                break;
             }
-            if skipped_nullable {
+            start += 1;
+        }
+        return result;
+    }
+
+    /// Like `first_of_elements_from` but uses deep nullability so it correctly
+    /// flows through `RuleRef`s whose underlying rule matches zero tokens.
+    pub fn deep_first_of_elements_from(&mut self, elements: &Array<Element>, start: i32) -> Array<String> {
+        let mut result: Array<String> = [];
+        for let mut i = start; i < elements.len(); i += 1 {
+            let mut fv: Array<String> = [];
+            let elem_first = self.first_of_element(&elements[i], &mut fv);
+            extend_dedup(&mut result, &elem_first);
+            let mut nv: Array<String> = [];
+            if !self.element_is_nullable_deep(&elements[i], &mut nv) {
                 break;
             }
         }
         return result;
+    }
+
+    /// Deep nullability: true if every element from `start` onwards can match
+    /// zero input tokens, recursively checking referenced rules (unlike the
+    /// shallow `is_nullable` which only inspects top-level Repeat kind).
+    pub fn tail_is_nullable_deep(&mut self, elements: &Array<Element>, start: i32) -> bool {
+        for let mut i = start; i < elements.len(); i += 1 {
+            let mut visiting: Array<String> = [];
+            if !self.element_is_nullable_deep(&elements[i], &mut visiting) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    pub fn element_is_nullable_deep(&mut self, elem: &Element, visiting: &mut Array<String>) -> bool {
+        return match elem {
+            TokenRef(_) => false,
+            Literal(_) => false,
+            Wildcard => false,
+            Not(_) => false,
+            RuleRef(name) => self.rule_is_nullable(name, visiting),
+            Label(lab) => self.element_is_nullable_deep(&lab.element, visiting),
+            Repeat(rep) => match rep.kind {
+                Star | Optional => true,
+                _ => self.element_is_nullable_deep(&rep.element, visiting),
+            },
+            Group(alts) => {
+                let mut any_nullable = false;
+                for let alt of alts {
+                    let mut all_null = true;
+                    for let e of &alt.elements {
+                        if !self.element_is_nullable_deep(e, visiting) {
+                            all_null = false;
+                            break;
+                        }
+                    }
+                    if all_null {
+                        any_nullable = true;
+                        break;
+                    }
+                }
+                any_nullable;
+            },
+        };
+    }
+
+    pub fn rule_is_nullable(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
+        let cached = self.nullable_cache.get(*name);
+        if let Some(val) = cached {
+            return val;
+        }
+
+        let visiting_set = str_set_from(visiting);
+        if visiting_set.contains(*name) {
+            return false;
+        }
+
+        let is_top_level = visiting.is_empty();
+        visiting.push(*name);
+
+        let mut result = false;
+        let rule = self.find_rule(name);
+        if let Some(rule) = rule {
+            for let alt of &rule.alternatives {
+                let mut all_null = true;
+                for let e of &alt.elements {
+                    if !self.element_is_nullable_deep(e, visiting) {
+                        all_null = false;
+                        break;
+                    }
+                }
+                if all_null {
+                    result = true;
+                    break;
+                }
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if is_top_level {
+            self.nullable_cache[*name] = result;
+        }
+
+        return result;
+    }
+
+    /// True if the element always consumes exactly 1 input token on match.
+    /// Used to keep `alt_position_first_sets` element-to-input-position aligned.
+    pub fn element_is_single_token(&mut self, elem: &Element, visiting: &mut Array<String>) -> bool {
+        return match elem {
+            TokenRef(_) => true,
+            Literal(_) => true,
+            Wildcard => true,
+            Not(_) => true,
+            RuleRef(name) => self.rule_is_single_token(name, visiting),
+            Label(lab) => self.element_is_single_token(&lab.element, visiting),
+            Group(_) => false,
+            Repeat(_) => false,
+        };
     }
 
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
@@ -222,17 +351,16 @@ impl GenContext {
         return result;
     }
 
-    /// Returns true if the rule is safe to scan as a predicate prefix.
-    /// Left-recursive rules (like `expr`) are excluded because their generated
-    /// scan functions use greedy single-commit semantics that cannot faithfully
-    /// reproduce the parser's multi-token lookahead disambiguation. Including
-    /// them in a per-alt scan prefix can cause the scan to stop short of the
-    /// real match, leading to wrong alt selection.
+    /// Returns true if the rule is safe AND cheap to scan as a predicate prefix.
     ///
-    /// A scan_X function is still generated for every rule (including LR ones)
-    /// so that future stages can call them where appropriate; this predicate
-    /// only controls whether `gen_bt_scan_if_possible` may extend a per-alt
-    /// scan past a RuleRef to a given rule.
+    /// Left-recursive (LR) rules have faithful `scan_X_atom` / `scan_X_prec` /
+    /// `scan_X_lr_N` generated for them so they can be correctly consumed by
+    /// nested scans. However, at the top level a full LR-rule scan expands to
+    /// a deep traversal (precedence climbing over every suffix operator), which
+    /// is orders of magnitude more expensive than parsing the rule with
+    /// backtracking-based dispatch. Group-level dispatch (Stage C) therefore
+    /// treats LR rules — and any rule that transitively references an LR rule —
+    /// as *not* scannable, and falls back to `bt_try` for those alternations.
     pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
         let cached = self.scannable_cache.get(*name);
         if let Some(val) = cached {
@@ -250,7 +378,18 @@ impl GenContext {
         let mut result = false;
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
-            if has_left_recursive_alt(&rule.alternatives, name) {
+            let mut has_lr = false;
+            for let alt of &rule.alternatives {
+                if alt.elements.len() > 0 {
+                    if let RuleRef(first_name) = &alt.elements[0] {
+                        if *first_name == *name {
+                            has_lr = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if has_lr {
                 result = false;
             } else {
                 let mut all_ok = true;
@@ -372,33 +511,6 @@ fn extract_group_alts_for_scan(elem: &Element) -> Option<&Array<Alternative>> {
         }
     }
     return null;
-}
-
-/// Returns true if any alternative starts with a direct reference to the
-/// given rule name (left-recursive). Unwraps labels and skips nullable
-/// elements to find the first non-nullable element.
-fn has_left_recursive_alt(alternatives: &Array<Alternative>, rule_name: &String) -> bool {
-    for let alt of alternatives {
-        for let elem of &alt.elements {
-            let inner = unwrap_labels(elem);
-            if let RuleRef(name) = inner {
-                if *name == *rule_name {
-                    return true;
-                }
-            }
-            if !is_nullable(elem) {
-                break;
-            }
-        }
-    }
-    return false;
-}
-
-fn unwrap_labels(elem: &Element) -> &Element with stores[elem] {
-    if let Label(lab) = elem {
-        return unwrap_labels(&lab.element);
-    }
-    return elem;
 }
 
 pub fn is_nullable(elem: &Element) -> bool {

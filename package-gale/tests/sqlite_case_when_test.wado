@@ -1,0 +1,40 @@
+// Regression: CASE WHEN parsing where the leading expr? optional must not
+// greedily consume WHEN via the column_ref → any_name → keyword first-set path.
+// See scan-side follow-set pruning in gen_scan_repeat_optional_with_follow.
+use sqlite from "./golden/sqlite.wado";
+
+fn check(label: &String, sql: &String) {
+    let r = sqlite::parse(sql);
+    if let Err(e) = r {
+        panic(`{*label}: {e.message}`);
+    }
+}
+
+test "c1_select_case_bare" {
+    check(&"c1", &"SELECT CASE WHEN x>1 THEN 1 END FROM t;");
+}
+
+test "c2_select_case_with_x" {
+    check(&"c2", &"SELECT CASE x WHEN 1 THEN 1 END FROM t;");
+}
+
+test "c3_just_case_no_select" {
+    check(&"c3", &"SELECT CASE WHEN 1 THEN 1 END;");
+}
+
+test "c4_case_with_literal" {
+    check(&"c4", &"SELECT CASE 1 WHEN 1 THEN 1 END;");
+}
+
+test "c5_case_with_literal_else" {
+    check(&"c5", &"SELECT CASE 1 WHEN 1 THEN 1 ELSE 0 END;");
+}
+
+test "c6_case_with_two_else" {
+    check(&"c6", &"SELECT CASE WHEN 1 THEN 1 ELSE 0 END;");
+}
+
+// Minimal just expr-level
+test "c7_case_in_value" {
+    check(&"c7", &"SELECT 1;");
+}

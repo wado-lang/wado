@@ -1129,6 +1129,7 @@ fn scan_sexpr(tokens: &Array<Token>, pos: i32) -> i32 {
         let sp = pos;
         pos = scan_item(tokens, pos);
         if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
@@ -1136,32 +1137,45 @@ fn scan_sexpr(tokens: &Array<Token>, pos: i32) -> i32 {
 }
 
 fn scan_item(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
     let start = pos;
+    let mut pos = pos;
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        pos = start;
-        try_0: {
-            pos = scan_atom(tokens, pos);
-            if pos < 0 { break try_0; }
-            break scan_alts;
+        if alt_kind matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT } {
+            pos = start;
+            try_0: {
+                pos = scan_atom(tokens, pos);
+                if pos < 0 { break try_0; }
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_LPAREN {
+            let mut best_pos: i32 = -1;
+            pos = start;
+            try_1: {
+                pos = scan_list_(tokens, pos);
+                if pos < 0 { break try_1; }
+                if pos > best_pos { best_pos = pos; }
+            }
+            pos = start;
+            try_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { break try_2; }
+                pos += 1;
+                pos = scan_item(tokens, pos);
+                if pos < 0 { break try_2; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_DOT { break try_2; }
+                pos += 1;
+                pos = scan_item(tokens, pos);
+                if pos < 0 { break try_2; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { break try_2; }
+                pos += 1;
+                if pos > best_pos { best_pos = pos; }
+            }
+            if best_pos >= 0 { pos = best_pos; break scan_alts; }
+            return -1;
+        } else {
+            return -1;
         }
-        pos = start;
-        try_1: {
-            pos = scan_list_(tokens, pos);
-            if pos < 0 { break try_1; }
-            break scan_alts;
-        }
-        pos = start;
-        if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
-        pos += 1;
-        pos = scan_item(tokens, pos);
-        if pos < 0 { return -1; }
-        if pos >= tokens.len() || tokens[pos].kind != TK_DOT { return -1; }
-        pos += 1;
-        pos = scan_item(tokens, pos);
-        if pos < 0 { return -1; }
-        if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
-        pos += 1;
     }
     return pos;
 }
@@ -1174,6 +1188,7 @@ fn scan_list_(tokens: &Array<Token>, pos: i32) -> i32 {
         let sp = pos;
         pos = scan_item(tokens, pos);
         if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_RPAREN { return -1; }
     pos += 1;
@@ -1181,30 +1196,45 @@ fn scan_list_(tokens: &Array<Token>, pos: i32) -> i32 {
 }
 
 fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
-    let mut pos = pos;
     let start = pos;
+    let mut pos = pos;
+    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        pos = start;
-        try_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_STRING { break try_0; }
-            pos += 1;
-            break scan_alts;
+        if alt_kind == TK_STRING {
+            pos = start;
+            try_0: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_STRING { break try_0; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_SYMBOL {
+            pos = start;
+            try_1: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_SYMBOL { break try_1; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_NUMBER {
+            pos = start;
+            try_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_NUMBER { break try_2; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_DOT {
+            pos = start;
+            try_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_DOT { break try_3; }
+                pos += 1;
+                break scan_alts;
+            }
+            return -1;
+        } else {
+            return -1;
         }
-        pos = start;
-        try_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_SYMBOL { break try_1; }
-            pos += 1;
-            break scan_alts;
-        }
-        pos = start;
-        try_2: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_NUMBER { break try_2; }
-            pos += 1;
-            break scan_alts;
-        }
-        pos = start;
-        if pos >= tokens.len() || tokens[pos].kind != TK_DOT { return -1; }
-        pos += 1;
     }
     return pos;
 }
@@ -1219,6 +1249,7 @@ fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
             let mut pos: i32 = p.pos;
             pos = scan_item(tokens, pos);
             if pos < 0 { break rep_scan; }
+            if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
@@ -1334,6 +1365,7 @@ fn parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
             let mut pos: i32 = p.pos;
             pos = scan_item(tokens, pos);
             if pos < 0 { break rep_scan; }
+            if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
