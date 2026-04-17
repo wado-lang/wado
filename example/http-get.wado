@@ -8,24 +8,23 @@ use { Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
 fn scheme_of(url: Url) -> Scheme {
-    if url.scheme == "http" {
-        return Scheme::Http;
-    }
-    if url.scheme == "https" {
-        return Scheme::Https;
-    }
-    return Scheme::Other(url.scheme);
+    return match url.scheme {
+        "http" => Scheme::Http,
+        "https" => Scheme::Https,
+        scheme => Scheme::Other(scheme),
+    };
 }
 
 fn send_get(url: Url) -> Response {
     let headers = Fields::new();
+    headers.append("user-agent", #file.as_bytes() as FieldValue);
+
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _req_future] = Request::new(headers, null, trailers_rx, null);
 
     req.set_scheme(Option::Some(scheme_of(url)));
     req.set_authority(Option::Some(url.authority()));
     req.set_path_with_query(Option::Some(url.path_with_query()));
-
 
     let result = Client::send(req);
     trailers_tx.write(Result::Ok(null));
@@ -50,17 +49,13 @@ fn read_body(resp: Response) -> String {
     }
     body_stream.drop();
 
-    return match String::from_utf8(body) {
-        Ok(s) => s,
-        Err(_) => panic("invalid utf-8"),
-    };
+    return String::from_utf8_lossy(body);
 }
 
 export fn run() with Stdout, Client {
     let url = Url::parse("https://httpbin.org/get").unwrap();
     let resp = send_get(url);
-    let status = resp.get_status_code();
-    println(`Status: {status as i32}`);
+    println(`Status: {resp.get_status_code() as i32}`);
 
     let body = read_body(resp);
     println(body);
