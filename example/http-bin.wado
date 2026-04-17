@@ -356,12 +356,12 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     // sent `TE: trailers` per RFC 7230 §4.3.
     let elapsed = MonotonicClock::now() - start_mark;
     let elapsed_ms = (elapsed as f64) / 1_000_000.0;
-    let trailers = Trailers::new();
+    let trailers = Trailers::new() as Trailers;
     trailers.append(
         "server-timing",
         `app;dur={elapsed_ms:0.3f}`.as_bytes() as FieldValue,
     );
-    trailers_tx.write(Result::Ok(Option::Some(trailers as Trailers)));
+    trailers_tx.write(Result::Ok(Option::Some(trailers)));
 
     // Access log: emit request summary as JSON to stderr after the
     // response body has been written out. `log_stderr` appends its own
