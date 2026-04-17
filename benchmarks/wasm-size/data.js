@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776437110276,
+  "lastUpdate": 1776461717841,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13673,6 +13673,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/233b7edea39e607391750bbf91b4056e34bd29a6"
         },
         "date": 1776437109995,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa26cbc516d41ff7e120428fb9f97f5cd13f1207",
+          "message": "Merge pull request #862 from wado-lang/claude/reduce-parser-backtracking-z2XUl\n\nperf(gale): faithful scan_X for LR rules, sqlite-parse −21%",
+          "timestamp": "2026-04-18T06:31:59+09:00",
+          "tree_id": "b7b5a4659d746a985bbffd6c08b9a00833f691e5",
+          "url": "https://github.com/wado-lang/wado/commit/fa26cbc516d41ff7e120428fb9f97f5cd13f1207"
+        },
+        "date": 1776461717559,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
