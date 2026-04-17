@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776431749044,
+  "lastUpdate": 1776432733706,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13517,6 +13517,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cc56d4382a12bc6c42fb618dcc0e7063cf23bdee"
         },
         "date": 1776431748815,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2d2a4b0b6c74ab6cad8f2f92be3a9d14b590b327",
+          "message": "Merge pull request #858 from wado-lang/claude/wado-lsp-continue-bYuyE\n\nfeat(compiler): introduce AstId / AstPtr for LSP-friendly queries",
+          "timestamp": "2026-04-17T22:28:33+09:00",
+          "tree_id": "2ef601bdd354b829c207823bc813c6725cebb29c",
+          "url": "https://github.com/wado-lang/wado/commit/2d2a4b0b6c74ab6cad8f2f92be3a9d14b590b327"
+        },
+        "date": 1776432733426,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
