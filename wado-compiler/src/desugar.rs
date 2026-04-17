@@ -77,6 +77,7 @@ pub fn desugar_module(module: &Module) -> Module {
         module.shebang().map(String::from),
         module.data_section().map(String::from),
         module.include_paths().clone(),
+        module.ast_id_count(),
     )
 }
 
@@ -159,6 +160,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
 
 fn desugar_global(global: &GlobalDecl, _ctx: &mut DesugarContext) -> GlobalDecl {
     GlobalDecl {
+        id: global.id,
         name: global.name.clone(),
         name_span: global.name_span,
         ty: global.ty.clone(),
@@ -172,6 +174,7 @@ fn desugar_global(global: &GlobalDecl, _ctx: &mut DesugarContext) -> GlobalDecl 
 
 fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
     Function {
+        id: func.id,
         name: func.name.clone(),
         name_span: func.name_span,
         is_pub: func.is_pub,
@@ -190,6 +193,7 @@ fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
 
 fn desugar_test(test: &TestDecl, ctx: &mut DesugarContext) -> TestDecl {
     TestDecl {
+        id: test.id,
         attributes: test.attributes.clone(),
         name: test.name.clone(),
         body: desugar_block(&test.body, ctx),
@@ -199,6 +203,7 @@ fn desugar_test(test: &TestDecl, ctx: &mut DesugarContext) -> TestDecl {
 
 fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
     ImplBlock {
+        id: impl_block.id,
         type_params: impl_block.type_params.clone(),
         trait_type: impl_block.trait_type.clone(),
         ty: impl_block.ty.clone(),
@@ -216,6 +221,7 @@ fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
 
 fn desugar_trait(trait_decl: &TraitDecl, ctx: &mut DesugarContext) -> TraitDecl {
     TraitDecl {
+        id: trait_decl.id,
         name: trait_decl.name.clone(),
         name_span: trait_decl.name_span,
         is_pub: trait_decl.is_pub,

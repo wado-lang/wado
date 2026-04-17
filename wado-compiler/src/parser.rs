@@ -38,6 +38,10 @@ pub struct Parser {
     /// Inner attributes parsed before items. Retained even if parsing fails later,
     /// so callers can check `has_todo()` after a parse error.
     parsed_inner_attributes: Vec<InnerAttribute>,
+    /// Next [`AstId`] to allocate. Allocated densely starting from `0` in DFS
+    /// parse order so that re-parsing the same source produces the same id
+    /// sequence.
+    next_ast_id: u32,
 }
 
 #[derive(Debug)]
@@ -84,6 +88,7 @@ impl Parser {
             data_section: None,
             include_paths: crate::hashmap::IndexSet::default(),
             parsed_inner_attributes: Vec::new(),
+            next_ast_id: 0,
         }
     }
 
@@ -102,7 +107,16 @@ impl Parser {
             data_section,
             include_paths: crate::hashmap::IndexSet::default(),
             parsed_inner_attributes: Vec::new(),
+            next_ast_id: 0,
         }
+    }
+
+    /// Allocate a fresh [`AstId`] for an AST node currently being constructed.
+    /// Ids are dense in `0..next_ast_id` and assigned in parse order.
+    fn alloc_ast_id(&mut self) -> crate::ast::AstId {
+        let id = crate::ast::AstId(self.next_ast_id);
+        self.next_ast_id += 1;
+        id
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.
@@ -175,6 +189,7 @@ impl Parser {
             self.shebang.take(),
             self.data_section.take(),
             std::mem::take(&mut self.include_paths),
+            self.next_ast_id,
         ))
     }
 
@@ -445,6 +460,7 @@ impl Parser {
 
     /// Parse test declaration: `[#[attr]] test "name" { ... }` or `[#[attr]] test { ... }`
     fn parse_test_decl(&mut self, attributes: Vec<Attribute>) -> ParseResult<TestDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         // Consume the "test" identifier (contextual keyword)
         self.advance();
@@ -462,6 +478,7 @@ impl Parser {
         let end_span = body.span;
 
         Ok(TestDecl {
+            id,
             attributes,
             name,
             body,
@@ -475,6 +492,7 @@ impl Parser {
         is_pub: bool,
         attributes: Vec<Attribute>,
     ) -> ParseResult<GlobalDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Global)?;
 
@@ -501,6 +519,7 @@ impl Parser {
         self.expect(&TokenKind::Semicolon)?;
 
         Ok(GlobalDecl {
+            id,
             name,
             name_span,
             ty,
@@ -675,6 +694,7 @@ impl Parser {
         is_pub: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<ResourceDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Resource)?;
         let name = self.consume_ident()?;
@@ -700,6 +720,7 @@ impl Parser {
         };
 
         Ok(ResourceDecl {
+            id,
             name,
             is_pub,
             type_params,
@@ -719,6 +740,7 @@ impl Parser {
     /// - Effect functions: `Effect::{func1, func2}` or `Effect::{func1 as alias}`
     /// - Wildcard: `_` (no braces needed)
     fn parse_use_decl(&mut self, is_pub: bool) -> ParseResult<UseDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Use)?;
 
@@ -759,6 +781,7 @@ impl Parser {
         let end_span = semicolon.span;
 
         Ok(UseDecl {
+            id,
             is_pub,
             source,
             items,
@@ -904,6 +927,7 @@ impl Parser {
         is_async: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<Function> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
 
@@ -939,6 +963,7 @@ impl Parser {
             .map_or(start_span, |b| start_span.merge(&b.span));
 
         Ok(Function {
+            id,
             name,
             name_span,
             is_pub,
@@ -960,6 +985,7 @@ impl Parser {
     }
 
     fn parse_param(&mut self) -> ParseResult<Param> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
 
         // Handle &self and &mut self for methods
@@ -990,6 +1016,7 @@ impl Parser {
                     Type::Reference(Box::new(self_type))
                 };
                 return Ok(Param {
+                    id,
                     name: "self".to_string(),
                     name_span: self_span,
                     ty,
@@ -1033,6 +1060,7 @@ impl Parser {
         let ty = self.parse_type()?;
 
         Ok(Param {
+            id,
             name,
             name_span,
             ty,
@@ -3381,6 +3409,7 @@ impl Parser {
         is_pub: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<EffectDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Effect)?;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -3394,6 +3423,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(EffectDecl {
+            id,
             name,
             name_span,
             is_pub,
@@ -3407,6 +3437,7 @@ impl Parser {
         // Parse any attributes on the method (e.g., #[cm("...")])
         let attrs = self.parse_attributes()?;
 
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
 
         // Check for async keyword
@@ -3436,6 +3467,7 @@ impl Parser {
         self.expect(&TokenKind::Semicolon)?;
 
         Ok(EffectMethod {
+            id,
             name,
             name_span,
             is_async,
@@ -3508,6 +3540,7 @@ impl Parser {
             };
 
             params.push(crate::ast::GenericParam {
+                id: self.alloc_ast_id(),
                 name,
                 name_span,
                 is_effect,
@@ -3578,6 +3611,7 @@ impl Parser {
         is_pub: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<StructDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Struct)?;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -3592,6 +3626,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(StructDecl {
+            id,
             name,
             name_span,
             is_pub,
@@ -3607,6 +3642,7 @@ impl Parser {
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
+            let id = self.alloc_ast_id();
             let start_span = self.peek().span;
             let is_pub = if self.check(&TokenKind::Pub) {
                 self.advance();
@@ -3621,6 +3657,7 @@ impl Parser {
             let ty = self.parse_type()?;
 
             fields.push(StructField {
+                id,
                 name,
                 name_span,
                 is_pub,
@@ -3638,6 +3675,7 @@ impl Parser {
     }
 
     fn parse_enum_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<EnumDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Enum)?;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -3659,6 +3697,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(EnumDecl {
+            id,
             name,
             name_span,
             is_pub,
@@ -3670,11 +3709,13 @@ impl Parser {
     }
 
     fn parse_enum_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<EnumCase> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
 
         // Enum cases have no payload (unlike variant cases)
         Ok(EnumCase {
+            id,
             name,
             name_span,
             attrs,
@@ -3690,6 +3731,7 @@ impl Parser {
     /// }
     /// ```
     fn parse_flags_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<FlagsDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Flags)?;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -3699,9 +3741,11 @@ impl Parser {
         let mut flags = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let flag_attrs = self.parse_attributes()?;
+            let flag_id = self.alloc_ast_id();
             let flag_span = self.peek().span;
             let (flag_name, flag_name_span) = self.consume_ident_with_span()?;
             flags.push(FlagsVariant {
+                id: flag_id,
                 name: flag_name,
                 name_span: flag_name_span,
                 attrs: flag_attrs,
@@ -3716,6 +3760,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(FlagsDecl {
+            id,
             name,
             name_span,
             is_pub,
@@ -3737,6 +3782,7 @@ impl Parser {
         is_pub: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<VariantDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Variant)?;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -3758,6 +3804,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(VariantDecl {
+            id,
             name,
             name_span,
             is_pub,
@@ -3769,6 +3816,7 @@ impl Parser {
     }
 
     fn parse_variant_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<VariantCase> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
 
@@ -3794,6 +3842,7 @@ impl Parser {
         };
 
         Ok(VariantCase {
+            id,
             name,
             name_span,
             payload,
@@ -3808,11 +3857,13 @@ impl Parser {
         let start_span = self.peek().span;
         // peek past `type` to see if next token is `[` (tuple type decl)
         if self.peek_nth(1).kind == TokenKind::LBracket {
+            let id = self.alloc_ast_id();
             self.expect(&TokenKind::Type)?;
             // Parse `[..T]` as a type (will be a Tuple containing TypePackSpread)
             let _ty = self.parse_type()?;
             let end_span = self.expect(&TokenKind::Semicolon)?.span;
             return Ok(Item::TupleTypeDecl(TupleTypeDecl {
+                id,
                 is_pub,
                 attrs,
                 span: start_span.merge(&end_span),
@@ -3822,6 +3873,7 @@ impl Parser {
     }
 
     fn parse_newtype(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Newtype> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Type)?;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -3831,6 +3883,7 @@ impl Parser {
         self.expect(&TokenKind::Semicolon)?;
 
         Ok(Newtype {
+            id,
             name,
             name_span,
             is_pub,
@@ -3842,6 +3895,7 @@ impl Parser {
     }
 
     fn parse_impl_block(&mut self) -> ParseResult<ImplBlock> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Impl)?;
 
@@ -3871,6 +3925,7 @@ impl Parser {
                 ));
             }
             return Ok(ImplBlock {
+                id,
                 type_params,
                 trait_type,
                 ty,
@@ -3899,6 +3954,7 @@ impl Parser {
                 let assoc_ty = self.parse_type()?;
                 let end = self.expect(&TokenKind::Semicolon)?.span;
                 associated_types.push(AssociatedTypeBinding {
+                    id: self.alloc_ast_id(),
                     name: assoc_name,
                     ty: assoc_ty,
                     span: type_span.merge(&end),
@@ -3922,6 +3978,7 @@ impl Parser {
                     let const_value = self.parse_expr()?;
                     let end = self.expect(&TokenKind::Semicolon)?.span;
                     constants.push(AssociatedConst {
+                        id: self.alloc_ast_id(),
                         name: const_name,
                         is_pub,
                         ty: const_ty,
@@ -3938,6 +3995,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(ImplBlock {
+            id,
             type_params,
             trait_type,
             ty,
@@ -3993,6 +4051,7 @@ impl Parser {
                 let bounds = self.parse_trait_bounds()?;
                 if !type_params.iter().any(|p| p.name == param_name) {
                     type_params.push(crate::ast::GenericParam {
+                        id: self.alloc_ast_id(),
                         name: param_name.clone(),
                         name_span: param_name_span,
                         is_effect: false,
@@ -4035,6 +4094,7 @@ impl Parser {
     /// }
     /// ```
     fn parse_trait_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<TraitDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Trait)?;
 
@@ -4063,6 +4123,7 @@ impl Parser {
                 };
                 let end = self.expect(&TokenKind::Semicolon)?.span;
                 associated_types.push(AssociatedTypeDecl {
+                    id: self.alloc_ast_id(),
                     name: assoc_name,
                     bounds,
                     span: type_span.merge(&end),
@@ -4078,6 +4139,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(TraitDecl {
+            id,
             name,
             name_span,
             is_pub,
@@ -4099,6 +4161,7 @@ impl Parser {
     /// }
     /// ```
     fn parse_world_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<WorldDecl> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::World)?;
         let name = self.consume_ident()?;
@@ -4130,6 +4193,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(WorldDecl {
+            id,
             name,
             is_pub,
             attrs,

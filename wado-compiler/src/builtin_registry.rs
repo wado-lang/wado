@@ -268,6 +268,7 @@ mod tests {
         let mut registry = BuiltinRegistry::new();
 
         let func = Function {
+            id: crate::ast::AstId::SYNTHETIC,
             name: "stream_new".to_string(),
             name_span: make_span(),
             is_pub: false,
@@ -303,6 +304,7 @@ mod tests {
         let mut registry = BuiltinRegistry::new();
 
         let func = Function {
+            id: crate::ast::AstId::SYNTHETIC,
             name: "unreachable".to_string(),
             name_span: make_span(),
             is_pub: false,
@@ -333,6 +335,7 @@ mod tests {
         let mut registry = BuiltinRegistry::new();
 
         let func = Function {
+            id: crate::ast::AstId::SYNTHETIC,
             name: "stream_write".to_string(),
             name_span: make_span(),
             is_pub: false,
@@ -342,6 +345,7 @@ mod tests {
             attrs: vec![],
             params: vec![
                 Param {
+                    id: crate::ast::AstId::SYNTHETIC,
                     name: "tx".to_string(),
                     name_span: make_span(),
                     ty: Type::Named(NamedType {
@@ -353,6 +357,7 @@ mod tests {
                     span: make_span(),
                 },
                 Param {
+                    id: crate::ast::AstId::SYNTHETIC,
                     name: "ptr".to_string(),
                     name_span: make_span(),
                     ty: Type::Named(NamedType {
@@ -364,6 +369,7 @@ mod tests {
                     span: make_span(),
                 },
                 Param {
+                    id: crate::ast::AstId::SYNTHETIC,
                     name: "len".to_string(),
                     name_span: make_span(),
                     ty: Type::Named(NamedType {

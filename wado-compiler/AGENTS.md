@@ -134,13 +134,22 @@ This means a simple **"recompute on file change, cache per-document"** model is 
 
 ### Target Architecture (remaining work)
 
-- Introduce stable `AstId` (module-local, parse-stable) and `AstPtr` (position-resolvable).
+- ✅ **Phase 1 (done):** Introduce stable `AstId` (module-local, parse-stable) and `AstPtr` (position-resolvable). Parser assigns dense, deterministic IDs to symbol-bearing AST nodes; `Module::ast_id_at(line, column)` provides innermost-containing-node lookup.
 - Rework `SymbolTable` / `TypeTable` to be keyed by `AstId` rather than consumed during TIR construction.
 - Split `resolve` into: (a) _annotate_ AST with `SymbolTable`/`TypeTable` (no lowering), (b) _lower_ to TIR as a later phase.
 - Expose a query API: `position → AstId`, `AstId → Symbol`, `AstId → ResolvedType`, `Symbol → defining AstId + source URI`.
 - Add a **lightweight analysis entry point** (parse + bind + resolve, no monomorphize/lower/codegen) for LSP use.
 - Add source URI to `Symbol` so cross-file definition results can be returned.
 - LSP caches analysis results per document and invalidates on change.
+
+### Phase 1 follow-up notes
+
+Follow-up PRs should cover:
+
+- `SymbolTable`/`TypeTable` → AstId-keyed storage.
+- `resolve` split into _annotate_ (AST-preserving) and _lower_ (AST→TIR).
+- Extend `AstId` coverage to `Expr`, `Stmt`, `Type` when TypeTable refactor lands.
+- LSP-side caching layer that consumes `Module::ast_id_at` for hover/go-to-def.
 
 ### Future: Incremental Analysis (salsa)
 
