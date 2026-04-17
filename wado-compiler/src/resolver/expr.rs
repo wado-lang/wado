@@ -593,7 +593,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // For imported functions, look up the module source from symbols
                 self.symbols
                     .lookup(&ident.name)
-                    .map(|s| s.module_source.clone())
+                    .map(|s| s.module_source().clone())
                     .unwrap_or_else(|| self.current_module_source.clone())
             };
             return TirExpr::new(
@@ -2051,7 +2051,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         } else if let Some(symbol) = self.symbols.lookup(name) {
             match &symbol.kind {
                 crate::symbol::SymbolKind::Struct(_) => {
-                    (symbol.name.clone(), symbol.module_source.clone())
+                    (symbol.name.clone(), symbol.module_source().clone())
                 }
                 _ => (name.clone(), self.current_module_source.clone()),
             }

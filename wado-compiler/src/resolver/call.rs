@@ -710,7 +710,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Get module source from symbol table for codegen
                     if let Some(symbol) = self.symbols.lookup(&ident.name) {
                         (
-                            Some(symbol.module_source.clone()),
+                            Some(symbol.module_source().clone()),
                             symbol.name.clone(),
                             true,
                         )
@@ -1295,7 +1295,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Check imported functions — resolve param types using
                 // the definition module's newtypes to avoid same-name collisions
                 if let Some(symbol) = self.symbols.lookup(&ident.name) {
-                    let src = symbol.module_source.clone();
+                    let src = symbol.module_source().clone();
                     let name = symbol.name.clone();
                     let params = Self::lookup_func_in_loaded_module(
                         self.loaded_modules,
@@ -1417,7 +1417,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Imported function
         if let Some(symbol) = self.symbols.lookup(&ident.name) {
-            let src = symbol.module_source.clone();
+            let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(func) = Self::lookup_func_in_loaded_module(
                 self.loaded_modules,
@@ -1570,7 +1570,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
         // Resolve the imported function via the symbol table to get its defining module.
         let symbol = self.symbols.lookup(func_name)?;
-        let src = symbol.module_source.clone();
+        let src = symbol.module_source().clone();
         let name = symbol.name.clone();
 
         let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>, Option<ast::Type>)> =
@@ -1837,7 +1837,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.lookup_current_func(&ident.name)
                     .map(|func| (func.type_params.clone(), func.params.clone()))
             } else if let Some(symbol) = self.symbols.lookup(&ident.name) {
-                let src = symbol.module_source.clone();
+                let src = symbol.module_source().clone();
                 let name = symbol.name.clone();
                 Self::lookup_func_in_loaded_module(
                     self.loaded_modules,
