@@ -1078,10 +1078,16 @@ fn scan_obj(tokens: &Array<Token>, pos: i32) -> i32 {
             if pos < 0 { break try_0; }
             while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
                 let sp = pos;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
-                pos += 1;
-                pos = scan_pair(tokens, pos);
-                if pos < 0 { return -1; }
+                sg_0_done: {
+                    sg_0: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_0; }
+                        pos += 1;
+                        pos = scan_pair(tokens, pos);
+                        if pos < 0 { break sg_0; }
+                        break sg_0_done;
+                    }
+                    pos = -1;
+                }
                 if pos < 0 { pos = sp; break; }
             }
             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { break try_0; }
@@ -1120,10 +1126,16 @@ fn scan_arr(tokens: &Array<Token>, pos: i32) -> i32 {
             if pos < 0 { break try_0; }
             while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
                 let sp = pos;
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
-                pos += 1;
-                pos = scan_value(tokens, pos);
-                if pos < 0 { return -1; }
+                sg_1_done: {
+                    sg_1: {
+                        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_1; }
+                        pos += 1;
+                        pos = scan_value(tokens, pos);
+                        if pos < 0 { break sg_1; }
+                        break sg_1_done;
+                    }
+                    pos = -1;
+                }
                 if pos < 0 { pos = sp; break; }
             }
             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { break try_0; }
@@ -1202,7 +1214,18 @@ fn parse_obj_bt_0(p: &mut Parser) -> Result<ObjNode, ParseError> {
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let pair = parse_pair(p)?;
     let mut comma_pair_list: Array<CommaPairItem> = [];
-    while p.peek_kind() == TK_LIT_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
+            pos += 1;
+            pos = scan_pair(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA)?;
         let pair = parse_pair(p)?;
         let comma_pair = CommaPairItem {
@@ -1229,10 +1252,16 @@ fn parse_obj_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
-        pos += 1;
-        pos = scan_pair(tokens, pos);
-        if pos < 0 { return -1; }
+        sg_2_done: {
+            sg_2: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_2; }
+                pos += 1;
+                pos = scan_pair(tokens, pos);
+                if pos < 0 { break sg_2; }
+                break sg_2_done;
+            }
+            pos = -1;
+        }
         if pos < 0 { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACE { return -1; }
@@ -1268,7 +1297,18 @@ fn parse_obj(p: &mut Parser) -> Result<ObjNode, ParseError> {
         if p.peek_kind() == TK_STRING {
             let pair = parse_pair(p)?;
             let mut comma_pair_list: Array<CommaPairItem> = [];
-            while p.peek_kind() == TK_LIT_COMMA {
+            loop {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
+                    pos += 1;
+                    pos = scan_pair(tokens, pos);
+                    if pos < 0 { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let pair = parse_pair(p)?;
                 let comma_pair = CommaPairItem {
@@ -1319,7 +1359,18 @@ fn parse_arr_bt_0(p: &mut Parser) -> Result<ArrNode, ParseError> {
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let value = parse_value(p)?;
     let mut comma_value_list: Array<CommaValueItem> = [];
-    while p.peek_kind() == TK_LIT_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
+            pos += 1;
+            pos = scan_value(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA)?;
         let value = parse_value(p)?;
         let comma_value = CommaValueItem {
@@ -1346,10 +1397,16 @@ fn parse_arr_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_COMMA {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { return -1; }
-        pos += 1;
-        pos = scan_value(tokens, pos);
-        if pos < 0 { return -1; }
+        sg_3_done: {
+            sg_3: {
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break sg_3; }
+                pos += 1;
+                pos = scan_value(tokens, pos);
+                if pos < 0 { break sg_3; }
+                break sg_3_done;
+            }
+            pos = -1;
+        }
         if pos < 0 { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }
@@ -1385,7 +1442,18 @@ fn parse_arr(p: &mut Parser) -> Result<ArrNode, ParseError> {
         if p.peek_kind() matches { TK_STRING | TK_NUMBER | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_TRUE | TK_LIT_FALSE | TK_LIT_NULL } {
             let value = parse_value(p)?;
             let mut comma_value_list: Array<CommaValueItem> = [];
-            while p.peek_kind() == TK_LIT_COMMA {
+            loop {
+                let mut rep_scan_pos: i32 = -1;
+                rep_scan: {
+                    let tokens = &p.tokens;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COMMA { break rep_scan; }
+                    pos += 1;
+                    pos = scan_value(tokens, pos);
+                    if pos < 0 { break rep_scan; }
+                    rep_scan_pos = pos;
+                }
+                if rep_scan_pos < 0 { break; }
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let value = parse_value(p)?;
                 let comma_value = CommaValueItem {

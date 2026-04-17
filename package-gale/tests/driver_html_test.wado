@@ -86,7 +86,10 @@ test "tree: simple tag" {
     assert_tree(&"<p>hello</p>", &"
         (htmlDocument
           (htmlElements
-            (htmlElement < p >)))
+            (htmlElement < p >
+              (htmlContent
+                (htmlChardata hello))
+              < / p >)))
     ");
 }
 
@@ -115,9 +118,13 @@ test "tree: nested tags" {
           (htmlElements
             (htmlElement < div
               (htmlAttribute class = \"main\")
-              >))
-          (htmlElements
-            (htmlElement < p >)))
+              >
+              (htmlContent
+                (htmlElement < p >
+                  (htmlContent
+                    (htmlChardata text))
+                  < / p >))
+              < / div >)))
     ");
 }
 

@@ -1212,7 +1212,16 @@ fn scan_atom(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_sexpr(p: &mut Parser) -> Result<SexprNode, ParseError> {
     let start = p.peek().span.start;
     let mut item_list: Array<ItemNode> = [];
-    while p.peek_kind() matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT | TK_LPAREN } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_item(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let item = parse_item(p)?;
         item_list.push(item);
     }
@@ -1284,8 +1293,25 @@ fn parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     }
     if kind == TK_LPAREN {
         if p.peek_kind() == TK_LPAREN {
-            if parse_item_scan_2(&p.tokens, p.pos) >= 0 {
+            let _sd_tokens = &p.tokens;
+            let _sd_pos = p.pos;
+            let _sd_p_2 = parse_item_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_1 = parse_item_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 2 {
                 return parse_item_bt_2(p);
+            }
+            if _sd_best_i == 1 {
+                return parse_item_bt_1(p);
             }
             return parse_item_bt_1(p);
         }
@@ -1301,7 +1327,16 @@ fn parse_list_(p: &mut Parser) -> Result<ListNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
     let mut item_list: Array<ItemNode> = [];
-    while p.peek_kind() matches { TK_STRING | TK_SYMBOL | TK_NUMBER | TK_DOT | TK_LPAREN } {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.tokens;
+            let mut pos: i32 = p.pos;
+            pos = scan_item(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let item = parse_item(p)?;
         item_list.push(item);
     }

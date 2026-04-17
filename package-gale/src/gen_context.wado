@@ -222,12 +222,17 @@ impl GenContext {
         return result;
     }
 
-    /// Returns true if the rule can be recognized by a bounded token scan.
-    /// A rule is scannable if it does not transitively reference any rule that
-    /// has left-recursive alternatives. Left-recursive rules (like `expr`) can
-    /// span arbitrarily large input, making scanning as expensive as parsing.
-    /// Self-recursive but non-left-recursive rules (like `any_name`) are
-    /// scannable because their recursion is bounded by delimiters.
+    /// Returns true if the rule is safe to scan as a predicate prefix.
+    /// Left-recursive rules (like `expr`) are excluded because their generated
+    /// scan functions use greedy single-commit semantics that cannot faithfully
+    /// reproduce the parser's multi-token lookahead disambiguation. Including
+    /// them in a per-alt scan prefix can cause the scan to stop short of the
+    /// real match, leading to wrong alt selection.
+    ///
+    /// A scan_X function is still generated for every rule (including LR ones)
+    /// so that future stages can call them where appropriate; this predicate
+    /// only controls whether `gen_bt_scan_if_possible` may extend a per-alt
+    /// scan past a RuleRef to a given rule.
     pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
         let cached = self.scannable_cache.get(*name);
         if let Some(val) = cached {
@@ -236,10 +241,6 @@ impl GenContext {
 
         let visiting_set = str_set_from(visiting);
         if visiting_set.contains(*name) {
-            // Cycle back to a rule we're already checking — this is fine for
-            // non-left-recursive rules (bounded recursion). Return true here;
-            // if the rule is left-recursive, it will be caught by the
-            // has_left_recursive_alt check on the initial call.
             return true;
         }
 
@@ -250,7 +251,6 @@ impl GenContext {
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
             if has_left_recursive_alt(&rule.alternatives, name) {
-                // Left-recursive rules are not scannable.
                 result = false;
             } else {
                 let mut all_ok = true;
