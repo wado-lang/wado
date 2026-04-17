@@ -3,6 +3,72 @@
 use crate::hashmap::IndexSet;
 use crate::token::Span;
 
+/// Module-local, parse-stable identifier for AST nodes that bear semantic
+/// significance (items, named members, parameters).
+///
+/// The parser assigns ids in DFS order starting from `0`; ids for a given
+/// module are densely packed in `0..Module::ast_id_count()`.
+///
+/// Synthetic nodes that did not originate from a parse (e.g. compiler-built
+/// builtins or test fixtures) use [`AstId::SYNTHETIC`] and do not participate
+/// in position-based lookups.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct AstId(pub u32);
+
+impl AstId {
+    /// Sentinel id for AST nodes that were not produced by the parser
+    /// (compiler-synthesised builtins, test fixtures, etc.). These nodes do
+    /// not appear in `Module::ast_id_count()` accounting and are excluded
+    /// from position lookups.
+    pub const SYNTHETIC: AstId = AstId(u32::MAX);
+}
+
+/// Discriminator for the kind of AST node an [`AstPtr`] points to.
+///
+/// Mirrors the shape of `Item` and the named members reachable from items
+/// (struct fields, enum/variant cases, params, etc.). Used to disambiguate
+/// nodes that share a span (e.g. a single-field struct and its sole field
+/// at the same opening brace position).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AstNodeKind {
+    Function,
+    Struct,
+    Enum,
+    Variant,
+    Flags,
+    Trait,
+    Newtype,
+    Effect,
+    Global,
+    Resource,
+    World,
+    Impl,
+    Use,
+    Test,
+    TupleType,
+    StructField,
+    EnumCase,
+    VariantCase,
+    FlagsVariant,
+    EffectMethod,
+    AssocTypeDecl,
+    AssocConst,
+    AssocTypeBinding,
+    GenericParam,
+    Param,
+}
+
+/// Position-resolvable pointer to an AST node.
+///
+/// Pairs an [`AstNodeKind`] with the source [`Span`] of the node. Two pointers
+/// compare equal iff both halves match, which is sufficient as a stable
+/// identity within a single module version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AstPtr {
+    pub kind: AstNodeKind,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct Module {
     pub items: Vec<Item>,
@@ -15,6 +81,10 @@ pub struct Module {
     data_section: Option<String>,
     /// Paths referenced by `#include_str` and `#include_bytes` literals, collected during parsing.
     include_paths: IndexSet<String>,
+    /// Total number of [`AstId`]s allocated for this module during parsing.
+    /// Real ids occupy the range `0..ast_id_count`; synthetic nodes use
+    /// [`AstId::SYNTHETIC`] and are not counted.
+    ast_id_count: u32,
 }
 
 /// Inner attribute like `#![no_prelude]`, `#![wasm_module("mem")]`, or
@@ -70,6 +140,7 @@ impl Module {
             shebang: None,
             data_section: None,
             include_paths: IndexSet::default(),
+            ast_id_count: 0,
         }
     }
 
@@ -80,6 +151,7 @@ impl Module {
         shebang: Option<String>,
         data_section: Option<String>,
         include_paths: IndexSet<String>,
+        ast_id_count: u32,
     ) -> Self {
         Self {
             items,
@@ -87,9 +159,170 @@ impl Module {
             shebang,
             data_section,
             include_paths,
+            ast_id_count,
         }
     }
 
+    /// Returns the total number of [`AstId`]s allocated for this module.
+    /// Real ids occupy `0..ast_id_count()`; synthetic nodes are not counted.
+    pub fn ast_id_count(&self) -> u32 {
+        self.ast_id_count
+    }
+
+    /// Find the [`AstId`] of the smallest id-bearing AST node whose span
+    /// contains the given 1-based `(line, column)` position.
+    ///
+    /// Synthetic nodes ([`AstId::SYNTHETIC`]) are excluded. Returns `None`
+    /// if no id-bearing node contains the position.
+    pub fn ast_id_at(&self, line: usize, column: usize) -> Option<AstId> {
+        let mut best: Option<(AstId, Span)> = None;
+        let mut visitor = |id: AstId, span: Span| {
+            if id == AstId::SYNTHETIC || !span_contains(span, line, column) {
+                return;
+            }
+            match best {
+                None => best = Some((id, span)),
+                Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
+                    best = Some((id, span));
+                }
+                _ => {}
+            }
+        };
+        for item in &self.items {
+            visit_item_ids(item, &mut visitor);
+        }
+        best.map(|(id, _)| id)
+    }
+}
+
+/// Returns true if `(line, column)` lies in `[span.line:column, span.end_line:end_column)`.
+fn span_contains(span: Span, line: usize, column: usize) -> bool {
+    if line < span.line || line > span.end_line {
+        return false;
+    }
+    if line == span.line && column < span.column {
+        return false;
+    }
+    if line == span.end_line && column >= span.end_column {
+        return false;
+    }
+    true
+}
+
+fn span_byte_len(span: Span) -> usize {
+    span.end.saturating_sub(span.start)
+}
+
+fn visit_item_ids(item: &Item, f: &mut impl FnMut(AstId, Span)) {
+    match item {
+        Item::Use(u) => f(u.id, u.span),
+        Item::Function(func) => visit_function_ids(func, f),
+        Item::Effect(e) => {
+            f(e.id, e.span);
+            for m in &e.methods {
+                visit_effect_method_ids(m, f);
+            }
+        }
+        Item::Struct(s) => {
+            f(s.id, s.span);
+            for p in &s.type_params {
+                f(p.id, p.span);
+            }
+            for field in &s.fields {
+                f(field.id, field.span);
+            }
+        }
+        Item::Enum(e) => {
+            f(e.id, e.span);
+            for p in &e.type_params {
+                f(p.id, p.span);
+            }
+            for case in &e.cases {
+                f(case.id, case.span);
+            }
+        }
+        Item::Variant(v) => {
+            f(v.id, v.span);
+            for p in &v.type_params {
+                f(p.id, p.span);
+            }
+            for case in &v.cases {
+                f(case.id, case.span);
+            }
+        }
+        Item::Flags(fl) => {
+            f(fl.id, fl.span);
+            for v in &fl.flags {
+                f(v.id, v.span);
+            }
+        }
+        Item::Newtype(n) => {
+            f(n.id, n.span);
+            for p in &n.type_params {
+                f(p.id, p.span);
+            }
+        }
+        Item::TupleTypeDecl(t) => f(t.id, t.span),
+        Item::Impl(i) => {
+            f(i.id, i.span);
+            for p in &i.type_params {
+                f(p.id, p.span);
+            }
+            for binding in &i.associated_types {
+                f(binding.id, binding.span);
+            }
+            for c in &i.constants {
+                f(c.id, c.span);
+            }
+            for m in &i.methods {
+                visit_function_ids(m, f);
+            }
+        }
+        Item::Trait(t) => {
+            f(t.id, t.span);
+            for p in &t.type_params {
+                f(p.id, p.span);
+            }
+            for assoc in &t.associated_types {
+                f(assoc.id, assoc.span);
+            }
+            for m in &t.methods {
+                visit_function_ids(m, f);
+            }
+        }
+        Item::Resource(r) => {
+            f(r.id, r.span);
+            for p in &r.type_params {
+                f(p.id, p.span);
+            }
+            for m in &r.methods {
+                visit_effect_method_ids(m, f);
+            }
+        }
+        Item::World(w) => f(w.id, w.span),
+        Item::Test(t) => f(t.id, t.span),
+        Item::Global(g) => f(g.id, g.span),
+    }
+}
+
+fn visit_function_ids(func: &Function, f: &mut impl FnMut(AstId, Span)) {
+    f(func.id, func.span);
+    for p in &func.type_params {
+        f(p.id, p.span);
+    }
+    for param in &func.params {
+        f(param.id, param.span);
+    }
+}
+
+fn visit_effect_method_ids(method: &EffectMethod, f: &mut impl FnMut(AstId, Span)) {
+    f(method.id, method.span);
+    for param in &method.params {
+        f(param.id, param.span);
+    }
+}
+
+impl Module {
     /// Returns the inner attributes.
     pub fn inner_attributes(&self) -> &[InnerAttribute] {
         &self.inner_attributes
@@ -184,6 +417,7 @@ pub enum Item {
 /// Test declaration: `test "name" { ... }` or `test { ... }`
 #[derive(Debug, Clone)]
 pub struct TestDecl {
+    pub id: AstId,
     /// Attributes applied to this test (e.g., `#[expect_trap]`).
     pub attributes: Vec<Attribute>,
     /// Optional test name (string literal). If None, identified by <file:line>.
@@ -196,6 +430,7 @@ pub struct TestDecl {
 /// or `pub global mut name: Type = expr;`
 #[derive(Debug, Clone)]
 pub struct GlobalDecl {
+    pub id: AstId,
     pub name: String,
     /// Span of the identifier token alone (for LSP name-targeted queries).
     pub name_span: Span,
@@ -351,6 +586,7 @@ impl CmImport {
 /// Resource declaration like `resource Foo;` or `resource Foo<T> { fn method(...); }`
 #[derive(Debug, Clone)]
 pub struct ResourceDecl {
+    pub id: AstId,
     pub name: String,
     pub is_pub: bool,
     /// Generic type parameters: `resource Future<T> { ... }`
@@ -372,6 +608,7 @@ pub struct ResourceDecl {
 /// ```
 #[derive(Debug, Clone)]
 pub struct WorldDecl {
+    pub id: AstId,
     pub name: String,
     pub is_pub: bool,
     pub attrs: Vec<Attribute>,
@@ -450,6 +687,7 @@ pub struct ImportAttributes {
 /// `pub use {items} from "source"` (re-export)
 #[derive(Debug, Clone)]
 pub struct UseDecl {
+    pub id: AstId,
     /// Whether this is a public re-export
     pub is_pub: bool,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
@@ -463,6 +701,7 @@ pub struct UseDecl {
 
 #[derive(Debug, Clone)]
 pub struct Function {
+    pub id: AstId,
     pub name: String,
     /// Span of the function name identifier alone (for LSP name-targeted queries).
     pub name_span: Span,
@@ -496,6 +735,7 @@ pub enum SelfKind {
 
 #[derive(Debug, Clone)]
 pub struct Param {
+    pub id: AstId,
     pub name: String,
     /// Span of the parameter name identifier (or `self` token for self params).
     pub name_span: Span,
@@ -1293,6 +1533,7 @@ impl std::fmt::Display for StoresEntry {
 // Placeholder types for future implementation
 #[derive(Debug, Clone)]
 pub struct EffectDecl {
+    pub id: AstId,
     pub name: String,
     /// Span of the effect name identifier.
     pub name_span: Span,
@@ -1304,6 +1545,7 @@ pub struct EffectDecl {
 
 #[derive(Debug, Clone)]
 pub struct EffectMethod {
+    pub id: AstId,
     pub name: String,
     /// Span of the method name identifier.
     pub name_span: Span,
@@ -1335,6 +1577,7 @@ pub struct TraitBound {
 /// Effect parameter declaration: `<effect E>` — represents a set of effects
 #[derive(Debug, Clone)]
 pub struct GenericParam {
+    pub id: AstId,
     pub name: String,
     /// Span of the type parameter name identifier.
     pub name_span: Span,
@@ -1351,6 +1594,7 @@ pub struct GenericParam {
 
 #[derive(Debug, Clone)]
 pub struct StructDecl {
+    pub id: AstId,
     pub name: String,
     /// Span of the struct name identifier.
     pub name_span: Span,
@@ -1365,6 +1609,7 @@ pub struct StructDecl {
 
 #[derive(Debug, Clone)]
 pub struct StructField {
+    pub id: AstId,
     pub name: String,
     /// Span of the field name identifier.
     pub name_span: Span,
@@ -1377,6 +1622,7 @@ pub struct StructField {
 
 #[derive(Debug, Clone)]
 pub struct EnumDecl {
+    pub id: AstId,
     pub name: String,
     /// Span of the enum name identifier.
     pub name_span: Span,
@@ -1393,6 +1639,7 @@ pub struct EnumDecl {
 /// Unlike `VariantCase`, enum cases have no payload.
 #[derive(Debug, Clone)]
 pub struct EnumCase {
+    pub id: AstId,
     pub name: String,
     /// Span of the case name identifier.
     pub name_span: Span,
@@ -1411,6 +1658,7 @@ pub struct EnumCase {
 /// ```
 #[derive(Debug, Clone)]
 pub struct FlagsDecl {
+    pub id: AstId,
     pub name: String,
     /// Span of the flags name identifier.
     pub name_span: Span,
@@ -1422,6 +1670,7 @@ pub struct FlagsDecl {
 
 #[derive(Debug, Clone)]
 pub struct FlagsVariant {
+    pub id: AstId,
     pub name: String,
     /// Span of the flag member name identifier.
     pub name_span: Span,
@@ -1439,6 +1688,7 @@ pub struct FlagsVariant {
 /// ```
 #[derive(Debug, Clone)]
 pub struct VariantDecl {
+    pub id: AstId,
     pub name: String,
     /// Span of the variant name identifier.
     pub name_span: Span,
@@ -1460,6 +1710,7 @@ pub struct VariantDecl {
 /// - Struct payloads: `Named({ w: f64 })` → payload is `Some({ w: f64 })`
 #[derive(Debug, Clone)]
 pub struct VariantCase {
+    pub id: AstId,
     pub name: String,
     /// Span of the case name identifier.
     pub name_span: Span,
@@ -1473,6 +1724,7 @@ pub struct VariantCase {
 
 #[derive(Debug, Clone)]
 pub struct Newtype {
+    pub id: AstId,
     pub name: String,
     /// Span of the newtype name identifier.
     pub name_span: Span,
@@ -1489,6 +1741,7 @@ pub struct Newtype {
 /// This is a type-system anchor that generates no code.
 #[derive(Debug, Clone)]
 pub struct TupleTypeDecl {
+    pub id: AstId,
     pub is_pub: bool,
     pub attrs: Vec<Attribute>,
     pub span: Span,
@@ -1497,6 +1750,7 @@ pub struct TupleTypeDecl {
 /// Associated type declaration in a trait: `type Output;` or `type Output: Trait1 + Trait2;`
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeDecl {
+    pub id: AstId,
     pub name: String,
     /// Trait bounds on this associated type (e.g., `SerializeSeq` in `type SeqSerializer: SerializeSeq;`
     /// or `Iterator<Item = Self::Item>` in `type Iter: Iterator<Item = Self::Item>;`)
@@ -1507,6 +1761,7 @@ pub struct AssociatedTypeDecl {
 /// Associated type binding in an impl block: `type Output = T;`
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeBinding {
+    pub id: AstId,
     pub name: String,
     pub ty: Type,
     pub span: Span,
@@ -1516,6 +1771,7 @@ pub struct AssociatedTypeBinding {
 /// These are compile-time constants that are inlined at every use site.
 #[derive(Debug, Clone)]
 pub struct AssociatedConst {
+    pub id: AstId,
     pub name: String,
     pub is_pub: bool,
     pub ty: Type,
@@ -1526,6 +1782,7 @@ pub struct AssociatedConst {
 /// Trait declaration: `trait Foo { type Output; fn method(&self) -> Self::Output; }`
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
+    pub id: AstId,
     pub name: String,
     /// Span of the trait name identifier.
     pub name_span: Span,
@@ -1541,6 +1798,7 @@ pub struct TraitDecl {
 
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
+    pub id: AstId,
     /// Generic type parameters: `impl<T> Box<T> { ... }`
     pub type_params: Vec<GenericParam>,
     /// The trait being implemented, if any: `impl Trait for Type`
@@ -1555,4 +1813,132 @@ pub struct ImplBlock {
     /// `impl Trait for Type;` — synthesis request (compiler generates the body)
     pub is_synthesize_request: bool,
     pub span: Span,
+}
+
+#[cfg(test)]
+mod ast_id_tests {
+    use super::*;
+    use crate::hashmap::IndexSet;
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+
+    fn parse(source: &str) -> Module {
+        let tokens = Lexer::new(source).tokenize().expect("lex");
+        let mut parser = Parser::new(tokens);
+        parser.parse().expect("parse")
+    }
+
+    const SAMPLE: &str = r#"
+use { println } from "core:cli";
+
+global COUNT: i32 = 0;
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+enum Color { Red, Green, Blue }
+
+variant Shape {
+    Circle(f64),
+    Square,
+}
+
+flags Perms { Read, Write }
+
+trait Greet {
+    fn hello(&self) -> String;
+}
+
+impl Point {
+    fn origin() -> Point {
+        return Point { x: 0, y: 0 };
+    }
+}
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+test "addition" {
+    assert add(1, 2) == 3;
+}
+"#;
+
+    #[test]
+    fn parse_assigns_stable_ids() {
+        let m1 = parse(SAMPLE);
+        let m2 = parse(SAMPLE);
+        assert_eq!(m1.ast_id_count(), m2.ast_id_count());
+        assert!(m1.ast_id_count() > 0);
+
+        let mut ids_1 = Vec::new();
+        for item in &m1.items {
+            visit_item_ids(item, &mut |id, _| ids_1.push(id));
+        }
+        let mut ids_2 = Vec::new();
+        for item in &m2.items {
+            visit_item_ids(item, &mut |id, _| ids_2.push(id));
+        }
+        assert_eq!(ids_1, ids_2);
+    }
+
+    #[test]
+    fn ids_are_dense_and_unique() {
+        let m = parse(SAMPLE);
+        let mut ids: Vec<AstId> = Vec::new();
+        for item in &m.items {
+            visit_item_ids(item, &mut |id, _| ids.push(id));
+        }
+        assert!(!ids.is_empty());
+
+        let mut seen: IndexSet<AstId> = IndexSet::default();
+        for id in &ids {
+            assert!(seen.insert(*id), "duplicate id: {id:?}");
+            assert_ne!(*id, AstId::SYNTHETIC);
+            assert!(
+                id.0 < m.ast_id_count(),
+                "id {} out of range (count={})",
+                id.0,
+                m.ast_id_count()
+            );
+        }
+        for i in 0..m.ast_id_count() {
+            assert!(seen.contains(&AstId(i)), "missing id {i} in dense range");
+        }
+    }
+
+    #[test]
+    fn ast_id_at_returns_innermost_node() {
+        let src = "struct Point {\n    x: i32,\n    y: i32,\n}\n";
+        let m = parse(src);
+        let struct_id = m.items.iter().find_map(|it| match it {
+            Item::Struct(s) => Some(s.id),
+            _ => None,
+        });
+        let field_ids: Vec<AstId> = m
+            .items
+            .iter()
+            .flat_map(|it| match it {
+                Item::Struct(s) => s.fields.iter().map(|f| f.id).collect::<Vec<_>>(),
+                _ => vec![],
+            })
+            .collect();
+        assert_eq!(field_ids.len(), 2);
+
+        // Position inside the `x: i32` field span returns the field id, not the struct.
+        let at_field = m.ast_id_at(2, 5);
+        assert_eq!(at_field, Some(field_ids[0]));
+
+        // Position inside the struct but outside any field (e.g. the struct name).
+        let at_struct_name = m.ast_id_at(1, 9);
+        assert_eq!(at_struct_name, struct_id);
+    }
+
+    #[test]
+    fn ast_id_at_outside_returns_none() {
+        let m = parse("fn add(a: i32, b: i32) -> i32 { return a + b; }\n");
+        assert_eq!(m.ast_id_at(42, 1), None);
+    }
 }

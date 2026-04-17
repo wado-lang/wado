@@ -40,6 +40,7 @@ pub mod wir_visitor;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
+pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use compiler_host::{
     Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SourceError,

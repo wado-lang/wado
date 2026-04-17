@@ -920,13 +920,17 @@ condition: trailers.has(\"x-request-id\" as FieldName)
     let __fw_write_ptr_3: i32;
     let __fw_handle_3: i32;
     let __fw_result_3: i32;
+    let __fw_resource_3: i32;
     __fw_handle_3 = trailers_tx;
+    __fw_resource_3 = trailers;
     __fw_write_ptr_3 = "mem/realloc"(0, 0, 8, 40);
     builtin::store_i64(__fw_write_ptr_3, 0_i64);
     builtin::store_i64[8](__fw_write_ptr_3, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_3, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_3, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_3, 0_i64);
+    builtin::store_u8[8](__fw_write_ptr_3, 1);
+    builtin::store_i32[12](__fw_write_ptr_3, __fw_resource_3);
     __fw_result_3 = "wasi/future-write"(__fw_handle_3, __fw_write_ptr_3);
     if __fw_result_3 == -1 {
         let __fw_evt_3: i32;

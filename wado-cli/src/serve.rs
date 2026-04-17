@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::fmt::Write as _;
 use std::net::SocketAddr;
 use std::pin::pin;
@@ -7,11 +8,12 @@ use std::sync::Arc;
 use anyhow::Result;
 use bytes::Bytes;
 use futures::future::{Either, select};
-use http_body_util::{BodyExt, Full};
-use hyper::server::conn::http1;
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, Collected, Full};
 use hyper::service::service_fn;
 use hyper::{Request as HyperRequest, Response as HyperResponse};
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::server::conn::auto;
 use lexopt::Arg::Value;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
@@ -212,12 +214,17 @@ fn create_http_state() -> HttpWasiState {
 /// — handler completing first is the normal case (a guest may never consume
 /// the request body, in which case the I/O future only resolves when the
 /// request resource is dropped).
+///
+/// The success body is returned as a `Collected<Bytes>` (boxed) rather than
+/// `Full<Bytes>` so that response trailers written by the guest survive the
+/// hop into hyper. `Full<Bytes>` carries no trailer frames, which would silently
+/// strip e.g. `Server-Timing` written via `trailers_tx.write(Some(...))`.
 async fn handle_http_request(
     engine: &Engine,
     component: &Component,
     linker: &Linker<HttpWasiState>,
     req: HyperRequest<hyper::body::Incoming>,
-) -> Result<HyperResponse<Full<Bytes>>> {
+) -> Result<HyperResponse<BoxBody<Bytes, Infallible>>> {
     type HttpErrorCode = wasmtime_wasi_http::p3::bindings::http::types::ErrorCode;
 
     let state = create_http_state();
@@ -230,33 +237,35 @@ async fn handle_http_request(
     let http_req = http::Request::from_parts(parts, body);
     let (wasi_req, io) = WasiRequest::from_http(http_req);
 
-    let result = store
-        .run_concurrent(
-            async |store| -> Result<Result<http::Response<Bytes>, Option<HttpErrorCode>>> {
-                let handler = pin!(async {
-                    let res = match service.handle(store, wasi_req).await? {
-                        Ok(res) => res,
-                        Err(err) => return anyhow::Ok(Err(Some(err))),
-                    };
-                    let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
-                    let (parts, body) = res.into_parts();
-                    let body = BodyExt::collect(body)
-                        .await
-                        .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?
-                        .to_bytes();
-                    anyhow::Ok(Ok(http::Response::from_parts(parts, body)))
-                });
-                let io = pin!(async {
-                    io.await
-                        .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
-                });
-                match select(handler, io).await {
-                    Either::Left((result, _)) => result,
-                    Either::Right((result, _)) => result.map(|()| Err(None)),
-                }
-            },
-        )
-        .await;
+    let result =
+        store
+            .run_concurrent(
+                async |store| -> Result<
+                    Result<http::Response<Collected<Bytes>>, Option<HttpErrorCode>>,
+                > {
+                    let handler = pin!(async {
+                        let res = match service.handle(store, wasi_req).await? {
+                            Ok(res) => res,
+                            Err(err) => return anyhow::Ok(Err(Some(err))),
+                        };
+                        let res = store.with(|store| res.into_http(store, async { Ok(()) }))?;
+                        let (parts, body) = res.into_parts();
+                        let collected = BodyExt::collect(body)
+                            .await
+                            .map_err(|e| anyhow::anyhow!("failed to collect response body: {e}"))?;
+                        anyhow::Ok(Ok(http::Response::from_parts(parts, collected)))
+                    });
+                    let io = pin!(async {
+                        io.await
+                            .map_err(|e| anyhow::anyhow!("request body I/O: {e}"))
+                    });
+                    match select(handler, io).await {
+                        Either::Left((result, _)) => result,
+                        Either::Right((result, _)) => result.map(|()| Err(None)),
+                    }
+                },
+            )
+            .await;
 
     let result = match result {
         Ok(Ok(inner)) => inner,
@@ -264,28 +273,32 @@ async fn handle_http_request(
             eprintln!("Handler trapped: {e:?}");
             return Ok(HyperResponse::builder()
                 .status(500)
-                .body(Full::new(Bytes::from(format!("Handler trapped:\n{e:?}"))))?);
+                .body(error_body(format!("Handler trapped:\n{e:?}")))?);
         }
         Err(e) => {
             eprintln!("Handler trapped: {e:?}");
             return Ok(HyperResponse::builder()
                 .status(500)
-                .body(Full::new(Bytes::from(format!("Handler trapped:\n{e:?}"))))?);
+                .body(error_body(format!("Handler trapped:\n{e:?}")))?);
         }
     };
 
     match result {
         Ok(res) => {
             let (parts, body) = res.into_parts();
-            Ok(HyperResponse::from_parts(parts, Full::new(body)))
+            Ok(HyperResponse::from_parts(parts, BoxBody::new(body)))
         }
         Err(Some(error_code)) => Ok(HyperResponse::builder()
             .status(500)
-            .body(Full::new(Bytes::from(format!("{error_code:?}"))))?),
+            .body(error_body(format!("{error_code:?}")))?),
         Err(None) => Ok(HyperResponse::builder()
             .status(500)
-            .body(Full::new(Bytes::from("Handler returned error")))?),
+            .body(error_body("Handler returned error".to_string()))?),
     }
+}
+
+fn error_body(msg: String) -> BoxBody<Bytes, Infallible> {
+    BoxBody::new(Full::new(Bytes::from(msg)))
 }
 
 async fn run_http_server(wasm: Vec<u8>, addr: &str) -> Result<()> {
@@ -324,7 +337,13 @@ async fn run_http_server(wasm: Vec<u8>, addr: &str) -> Result<()> {
                 }
             });
 
-            if let Err(e) = http1::Builder::new().serve_connection(io, service).await {
+            // Auto-detect HTTP/1.1 vs h2c (HTTP/2 cleartext, prior-knowledge)
+            // by sniffing the connection preface. HTTP/1 callers see normal
+            // behavior; h2c clients (e.g. `curl --http2-prior-knowledge`) get
+            // trailers without needing the `TE: trailers` handshake hyper
+            // requires on the HTTP/1 path.
+            let builder = auto::Builder::new(TokioExecutor::new());
+            if let Err(e) = builder.serve_connection(io, service).await {
                 eprintln!("Error serving {remote_addr}: {e}");
             }
         });
