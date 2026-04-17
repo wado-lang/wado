@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776418090968,
+  "lastUpdate": 1776418963251,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13439,6 +13439,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fbcb68f5822029a4e99184a4096b09eed3c24bdc"
         },
         "date": 1776418090677,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7e18ab76a2f79b1c9c61d555d368ecf81ba5cc10",
+          "message": "Merge pull request #855 from wado-lang/copilot/add-standalone-min-repro-e2e-fixure\n\nNarrow implicit `&mut self` address-taken tracking to primitive local receivers",
+          "timestamp": "2026-04-17T18:39:10+09:00",
+          "tree_id": "3a3e6b92a8ceb4ae55257996d63f72fc9bf4dcf5",
+          "url": "https://github.com/wado-lang/wado/commit/7e18ab76a2f79b1c9c61d555d368ecf81ba5cc10"
+        },
+        "date": 1776418962966,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
