@@ -124,7 +124,6 @@ This crate must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `s
 The current pipeline (`parse → bind → desugar → load → analyze → resolve → TIR → monomorphize → lower → optimize → codegen`) treats **resolve as AST → TIR lowering**. This is fine for batch compilation but hostile to LSP:
 
 - TIR is a transformed tree, losing 1:1 correspondence with source AST. `position → type` / `position → symbol` queries have no direct path.
-- AST declarations carry a single `Span` covering the whole item, not the name identifier. LSP features (go-to-definition, rename, hover) need the name span.
 - Symbols lack source-file/URI info, so cross-file navigation cannot be assembled.
 
 ### Design Context
@@ -133,10 +132,9 @@ Coding agents write most of the code, so keystroke-level incremental analysis is
 
 This means a simple **"recompute on file change, cache per-document"** model is sufficient: parse + bind + resolve runs once per `didChange`/`didSave` (typically tens of milliseconds for a single file), and results are cached until the next change. No demand-driven incremental framework (salsa) is needed at this scale.
 
-### Target Architecture
+### Target Architecture (remaining work)
 
 - Introduce stable `AstId` (module-local, parse-stable) and `AstPtr` (position-resolvable).
-- Add `name_span: Span` to every AST declaration (fn, struct, enum, variant, flags, trait, newtype, impl method, global, let, param).
 - Rework `SymbolTable` / `TypeTable` to be keyed by `AstId` rather than consumed during TIR construction.
 - Split `resolve` into: (a) _annotate_ AST with `SymbolTable`/`TypeTable` (no lowering), (b) _lower_ to TIR as a later phase.
 - Expose a query API: `position → AstId`, `AstId → Symbol`, `AstId → ResolvedType`, `Symbol → defining AstId + source URI`.
@@ -158,12 +156,3 @@ If the project grows to hundreds of files and per-file reanalysis becomes a bott
 
 - This plan does **not** change the language, `Package` format, or codegen output.
 - Batch compilation (`wado compile`) continues to work by driving the query chain end-to-end.
-
-### `name_span` Convention
-
-Every AST declaration must carry a `name_span: Span` covering **only the name identifier**, in addition to the existing `span` (which covers the whole item).
-
-- Why: LSP features (go-to-definition, hover target, rename, semantic token for declaration name) need to highlight/click the name alone. The item-wide `span` is too coarse; lexer heuristics to recover the name position are fragile and duplicated in wado-lsp.
-- Where: `Function`, `Struct`, `Enum` (and each enum member), `Variant` (and each variant case), `Flags` (and each flag member), `Trait`, `Newtype`, `Effect`, `Global`, `Impl` method, `LetStatement` binding, function/closure `Parameter`, generic `TypeParameter`.
-- Parser responsibility: capture the span at the identifier token at parse time. Do not reconstruct from `span` later.
-- Independent of the larger refactor: `name_span` can land first on its own; it is a pure additive change with immediate LSP benefit.
