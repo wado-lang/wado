@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776418963251,
+  "lastUpdate": 1776431749044,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13478,6 +13478,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7e18ab76a2f79b1c9c61d555d368ecf81ba5cc10"
         },
         "date": 1776418962966,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cc56d4382a12bc6c42fb618dcc0e7063cf23bdee",
+          "message": "Merge pull request #856 from wado-lang/gfx/trailers\n\nfeat(http): support response trailers end-to-end",
+          "timestamp": "2026-04-17T22:11:17+09:00",
+          "tree_id": "c544011e47e4ee945a032988e0dd1edb10318b40",
+          "url": "https://github.com/wado-lang/wado/commit/cc56d4382a12bc6c42fb618dcc0e7063cf23bdee"
+        },
+        "date": 1776431748815,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
