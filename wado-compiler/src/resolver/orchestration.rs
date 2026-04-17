@@ -741,8 +741,47 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
+        Self::register_symbol_key_type_indices(symbols, &type_table);
+
         drop(_span);
         logger.ok_or_bail(result)
+    }
+
+    /// Populate `TypeTable::type_by_symbol` / `symbol_by_type` by walking every
+    /// type-declaring symbol and looking up the `TypeId` the resolver created
+    /// for it.
+    ///
+    /// This runs as a post-pass over the whole symbol table rather than being
+    /// instrumented at each `make_struct` / `make_enum` / ... call site: the
+    /// decl-creation sites are spread across resolver/module.rs,
+    /// resolver/type_resolution.rs, resolver/orchestration.rs, resolver/call.rs,
+    /// and resolver/expr.rs, and threading a `SymbolKey` through every one of
+    /// them would churn ~40 call sites. The symbol-table walk is O(symbols) and
+    /// touches only declarations, so the cost is negligible.
+    fn register_symbol_key_type_indices(
+        symbols: &SymbolTable,
+        type_table: &Rc<RefCell<TypeTable>>,
+    ) {
+        use crate::symbol::SymbolKind;
+        let mut tt = type_table.borrow_mut();
+        for symbol in symbols.all_symbols() {
+            let is_type_decl = matches!(
+                symbol.kind,
+                SymbolKind::Struct(_)
+                    | SymbolKind::Enum(_)
+                    | SymbolKind::Variant(_)
+                    | SymbolKind::Flags(_)
+                    | SymbolKind::Newtype(_)
+                    | SymbolKind::Resource(_)
+            );
+            if !is_type_decl {
+                continue;
+            }
+            let key = symbol.defined_at.clone();
+            if let Some(type_id) = tt.find_decl_type_by_name(&symbol.name, &key.module) {
+                tt.register_decl_type(key, type_id);
+            }
+        }
     }
 
     /// Build a module-specific flat map from per-module entries.
