@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776436591804,
+  "lastUpdate": 1776437110276,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13634,6 +13634,45 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5953bd18f0e53d01d2b8fcf9a7990443eebdfd08"
         },
         "date": 1776436591513,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "233b7edea39e607391750bbf91b4056e34bd29a6",
+          "message": "Merge pull request #861 from wado-lang/gfx/zlib_doc\n\ndocs: update zlib docs for formatter safe",
+          "timestamp": "2026-04-17T23:41:42+09:00",
+          "tree_id": "d093d7f1ad48fbf91c9d0b67893a6f54a9b4f6d9",
+          "url": "https://github.com/wado-lang/wado/commit/233b7edea39e607391750bbf91b4056e34bd29a6"
+        },
+        "date": 1776437109995,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
