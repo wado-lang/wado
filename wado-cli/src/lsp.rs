@@ -127,7 +127,8 @@ pub async fn run() {
                         .and_then(Value::as_u64)
                         .unwrap_or(0) as u32;
                     let position = wado_lsp::Position { line, character };
-                    let result = match engine.definition(uri, position) {
+                    let host = lsp_adapter::host_for_uri(uri);
+                    let result = match engine.definition(uri, position, &host).await {
                         Some(def) => json!({
                             "uri": def.uri,
                             "range": {
@@ -167,7 +168,8 @@ pub async fn run() {
                         .and_then(Value::as_u64)
                         .unwrap_or(0) as u32;
                     let position = wado_lsp::Position { line, character };
-                    let result = match engine.hover(uri, position) {
+                    let host = lsp_adapter::host_for_uri(uri);
+                    let result = match engine.hover(uri, position, &host).await {
                         Some(hover) => json!({
                             "contents": {
                                 "kind": "markdown",

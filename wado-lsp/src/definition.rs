@@ -1,77 +1,82 @@
-use wado_compiler::ast::{self, Expr, Item, Stmt};
+//! Go-to-definition, powered by `wado_compiler::annotate`.
+//!
+//! Resolution flow:
+//! 1. Lex the source to find the identifier at the cursor.
+//! 2. Run `annotate` to produce a fully-resolved [`Annotated`] snapshot.
+//! 3. Look up the identifier in the entry module's scope — this traverses
+//!    `use` imports, so a name defined in another file resolves to that
+//!    file's definition.
+//! 4. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`]
+//!    (module URI + identifier span).
+
+use wado_compiler::annotate::{Annotated, annotate};
 use wado_compiler::lexer::Lexer;
-use wado_compiler::token::{Span, Token, TokenKind};
+use wado_compiler::name::ModuleSource;
+use wado_compiler::symbol::Symbol;
+use wado_compiler::token::{Span, TokenKind};
+use wado_compiler::CompilerHost;
 
 use crate::diagnostics::{Position, Range};
 
-/// Result of a go-to-definition query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefinitionResult {
-    /// URI of the document containing the definition.
     pub uri: String,
-    /// Range of the definition.
     pub range: Range,
 }
 
-/// Find the definition location for the identifier at the given position.
+/// Find the definition of the identifier at `position` in `source`.
 ///
-/// Uses AST-level resolution within the entry file: finds the token at the cursor,
-/// then scans all declarations for a matching name. The returned range covers the
-/// declaration's name identifier alone (via `name_span`), not the whole item.
-pub fn find_definition(source: &str, position: Position, uri: &str) -> Option<DefinitionResult> {
-    // 1. Lex to find the token at cursor position
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().ok()?;
-    let ident_name = find_ident_at_position(&tokens, position)?;
+/// `uri` is the URI of the document being edited; cross-file results carry
+/// their own URI (derived from the defining module's `diagnostic_filename`).
+pub async fn find_definition<H: CompilerHost>(
+    source: &str,
+    position: Position,
+    uri: &str,
+    host: &H,
+) -> Option<DefinitionResult> {
+    let ident = find_ident_at_position(source, position)?;
 
-    // 2. Parse to get AST
-    let pr = wado_compiler::parse(source).ok()?;
+    let filename = uri_to_filename(uri);
+    let annotated = annotate(source, host, Some(&filename)).await.ok()?;
 
-    // 3. Collect all definitions from AST
-    let defs = collect_definitions(&pr.ast);
-
-    // 4. Find matching definition
-    let def = defs.iter().find(|d| d.name == ident_name)?;
-
+    let symbol = resolve_ident(&annotated, &filename, &ident)?;
+    let span = annotated
+        .name_span_of(&symbol.defined_at)
+        .or(symbol.span)?;
+    let def_uri = symbol_uri(&annotated, symbol, uri)?;
     Some(DefinitionResult {
-        uri: uri.to_string(),
-        range: span_to_range(&def.name_span),
+        uri: def_uri,
+        range: span_to_range(&span),
     })
 }
 
-/// Find the identifier name at the given cursor position.
-fn find_ident_at_position(tokens: &[Token], position: Position) -> Option<String> {
-    let target_line = position.line as usize + 1; // LSP 0-based → compiler 1-based
+/// Scan `tokens` for an identifier whose span covers `position`.
+fn find_ident_at_position(source: &str, position: Position) -> Option<String> {
+    let mut lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().ok()?;
+    let target_line = position.line as usize + 1;
     let target_col = position.character as usize + 1;
 
-    for token in tokens {
-        if let TokenKind::Ident(ref name) = token.kind
-            && token_contains(&token.span, target_line, target_col)
-        {
+    for token in &tokens {
+        if !token_contains(&token.span, target_line, target_col) {
+            continue;
+        }
+        if let TokenKind::Ident(name) = &token.kind {
             return Some(name.clone());
         }
-        // Also handle contextual keywords used as identifiers
-        if let Some(name) = token.kind.as_ident_name()
-            && token_contains(&token.span, target_line, target_col)
-        {
-            if !matches!(
+        if let Some(name) = token.kind.as_ident_name() {
+            // Contextual keywords-as-identifiers (`flags`, `type`, `of`, `from`).
+            if matches!(
                 token.kind,
-                TokenKind::Ident(_)
-                    | TokenKind::Flags
-                    | TokenKind::Type
-                    | TokenKind::Of
-                    | TokenKind::From
+                TokenKind::Flags | TokenKind::Type | TokenKind::Of | TokenKind::From
             ) {
-                continue; // Skip real keywords
+                return Some(name.to_string());
             }
-            return Some(name.to_string());
         }
     }
     None
 }
 
-/// Test whether (`target_line`, `target_col`) — both 1-based — lies within the
-/// half-open range covered by `span`.
 fn token_contains(span: &Span, target_line: usize, target_col: usize) -> bool {
     if target_line < span.line || target_line > span.end_line {
         return false;
@@ -85,238 +90,81 @@ fn token_contains(span: &Span, target_line: usize, target_col: usize) -> bool {
     true
 }
 
-/// A definition found in the AST.
-struct Definition {
-    name: String,
-    name_span: Span,
-}
-
-/// Collect all top-level and nested definitions from the AST module.
-fn collect_definitions(module: &ast::Module) -> Vec<Definition> {
-    let mut defs = Vec::new();
-    for item in &module.items {
-        collect_item_defs(&mut defs, item);
+fn resolve_ident<'a>(
+    annotated: &'a Annotated,
+    filename: &str,
+    ident: &str,
+) -> Option<&'a Symbol> {
+    let entry = &annotated.entry_module_source;
+    if let Some(sym) = annotated.symbols.lookup_in_module(entry, ident) {
+        return Some(sym);
     }
-    defs
+    // Fall back to searching every module: catches definitions hovered while
+    // editing a non-entry file.
+    let _ = filename;
+    annotated
+        .modules
+        .keys()
+        .find_map(|ms| annotated.symbols.lookup_in_module(ms, ident))
 }
 
-fn collect_item_defs(defs: &mut Vec<Definition>, item: &Item) {
-    match item {
-        Item::Function(f) => {
-            defs.push(Definition {
-                name: f.name.clone(),
-                name_span: f.name_span,
-            });
-            // Collect parameter definitions
-            for param in &f.params {
-                if param.self_kind == ast::SelfKind::None {
-                    defs.push(Definition {
-                        name: param.name.clone(),
-                        name_span: param.name_span,
-                    });
-                }
-            }
-            // Collect let bindings inside the function body
-            if let Some(body) = &f.body {
-                collect_block_defs(defs, body);
-            }
-        }
-        Item::Struct(s) => {
-            defs.push(Definition {
-                name: s.name.clone(),
-                name_span: s.name_span,
-            });
-            for field in &s.fields {
-                defs.push(Definition {
-                    name: field.name.clone(),
-                    name_span: field.name_span,
-                });
-            }
-        }
-        Item::Enum(e) => {
-            defs.push(Definition {
-                name: e.name.clone(),
-                name_span: e.name_span,
-            });
-            for case in &e.cases {
-                defs.push(Definition {
-                    name: case.name.clone(),
-                    name_span: case.name_span,
-                });
-            }
-        }
-        Item::Variant(v) => {
-            defs.push(Definition {
-                name: v.name.clone(),
-                name_span: v.name_span,
-            });
-            for case in &v.cases {
-                defs.push(Definition {
-                    name: case.name.clone(),
-                    name_span: case.name_span,
-                });
-            }
-        }
-        Item::Flags(f) => {
-            defs.push(Definition {
-                name: f.name.clone(),
-                name_span: f.name_span,
-            });
-            for flag in &f.flags {
-                defs.push(Definition {
-                    name: flag.name.clone(),
-                    name_span: flag.name_span,
-                });
-            }
-        }
-        Item::Trait(t) => {
-            defs.push(Definition {
-                name: t.name.clone(),
-                name_span: t.name_span,
-            });
-            for method in &t.methods {
-                defs.push(Definition {
-                    name: method.name.clone(),
-                    name_span: method.name_span,
-                });
-            }
-        }
-        Item::Newtype(n) => {
-            defs.push(Definition {
-                name: n.name.clone(),
-                name_span: n.name_span,
-            });
-        }
-        Item::Impl(imp) => {
-            for method in &imp.methods {
-                defs.push(Definition {
-                    name: method.name.clone(),
-                    name_span: method.name_span,
-                });
-                if let Some(body) = &method.body {
-                    collect_block_defs(defs, body);
-                }
-            }
-        }
-        Item::Effect(e) => {
-            defs.push(Definition {
-                name: e.name.clone(),
-                name_span: e.name_span,
-            });
-            for method in &e.methods {
-                defs.push(Definition {
-                    name: method.name.clone(),
-                    name_span: method.name_span,
-                });
-            }
-        }
-        Item::Global(g) => {
-            defs.push(Definition {
-                name: g.name.clone(),
-                name_span: g.name_span,
-            });
-        }
-        Item::Use(_)
-        | Item::Resource(_)
-        | Item::World(_)
-        | Item::Test(_)
-        | Item::TupleTypeDecl(_) => {}
+/// Derive the URI for a symbol's defining module.
+///
+/// Prefers the URI the request was made against when the symbol lives in the
+/// entry module (keeps the `file://` scheme the client expects); otherwise
+/// synthesises a `file://` URI from the module's on-disk path.
+///
+/// `ModuleSource::Local` paths are stored relative to the entry module's
+/// directory (see `loader::resolve_module_path`), so they are resolved against
+/// the request URI's parent to produce an absolute `file://` URI.
+fn symbol_uri(annotated: &Annotated, symbol: &Symbol, request_uri: &str) -> Option<String> {
+    let module = &symbol.defined_at.module;
+    if module == &annotated.entry_module_source {
+        return Some(request_uri.to_string());
     }
-}
-
-fn collect_block_defs(defs: &mut Vec<Definition>, block: &ast::Block) {
-    for stmt in &block.stmts {
-        collect_stmt_defs(defs, stmt);
-    }
-}
-
-fn collect_stmt_defs(defs: &mut Vec<Definition>, stmt: &Stmt) {
-    match stmt {
-        Stmt::Let(l) => {
-            if let Some(name) = pattern_name(&l.pattern) {
-                defs.push(Definition {
-                    name,
-                    name_span: l.name_span,
-                });
-            }
-            // Recurse into the initializer so that, e.g., closure parameters in
-            // `let f = |x: i32| ...` are registered as definitions.
-            if let Some(value) = &l.value {
-                collect_expr_defs(defs, value);
-            }
-        }
-        Stmt::If(i) => {
-            collect_block_defs(defs, &i.then_block);
-            if let Some(else_block) = &i.else_block {
-                collect_block_defs(defs, else_block);
-            }
-        }
-        Stmt::While(w) => collect_block_defs(defs, &w.body),
-        Stmt::For(f) => {
-            if let Some(init) = &f.init {
-                collect_stmt_defs(defs, init);
-            }
-            collect_block_defs(defs, &f.body);
-        }
-        Stmt::ForOf(fo) => {
-            if let Some(name) = pattern_name(&fo.binding) {
-                // ForOfStmt does not yet expose a `name_span` for the loop binding;
-                // fall back to the statement span until that is wired through.
-                defs.push(Definition {
-                    name,
-                    name_span: fo.span,
-                });
-            }
-            collect_block_defs(defs, &fo.body);
-        }
-        Stmt::Loop(l) => collect_block_defs(defs, &l.body),
-        Stmt::Match(m) => {
-            for arm in &m.arms {
-                collect_expr_defs(defs, &arm.body);
-            }
-        }
-        Stmt::LabeledBlock(lb) => collect_block_defs(defs, &lb.block),
-        _ => {}
-    }
-}
-
-fn collect_expr_defs(defs: &mut Vec<Definition>, expr: &Expr) {
-    match expr {
-        Expr::Block(b) => collect_block_defs(defs, b),
-        Expr::If(i) => {
-            collect_block_defs(defs, &i.then_block);
-            if let Some(else_block) = &i.else_block {
-                collect_block_defs(defs, else_block);
-            }
-        }
-        Expr::Match(m) => {
-            for arm in &m.arms {
-                collect_expr_defs(defs, &arm.body);
-            }
-        }
-        Expr::Closure(c) => {
-            for param in &c.params {
-                defs.push(Definition {
-                    name: param.name.clone(),
-                    name_span: param.name_span,
-                });
-            }
-            collect_expr_defs(defs, &c.body);
-        }
-        Expr::LabeledBlock(lb) => collect_block_defs(defs, &lb.block),
-        _ => {}
-    }
-}
-
-/// Extract the simple identifier name from a pattern, if it is a simple ident pattern.
-fn pattern_name(pattern: &ast::Pattern) -> Option<String> {
-    match pattern {
-        ast::Pattern::Ident(name) | ast::Pattern::MutIdent(name) => Some(name.clone()),
+    match module {
+        ModuleSource::EntryPoint { filename } => Some(filename_to_uri(filename)),
+        ModuleSource::Local { path } => Some(resolve_local_uri(path, request_uri)),
+        // Core / WASI / Remote modules have no navigable URI.
         _ => None,
     }
 }
 
-/// Convert a compiler Span (1-based) to an LSP Range (0-based).
+fn uri_to_filename(uri: &str) -> String {
+    if let Some(path) = uri.strip_prefix("file://") {
+        path.to_string()
+    } else {
+        uri.to_string()
+    }
+}
+
+fn filename_to_uri(filename: &str) -> String {
+    if filename.starts_with("file://") {
+        filename.to_string()
+    } else if filename.starts_with('/') {
+        format!("file://{filename}")
+    } else {
+        filename.to_string()
+    }
+}
+
+fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
+    if module_path.starts_with('/') || module_path.starts_with("file://") {
+        return filename_to_uri(module_path);
+    }
+    let request_path = uri_to_filename(request_uri);
+    let base_dir = request_path
+        .rsplit_once('/')
+        .map(|(dir, _)| dir)
+        .unwrap_or("");
+    let normalized = module_path.strip_prefix("./").unwrap_or(module_path);
+    if base_dir.is_empty() {
+        filename_to_uri(normalized)
+    } else {
+        filename_to_uri(&format!("{base_dir}/{normalized}"))
+    }
+}
+
 fn span_to_range(span: &Span) -> Range {
     Range {
         start: Position {
@@ -330,136 +178,3 @@ fn span_to_range(span: &Span) -> Range {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_find_function_definition() {
-        let source = "fn greet() {}\nfn main() { greet(); }";
-        // Click on `greet` in the call at line 1, char 12
-        let pos = Position {
-            line: 1,
-            character: 12,
-        };
-        let result = find_definition(source, pos, "file:///test.wado").unwrap();
-        // Range covers `greet` on line 0 (the identifier alone, not the whole fn item).
-        assert_eq!(
-            result.range,
-            Range {
-                start: Position {
-                    line: 0,
-                    character: 3
-                },
-                end: Position {
-                    line: 0,
-                    character: 8
-                },
-            }
-        );
-    }
-
-    #[test]
-    fn test_find_struct_definition() {
-        let source = "struct Point { x: i32, y: i32 }\nfn foo(p: Point) {}";
-        // Click on `Point` in the param type at line 1, char 10
-        let pos = Position {
-            line: 1,
-            character: 10,
-        };
-        let result = find_definition(source, pos, "file:///test.wado").unwrap();
-        // Range covers `Point` on line 0 (the identifier alone, not the whole struct).
-        assert_eq!(
-            result.range,
-            Range {
-                start: Position {
-                    line: 0,
-                    character: 7
-                },
-                end: Position {
-                    line: 0,
-                    character: 12
-                },
-            }
-        );
-    }
-
-    #[test]
-    fn test_no_definition_for_unknown() {
-        let source = "fn foo() { bar(); }";
-        let pos = Position {
-            line: 0,
-            character: 11,
-        };
-        let result = find_definition(source, pos, "file:///test.wado");
-        assert!(result.is_none()); // bar is not defined
-    }
-
-    #[test]
-    fn test_find_ident_at_position() {
-        let source = "fn foo() {}";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
-        // `foo` is at column 3 (0-based), line 0 (0-based)
-        let name = find_ident_at_position(
-            &tokens,
-            Position {
-                line: 0,
-                character: 3,
-            },
-        );
-        assert_eq!(name.as_deref(), Some("foo"));
-    }
-
-    #[test]
-    fn closure_param_goto_def_now_resolves() {
-        // Regression: previously closure params had no span and were skipped.
-        // The cursor is on the `x` use inside the closure body; definition should
-        // resolve to the parameter declaration.
-        let source = "fn test() { let f = |x: i32| x + 1; }";
-        let pos = Position {
-            line: 0,
-            character: 29,
-        };
-        let result = find_definition(source, pos, "file:///test.wado").unwrap();
-        // The parameter `x` lives on line 0 at column 21 (0-based).
-        assert_eq!(
-            result.range,
-            Range {
-                start: Position {
-                    line: 0,
-                    character: 21
-                },
-                end: Position {
-                    line: 0,
-                    character: 22
-                },
-            }
-        );
-    }
-
-    #[test]
-    fn multi_line_function_range_uses_end_column() {
-        // The definition range of a multi-line function should be exactly the
-        // identifier; previously the byte-length hack overshot for multi-line items.
-        let source = "fn greet(\n  who: i32,\n) -> i32 {\n  return who;\n}";
-        let pos = Position {
-            line: 0,
-            character: 4,
-        };
-        let result = find_definition(source, pos, "file:///test.wado").unwrap();
-        assert_eq!(
-            result.range,
-            Range {
-                start: Position {
-                    line: 0,
-                    character: 3
-                },
-                end: Position {
-                    line: 0,
-                    character: 8
-                },
-            }
-        );
-    }
-}

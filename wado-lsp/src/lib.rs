@@ -47,21 +47,31 @@ impl Engine {
 
     /// Find the definition of the symbol at the given position.
     ///
-    /// Returns the location of the definition, or `None` if not found.
-    /// Currently resolves definitions within the same file only (AST-level).
-    #[must_use]
-    pub fn definition(&self, uri: &str, position: Position) -> Option<DefinitionResult> {
+    /// Runs the compiler's `annotate` pipeline so cross-file imports resolve
+    /// correctly. The provided `host` is used to load imported modules.
+    pub async fn definition<H: CompilerHost>(
+        &self,
+        uri: &str,
+        position: Position,
+        host: &H,
+    ) -> Option<DefinitionResult> {
         let source = self.documents.get(uri)?;
-        definition::find_definition(source, position, uri)
+        definition::find_definition(source, position, uri, host).await
     }
 
     /// Compute hover information for the symbol at the given position.
     ///
-    /// Returns markdown content describing the symbol, or `None` if not found.
-    #[must_use]
-    pub fn hover(&self, uri: &str, position: Position) -> Option<HoverResult> {
+    /// Runs the compiler's `annotate` pipeline to access resolved type
+    /// information; for symbols from imported modules, the `host` is used to
+    /// load their sources.
+    pub async fn hover<H: CompilerHost>(
+        &self,
+        uri: &str,
+        position: Position,
+        host: &H,
+    ) -> Option<HoverResult> {
         let source = self.documents.get(uri)?;
-        hover::find_hover(source, position)
+        hover::find_hover(source, position, uri, host).await
     }
 
     /// Compute semantic tokens for the given document.

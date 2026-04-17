@@ -11,7 +11,7 @@
 //! skips it.
 
 use crate::analyze::Analyzer;
-use crate::ast::{AstId, Module};
+use crate::ast::{AstId, Item, Module};
 use crate::compiler_host::{CompilerHost, LogLevel};
 use crate::hashmap::IndexMap;
 use crate::loader;
@@ -99,6 +99,130 @@ impl Annotated {
             uri: self.uri_of(&defined_at.module),
         })
     }
+
+    /// Span of the defining identifier for the symbol at `key`.
+    ///
+    /// The `Symbol::span` field covers the whole declaring item — e.g. the
+    /// entire `fn foo() { ... }` block. LSP go-to-definition wants the
+    /// identifier alone (`foo`), which is carried on the AST item as
+    /// `name_span`. This walks the defining module's items, finds the one
+    /// with matching `AstId`, and returns its `name_span` when the item has
+    /// one. Returns `None` for items that do not expose a name span (e.g.
+    /// anonymous `impl` blocks, tests).
+    #[must_use]
+    pub fn name_span_of(&self, key: &SymbolKey) -> Option<Span> {
+        let module = self.modules.get(&key.module)?;
+        name_span_in_module(module, key.ast_id)
+    }
+}
+
+fn name_span_in_module(module: &Module, ast_id: AstId) -> Option<Span> {
+    for item in &module.items {
+        if let Some(span) = name_span_of_item(item, ast_id) {
+            return Some(span);
+        }
+    }
+    None
+}
+
+fn name_span_of_item(item: &Item, target: AstId) -> Option<Span> {
+    match item {
+        Item::Function(f) => {
+            if f.id == target {
+                return Some(f.name_span);
+            }
+        }
+        Item::Struct(s) => {
+            if s.id == target {
+                return Some(s.name_span);
+            }
+            for field in &s.fields {
+                if field.id == target {
+                    return Some(field.name_span);
+                }
+            }
+        }
+        Item::Enum(e) => {
+            if e.id == target {
+                return Some(e.name_span);
+            }
+            for case in &e.cases {
+                if case.id == target {
+                    return Some(case.name_span);
+                }
+            }
+        }
+        Item::Variant(v) => {
+            if v.id == target {
+                return Some(v.name_span);
+            }
+            for case in &v.cases {
+                if case.id == target {
+                    return Some(case.name_span);
+                }
+            }
+        }
+        Item::Flags(f) => {
+            if f.id == target {
+                return Some(f.name_span);
+            }
+            for flag in &f.flags {
+                if flag.id == target {
+                    return Some(flag.name_span);
+                }
+            }
+        }
+        Item::Trait(t) => {
+            if t.id == target {
+                return Some(t.name_span);
+            }
+            for method in &t.methods {
+                if method.id == target {
+                    return Some(method.name_span);
+                }
+            }
+        }
+        Item::Newtype(n) => {
+            if n.id == target {
+                return Some(n.name_span);
+            }
+        }
+        Item::Effect(e) => {
+            if e.id == target {
+                return Some(e.name_span);
+            }
+            for method in &e.methods {
+                if method.id == target {
+                    return Some(method.name_span);
+                }
+            }
+        }
+        Item::Resource(r) => {
+            if r.id == target {
+                // ResourceDecl has no dedicated name_span; fall back to the whole-decl span.
+                return Some(r.span);
+            }
+            for method in &r.methods {
+                if method.id == target {
+                    return Some(method.name_span);
+                }
+            }
+        }
+        Item::Global(g) => {
+            if g.id == target {
+                return Some(g.name_span);
+            }
+        }
+        Item::Impl(imp) => {
+            for method in &imp.methods {
+                if method.id == target {
+                    return Some(method.name_span);
+                }
+            }
+        }
+        Item::World(_) | Item::Use(_) | Item::TupleTypeDecl(_) | Item::Test(_) => {}
+    }
+    None
 }
 
 /// Run parse → bind → desugar → load → analyze → resolve on `source` and
