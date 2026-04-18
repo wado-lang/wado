@@ -869,7 +869,7 @@ fn gen_char_guard(access: &String, c: char, ci: bool) -> String {
     let lower = c.to_ascii_lowercase();
     let upper = c.to_ascii_uppercase();
     if ci && lower != upper {
-        return `({access} == {escape_char(lower)} || {access} == {escape_char(upper)})`;
+        return `{access}.eq_ignore_ascii_case(&{escape_char(lower)})`;
     }
     return `{access} == {escape_char(c)}`;
 }
@@ -878,7 +878,7 @@ fn gen_char_mismatch(access: &String, c: char, ci: bool) -> String {
     let lower = c.to_ascii_lowercase();
     let upper = c.to_ascii_uppercase();
     if ci && lower != upper {
-        return `{access} != {escape_char(lower)} && {access} != {escape_char(upper)}`;
+        return `!{access}.eq_ignore_ascii_case(&{escape_char(lower)})`;
     }
     return `{access} != {escape_char(c)}`;
 }
@@ -891,9 +891,8 @@ fn emit_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
             w.write(" && ");
         }
         let lower = kw_chars[ci];
-        let upper = kw_chars[ci].to_ascii_uppercase();
         if kw.char_ci[ci] {
-            w.write(`(chars[start + {ci}] == {escape_char(lower)} || chars[start + {ci}] == {escape_char(upper)})`);
+            w.write(`chars[start + {ci}].eq_ignore_ascii_case(&{escape_char(lower)})`);
         } else {
             w.write(`chars[start + {ci}] == {escape_char(lower)}`);
         }

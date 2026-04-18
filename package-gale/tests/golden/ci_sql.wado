@@ -510,9 +510,9 @@ impl Lexer {
 
 fn try_if(chars: &Array<char>, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'i' && chars[pos] != 'I' { return -1; }
+    if pos >= chars.len() || !chars[pos].eq_ignore_ascii_case(&'i') { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' && chars[pos] != 'F' { return -1; }
+    if pos >= chars.len() || !chars[pos].eq_ignore_ascii_case(&'f') { return -1; }
     pos += 1;
     return pos;
 }
