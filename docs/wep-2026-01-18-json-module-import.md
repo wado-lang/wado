@@ -1,7 +1,9 @@
 # WEP: JSON Module Import
 
-**Date**: 2026-01-18
-**Status**: Proposed
+Date: 2026-01-18
+Status: Superseded by [Kiln — Keyed IDL Lowering Notation](./wep-2026-04-12-kiln.md)
+
+JSON compile-time import is no longer a compiler-level feature. The same user-visible syntax (`use config from "./config.json" with { ... }`) is now provided by a Kiln generator (e.g. `core:kiln-json`), which lowers JSON to a Wado module via the `wado:kiln/generator` world. Only the file-extension dispatch and cache logic live in the compiler; parsing, typing, and code emission all move to the generator. The sections below are preserved for historical context.
 
 ## Context
 

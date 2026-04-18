@@ -45,7 +45,7 @@ It may include TODOs on WIP.
 - [Type Stringification](./wep-2026-01-16-type-stringification.md)
 - [Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md)
 - [JSON Literal Compatibility](./wep-2026-01-18-json-literal-compatibility.md)
-- [JSON Module Import](./wep-2026-01-18-json-module-import.md)
+- [JSON Module Import](./wep-2026-01-18-json-module-import.md) (superseded by Kiln)
 - [Operator Overloading](./wep-2026-01-18-operator-overloading.md)
 - [Iterator-Based Literal Coercion](./wep-2026-01-18-iterator-based-literal-coercion.md)
 - [Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md)
