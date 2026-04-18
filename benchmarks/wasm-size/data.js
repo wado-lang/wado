@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776501019108,
+  "lastUpdate": 1776502122324,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14049,6 +14049,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b3fe4899c68733f705e4f460da3703a2cdafadf6"
         },
         "date": 1776501018821,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9a4262498f0fa40cc063ad2ec77ccd322207c905",
+          "message": "Merge pull request #871 from wado-lang/claude/string-to-int-api-wMdHf\n\nAdd Rust-like string-to-integer parsing APIs",
+          "timestamp": "2026-04-18T17:45:08+09:00",
+          "tree_id": "86bcd4ee2222d70c489b26acf2a5c3dce22895b0",
+          "url": "https://github.com/wado-lang/wado/commit/9a4262498f0fa40cc063ad2ec77ccd322207c905"
+        },
+        "date": 1776502122086,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
