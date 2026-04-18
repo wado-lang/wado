@@ -14124,7 +14124,7 @@ fn scan_single_expression_lr_21(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STARSTAR { return -1; }
     pos += 1;
-    pos = scan_single_expression_prec(tokens, pos, 21);
+    pos = scan_single_expression_prec(tokens, pos, 20);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -23112,7 +23112,7 @@ fn parse_single_expression_lr_10(p: &mut Parser, left: SingleExpressionNode, sta
 
 fn parse_single_expression_lr_21(p: &mut Parser, left: SingleExpressionNode, start: i32) -> Result<SingleExpressionNode, ParseError> {
     let lit___ = p.expect(TK_LIT_STARSTAR)?;
-    let single_expression_2 = parse_single_expression_prec(p, 21)?;
+    let single_expression_2 = parse_single_expression_prec(p, 20)?;
     return Result::<SingleExpressionNode, ParseError>::Ok(SingleExpressionNode::PowerExpression(SingleExpressionPowerExpression {
         span: Span::new(start, p.last_end()),
         single_expression: left,

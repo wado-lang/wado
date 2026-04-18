@@ -1,5 +1,7 @@
 use {
     Grammar,
+    GrammarOption,
+    OptionValue,
     ParserRule,
     Alternative,
     Element,
@@ -560,11 +562,11 @@ rule : ID ;";
     let g = parse(input).unwrap();
     assert g.options.len() == 3, `got {g.options.len()} options`;
     assert g.options[0].name == "caseInsensitive";
-    assert g.options[0].value == "true";
+    assert_option_ident(&g.options[0], "true");
     assert g.options[1].name == "language";
-    assert g.options[1].value == "Python";
+    assert_option_ident(&g.options[1], "Python");
     assert g.options[2].name == "superClass";
-    assert g.options[2].value == "my.pkg.BaseParser";
+    assert_option_qualified(&g.options[2], ["my", "pkg", "BaseParser"]);
 }
 
 test "grammar options with string literal value" {
@@ -574,7 +576,7 @@ rule : ID ;";
     let g = parse(input).unwrap();
     assert g.options.len() == 1;
     assert g.options[0].name == "tokenVocab";
-    assert g.options[0].value == "'foo.g4'";
+    assert_option_str(&g.options[0], "foo.g4");
 }
 
 test "parser rule options block stored in ir" {
@@ -584,7 +586,7 @@ rule options { foo = bar; } : ID ;";
     assert g.parser_rules.len() == 1;
     assert g.parser_rules[0].options.len() == 1;
     assert g.parser_rules[0].options[0].name == "foo";
-    assert g.parser_rules[0].options[0].value == "bar";
+    assert_option_ident(&g.parser_rules[0].options[0], "bar");
 }
 
 test "lexer rule options block stored in ir" {
@@ -594,7 +596,33 @@ ID options { caseInsensitive = false; } : [a-z]+ ;";
     assert g.lexer_rules.len() == 1;
     assert g.lexer_rules[0].options.len() == 1;
     assert g.lexer_rules[0].options[0].name == "caseInsensitive";
-    assert g.lexer_rules[0].options[0].value == "false";
+    assert_option_ident(&g.lexer_rules[0].options[0], "false");
+}
+
+test "grammar option with integer literal value" {
+    let input = "grammar Test;
+options { k = 3; }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.options.len() == 1;
+    assert g.options[0].name == "k";
+    assert_option_int(&g.options[0], 3);
+}
+
+test "grammar option with action-block value round-trips the body" {
+    // ANTLR4 allows `{ ... }` as an option value for host-language hooks.
+    // Gale does not interpret the body but preserves it verbatim so that
+    // downstream tooling can round-trip it. Spec: `doc/options.md`.
+    let input = "grammar Test;
+options { language = {some code;} ; }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.options.len() == 1;
+    if let Action(body) = &g.options[0].value {
+        assert *body == "some code;", `got action body: '{*body}'`;
+    } else {
+        panic("expected Action option value");
+    }
 }
 
 test "grammar level named actions recorded" {
@@ -1079,7 +1107,7 @@ r : <assoc=right> A '**' B ;";
     let alt = &g.parser_rules[0].alternatives[0];
     assert alt.options.len() == 1;
     assert alt.options[0].name == "assoc";
-    assert alt.options[0].value == "right";
+    assert_option_ident(&alt.options[0], "right");
     assert alt.elements.len() == 3;
 }
 
@@ -1092,7 +1120,7 @@ r : foo<p=3> ;";
         assert r.name == "foo";
         assert r.options.len() == 1;
         assert r.options[0].name == "p";
-        assert r.options[0].value == "3";
+        assert_option_int(&r.options[0], 3);
     } else {
         panic("expected RuleRef");
     }
@@ -1107,7 +1135,7 @@ r : ID<assoc=right> ;";
         assert t.name == "ID";
         assert t.options.len() == 1;
         assert t.options[0].name == "assoc";
-        assert t.options[0].value == "right";
+        assert_option_ident(&t.options[0], "right");
     } else {
         panic("expected TokenRef");
     }
@@ -1122,7 +1150,7 @@ r : '+'<p=3> ;";
         assert l.text == "+";
         assert l.options.len() == 1;
         assert l.options[0].name == "p";
-        assert l.options[0].value == "3";
+        assert_option_int(&l.options[0], 3);
     } else {
         panic("expected Literal");
     }
@@ -1136,7 +1164,7 @@ r : .<assoc=right> ;";
     if let Wildcard(w) = &elems[0] {
         assert w.options.len() == 1;
         assert w.options[0].name == "assoc";
-        assert w.options[0].value == "right";
+        assert_option_ident(&w.options[0], "right");
     } else {
         panic("expected Wildcard");
     }
@@ -1153,7 +1181,7 @@ r : (options { assoc=right; } : A | B) ;";
         assert g.alternatives.len() == 2;
         assert g.options.len() == 1;
         assert g.options[0].name == "assoc";
-        assert g.options[0].value == "right";
+        assert_option_ident(&g.options[0], "right");
     } else {
         panic("expected Group");
     }
@@ -1167,9 +1195,9 @@ r : A<assoc=right, fail='bad'> ;";
     if let TokenRef(t) = &elems[0] {
         assert t.options.len() == 2;
         assert t.options[0].name == "assoc";
-        assert t.options[0].value == "right";
+        assert_option_ident(&t.options[0], "right");
         assert t.options[1].name == "fail";
-        assert t.options[1].value == "'bad'";
+        assert_option_str(&t.options[1], "bad");
     } else {
         panic("expected TokenRef");
     }
@@ -1206,7 +1234,7 @@ r : ID<p=3>* ;";
             assert t.name == "ID";
             assert t.options.len() == 1;
             assert t.options[0].name == "p";
-            assert t.options[0].value == "3";
+            assert_option_int(&t.options[0], 3);
         } else {
             panic("expected TokenRef inside Repeat");
         }
@@ -1223,4 +1251,44 @@ r : A<foo=> ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 1;
     assert g.parser_rules[0].alternatives.len() == 1;
+}
+
+fn assert_option_ident(opt: &GrammarOption, expected: String) {
+    if let Ident(v) = &opt.value {
+        assert *v == expected,
+            `option '{opt.name}': expected Ident('{expected}'), got Ident('{*v}')`;
+    } else {
+        panic(`option '{opt.name}': expected Ident, got other`);
+    }
+}
+
+fn assert_option_str(opt: &GrammarOption, expected: String) {
+    if let Str(v) = &opt.value {
+        assert *v == expected,
+            `option '{opt.name}': expected Str('{expected}'), got Str('{*v}')`;
+    } else {
+        panic(`option '{opt.name}': expected Str, got other`);
+    }
+}
+
+fn assert_option_int(opt: &GrammarOption, expected: i64) {
+    if let Int(n) = &opt.value {
+        assert *n == expected,
+            `option '{opt.name}': expected Int({expected}), got Int({*n})`;
+    } else {
+        panic(`option '{opt.name}': expected Int, got other`);
+    }
+}
+
+fn assert_option_qualified(opt: &GrammarOption, expected: Array<String>) {
+    if let Qualified(parts) = &opt.value {
+        assert parts.len() == expected.len(),
+            `option '{opt.name}': expected {expected.len()} parts, got {parts.len()}`;
+        for let mut i = 0; i < parts.len(); i += 1 {
+            assert parts[i] == expected[i],
+                `option '{opt.name}': part {i}: expected '{expected[i]}', got '{parts[i]}'`;
+        }
+    } else {
+        panic(`option '{opt.name}': expected Qualified, got other`);
+    }
 }

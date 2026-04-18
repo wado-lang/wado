@@ -37,6 +37,17 @@ most of the new fields. "Parsed and stored" is not "used":
   `char_ci[i]`. Rule-level `caseInsensitive = false` overrides a
   grammar-level `true`. Driver coverage lives in
   `tests/grammars/ci_sql.g4` + `tests/driver_ci_sql_test.wado`.
+- ~~`Alternative.options.assoc = right` on a left-recursive alt had no
+  effect on generated parser behaviour.~~ **Done** (this branch). The
+  LR precedence-climbing code now consults
+  `is_right_associative(alt)` in `compute_lr_conflict_min_prec`:
+  left-assoc alts recurse on the right operand at `own_prec + 1`
+  (same-level rejected, outer loop handles left-association);
+  right-assoc alts recurse at `own_prec` so same-level operators nest
+  rightward. Conflict widening only applies to strictly higher-prec
+  conflicting alts to avoid defeating right-assoc via self-conflict.
+  Scan-side mirror updated in lockstep. Driver coverage: `2 ** 3 ** 4`
+  CST assertion in `driver_typescript_test.wado`.
 - `Grammar.options.superClass` / `tokenVocab` / `language` — completely
   ignored. `tokenVocab` in particular is non-trivial: it implies loading
   another grammar's token ids.
@@ -50,16 +61,15 @@ most of the new fields. "Parsed and stored" is not "used":
 
 ## C. Representation quality of stored options
 
-- **`GrammarOption.value` is a lossy raw String.** Option values in
-  ANTLR4 can be identifier / qualified.name / string literal / integer
-  literal / **action block (`{ ... }`)**. The current implementation
-  stores identifiers and integers verbatim, wraps string literals in
-  single quotes, and collapses action-block values to the placeholder
-  `"{}"`. Round-trip from IR to surface syntax is therefore impossible
-  for action-block values.
-- Consider switching to a `variant OptionValue { Ident(String),
-  Qualified(Array<String>), Str(String), Int(i64), Action(String) }`
-  so consumers can branch without re-parsing the string.
+- ~~`GrammarOption.value` is a lossy raw String.~~ **Done** (this
+  branch). `GrammarOption.value` is now the typed variant
+  `OptionValue { Ident(String), Qualified(Array<String>), Str(String),
+  Int(i64), Action(String) }`. `Str` drops the surrounding single
+  quotes, `Qualified` keeps the dotted components separate, and
+  `Action` round-trips the raw host-language body between braces —
+  previously collapsed to the placeholder `"{}"`. Both production
+  consumers (`parser_gen.is_right_associative`,
+  `lexer_gen.lookup_ci_option`) pattern-match on the variant.
 
 ## D. Driver-level verification (remaining gaps)
 

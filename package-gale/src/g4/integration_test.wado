@@ -1,5 +1,7 @@
 use {
     Grammar,
+    GrammarOption,
+    OptionValue,
     ParserRule,
     Alternative,
     Element,
@@ -284,7 +286,11 @@ test "parse TypeScriptParser.g4" {
                 assert alt.options.len() == 1,
                     `expected 1 option on PowerExpression, got {alt.options.len()}`;
                 assert alt.options[0].name == "assoc";
-                assert alt.options[0].value == "right";
+                if let Ident(v) = &alt.options[0].value {
+                    assert *v == "right", `expected assoc=right, got assoc={*v}`;
+                } else {
+                    panic("expected Ident for assoc value");
+                }
             }
         }
     }

@@ -1,6 +1,7 @@
 use {
     Grammar,
     GrammarOption,
+    OptionValue,
     LexerRule,
     LexerAlt,
     LexerElement,
@@ -33,8 +34,9 @@ pub struct KeywordInfo {
 /// overrides the grammar-level option. ANTLR4 spec: `doc/options.md`.
 fn lookup_ci_option(opts: &Array<GrammarOption>) -> Option<bool> {
     for let opt of opts {
-        if opt.name == "caseInsensitive" {
-            return Option::<bool>::Some(opt.value == "true");
+        if opt.name != "caseInsensitive" { continue; }
+        if let Ident(v) = &opt.value {
+            return Option::<bool>::Some(*v == "true");
         }
     }
     return null;

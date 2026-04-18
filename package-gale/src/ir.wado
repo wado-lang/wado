@@ -1,11 +1,32 @@
+/// OptionValue is the typed right-hand side of an ANTLR4 `key = value` option
+/// entry. ANTLR4 options can be a bare identifier, a dotted qualified name,
+/// a single-quoted string literal, a decimal integer, or an action-block
+/// `{ ... }` body of host-language code. Using a variant (rather than a raw
+/// string) means consumers can branch on kind without re-parsing, and
+/// action-block bodies round-trip through the IR intact.
+/// ANTLR4 spec: `vendor/antlr4/doc/options.md`.
+pub variant OptionValue {
+    /// Bare identifier: `true`, `right`, `Python`.
+    Ident(String),
+    /// Dotted qualified name: `my.pkg.BaseParser`. Components are kept
+    /// separate so consumers don't have to re-split.
+    Qualified(Array<String>),
+    /// Single-quoted string literal value, with the surrounding quotes
+    /// stripped: `'foo.g4'` → `Str("foo.g4")`.
+    Str(String),
+    /// Decimal integer literal.
+    Int(i64),
+    /// Host-language action block `{ ... }`. The stored text is the raw
+    /// body between the braces (delimiters excluded); Gale does not parse
+    /// action-language code.
+    Action(String),
+}
+
 /// GrammarOption is a single `key = value ;` entry from an ANTLR4
-/// `options { ... }` block. Gale records the raw textual value so the full
-/// surface syntax (bare identifiers, qualified names, string literals,
-/// integer literals) round-trips without loss. ANTLR4 spec:
-/// `vendor/antlr4/doc/options.md`.
+/// `options { ... }` block. ANTLR4 spec: `vendor/antlr4/doc/options.md`.
 pub struct GrammarOption {
     pub name: String,
-    pub value: String,
+    pub value: OptionValue,
 }
 
 /// NamedAction records the presence and position of a grammar-level
