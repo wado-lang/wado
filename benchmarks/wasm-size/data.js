@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776526856261,
+  "lastUpdate": 1776526984560,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14313,6 +14313,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/43e7caf5052198127e0420c5788672907cb5583a"
         },
         "date": 1776526855919,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dc914e53fdcdf256e848ce9f464e931d27e40c2e",
+          "message": "Merge pull request #878 from wado-lang/claude/review-lsp-spec-AOApD\n\nwado-cli: LSP 3.18 spec review — conformance tests + lifecycle/parse-error recovery",
+          "timestamp": "2026-04-19T00:38:49+09:00",
+          "tree_id": "d8a12932a0486680240f146836be489f92526e2a",
+          "url": "https://github.com/wado-lang/wado/commit/dc914e53fdcdf256e848ce9f464e931d27e40c2e"
+        },
+        "date": 1776526984321,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
