@@ -1,5 +1,6 @@
 use {
     Grammar,
+    GrammarOption,
     LexerRule,
     LexerAlt,
     LexerElement,
@@ -26,6 +27,51 @@ pub struct KeywordInfo {
     pub rule_name: String,
     pub lowercase_text: String,
     pub char_ci: Array<bool>,
+}
+
+/// ANTLR4 `caseInsensitive` resolution: a rule-level option (when present)
+/// overrides the grammar-level option. ANTLR4 spec: `doc/options.md`.
+fn lookup_ci_option(opts: &Array<GrammarOption>) -> Option<bool> {
+    for let opt of opts {
+        if opt.name == "caseInsensitive" {
+            return Option::<bool>::Some(opt.value == "true");
+        }
+    }
+    return null;
+}
+
+pub fn resolve_ci(grammar_opts: &Array<GrammarOption>, rule_opts: &Array<GrammarOption>) -> bool {
+    if let Some(b) = lookup_ci_option(rule_opts) {
+        return b;
+    }
+    if let Some(b) = lookup_ci_option(grammar_opts) {
+        return b;
+    }
+    return false;
+}
+
+/// Expand one char range into the set of ranges needed to match it
+/// case-insensitively. The original range is always included. When the range
+/// intersects ASCII letters, the opposing-case sub-range is appended.
+/// Non-letter chars are not folded (ANTLR4 only does one-length transforms).
+fn fold_range_ci(start: char, end: char, out: &mut Array<CharRange>) {
+    out.push(CharRange { start, end });
+    if start <= 'z' && end >= 'a' {
+        let lo = if start < 'a' { 'a' } else { start };
+        let hi = if end > 'z' { 'z' } else { end };
+        out.push(CharRange {
+            start: lo.to_ascii_uppercase(),
+            end: hi.to_ascii_uppercase(),
+        });
+    }
+    if start <= 'Z' && end >= 'A' {
+        let lo = if start < 'A' { 'A' } else { start };
+        let hi = if end > 'Z' { 'Z' } else { end };
+        out.push(CharRange {
+            start: lo.to_ascii_lowercase(),
+            end: hi.to_ascii_lowercase(),
+        });
+    }
 }
 
 fn seen_contains(seen: &Array<String>, text: &String) -> bool {
@@ -99,12 +145,14 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, l
 }
 
 pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
-    let keywords = collect_keyword_rules(&grammar.lexer_rules);
+    let empty_opts: Array<GrammarOption> = [];
+    let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
+    let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
     gen_lexer_struct(w);
-    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens);
-    gen_literal_match_fns(w, lit_tokens);
+    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options);
+    gen_literal_match_fns(w, lit_tokens, grammar_ci);
     gen_keyword_classifier_fn(w, &keywords);
-    gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names, &keywords);
+    gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names, &keywords, &grammar.options);
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
 
@@ -146,16 +194,28 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
     w.blank();
 }
 
-fn gen_lexer_match_fns(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, keywords: &Array<KeywordInfo>, lit_tokens: &Array<LitToken>) {
+fn gen_lexer_match_fns(
+    w: &mut CodeWriter,
+    lexer_rules: &Array<LexerRule>,
+    keywords: &Array<KeywordInfo>,
+    lit_tokens: &Array<LitToken>,
+    grammar_opts: &Array<GrammarOption>,
+) {
+    let empty_opts: Array<GrammarOption> = [];
+    let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
     for let rule of lexer_rules {
         if rule.body.is_empty() {
             // Virtual token (from `tokens { }` block): no match function needed
         } else if !rule.is_fragment {
-            if !is_keyword_rule_name(&rule.name, keywords) && !is_literal_duplicate(rule, lit_tokens) {
-                gen_lexer_match_fn(w, rule, lexer_rules);
+            if !is_keyword_rule_name(&rule.name, keywords)
+                && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
+                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts);
             }
         } else if fragment_is_recursive(rule, lexer_rules) {
-            gen_lexer_match_fn(w, rule, lexer_rules);
+            // Fragments inherit the grammar-level CI flag (rule-level options
+            // on fragments are uncommon; ANTLR4 applies grammar-level CI to
+            // fragments uniformly).
+            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts);
         }
     }
 }
@@ -207,8 +267,14 @@ fn fragment_elem_refs_self(target: &String, elem: &LexerElement, all_rules: &Arr
     }
 }
 
-fn gen_lexer_match_fn(w: &mut CodeWriter, rule: &LexerRule, all_rules: &Array<LexerRule>) {
+fn gen_lexer_match_fn(
+    w: &mut CodeWriter,
+    rule: &LexerRule,
+    all_rules: &Array<LexerRule>,
+    grammar_opts: &Array<GrammarOption>,
+) {
     let fn_name = `try_{to_lower(&rule.name)}`;
+    let ci = resolve_ci(grammar_opts, &rule.options);
     let mut f = FnSpec::new(&fn_name);
     f.add_param("chars", "&Array<char>");
     f.add_param("start", "i32");
@@ -216,17 +282,23 @@ fn gen_lexer_match_fn(w: &mut CodeWriter, rule: &LexerRule, all_rules: &Array<Le
     f.emit_begin(w);
     w.line("let mut pos = start;");
     if rule.body.len() == 1 {
-        gen_lexer_alt_seq(w, &rule.body[0], all_rules, "return -1");
+        gen_lexer_alt_seq(w, &rule.body[0], all_rules, "return -1", ci);
         w.line("return pos;");
     } else {
-        gen_lexer_alts(w, &rule.body, all_rules, "return -1");
+        gen_lexer_alts(w, &rule.body, all_rules, "return -1", ci);
         w.line("return pos;");
     }
     w.end();
     w.blank();
 }
 
-fn gen_lexer_alts(w: &mut CodeWriter, alts: &Array<LexerAlt>, all_rules: &Array<LexerRule>, fail_action: &String) {
+fn gen_lexer_alts(
+    w: &mut CodeWriter,
+    alts: &Array<LexerAlt>,
+    all_rules: &Array<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+) {
     let id = w.next_id();
     w.line(`let alts_saved_{id} = pos;`);
     w.line(`let mut alts_ok_{id} = false;`);
@@ -237,7 +309,7 @@ fn gen_lexer_alts(w: &mut CodeWriter, alts: &Array<LexerAlt>, all_rules: &Array<
         let label = `alts_{id}_{i}`;
         w.begin(`{label}:`);
         w.line(`pos = alts_saved_{id};`);
-        gen_lexer_alt_seq(w, &alts[i], all_rules, `break {label}`);
+        gen_lexer_alt_seq(w, &alts[i], all_rules, `break {label}`, ci);
         w.line(`alts_ok_{id} = true;`);
         w.end();
     }
@@ -247,7 +319,13 @@ fn gen_lexer_alts(w: &mut CodeWriter, alts: &Array<LexerAlt>, all_rules: &Array<
     w.line(`if !alts_ok_{id} \{ {fail_action}; \}`);
 }
 
-fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &Array<LexerRule>, fail_action: &String) {
+fn gen_lexer_alt_seq(
+    w: &mut CodeWriter,
+    alt: &LexerAlt,
+    all_rules: &Array<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+) {
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
         if let Repeat(rep) = elem {
@@ -258,30 +336,47 @@ fn gen_lexer_alt_seq(w: &mut CodeWriter, alt: &LexerAlt, all_rules: &Array<Lexer
                     rest_elems.push(alt.elements[j]);
                 }
                 let rest_alt = LexerAlt { elements: rest_elems };
-                gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action);
+                gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci);
                 return;
             }
         }
-        gen_lexer_elem(w, elem, all_rules, fail_action);
+        gen_lexer_elem(w, elem, all_rules, fail_action, ci);
     }
 }
 
-fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &Array<LexerRule>, fail_action: &String) {
+fn gen_lexer_elem(
+    w: &mut CodeWriter,
+    elem: &LexerElement,
+    all_rules: &Array<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+) {
     match *elem {
         Literal(text) => {
             let chars: Array<char> = text.chars().collect();
             for let mut i = 0; i < chars.len(); i += 1 {
-                w.line(`if pos >= chars.len() || chars[pos] != {escape_char(chars[i])} \{ {fail_action}; \}`);
+                let mismatch = gen_char_mismatch(&`chars[pos]`, chars[i], ci);
+                w.line(`if pos >= chars.len() || {mismatch} \{ {fail_action}; \}`);
                 w.line("pos += 1;");
             }
         },
         CharRange(pair) => {
-            w.line(
-                `if pos >= chars.len() || !({escape_char(pair.0)} <= chars[pos] <= {escape_char(pair.1)}) \{ {fail_action}; \}`,
-            );
-            w.line("pos += 1;");
+            if ci {
+                let mut ranges: Array<CharRange> = [];
+                fold_range_ci(pair.0, pair.1, &mut ranges);
+                let cc = CharClass { ranges, negated: false };
+                gen_char_class(w, &cc, fail_action);
+            } else {
+                w.line(
+                    `if pos >= chars.len() || !({escape_char(pair.0)} <= chars[pos] <= {escape_char(pair.1)}) \{ {fail_action}; \}`,
+                );
+                w.line("pos += 1;");
+            }
         },
-        CharClass(cc) => gen_char_class(w, &cc, fail_action),
+        CharClass(cc) => {
+            let expanded = if ci { expand_char_class_ci(&cc) } else { cc };
+            gen_char_class(w, &expanded, fail_action);
+        },
         AnyChar => {
             w.line(`if pos >= chars.len() \{ {fail_action}; \}`);
             w.line("pos += 1;");
@@ -292,14 +387,17 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &Array<Lex
             } else {
                 let frag = find_fragment(all_rules, &name);
                 if let Some(f) = frag {
+                    // Fragments inherit the caller's CI context when inlined.
+                    // The recursive-fragment case uses its own `try_*` fn
+                    // emitted separately with grammar-level CI.
                     if fragment_is_recursive(f, all_rules) {
                         let fn_name = `try_{to_lower(&name)}`;
                         w.line(`pos = {fn_name}(chars, pos);`);
                         w.line(`if pos < 0 \{ {fail_action}; \}`);
                     } else if f.body.len() == 1 {
-                        gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action);
+                        gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action, ci);
                     } else {
-                        gen_lexer_alts(w, &f.body, all_rules, fail_action);
+                        gen_lexer_alts(w, &f.body, all_rules, fail_action, ci);
                     }
                 } else {
                     let fn_name = `try_{to_lower(&name)}`;
@@ -310,14 +408,22 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &Array<Lex
         },
         Group(alts) => {
             if alts.len() == 1 {
-                gen_lexer_alt_seq(w, &alts[0], all_rules, fail_action);
+                gen_lexer_alt_seq(w, &alts[0], all_rules, fail_action, ci);
             } else {
-                gen_lexer_alts(w, &alts, all_rules, fail_action);
+                gen_lexer_alts(w, &alts, all_rules, fail_action, ci);
             }
         },
-        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action),
-        Not(not_elem) => gen_lexer_not(w, &not_elem, all_rules, fail_action),
+        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action, ci),
+        Not(not_elem) => gen_lexer_not(w, &not_elem, all_rules, fail_action, ci),
     }
+}
+
+fn expand_char_class_ci(cc: &CharClass) -> CharClass {
+    let mut expanded: Array<CharRange> = [];
+    for let r of &cc.ranges {
+        fold_range_ci(r.start, r.end, &mut expanded);
+    }
+    return CharClass { ranges: expanded, negated: cc.negated };
 }
 
 fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
@@ -348,14 +454,20 @@ fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
     w.line("pos += 1;");
 }
 
-fn gen_lexer_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, all_rules: &Array<LexerRule>, fail_action: &String) {
+fn gen_lexer_repeat(
+    w: &mut CodeWriter,
+    rep: &LexerRepeatElement,
+    all_rules: &Array<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+) {
     let id = w.next_id();
     let label = `rep_{id}`;
     if let Star = rep.kind {
         w.begin("loop");
         w.line(`let rep_saved_{id} = pos;`);
         w.begin(`{label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, `break {label}`);
+        gen_lexer_elem(w, &rep.element, all_rules, `break {label}`, ci);
         w.line("continue;");
         w.end();
         w.line(`pos = rep_saved_{id};`);
@@ -363,11 +475,11 @@ fn gen_lexer_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, all_rules: &Ar
         w.end();
     }
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action);
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci);
         w.begin("loop");
         w.line(`let rep_saved_{id} = pos;`);
         w.begin(`{label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, `break {label}`);
+        gen_lexer_elem(w, &rep.element, all_rules, `break {label}`, ci);
         w.line("continue;");
         w.end();
         w.line(`pos = rep_saved_{id};`);
@@ -378,19 +490,26 @@ fn gen_lexer_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, all_rules: &Ar
         w.line(`let opt_saved_{id} = pos;`);
         w.line(`let mut opt_ok_{id} = false;`);
         w.begin(`{label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, `break {label}`);
+        gen_lexer_elem(w, &rep.element, all_rules, `break {label}`, ci);
         w.line(`opt_ok_{id} = true;`);
         w.end();
         w.line(`if !opt_ok_{id} \{ pos = opt_saved_{id}; \}`);
     }
 }
 
-fn gen_lexer_non_greedy_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, rest: &LexerAlt, all_rules: &Array<LexerRule>, fail_action: &String) {
+fn gen_lexer_non_greedy_repeat(
+    w: &mut CodeWriter,
+    rep: &LexerRepeatElement,
+    rest: &LexerAlt,
+    all_rules: &Array<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+) {
     let id = w.next_id();
     let label = `ng_{id}`;
     // For Plus, match at least one element first
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action);
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci);
     }
     // Loop: try matching the rest first (non-greedy), otherwise consume one more
     w.begin("loop");
@@ -398,7 +517,7 @@ fn gen_lexer_non_greedy_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, res
     w.line(`let ng_saved_{id} = pos;`);
     w.line(`let mut ng_exit_{id} = false;`);
     w.begin(`{label}:`);
-    gen_lexer_alt_seq(w, rest, all_rules, `break {label}`);
+    gen_lexer_alt_seq(w, rest, all_rules, `break {label}`, ci);
     w.line(`ng_exit_{id} = true;`);
     w.end();
     w.begin(`if ng_exit_{id}`);
@@ -406,15 +525,22 @@ fn gen_lexer_non_greedy_repeat(w: &mut CodeWriter, rep: &LexerRepeatElement, res
     w.end();
     // Exit failed, restore pos and consume one element
     w.line(`pos = ng_saved_{id};`);
-    gen_lexer_elem(w, &rep.element, all_rules, fail_action);
+    gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci);
     w.end();
 }
 
-fn gen_lexer_not(w: &mut CodeWriter, not_elem: &LexerNotElement, all_rules: &Array<LexerRule>, fail_action: &String) {
+fn gen_lexer_not(
+    w: &mut CodeWriter,
+    not_elem: &LexerNotElement,
+    all_rules: &Array<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+) {
     if let CharClass(cc) = not_elem.element {
+        let expanded = if ci { expand_char_class_ci(&cc) } else { cc };
         let flipped = CharClass {
-            ranges: cc.ranges,
-            negated: !cc.negated,
+            ranges: expanded.ranges,
+            negated: !expanded.negated,
         };
         gen_char_class(w, &flipped, fail_action);
         return;
@@ -425,7 +551,7 @@ fn gen_lexer_not(w: &mut CodeWriter, not_elem: &LexerNotElement, all_rules: &Arr
     w.line(`let not_saved_{id} = pos;`);
     w.line(`let mut not_matched_{id} = false;`);
     w.begin(`{label}:`);
-    gen_lexer_elem(w, &not_elem.element, all_rules, `break {label}`);
+    gen_lexer_elem(w, &not_elem.element, all_rules, `break {label}`, ci);
     w.line(`not_matched_{id} = true;`);
     w.end();
     w.line(`pos = not_saved_{id};`);
@@ -470,12 +596,21 @@ fn try_extract_ci_char(cc: &CharClass) -> Option<char> {
 }
 
 /// Extracts a [lowercase_char, is_case_insensitive] pair from a lexer element.
-fn try_extract_keyword_char(elem: &LexerElement, all_rules: &Array<LexerRule>) -> Option<[char, bool]> {
+/// When `rule_ci` is true, plain literal chars are treated as case-insensitive
+/// too — ANTLR4's `caseInsensitive` option folds every grammar-level char to
+/// its opposing-case partner.
+fn try_extract_keyword_char(
+    elem: &LexerElement,
+    all_rules: &Array<LexerRule>,
+    rule_ci: bool,
+) -> Option<[char, bool]> {
     if let Literal(text) = elem {
         let mut iter = text.chars();
         if let Some(c) = iter.next() {
             if let None = iter.next() {
-                return Option::<[char, bool]>::Some([c.to_ascii_lowercase(), false]);
+                let is_letter = c.to_ascii_lowercase() != c.to_ascii_uppercase();
+                let ci = rule_ci && is_letter;
+                return Option::<[char, bool]>::Some([c.to_ascii_lowercase(), ci]);
             }
         }
         return null;
@@ -486,7 +621,10 @@ fn try_extract_keyword_char(elem: &LexerElement, all_rules: &Array<LexerRule>) -
             return Option::<[char, bool]>::Some([c, true]);
         }
         if !cc.negated && cc.ranges.len() == 1 && cc.ranges[0].start == cc.ranges[0].end {
-            return Option::<[char, bool]>::Some([cc.ranges[0].start.to_ascii_lowercase(), false]);
+            let c = cc.ranges[0].start;
+            let is_letter = c.to_ascii_lowercase() != c.to_ascii_uppercase();
+            let ci = rule_ci && is_letter;
+            return Option::<[char, bool]>::Some([c.to_ascii_lowercase(), ci]);
         }
         return null;
     }
@@ -494,7 +632,7 @@ fn try_extract_keyword_char(elem: &LexerElement, all_rules: &Array<LexerRule>) -
         let frag = find_fragment(all_rules, name);
         if let Some(f) = frag {
             if f.body.len() == 1 && f.body[0].elements.len() == 1 {
-                return try_extract_keyword_char(&f.body[0].elements[0], all_rules);
+                return try_extract_keyword_char(&f.body[0].elements[0], all_rules, rule_ci);
             }
         }
         return null;
@@ -504,7 +642,11 @@ fn try_extract_keyword_char(elem: &LexerElement, all_rules: &Array<LexerRule>) -
 
 /// Analyzes a lexer rule to determine if it's a fixed keyword pattern.
 /// Returns KeywordInfo if it matches a sequence of case-insensitive (or literal) chars.
-fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>) -> Option<KeywordInfo> {
+fn try_extract_keyword_info(
+    rule: &LexerRule,
+    all_rules: &Array<LexerRule>,
+    grammar_opts: &Array<GrammarOption>,
+) -> Option<KeywordInfo> {
     if rule.is_fragment || rule.body.len() != 1 {
         return null;
     }
@@ -525,10 +667,11 @@ fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>) -> O
     if alt.elements.is_empty() {
         return null;
     }
+    let rule_ci = resolve_ci(grammar_opts, &rule.options);
     let mut text = String::with_capacity(alt.elements.len());
     let mut char_ci: Array<bool> = [];
     for let elem of &alt.elements {
-        if let Some(pair) = try_extract_keyword_char(elem, all_rules) {
+        if let Some(pair) = try_extract_keyword_char(elem, all_rules, rule_ci) {
             text.push(pair.0);
             char_ci.push(pair.1);
         } else {
@@ -550,13 +693,16 @@ fn try_extract_keyword_info(rule: &LexerRule, all_rules: &Array<LexerRule>) -> O
 }
 
 /// Collects all keyword rules from the grammar.
-pub fn collect_keyword_rules(lexer_rules: &Array<LexerRule>) -> Array<KeywordInfo> {
+pub fn collect_keyword_rules(
+    lexer_rules: &Array<LexerRule>,
+    grammar_opts: &Array<GrammarOption>,
+) -> Array<KeywordInfo> {
     let mut result: Array<KeywordInfo> = [];
     for let rule of lexer_rules {
         if rule.is_fragment || rule.body.is_empty() {
             continue;
         }
-        let info = try_extract_keyword_info(rule, lexer_rules);
+        let info = try_extract_keyword_info(rule, lexer_rules, grammar_opts);
         if let Some(kw) = info {
             result.push(kw);
         }
@@ -591,7 +737,20 @@ fn try_extract_fixed_text(rule: &LexerRule) -> Option<String> {
 }
 
 /// Check if a lexer rule has the same fixed text as any literal token.
-fn is_literal_duplicate(rule: &LexerRule, lit_tokens: &Array<LitToken>) -> bool {
+///
+/// Parser literals inherit the grammar-level `caseInsensitive` setting, so a
+/// lexer rule with a divergent rule-level CI override must keep its own
+/// `try_*` function instead of being deduped against the shared literal.
+fn is_literal_duplicate(
+    rule: &LexerRule,
+    lit_tokens: &Array<LitToken>,
+    grammar_opts: &Array<GrammarOption>,
+    grammar_ci: bool,
+) -> bool {
+    let rule_ci = resolve_ci(grammar_opts, &rule.options);
+    if rule_ci != grammar_ci {
+        return false;
+    }
     let text = try_extract_fixed_text(rule);
     if let Some(t) = &text {
         for let lit of lit_tokens {
@@ -706,12 +865,22 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &Array<KeywordInfo>) 
     w.blank();
 }
 
-fn gen_char_guard(access: &String, lower: char, ci: bool) -> String {
-    let upper = lower.to_ascii_uppercase();
+fn gen_char_guard(access: &String, c: char, ci: bool) -> String {
+    let lower = c.to_ascii_lowercase();
+    let upper = c.to_ascii_uppercase();
     if ci && lower != upper {
         return `({access} == {escape_char(lower)} || {access} == {escape_char(upper)})`;
     }
-    return `{access} == {escape_char(lower)}`;
+    return `{access} == {escape_char(c)}`;
+}
+
+fn gen_char_mismatch(access: &String, c: char, ci: bool) -> String {
+    let lower = c.to_ascii_lowercase();
+    let upper = c.to_ascii_uppercase();
+    if ci && lower != upper {
+        return `{access} != {escape_char(lower)} && {access} != {escape_char(upper)}`;
+    }
+    return `{access} != {escape_char(c)}`;
 }
 
 fn emit_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
@@ -732,7 +901,7 @@ fn emit_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
     w.write(` \{ return TK_{kw.rule_name}; \}\n`);
 }
 
-fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &Array<LitToken>) {
+fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &Array<LitToken>, ci: bool) {
     for let lit of lit_tokens {
         let chars: Array<char> = lit.text.chars().collect();
         let fn_name = lit_try_fn_name(&lit.const_name);
@@ -743,7 +912,8 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &Array<LitToken>) {
         f.emit_begin(w);
         w.line("let pos = start;");
         for let mut i = 0; i < chars.len(); i += 1 {
-            w.line(`if pos + {i} >= chars.len() || chars[pos + {i}] != {escape_char(chars[i])} \{ return -1; \}`);
+            let mismatch = gen_char_mismatch(&`chars[pos + {i}]`, chars[i], ci);
+            w.line(`if pos + {i} >= chars.len() || {mismatch} \{ return -1; \}`);
         }
         let len = chars.len();
         w.line(`return pos + {len};`);
@@ -839,7 +1009,9 @@ fn compute_first_chars(
     has_set_mode_rules: bool,
     has_more_rules: bool,
     has_channel_rules: bool,
+    grammar_opts: &Array<GrammarOption>,
 ) -> TryCall {
+    let ci = resolve_ci(grammar_opts, &rule.options);
     let fn_name = `try_{to_lower(&rule.name)}`;
     // `type(X)` rewrites the kind used when emitting the token. Use the
     // override kind at emit time so downstream code (parser, token_kind_name)
@@ -885,7 +1057,7 @@ fn compute_first_chars(
         }
     }
     let mut chars: Array<[char, char]> = [];
-    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars);
+    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci);
     // A catch-all rule (e.g., UNEXPECTED_CHAR: .) matches any single character.
     // It's only useful in the wildcard fallback, never in specific dispatch branches
     // where another rule already matches at least 1 character.
@@ -906,28 +1078,50 @@ fn compute_first_chars(
 
 /// Analyze first elements of rule body alternatives to find first-char set.
 /// Returns true if it's a wildcard (any char could match).
-fn compute_elem_first_chars(body: &Array<LexerAlt>, all_rules: &Array<LexerRule>, out: &mut Array<[char, char]>) -> bool {
+fn compute_elem_first_chars(
+    body: &Array<LexerAlt>,
+    all_rules: &Array<LexerRule>,
+    out: &mut Array<[char, char]>,
+    ci: bool,
+) -> bool {
     for let alt of body {
         if alt.elements.is_empty() {
             return true;
         }
         let elem = &alt.elements[0];
-        if compute_single_elem_first(elem, all_rules, out) {
+        if compute_single_elem_first(elem, all_rules, out, ci) {
             return true;
         }
     }
     return false;
 }
 
-fn compute_single_elem_first(elem: &LexerElement, all_rules: &Array<LexerRule>, out: &mut Array<[char, char]>) -> bool {
+fn add_folded_range(out: &mut Array<[char, char]>, start: char, end: char, ci: bool) {
+    if !ci {
+        add_range(out, start, end);
+        return;
+    }
+    let mut folded: Array<CharRange> = [];
+    fold_range_ci(start, end, &mut folded);
+    for let r of &folded {
+        add_range(out, r.start, r.end);
+    }
+}
+
+fn compute_single_elem_first(
+    elem: &LexerElement,
+    all_rules: &Array<LexerRule>,
+    out: &mut Array<[char, char]>,
+    ci: bool,
+) -> bool {
     match *elem {
         Literal(text) => {
             let c = text.chars().next().unwrap();
-            add_range(out, c, c);
+            add_folded_range(out, c, c, ci);
             return false;
         },
         CharRange(pair) => {
-            add_range(out, pair.0, pair.1);
+            add_folded_range(out, pair.0, pair.1, ci);
             return false;
         },
         CharClass(cc) => {
@@ -935,20 +1129,20 @@ fn compute_single_elem_first(elem: &LexerElement, all_rules: &Array<LexerRule>, 
                 return true;
             }
             for let r of &cc.ranges {
-                add_range(out, r.start, r.end);
+                add_folded_range(out, r.start, r.end, ci);
             }
             return false;
         },
         RuleRef(name) => {
             for let rule of all_rules {
                 if rule.name == name && rule.is_fragment {
-                    return compute_elem_first_chars(&rule.body, all_rules, out);
+                    return compute_elem_first_chars(&rule.body, all_rules, out, ci);
                 }
             }
             return true;
         },
         Repeat(rep) => {
-            let is_wc = compute_single_elem_first(&rep.element, all_rules, out);
+            let is_wc = compute_single_elem_first(&rep.element, all_rules, out, ci);
             if is_wc {
                 return true;
             }
@@ -958,7 +1152,7 @@ fn compute_single_elem_first(elem: &LexerElement, all_rules: &Array<LexerRule>, 
             return false;
         },
         Group(alts) => {
-            return compute_elem_first_chars(&alts, all_rules, out);
+            return compute_elem_first_chars(&alts, all_rules, out, ci);
         },
         _ => {
             return true;
@@ -1203,11 +1397,20 @@ fn arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
     return true;
 }
 
-fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_tokens: &Array<LitToken>, mode_names: &Array<String>, keywords: &Array<KeywordInfo>) {
+fn gen_tokenize_fn(
+    w: &mut CodeWriter,
+    lexer_rules: &Array<LexerRule>,
+    lit_tokens: &Array<LitToken>,
+    mode_names: &Array<String>,
+    keywords: &Array<KeywordInfo>,
+    grammar_opts: &Array<GrammarOption>,
+) {
     let use_modes = has_modes(mode_names);
     let has_set_mode_rules = has_set_mode(lexer_rules);
     let has_more_rules = has_more(lexer_rules);
     let has_channel_rules = has_channel(lexer_rules);
+    let empty_opts: Array<GrammarOption> = [];
+    let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
 
     let mut f = FnSpec::new("tokenize");
     f.set_pub();
@@ -1285,7 +1488,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                     && !rule.body.is_empty()
                     && rule.mode == mi
                     && !is_keyword_rule_name(&rule.name, keywords)
-                    && !is_literal_duplicate(rule, lit_tokens) {
+                    && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
                     let fn_name = `try_{to_lower(&rule.name)}`;
                     w.line(`end = {fn_name}(&lexer.chars, start);`);
                     let mut extra = String::with_capacity(64);
@@ -1342,7 +1545,9 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
             let fn_name = lit_try_fn_name(&lit.const_name);
             let c = lit.text.chars().next().unwrap();
             let mut fc: Array<[char, char]> = [];
-            fc.push([c, c]);
+            // Parser literals inherit grammar-level caseInsensitive. Under CI,
+            // the literal's first char may appear in either case.
+            add_folded_range(&mut fc, c, c, grammar_ci);
             let tk = lit.const_name;
             let mlen = lit.text.chars().count();
             all_calls.push(TryCall {
@@ -1359,7 +1564,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
             if !rule.is_fragment
                 && !rule.body.is_empty()
                 && !is_keyword_rule_name(&rule.name, keywords)
-                && !is_literal_duplicate(rule, lit_tokens) {
+                && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
                 all_calls.push(compute_first_chars(
                     rule,
                     lexer_rules,
@@ -1367,6 +1572,7 @@ fn gen_tokenize_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, lit_token
                     has_set_mode_rules,
                     has_more_rules,
                     has_channel_rules,
+                    grammar_opts,
                 ));
             }
         }

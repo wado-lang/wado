@@ -713,6 +713,77 @@ test "generate rust golden" {
     assert output == expected, "Rust golden mismatch";
 }
 
+test "caseInsensitive grammar option makes literal match CI" {
+    let input = "lexer grammar Test;
+options { caseInsensitive = true; }
+IF : 'if' ;
+WS : [ \\t]+ -> skip ;";
+    let grammar = parse_grammar(input, "test.g4");
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    // A case-insensitive 'i' must reject only both 'i' and 'I' being absent.
+    assert str_contains(&output, "chars[pos] != 'i' && chars[pos] != 'I'"),
+        `ci literal should fold 'i' → [iI]:\n{output}`;
+    assert str_contains(&output, "chars[pos] != 'f' && chars[pos] != 'F'"),
+        `ci literal should fold 'f' → [fF]:\n{output}`;
+}
+
+test "caseInsensitive grammar option makes char-range match CI" {
+    let input = "lexer grammar Test;
+options { caseInsensitive = true; }
+ID : [a-z]+ ;";
+    let grammar = parse_grammar(input, "test.g4");
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    // A case-insensitive [a-z] must also accept [A-Z].
+    assert str_contains(&output, "'A' <= chars[pos] <= 'Z'"),
+        `ci char range should fold [a-z] → [a-zA-Z]:\n{output}`;
+}
+
+test "lexer rule caseInsensitive=false overrides grammar-level true" {
+    let input = "lexer grammar Test;
+options { caseInsensitive = true; }
+IF : 'if' ;
+STRICT options { caseInsensitive = false; } : 'x' ;
+WS : [ \\t]+ -> skip ;";
+    let grammar = parse_grammar(input, "test.g4");
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    // IF still CI.
+    assert str_contains(&output, "chars[pos] != 'i' && chars[pos] != 'I'"),
+        `IF must remain CI (grammar-level):\n{output}`;
+    // STRICT must emit plain equality for 'x' (no CI fold). The keyword
+    // classifier uses `start + i` indexing.
+    assert str_contains(&output, "chars[start + 0] == 'x'"),
+        `STRICT must not fold 'x':\n{output}`;
+    assert !str_contains(&output, "'x' || chars[start + 0] == 'X'"),
+        `STRICT must not fold 'x' to [xX]:\n{output}`;
+}
+
+test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
+    let input = "lexer grammar Test;
+KW options { caseInsensitive = true; } : 'go' ;
+ID : [a-z]+ ;";
+    let grammar = parse_grammar(input, "test.g4");
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "chars[pos] != 'g' && chars[pos] != 'G'"),
+        `rule-level caseInsensitive=true should fold 'g' → [gG]:\n{output}`;
+    // ID is not CI; its range must stay [a-z] without a mirrored [A-Z].
+    assert !str_contains(&output, "'A' <= chars[pos] <= 'Z'"),
+        `ID has no CI; [a-z] must not be mirrored to [A-Z]:\n{output}`;
+}
+
+test "caseInsensitive does not fold non-letters" {
+    let input = "lexer grammar Test;
+options { caseInsensitive = true; }
+DIGITS : [0-9]+ ;
+SEMI : ';' ;";
+    let grammar = parse_grammar(input, "test.g4");
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    // Digit range must not be duplicated.
+    assert str_contains(&output, "'0' <= chars[pos] <= '9'");
+    // Non-letter literal must not be duplicated — plain mismatch form.
+    assert str_contains(&output, "chars[pos] != ';'");
+    assert !str_contains(&output, "chars[pos] != ';' && chars[pos] !=");
+}
+
 fn str_contains(haystack: &String, needle: &String) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();

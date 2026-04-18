@@ -1,0 +1,47 @@
+use ci from "./golden/ci_sql.wado";
+use { normalize_tree } from "./golden/ci_sql.wado";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = ci::parse(input).unwrap();
+    let tree = ci::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "tokenize keyword lowercase" {
+    let tokens = ci::tokenize(&"if foo");
+    assert ci::token_kind_name(tokens[0].kind) == "IF";
+    assert ci::token_kind_name(tokens[1].kind) == "IDENT";
+}
+
+test "tokenize keyword uppercase" {
+    let tokens = ci::tokenize(&"IF foo");
+    assert ci::token_kind_name(tokens[0].kind) == "IF";
+}
+
+test "tokenize keyword mixed case" {
+    let tokens = ci::tokenize(&"If foo");
+    assert ci::token_kind_name(tokens[0].kind) == "IF";
+}
+
+test "identifier range folds to uppercase" {
+    // IDENT is [a-z_]+, but with grammar-level CI it must accept [A-Z] too.
+    let tokens = ci::tokenize(&"IF FOO");
+    assert ci::token_kind_name(tokens[1].kind) == "IDENT";
+}
+
+test "parse accepts any casing" {
+    let r1 = ci::parse(&"if foo");
+    let r2 = ci::parse(&"IF FOO");
+    let r3 = ci::parse(&"If FoO");
+    if let Err(e) = &r1 { panic(`r1 failed: {e.message}`); }
+    if let Err(e) = &r2 { panic(`r2 failed: {e.message}`); }
+    if let Err(e) = &r3 { panic(`r3 failed: {e.message}`); }
+}
+
+test "tree: keyword uppercased in output" {
+    // Keyword text in the tree preserves the original casing of the source.
+    assert_tree(&"IF foo", &"(stmt IF foo)");
+    assert_tree(&"if FOO", &"(stmt if FOO)");
+}
