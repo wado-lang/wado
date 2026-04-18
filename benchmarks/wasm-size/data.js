@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776496407294,
+  "lastUpdate": 1776501019108,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14025,6 +14025,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 618093,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b3fe4899c68733f705e4f460da3703a2cdafadf6",
+          "message": "Merge pull request #870 from wado-lang/claude/optimize-gale-generation-65vwn\n\nHFS: fix label-collision miscompile when inlined callees reuse __for_N labels",
+          "timestamp": "2026-04-18T17:26:25+09:00",
+          "tree_id": "1d4576211f603302e802b104c11c5555cc78b86d",
+          "url": "https://github.com/wado-lang/wado/commit/b3fe4899c68733f705e4f460da3703a2cdafadf6"
+        },
+        "date": 1776501018821,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
             "unit": "bytes"
           }
         ]
