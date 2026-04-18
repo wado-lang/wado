@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776474304492,
+  "lastUpdate": 1776482733309,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13893,6 +13893,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 664108,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "de630d6d5464f815fecce83bbba454040941fbfc",
+          "message": "Merge pull request #867 from wado-lang/claude/antlr4-compatibility-plan-B2RcK\n\nGale: caseInsensitive codegen + `gale dump` CLI",
+          "timestamp": "2026-04-18T12:21:25+09:00",
+          "tree_id": "c4ad68efa46127fdc581aa966d92ad44c38ca9de",
+          "url": "https://github.com/wado-lang/wado/commit/de630d6d5464f815fecce83bbba454040941fbfc"
+        },
+        "date": 1776482733000,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618093,
             "unit": "bytes"
           }
         ]
