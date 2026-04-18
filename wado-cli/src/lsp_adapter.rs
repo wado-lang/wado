@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
-use serde::Serialize;
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::lsp_rpc::{
     JsonRpcError, JsonRpcErrorResponse, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse,
-    PublishDiagnosticsParams,
+    PublishDiagnosticsParams, error_codes,
 };
 
 const JSONRPC_VERSION: &str = "2.0";
@@ -115,6 +115,33 @@ pub async fn send_error<W: AsyncWrite + Unpin>(
     };
     let body = serde_json::to_string(&msg).map_err(|e| format!("serialize error: {e}"))?;
     write_serialized(writer, body).await
+}
+
+/// Decode request params. On failure, send an `InvalidParams` error response
+/// to the client and return `Ok(None)` so the caller can skip the request.
+/// Returns `Err` only if the error response itself fails to write.
+pub async fn decode_or_error<P, W>(
+    writer: &mut W,
+    id: &Value,
+    params: Value,
+) -> Result<Option<P>, String>
+where
+    P: DeserializeOwned,
+    W: AsyncWrite + Unpin,
+{
+    match serde_json::from_value(params) {
+        Ok(p) => Ok(Some(p)),
+        Err(e) => {
+            send_error(
+                writer,
+                id,
+                error_codes::INVALID_PARAMS,
+                format!("invalid params: {e}"),
+            )
+            .await?;
+            Ok(None)
+        }
+    }
 }
 
 /// Build a silent filesystem host rooted at the directory containing `uri`.

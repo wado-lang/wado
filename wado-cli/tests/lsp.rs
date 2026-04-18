@@ -580,6 +580,23 @@ fn lsp_unknown_method_returns_error() {
 }
 
 #[test]
+fn lsp_invalid_params_returns_error() {
+    let mut session = LspSession::start();
+
+    session.send_request("initialize", json!({ "capabilities": {} }));
+    let _init_resp = session.read_message();
+
+    // Send a well-formed request with malformed params (missing required fields).
+    let id = session.send_request("textDocument/hover", json!({ "bogus": true }));
+
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["error"]["code"], -32602); // InvalidParams
+
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
 fn lsp_exit_without_shutdown_returns_nonzero() {
     let mut child = Command::new(wado_bin())
         .args(["lsp"])
