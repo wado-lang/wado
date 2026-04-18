@@ -45,9 +45,11 @@ pub async fn read_message<R: tokio::io::AsyncRead + Unpin>(
             break;
         }
         if let Some(len_str) = trimmed.strip_prefix("Content-Length: ") {
-            content_length = Some(len_str.parse().map_err(|_| {
-                ReadError::Parse(format!("invalid Content-Length: {len_str}"))
-            })?);
+            content_length = Some(
+                len_str
+                    .parse()
+                    .map_err(|_| ReadError::Parse(format!("invalid Content-Length: {len_str}")))?,
+            );
         }
     }
 

@@ -1138,7 +1138,9 @@ fn lsp_semantic_tokens_full_returns_data_array() {
     );
     let resp = session.read_message();
     assert_eq!(resp["id"], id);
-    let data = resp["result"]["data"].as_array().expect("data must be array");
+    let data = resp["result"]["data"]
+        .as_array()
+        .expect("data must be array");
     // Delta-encoded tokens come in 5-tuples. Must be a non-empty multiple of 5.
     assert!(!data.is_empty(), "expected semantic tokens, got none");
     assert_eq!(

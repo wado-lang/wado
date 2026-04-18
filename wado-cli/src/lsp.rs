@@ -39,14 +39,9 @@ pub async fn run() {
                 // Per JSON-RPC 2.0 §5.1: respond with ParseError (id: null)
                 // and keep the loop running so a well-formed follow-up can
                 // still be processed.
-                if lsp_adapter::send_error(
-                    &mut writer,
-                    &Value::Null,
-                    error_codes::PARSE_ERROR,
-                    msg,
-                )
-                .await
-                .is_err()
+                if lsp_adapter::send_error(&mut writer, &Value::Null, error_codes::PARSE_ERROR, msg)
+                    .await
+                    .is_err()
                 {
                     break;
                 }
