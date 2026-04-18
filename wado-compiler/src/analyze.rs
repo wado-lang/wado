@@ -30,8 +30,15 @@ pub enum AnalyzeError {
         name: String,
         span: Span,
     },
-    /// Duplicate definition
-    DuplicateDefinition { name: String, span: Span },
+    /// Duplicate top-level definition within a single module.
+    ///
+    /// `span` is the location of the duplicate; `first` is the location of
+    /// the original definition that the duplicate collides with.
+    DuplicateDefinition {
+        name: String,
+        span: Span,
+        first: Span,
+    },
     /// Undefined symbol reference
     UndefinedSymbol { name: String, span: Span },
     /// Invalid module path (not a valid URI reference)
@@ -68,11 +75,11 @@ impl std::fmt::Display for AnalyzeError {
                     span.line, span.column, name, module_source
                 )
             }
-            AnalyzeError::DuplicateDefinition { name, span } => {
+            AnalyzeError::DuplicateDefinition { name, span, first } => {
                 write!(
                     f,
-                    "{}:{}: duplicate definition '{}'",
-                    span.line, span.column, name
+                    "{}:{}: duplicate definition '{}' (first defined at {}:{})",
+                    span.line, span.column, name, first.line, first.column
                 )
             }
             AnalyzeError::UndefinedSymbol { name, span } => {
@@ -127,9 +134,12 @@ impl From<AnalyzeError> for crate::compiler_host::Diagnostic {
                 format!("symbol '{name}' not found in module '{module_source}'"),
                 *span,
             ),
-            AnalyzeError::DuplicateDefinition { name, span } => (
+            AnalyzeError::DuplicateDefinition { name, span, first } => (
                 Code::DuplicateDefinition,
-                format!("duplicate definition '{name}'"),
+                format!(
+                    "duplicate definition '{name}' (first defined at {}:{})",
+                    first.line, first.column
+                ),
                 *span,
             ),
             AnalyzeError::UndefinedSymbol { name, span } => (
@@ -185,8 +195,39 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         }
     }
 
+    /// Define a top-level symbol, emitting a `DuplicateDefinition` diagnostic
+    /// if `name` is already defined directly in `module_source`.
+    ///
+    /// Duplicates are silently dropped (first-def wins).  Downstream phases
+    /// rely on a single registration per `(module, name)`; this matches
+    /// codegen's long-standing "first definition wins, skip the rest"
+    /// behaviour and makes the error surface before those phases can
+    /// miscompile against a different definition.
+    fn define_unique(
+        &mut self,
+        module_source: &ModuleSource,
+        ast_id: crate::ast::AstId,
+        name: &str,
+        kind: SymbolKind,
+        span: Span,
+    ) -> Option<SymbolKey> {
+        if let Some(first) = self.symbols.defined_span_in_module(module_source, name) {
+            let _ = self.logger.error(AnalyzeError::DuplicateDefinition {
+                name: name.to_string(),
+                span,
+                first,
+            });
+            return None;
+        }
+        Some(
+            self.symbols
+                .define(module_source, ast_id, name, kind, Some(span)),
+        )
+    }
+
     /// Collect all definitions from a module into the symbol table
     fn collect_definitions(&mut self, module: &Module, module_source: &ModuleSource) {
+        self.logger.set_file(module_source.diagnostic_filename());
         for item in &module.items {
             match item {
                 Item::Function(func) => {
@@ -204,8 +245,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cm_import: func.attrs.first().and_then(|a| a.cm_import.clone()),
                     });
 
-                    self.symbols
-                        .define(module_source, func.id, &func.name, kind, Some(func.span));
+                    self.define_unique(module_source, func.id, &func.name, kind, func.span);
                 }
 
                 Item::Effect(effect) => {
@@ -217,13 +257,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cm_import: effect_cm_import,
                     });
 
-                    self.symbols.define(
-                        module_source,
-                        effect.id,
-                        &effect.name,
-                        kind,
-                        Some(effect.span),
-                    );
+                    self.define_unique(module_source, effect.id, &effect.name, kind, effect.span);
 
                     // Also register each effect method as a function symbol
                     // with the fully qualified name "{Effect}.{method}"
@@ -241,12 +275,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
                         // Register as "{Effect}::{method}"
                         let qualified_name = format!("{}::{}", effect.name, method.name);
-                        self.symbols.define(
+                        self.define_unique(
                             module_source,
                             method.id,
                             &qualified_name,
                             func_kind,
-                            Some(method.span),
+                            method.span,
                         );
                     }
                 }
@@ -256,12 +290,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         fields: struct_decl.fields.iter().map(|f| f.name.clone()).collect(),
                     });
 
-                    self.symbols.define(
+                    self.define_unique(
                         module_source,
                         struct_decl.id,
                         &struct_decl.name,
                         kind,
-                        Some(struct_decl.span),
+                        struct_decl.span,
                     );
                 }
 
@@ -270,12 +304,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cases: enum_decl.cases.iter().map(|c| c.name.clone()).collect(),
                     });
 
-                    self.symbols.define(
+                    self.define_unique(
                         module_source,
                         enum_decl.id,
                         &enum_decl.name,
                         kind,
-                        Some(enum_decl.span),
+                        enum_decl.span,
                     );
                 }
 
@@ -284,12 +318,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cases: variant_decl.cases.iter().map(|c| c.name.clone()).collect(),
                     });
 
-                    self.symbols.define(
+                    self.define_unique(
                         module_source,
                         variant_decl.id,
                         &variant_decl.name,
                         kind,
-                        Some(variant_decl.span),
+                        variant_decl.span,
                     );
                 }
 
@@ -303,12 +337,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             .collect(),
                     });
 
-                    self.symbols.define(
+                    self.define_unique(
                         module_source,
                         trait_decl.id,
                         &trait_decl.name,
                         kind,
-                        Some(trait_decl.span),
+                        trait_decl.span,
                     );
                 }
 
@@ -317,12 +351,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         aliased_type: "unknown".to_string(), // TODO: store actual type
                     });
 
-                    self.symbols.define(
+                    self.define_unique(
                         module_source,
                         newtype.id,
                         &newtype.name,
                         kind,
-                        Some(newtype.span),
+                        newtype.span,
                     );
                 }
 
@@ -332,12 +366,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         cm_import: resource.attrs.first().and_then(|a| a.cm_import.clone()),
                     });
 
-                    self.symbols.define(
+                    self.define_unique(
                         module_source,
                         resource.id,
                         &resource.name,
                         kind,
-                        Some(resource.span),
+                        resource.span,
                     );
 
                     // Register each resource method as a function symbol
@@ -355,12 +389,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
                         // Register as "{Resource}::{method}"
                         let qualified_name = format!("{}::{}", resource.name, method.name);
-                        self.symbols.define(
+                        self.define_unique(
                             module_source,
                             method.id,
                             &qualified_name,
                             func_kind,
-                            Some(method.span),
+                            method.span,
                         );
                     }
                 }
@@ -387,13 +421,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             .collect(),
                     });
 
-                    self.symbols.define(
-                        module_source,
-                        world.id,
-                        &world.name,
-                        kind,
-                        Some(world.span),
-                    );
+                    self.define_unique(module_source, world.id, &world.name, kind, world.span);
                 }
 
                 Item::Use(_) => {
@@ -409,12 +437,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         members: flags_decl.flags.iter().map(|m| m.name.clone()).collect(),
                     });
 
-                    self.symbols.define(
+                    self.define_unique(
                         module_source,
                         flags_decl.id,
                         &flags_decl.name,
                         kind,
-                        Some(flags_decl.span),
+                        flags_decl.span,
                     );
                 }
 
@@ -428,13 +456,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         is_mut: global.mutable,
                     });
 
-                    self.symbols.define(
-                        module_source,
-                        global.id,
-                        &global.name,
-                        kind,
-                        Some(global.span),
-                    );
+                    self.define_unique(module_source, global.id, &global.name, kind, global.span);
                 }
 
                 Item::TupleTypeDecl(_) => {

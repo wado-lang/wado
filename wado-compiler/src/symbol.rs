@@ -251,6 +251,28 @@ impl SymbolTable {
         Self::default()
     }
 
+    /// Check whether a symbol with `name` is already defined directly in
+    /// `module_source`.  Unlike [`Self::lookup_in_module`], this does **not**
+    /// follow re-export chains — it only inspects symbols registered via
+    /// [`Self::define`] for this exact module.  Used by the analyzer to flag
+    /// duplicate top-level definitions.
+    pub fn is_defined_in_module(&self, module_source: &ModuleSource, name: &str) -> bool {
+        self.modules
+            .get(module_source)
+            .is_some_and(|module| module.contains_key(name))
+    }
+
+    /// Return the span of an existing direct definition of `name` in
+    /// `module_source`, if any.  Mirrors [`Self::is_defined_in_module`] but
+    /// hands back the declaration site for error diagnostics.
+    pub fn defined_span_in_module(&self, module_source: &ModuleSource, name: &str) -> Option<Span> {
+        self.modules
+            .get(module_source)
+            .and_then(|module| module.get(name))
+            .and_then(|key| self.symbols.get(key))
+            .and_then(|sym| sym.span)
+    }
+
     /// Define a symbol in a module.
     ///
     /// The `(module_source, ast_id)` pair uniquely identifies the declaring

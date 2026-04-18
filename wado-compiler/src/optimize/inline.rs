@@ -503,18 +503,10 @@ pub fn inline_functions(project: &mut FlatPackage, inline_threshold: usize) -> b
             &type_table,
             inline_threshold,
         ) {
-            // Duplicate top-level function definitions share the same key.
-            // Codegen registers the first definition and skips the rest
-            // (see `register_single_function` in `wir_build/functions.rs`), so
-            // the inliner must do the same — otherwise callers see different
-            // bodies at different optimization levels (last-def-wins at O2+
-            // vs first-def-wins at O0).
-            if !inline_candidates.contains_key(&key) {
-                inline_candidates.insert(key.clone(), func.clone());
-                // Get the strings used by this function
-                if let Some(strings) = project.function_strings.get(&key) {
-                    candidate_strings.insert(key, strings.clone());
-                }
+            inline_candidates.insert(key.clone(), func.clone());
+            // Get the strings used by this function
+            if let Some(strings) = project.function_strings.get(&key) {
+                candidate_strings.insert(key, strings.clone());
             }
         }
     }

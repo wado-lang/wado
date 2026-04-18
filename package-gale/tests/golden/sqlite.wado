@@ -1700,7 +1700,7 @@ pub struct ExprAlt3 {
 pub struct ExprAlt4 {
     pub span: Span,
     pub expr: ExprNode,
-    pub lit___: Token,
+    pub lit_pipepipe: Token,
     pub expr_2: ExprNode,
 }
 
@@ -1721,21 +1721,21 @@ pub struct ExprAlt6 {
 pub struct ExprAlt7 {
     pub span: Span,
     pub expr: ExprNode,
-    pub lit____or_lit____or_amp_or_pipe: Token,
+    pub lit_ltlt_or_lit_gtgt_or_amp_or_pipe: Token,
     pub expr_2: ExprNode,
 }
 
 pub struct ExprAlt8 {
     pub span: Span,
     pub expr: ExprNode,
-    pub lt_or_lit____or_gt_or_lit___: Token,
+    pub lt_or_lit_lteq_or_gt_or_lit_gteq: Token,
     pub expr_2: ExprNode,
 }
 
 pub struct ExprAlt9 {
     pub span: Span,
     pub expr: ExprNode,
-    pub eq_or_lit____or_lit____or_lit___: Token,
+    pub eq_or_lit_eqeq_or_lit_bangeq_or_lit_ltgt: Token,
     pub expr_2: ExprNode,
 }
 
@@ -16662,12 +16662,12 @@ fn parse_expr_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
 }
 
 fn parse_expr_lr_4(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let lit___ = p.expect(TK_LIT_PIPEPIPE)?;
+    let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE)?;
     let expr_2 = parse_expr_prec(p, 15)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt4(ExprAlt4 {
         span: Span::new(start, p.last_end()),
         expr: left,
-        lit___,
+        lit_pipepipe,
         expr_2,
     }));
 }
@@ -16695,34 +16695,34 @@ fn parse_expr_lr_6(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNod
 }
 
 fn parse_expr_lr_7(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let lit____or_lit____or_amp_or_pipe = p.advance();
+    let lit_ltlt_or_lit_gtgt_or_amp_or_pipe = p.advance();
     let expr_2 = parse_expr_prec(p, 12)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt7(ExprAlt7 {
         span: Span::new(start, p.last_end()),
         expr: left,
-        lit____or_lit____or_amp_or_pipe,
+        lit_ltlt_or_lit_gtgt_or_amp_or_pipe,
         expr_2,
     }));
 }
 
 fn parse_expr_lr_8(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let lt_or_lit____or_gt_or_lit___ = p.advance();
+    let lt_or_lit_lteq_or_gt_or_lit_gteq = p.advance();
     let expr_2 = parse_expr_prec(p, 11)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt8(ExprAlt8 {
         span: Span::new(start, p.last_end()),
         expr: left,
-        lt_or_lit____or_gt_or_lit___,
+        lt_or_lit_lteq_or_gt_or_lit_gteq,
         expr_2,
     }));
 }
 
 fn parse_expr_lr_9(p: &mut Parser, left: ExprNode, start: i32) -> Result<ExprNode, ParseError> {
-    let eq_or_lit____or_lit____or_lit___ = p.advance();
+    let eq_or_lit_eqeq_or_lit_bangeq_or_lit_ltgt = p.advance();
     let expr_2 = parse_expr_prec(p, 10)?;
     return Result::<ExprNode, ParseError>::Ok(ExprNode::Alt9(ExprAlt9 {
         span: Span::new(start, p.last_end()),
         expr: left,
-        eq_or_lit____or_lit____or_lit___,
+        eq_or_lit_eqeq_or_lit_bangeq_or_lit_ltgt,
         expr_2,
     }));
 }
@@ -21594,7 +21594,7 @@ pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
         Alt4(n) => {
             v.enter_rule(&"expr", &n.span);
             walk_expr(v, &n.expr);
-            v.visit_token(&n.lit___);
+            v.visit_token(&n.lit_pipepipe);
             walk_expr(v, &n.expr_2);
             v.exit_rule(&"expr", &n.span);
         }
@@ -21615,21 +21615,21 @@ pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
         Alt7(n) => {
             v.enter_rule(&"expr", &n.span);
             walk_expr(v, &n.expr);
-            v.visit_token(&n.lit____or_lit____or_amp_or_pipe);
+            v.visit_token(&n.lit_ltlt_or_lit_gtgt_or_amp_or_pipe);
             walk_expr(v, &n.expr_2);
             v.exit_rule(&"expr", &n.span);
         }
         Alt8(n) => {
             v.enter_rule(&"expr", &n.span);
             walk_expr(v, &n.expr);
-            v.visit_token(&n.lt_or_lit____or_gt_or_lit___);
+            v.visit_token(&n.lt_or_lit_lteq_or_gt_or_lit_gteq);
             walk_expr(v, &n.expr_2);
             v.exit_rule(&"expr", &n.span);
         }
         Alt9(n) => {
             v.enter_rule(&"expr", &n.span);
             walk_expr(v, &n.expr);
-            v.visit_token(&n.eq_or_lit____or_lit____or_lit___);
+            v.visit_token(&n.eq_or_lit_eqeq_or_lit_bangeq_or_lit_ltgt);
             walk_expr(v, &n.expr_2);
             v.exit_rule(&"expr", &n.span);
         }

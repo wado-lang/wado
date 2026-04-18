@@ -1233,7 +1233,7 @@ pub struct PropertybadProperty0 {
 
 pub struct PropertybadProperty1 {
     pub span: Span,
-    pub lit__: Token,
+    pub lit_u5f: Token,
     pub ident: IdentNode,
 }
 
@@ -2331,7 +2331,7 @@ global TK_LIT_LBRACKET: i32 = 75;
 global TK_LIT_EQ: i32 = 76;
 global TK_LIT_RBRACKET: i32 = 77;
 global TK_LIT_SLASH: i32 = 78;
-global TK_LIT__: i32 = 79;
+global TK_LIT_U5f: i32 = 79;
 
 struct Lexer {
     chars: Array<char>,
@@ -28464,7 +28464,7 @@ fn try_lit_slash(chars: &Array<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
-fn try_lit__(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_u5f(chars: &Array<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '_' { return -1; }
     return pos + 1;
@@ -28963,7 +28963,7 @@ pub fn tokenize(input: &String) -> Array<Token> {
             end = try_function_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
         } else if first_char == '_' {
-            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT__; best_channel = 0; }
+            if start + 1 > best_end { best_end = start + 1; best_kind = TK_LIT_U5f; best_channel = 0; }
             end = try_percentage(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_dimension(&lexer.chars, start);
@@ -29245,7 +29245,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_LIT_EQ => "TK_LIT_EQ",
         TK_LIT_RBRACKET => "TK_LIT_RBRACKET",
         TK_LIT_SLASH => "TK_LIT_SLASH",
-        TK_LIT__ => "TK_LIT__",
+        TK_LIT_U5f => "TK_LIT_U5f",
         _ => "Unknown",
     };
 }
@@ -30035,7 +30035,7 @@ fn scan_page(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     pos = scan_ws(tokens, pos);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let sp = pos;
         pos = scan_declaration(tokens, pos);
         if pos < 0 { pos = sp; }
@@ -30048,7 +30048,7 @@ fn scan_page(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 pos = scan_ws(tokens, pos);
                 if pos < 0 { break sg_22; }
-                if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+                if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                     let sp = pos;
                     pos = scan_declaration(tokens, pos);
                     if pos < 0 { pos = sp; }
@@ -30830,10 +30830,10 @@ fn scan_property_(tokens: &Array<Token>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT__ {
+        } else if alt_kind == TK_LIT_U5f {
             pos = start;
             try_3: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_LIT__ { break try_3; }
+                if pos >= tokens.len() || tokens[pos].kind != TK_LIT_U5f { break try_3; }
                 pos += 1;
                 pos = scan_ident(tokens, pos);
                 if pos < 0 { break try_3; }
@@ -30862,7 +30862,7 @@ fn scan_ruleset(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 pos = scan_ws(tokens, pos);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+                if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                     let sp = pos;
                     pos = scan_declaration_list(tokens, pos);
                     if pos < 0 { pos = sp; }
@@ -30885,7 +30885,7 @@ fn scan_ruleset(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 pos = scan_ws(tokens, pos);
                 if pos < 0 { break try_1; }
-                if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+                if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                     let sp = pos;
                     pos = scan_declaration_list(tokens, pos);
                     if pos < 0 { pos = sp; }
@@ -30907,7 +30907,7 @@ fn scan_ruleset(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 pos = scan_ws(tokens, pos);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+                if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                     let sp = pos;
                     pos = scan_declaration_list(tokens, pos);
                     if pos < 0 { pos = sp; }
@@ -30932,7 +30932,7 @@ fn scan_ruleset(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 pos = scan_ws(tokens, pos);
                 if pos < 0 { break try_1; }
-                if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+                if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                     let sp = pos;
                     pos = scan_declaration_list(tokens, pos);
                     if pos < 0 { pos = sp; }
@@ -30980,7 +30980,7 @@ fn scan_declaration_list(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 pos = scan_ws(tokens, pos);
                 if pos < 0 { break sg_39; }
-                if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+                if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                     let sp = pos;
                     pos = scan_declaration(tokens, pos);
                     if pos < 0 { pos = sp; }
@@ -31000,7 +31000,7 @@ fn scan_declaration(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if alt_kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        if alt_kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
             let mut best_pos: i32 = -1;
             pos = start;
             try_0: {
@@ -31825,7 +31825,7 @@ fn scan_block(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     pos = scan_ws(tokens, pos);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ | TK_LIT_PIPE | TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACE | TK_Media | TK_Page | TK_FontFace | TK_Keyframes | TK_Supports | TK_Viewport | TK_CounterStyle | TK_FontFeatureValues | TK_AtKeyword } {
+    while pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f | TK_LIT_PIPE | TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACE | TK_Media | TK_Page | TK_FontFace | TK_Keyframes | TK_Supports | TK_Viewport | TK_CounterStyle | TK_FontFeatureValues | TK_AtKeyword } {
         let sp = pos;
         let gp_51 = pos;
         let mut sg_51_best = -1;
@@ -32551,7 +32551,7 @@ fn scan_font_face_rule(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     pos = scan_ws(tokens, pos);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let sp = pos;
         pos = scan_font_face_declaration(tokens, pos);
         if pos < 0 { pos = sp; }
@@ -32564,7 +32564,7 @@ fn scan_font_face_rule(tokens: &Array<Token>, pos: i32) -> i32 {
                 pos += 1;
                 pos = scan_ws(tokens, pos);
                 if pos < 0 { break sg_61; }
-                if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+                if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                     let sp = pos;
                     pos = scan_font_face_declaration(tokens, pos);
                     if pos < 0 { pos = sp; }
@@ -32588,7 +32588,7 @@ fn scan_font_face_declaration(tokens: &Array<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
     scan_alts: {
-        if alt_kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        if alt_kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
             let mut best_pos: i32 = -1;
             pos = start;
             try_0: {
@@ -32664,7 +32664,7 @@ fn scan_keyframe_block(tokens: &Array<Token>, pos: i32) -> i32 {
             pos += 1;
             pos = scan_ws(tokens, pos);
             if pos < 0 { break sg_62; }
-            if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+            if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                 let sp = pos;
                 pos = scan_declaration_list(tokens, pos);
                 if pos < 0 { pos = sp; }
@@ -32758,7 +32758,7 @@ fn scan_viewport(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     pos = scan_ws(tokens, pos);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let sp = pos;
         pos = scan_declaration_list(tokens, pos);
         if pos < 0 { pos = sp; }
@@ -32784,7 +32784,7 @@ fn scan_counter_style(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     pos = scan_ws(tokens, pos);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let sp = pos;
         pos = scan_declaration_list(tokens, pos);
         if pos < 0 { pos = sp; }
@@ -34356,7 +34356,7 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
     };
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_2 = parse_ws(p)?;
-    let declaration: Option<DeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    let declaration: Option<DeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let declaration = parse_declaration(p)?;
         Option::<DeclarationNode>::Some(declaration)
     } else {
@@ -34372,7 +34372,7 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
             pos += 1;
             pos = scan_ws(tokens, pos);
             if pos < 0 { break rep_scan; }
-            if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+            if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                 let sp = pos;
                 pos = scan_declaration(tokens, pos);
                 if pos < 0 { pos = sp; }
@@ -34383,7 +34383,7 @@ fn parse_page(p: &mut Parser) -> Result<PageNode, ParseError> {
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = parse_ws(p)?;
-        let declaration: Option<DeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        let declaration: Option<DeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
             let declaration = parse_declaration(p)?;
             Option::<DeclarationNode>::Some(declaration)
         } else {
@@ -35325,19 +35325,19 @@ fn parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
             ident,
         }));
     }
-    if kind == TK_LIT__ {
-        let lit__ = p.expect(TK_LIT__)?;
+    if kind == TK_LIT_U5f {
+        let lit_u5f = p.expect(TK_LIT_U5f)?;
         let ident = parse_ident(p)?;
         return Result::<PropertyNode, ParseError>::Ok(PropertyNode::badProperty1(PropertybadProperty1 {
             span: Span::new(start, p.last_end()),
-            lit__,
+            lit_u5f,
             ident,
         }));
     }
     return Result::<PropertyNode, ParseError>::Err(ParseError::new(
         "expected property_",
         p.peek().span,
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT__"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
     ));
 }
 
@@ -35360,7 +35360,7 @@ fn parse_ruleset_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     }
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = parse_ws(p)?;
-    let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let declaration_list = parse_declaration_list(p)?;
         Option::<DeclarationListNode>::Some(declaration_list)
     } else {
@@ -35391,7 +35391,7 @@ fn parse_ruleset_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     pos = scan_ws(tokens, pos);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let sp = pos;
         pos = scan_declaration_list(tokens, pos);
         if pos < 0 { pos = sp; }
@@ -35408,7 +35408,7 @@ fn parse_ruleset_bt_0(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     let selector_group = parse_selector_group(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = parse_ws(p)?;
-    let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let declaration_list = parse_declaration_list(p)?;
         Option::<DeclarationListNode>::Some(declaration_list)
     } else {
@@ -35435,7 +35435,7 @@ fn parse_ruleset_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
     pos += 1;
     pos = scan_ws(tokens, pos);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    if pos < tokens.len() && tokens[pos].kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let sp = pos;
         pos = scan_declaration_list(tokens, pos);
         if pos < 0 { pos = sp; }
@@ -35522,7 +35522,7 @@ fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseEr
             pos += 1;
             pos = scan_ws(tokens, pos);
             if pos < 0 { break rep_scan_2; }
-            if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+            if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                 let sp = pos;
                 pos = scan_declaration(tokens, pos);
                 if pos < 0 { pos = sp; }
@@ -35533,7 +35533,7 @@ fn parse_declaration_list(p: &mut Parser) -> Result<DeclarationListNode, ParseEr
         if rep_scan_pos_2 < 0 { break; }
         let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = parse_ws(p)?;
-        let declaration: Option<DeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        let declaration: Option<DeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
             let declaration = parse_declaration(p)?;
             Option::<DeclarationNode>::Some(declaration)
         } else {
@@ -35626,8 +35626,8 @@ fn parse_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_declaration(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
-        if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
+        if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_declaration_scan_0(_sd_tokens, _sd_pos);
@@ -35654,7 +35654,7 @@ fn parse_declaration(p: &mut Parser) -> Result<DeclarationNode, ParseError> {
     return Result::<DeclarationNode, ParseError>::Err(ParseError::new(
         "expected declaration",
         p.peek().span,
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT__"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
     ));
 }
 
@@ -36783,7 +36783,7 @@ fn parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
         if rep_scan_pos < 0 { break; }
         let mut group_0_opt: Option<BlockGroup0> = null;
         let grp_kind = p.peek_kind();
-        if grp_kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ | TK_LIT_PIPE | TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACE | TK_Media | TK_Page | TK_FontFace | TK_Keyframes | TK_Supports | TK_Viewport | TK_CounterStyle | TK_FontFeatureValues | TK_AtKeyword } {
+        if grp_kind matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f | TK_LIT_PIPE | TK_Hash | TK_LIT_DOT | TK_LIT_LBRACKET | TK_LIT_COLON | TK_PseudoNot | TK_Plus | TK_Minus | TK_Number | TK_Percentage | TK_Dimension | TK_UnknownDimension | TK_String_ | TK_Url_ | TK_Url | TK_UnicodeRange | TK_Includes | TK_DashMatch | TK_Function_ | TK_LIT_LPAREN | TK_LIT_LBRACE | TK_Media | TK_Page | TK_FontFace | TK_Keyframes | TK_Supports | TK_Viewport | TK_CounterStyle | TK_FontFeatureValues | TK_AtKeyword } {
             let mut gd_scan_pos: i32 = -1;
             gd_scan: {
                 let tokens = &p.tokens;
@@ -37855,7 +37855,7 @@ fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> 
     let ws = parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_2 = parse_ws(p)?;
-    let font_face_declaration: Option<FontFaceDeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    let font_face_declaration: Option<FontFaceDeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let font_face_declaration = parse_font_face_declaration(p)?;
         Option::<FontFaceDeclarationNode>::Some(font_face_declaration)
     } else {
@@ -37871,7 +37871,7 @@ fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> 
             pos += 1;
             pos = scan_ws(tokens, pos);
             if pos < 0 { break rep_scan; }
-            if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+            if pos < tokens.len() && tokens[pos].kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
                 let sp = pos;
                 pos = scan_font_face_declaration(tokens, pos);
                 if pos < 0 { pos = sp; }
@@ -37882,7 +37882,7 @@ fn parse_font_face_rule(p: &mut Parser) -> Result<FontFaceRuleNode, ParseError> 
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = parse_ws(p)?;
-        let font_face_declaration: Option<FontFaceDeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+        let font_face_declaration: Option<FontFaceDeclarationNode> = if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
             let font_face_declaration = parse_font_face_declaration(p)?;
             Option::<FontFaceDeclarationNode>::Some(font_face_declaration)
         } else {
@@ -37969,8 +37969,8 @@ fn parse_font_face_declaration_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
 fn parse_font_face_declaration(p: &mut Parser) -> Result<FontFaceDeclarationNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
-        if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    if kind matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
+        if p.peek_kind() matches { TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
             let _sd_tokens = &p.tokens;
             let _sd_pos = p.pos;
             let _sd_p_0 = parse_font_face_declaration_scan_0(_sd_tokens, _sd_pos);
@@ -37997,7 +37997,7 @@ fn parse_font_face_declaration(p: &mut Parser) -> Result<FontFaceDeclarationNode
     return Result::<FontFaceDeclarationNode, ParseError>::Err(ParseError::new(
         "expected fontFaceDeclaration",
         p.peek().span,
-        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT__"],
+        ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
     ));
 }
 
@@ -38049,7 +38049,7 @@ fn parse_keyframe_block(p: &mut Parser) -> Result<KeyframeBlockNode, ParseError>
     let keyframe_selector = parse_keyframe_selector(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = parse_ws(p)?;
-    let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let declaration_list = parse_declaration_list(p)?;
         Option::<DeclarationListNode>::Some(declaration_list)
     } else {
@@ -38139,7 +38139,7 @@ fn parse_viewport(p: &mut Parser) -> Result<ViewportNode, ParseError> {
     let ws = parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_2 = parse_ws(p)?;
-    let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let declaration_list = parse_declaration_list(p)?;
         Option::<DeclarationListNode>::Some(declaration_list)
     } else {
@@ -38167,7 +38167,7 @@ fn parse_counter_style(p: &mut Parser) -> Result<CounterStyleNode, ParseError> {
     let ws_2 = parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_3 = parse_ws(p)?;
-    let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT__ } {
+    let declaration_list: Option<DeclarationListNode> = if p.peek_kind() matches { TK_LIT_SEMI | TK_Ident | TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Variable | TK_LIT_STAR | TK_LIT_U5f } {
         let declaration_list = parse_declaration_list(p)?;
         Option::<DeclarationListNode>::Some(declaration_list)
     } else {
@@ -39178,7 +39178,7 @@ pub fn walk_property_<V: Visitor>(v: &mut V, node: &PropertyNode) {
         }
         badProperty1(n) => {
             v.enter_rule(&"property_", &n.span);
-            v.visit_token(&n.lit__);
+            v.visit_token(&n.lit_u5f);
             walk_ident(v, &n.ident);
             v.exit_rule(&"property_", &n.span);
         }
