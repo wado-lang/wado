@@ -613,11 +613,11 @@ impl<'a> WirEmitter<'a> {
         }
         // Defined functions use DEFINED_FUNC_BASE + list_position as WirFuncId,
         // mapped to actual Wasm indices starting after imports.
-        let mut wasm_idx = self.func_index_offset;
-        for (i, _func) in self.wir.functions.iter().enumerate() {
+        for (wasm_idx, (i, _func)) in
+            (self.func_index_offset..).zip(self.wir.functions.iter().enumerate())
+        {
             let wir_func_idx = DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
             self.func_index_map.insert(wir_func_idx, wasm_idx);
-            wasm_idx += 1;
         }
     }
 
