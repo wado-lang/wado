@@ -187,23 +187,34 @@ impl Module {
     /// contains the given 1-based `(line, column)` position. Returns `None`
     /// if no id-bearing node contains the position.
     pub fn ast_id_at(&self, line: usize, column: usize) -> Option<AstId> {
-        let mut best: Option<(AstId, Span)> = None;
-        let mut visitor = |id: AstId, span: Span| {
-            if !span_contains(span, line, column) {
-                return;
-            }
-            match best {
-                None => best = Some((id, span)),
-                Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
-                    best = Some((id, span));
+        struct Finder {
+            line: usize,
+            column: usize,
+            best: Option<(AstId, Span)>,
+        }
+        impl AstVisitor for Finder {
+            fn visit_id(&mut self, id: AstId, span: Span) {
+                if !span_contains(span, self.line, self.column) {
+                    return;
                 }
-                _ => {}
+                match self.best {
+                    None => self.best = Some((id, span)),
+                    Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
+                        self.best = Some((id, span));
+                    }
+                    _ => {}
+                }
             }
+        }
+        let mut finder = Finder {
+            line,
+            column,
+            best: None,
         };
         for item in &self.items {
-            visit_item_ids(item, &mut visitor);
+            finder.visit_item(item);
         }
-        best.map(|(id, _)| id)
+        finder.best.map(|(id, _)| id)
     }
 }
 
@@ -225,407 +236,470 @@ fn span_byte_len(span: Span) -> usize {
     span.end.saturating_sub(span.start)
 }
 
-fn visit_item_ids(item: &Item, f: &mut impl FnMut(AstId, Span)) {
+/// Structural AST visitor used for id-based queries (LSP position lookup,
+/// density checks) and scope-aware analyses (reference collection).
+///
+/// Every `visit_*` method defaults to its corresponding free `walk_*`
+/// function, which recurses into children through the visitor's own
+/// methods. Implementers override only the nodes where their behavior
+/// differs from plain structural traversal.
+///
+/// `visit_id` receives every [`AstId`] / [`Span`] pair encountered during a
+/// walk — including container ids (items, statements, expressions, blocks)
+/// and leaf id-bearing nodes that have no dedicated `visit_*` method (struct
+/// fields, enum cases, generic/closure parameters, etc.).
+pub trait AstVisitor: Sized {
+    /// Invoked for every [`AstId`] emitted during traversal.
+    ///
+    /// Default is a no-op; an id-emitter overrides this to collect all ids,
+    /// a scope-aware visitor leaves it as no-op and overrides the relevant
+    /// `visit_*` methods instead.
+    fn visit_id(&mut self, _id: AstId, _span: Span) {}
+
+    fn visit_item(&mut self, item: &Item) {
+        walk_item(self, item);
+    }
+
+    fn visit_function(&mut self, func: &Function) {
+        walk_function(self, func);
+    }
+
+    fn visit_effect_method(&mut self, method: &EffectMethod) {
+        walk_effect_method(self, method);
+    }
+
+    fn visit_block(&mut self, block: &Block) {
+        walk_block(self, block);
+    }
+
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        walk_stmt(self, stmt);
+    }
+
+    fn visit_condition(&mut self, cond: &Condition) {
+        walk_condition(self, cond);
+    }
+
+    fn visit_match_expr(&mut self, m: &MatchExpr) {
+        walk_match_expr(self, m);
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        walk_expr(self, expr);
+    }
+
+    fn visit_pattern(&mut self, pat: &Pattern) {
+        walk_pattern(self, pat);
+    }
+
+    fn visit_type(&mut self, ty: &Type) {
+        walk_type(self, ty);
+    }
+}
+
+pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
     match item {
-        Item::Use(u) => f(u.id, u.span),
-        Item::Function(func) => visit_function_ids(func, f),
+        Item::Use(u) => v.visit_id(u.id, u.span),
+        Item::Function(func) => v.visit_function(func),
         Item::Effect(e) => {
-            f(e.id, e.span);
+            v.visit_id(e.id, e.span);
             for m in &e.methods {
-                visit_effect_method_ids(m, f);
+                v.visit_effect_method(m);
             }
         }
         Item::Struct(s) => {
-            f(s.id, s.span);
+            v.visit_id(s.id, s.span);
             for p in &s.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
             for field in &s.fields {
-                f(field.id, field.span);
-                visit_type_ids(&field.ty, f);
+                v.visit_id(field.id, field.span);
+                v.visit_type(&field.ty);
             }
         }
         Item::Enum(e) => {
-            f(e.id, e.span);
+            v.visit_id(e.id, e.span);
             for p in &e.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
             for case in &e.cases {
-                f(case.id, case.span);
+                v.visit_id(case.id, case.span);
             }
         }
-        Item::Variant(v) => {
-            f(v.id, v.span);
-            for p in &v.type_params {
-                f(p.id, p.span);
+        Item::Variant(vr) => {
+            v.visit_id(vr.id, vr.span);
+            for p in &vr.type_params {
+                v.visit_id(p.id, p.span);
             }
-            for case in &v.cases {
-                f(case.id, case.span);
+            for case in &vr.cases {
+                v.visit_id(case.id, case.span);
                 if let Some(payload) = &case.payload {
-                    visit_type_ids(payload, f);
+                    v.visit_type(payload);
                 }
             }
         }
         Item::Flags(fl) => {
-            f(fl.id, fl.span);
-            for v in &fl.flags {
-                f(v.id, v.span);
+            v.visit_id(fl.id, fl.span);
+            for va in &fl.flags {
+                v.visit_id(va.id, va.span);
             }
         }
         Item::Newtype(n) => {
-            f(n.id, n.span);
+            v.visit_id(n.id, n.span);
             for p in &n.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
-            visit_type_ids(&n.ty, f);
+            v.visit_type(&n.ty);
         }
-        Item::TupleTypeDecl(t) => f(t.id, t.span),
+        Item::TupleTypeDecl(t) => v.visit_id(t.id, t.span),
         Item::Impl(i) => {
-            f(i.id, i.span);
+            v.visit_id(i.id, i.span);
             for p in &i.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
             if let Some(trait_ty) = &i.trait_type {
-                visit_type_ids(trait_ty, f);
+                v.visit_type(trait_ty);
             }
-            visit_type_ids(&i.ty, f);
+            v.visit_type(&i.ty);
             for binding in &i.associated_types {
-                f(binding.id, binding.span);
-                visit_type_ids(&binding.ty, f);
+                v.visit_id(binding.id, binding.span);
+                v.visit_type(&binding.ty);
             }
             for c in &i.constants {
-                f(c.id, c.span);
-                visit_type_ids(&c.ty, f);
-                visit_expr_ids(&c.value, f);
+                v.visit_id(c.id, c.span);
+                v.visit_type(&c.ty);
+                v.visit_expr(&c.value);
             }
             for m in &i.methods {
-                visit_function_ids(m, f);
+                v.visit_function(m);
             }
         }
         Item::Trait(t) => {
-            f(t.id, t.span);
+            v.visit_id(t.id, t.span);
             for p in &t.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
             for assoc in &t.associated_types {
-                f(assoc.id, assoc.span);
+                v.visit_id(assoc.id, assoc.span);
             }
             for m in &t.methods {
-                visit_function_ids(m, f);
+                v.visit_function(m);
             }
         }
         Item::Resource(r) => {
-            f(r.id, r.span);
+            v.visit_id(r.id, r.span);
             for p in &r.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
             for m in &r.methods {
-                visit_effect_method_ids(m, f);
+                v.visit_effect_method(m);
             }
         }
-        Item::World(w) => f(w.id, w.span),
+        Item::World(w) => v.visit_id(w.id, w.span),
         Item::Test(t) => {
-            f(t.id, t.span);
-            visit_block_ids(&t.body, f);
+            v.visit_id(t.id, t.span);
+            v.visit_block(&t.body);
         }
         Item::Global(g) => {
-            f(g.id, g.span);
-            visit_type_ids(&g.ty, f);
-            visit_expr_ids(&g.initializer, f);
+            v.visit_id(g.id, g.span);
+            v.visit_type(&g.ty);
+            v.visit_expr(&g.initializer);
         }
     }
 }
 
-fn visit_function_ids(func: &Function, f: &mut impl FnMut(AstId, Span)) {
-    f(func.id, func.span);
+pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
+    v.visit_id(func.id, func.span);
     for p in &func.type_params {
-        f(p.id, p.span);
+        v.visit_id(p.id, p.span);
     }
     for param in &func.params {
-        f(param.id, param.span);
-        visit_type_ids(&param.ty, f);
+        v.visit_id(param.id, param.span);
+        v.visit_type(&param.ty);
     }
     if let Some(ret) = &func.return_type {
-        visit_type_ids(ret, f);
+        v.visit_type(ret);
     }
     if let Some(body) = &func.body {
-        visit_block_ids(body, f);
+        v.visit_block(body);
     }
 }
 
-fn visit_effect_method_ids(method: &EffectMethod, f: &mut impl FnMut(AstId, Span)) {
-    f(method.id, method.span);
+pub fn walk_effect_method<V: AstVisitor>(v: &mut V, method: &EffectMethod) {
+    v.visit_id(method.id, method.span);
     for param in &method.params {
-        f(param.id, param.span);
-        visit_type_ids(&param.ty, f);
+        v.visit_id(param.id, param.span);
+        v.visit_type(&param.ty);
     }
     if let Some(ret) = &method.return_type {
-        visit_type_ids(ret, f);
+        v.visit_type(ret);
     }
 }
 
-fn visit_block_ids(block: &Block, f: &mut impl FnMut(AstId, Span)) {
-    f(block.id, block.span);
+pub fn walk_block<V: AstVisitor>(v: &mut V, block: &Block) {
+    v.visit_id(block.id, block.span);
     for stmt in &block.stmts {
-        visit_stmt_ids(stmt, f);
+        v.visit_stmt(stmt);
     }
 }
 
-fn visit_stmt_ids(stmt: &Stmt, f: &mut impl FnMut(AstId, Span)) {
-    f(stmt.id(), stmt.span());
+pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
+    v.visit_id(stmt.id(), stmt.span());
     match stmt {
         Stmt::Let(s) => {
-            visit_pattern_ids(&s.pattern, f);
+            v.visit_pattern(&s.pattern);
             if let Some(ty) = &s.ty {
-                visit_type_ids(ty, f);
+                v.visit_type(ty);
             }
-            if let Some(v) = &s.value {
-                visit_expr_ids(v, f);
+            if let Some(val) = &s.value {
+                v.visit_expr(val);
             }
         }
-        Stmt::Expr(s) => visit_expr_ids(&s.expr, f),
+        Stmt::Expr(s) => v.visit_expr(&s.expr),
         Stmt::Return(s) => {
-            if let Some(v) = &s.value {
-                visit_expr_ids(v, f);
+            if let Some(val) = &s.value {
+                v.visit_expr(val);
             }
         }
-        Stmt::TaskReturn(s) => visit_expr_ids(&s.value, f),
+        Stmt::TaskReturn(s) => v.visit_expr(&s.value),
         Stmt::If(s) => {
-            visit_condition_ids(&s.condition, f);
-            visit_block_ids(&s.then_block, f);
-            if let Some(e) = &s.else_block {
-                visit_block_ids(e, f);
+            v.visit_condition(&s.condition);
+            v.visit_block(&s.then_block);
+            if let Some(eb) = &s.else_block {
+                v.visit_block(eb);
             }
         }
         Stmt::While(s) => {
-            visit_condition_ids(&s.condition, f);
-            visit_block_ids(&s.body, f);
+            v.visit_condition(&s.condition);
+            v.visit_block(&s.body);
         }
         Stmt::For(s) => {
             if let Some(init) = &s.init {
-                visit_stmt_ids(init, f);
+                v.visit_stmt(init);
             }
             if let Some(cond) = &s.condition {
-                visit_condition_ids(cond, f);
+                v.visit_condition(cond);
             }
             if let Some(update) = &s.update {
-                visit_expr_ids(update, f);
+                v.visit_expr(update);
             }
-            visit_block_ids(&s.body, f);
+            v.visit_block(&s.body);
         }
         Stmt::ForOf(s) => {
-            visit_pattern_ids(&s.binding, f);
-            visit_expr_ids(&s.iterable, f);
-            visit_block_ids(&s.body, f);
+            v.visit_pattern(&s.binding);
+            v.visit_expr(&s.iterable);
+            v.visit_block(&s.body);
         }
-        Stmt::Loop(s) => visit_block_ids(&s.body, f),
-        Stmt::Match(m) => visit_match_expr_ids(m, f),
+        Stmt::Loop(s) => v.visit_block(&s.body),
+        Stmt::Match(m) => v.visit_match_expr(m),
         Stmt::Break(s) => {
-            if let Some(v) = &s.value {
-                visit_expr_ids(v, f);
+            if let Some(val) = &s.value {
+                v.visit_expr(val);
             }
         }
         Stmt::Continue(_) => {}
         Stmt::Assert(s) => {
-            visit_expr_ids(&s.condition, f);
+            v.visit_expr(&s.condition);
             if let Some(msg) = &s.message {
-                visit_expr_ids(msg, f);
+                v.visit_expr(msg);
             }
         }
-        Stmt::LabeledBlock(s) => visit_block_ids(&s.block, f),
+        Stmt::LabeledBlock(s) => v.visit_block(&s.block),
     }
 }
 
-fn visit_condition_ids(cond: &Condition, f: &mut impl FnMut(AstId, Span)) {
+pub fn walk_condition<V: AstVisitor>(v: &mut V, cond: &Condition) {
     match cond {
-        Condition::Expr(e) => visit_expr_ids(e, f),
+        Condition::Expr(e) => v.visit_expr(e),
         Condition::LetChain { elements, .. } => {
             for el in elements {
                 match el {
                     ConditionElement::Let { pattern, expr, .. } => {
-                        visit_pattern_ids(pattern, f);
-                        visit_expr_ids(expr, f);
+                        v.visit_pattern(pattern);
+                        v.visit_expr(expr);
                     }
-                    ConditionElement::Expr(e) => visit_expr_ids(e, f),
+                    ConditionElement::Expr(e) => v.visit_expr(e),
                 }
             }
         }
     }
 }
 
-fn visit_pattern_ids(pattern: &Pattern, f: &mut impl FnMut(AstId, Span)) {
-    match pattern {
-        Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => f(*id, *span),
+pub fn walk_match_expr<V: AstVisitor>(v: &mut V, m: &MatchExpr) {
+    // NOTE: `m.id` is emitted by the caller (`walk_expr` for `Expr::Match` or
+    // `walk_stmt` for `Stmt::Match`), since both share the same `MatchExpr::id`.
+    v.visit_expr(&m.expr);
+    for arm in &m.arms {
+        v.visit_pattern(&arm.pattern);
+        if let Some(guard) = &arm.guard {
+            v.visit_expr(guard);
+        }
+        v.visit_expr(&arm.body);
+    }
+}
+
+pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
+    v.visit_id(expr.id(), expr.span());
+    match expr {
+        Expr::Ident(_) | Expr::Literal(_) => {}
+        Expr::Binary(e) => {
+            v.visit_expr(&e.left);
+            v.visit_expr(&e.right);
+        }
+        Expr::Unary(e) => v.visit_expr(&e.expr),
+        Expr::Assign(e) => {
+            v.visit_expr(&e.target);
+            v.visit_expr(&e.value);
+        }
+        Expr::CompoundAssign(e) => {
+            v.visit_expr(&e.target);
+            v.visit_expr(&e.value);
+        }
+        Expr::ComparisonChain(e) => {
+            v.visit_expr(&e.first);
+            for c in &e.comparisons {
+                v.visit_expr(&c.right);
+            }
+        }
+        Expr::Call(e) => {
+            v.visit_expr(&e.callee);
+            for ty in &e.type_args {
+                v.visit_type(ty);
+            }
+            for a in &e.args {
+                v.visit_expr(a);
+            }
+        }
+        Expr::MethodCall(e) => {
+            v.visit_expr(&e.receiver);
+            for ty in &e.type_args {
+                v.visit_type(ty);
+            }
+            for a in &e.args {
+                v.visit_expr(a);
+            }
+        }
+        Expr::StaticMethodCall(e) => {
+            v.visit_type(&e.target_type);
+            for ty in &e.type_args {
+                v.visit_type(ty);
+            }
+            for a in &e.args {
+                v.visit_expr(a);
+            }
+        }
+        Expr::FieldAccess(e) => v.visit_expr(&e.expr),
+        Expr::Index(e) => {
+            v.visit_expr(&e.expr);
+            v.visit_expr(&e.index);
+        }
+        Expr::Block(b) => v.visit_block(b),
+        Expr::If(e) => {
+            v.visit_condition(&e.condition);
+            v.visit_block(&e.then_block);
+            if let Some(eb) = &e.else_block {
+                v.visit_block(eb);
+            }
+        }
+        Expr::Match(m) => v.visit_match_expr(m),
+        Expr::Matches(m) => {
+            v.visit_expr(&m.expr);
+            v.visit_pattern(&m.pattern);
+            if let Some(guard) = &m.guard {
+                v.visit_expr(guard);
+            }
+        }
+        Expr::Closure(c) => {
+            for p in &c.params {
+                v.visit_id(p.id, p.name_span);
+                if let Some(ty) = &p.ty {
+                    v.visit_type(ty);
+                }
+            }
+            v.visit_expr(&c.body);
+        }
+        Expr::TemplateString(t) => {
+            for part in &t.parts {
+                if let TemplatePart::Interpolation { expr, .. } = part {
+                    v.visit_expr(expr);
+                }
+            }
+        }
+        Expr::Cast(c) => {
+            v.visit_expr(&c.expr);
+            v.visit_type(&c.target_type);
+        }
+        Expr::StructLiteral(s) => {
+            for field in &s.fields {
+                v.visit_expr(&field.value);
+            }
+        }
+        Expr::TupleLiteral(t) => {
+            for el in &t.elements {
+                v.visit_expr(el);
+            }
+        }
+        Expr::LabeledBlock(lb) => v.visit_block(&lb.block),
+        Expr::TryOp(t) => v.visit_expr(&t.expr),
+        Expr::Spread(inner, _) => v.visit_expr(inner),
+        Expr::Range(r) => {
+            v.visit_expr(&r.start);
+            v.visit_expr(&r.end);
+        }
+    }
+}
+
+pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
+    match pat {
+        Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => {
+            v.visit_id(*id, *span);
+        }
         Pattern::Tuple(ps, _) | Pattern::Or(ps) => {
             for p in ps {
-                visit_pattern_ids(p, f);
+                v.visit_pattern(p);
             }
         }
         Pattern::Struct { fields, .. } => {
             for field in fields {
-                visit_pattern_ids(&field.pattern, f);
+                v.visit_pattern(&field.pattern);
             }
         }
         Pattern::Variant { bindings, .. } => {
             for p in bindings {
-                visit_pattern_ids(p, f);
+                v.visit_pattern(p);
             }
         }
         Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } => {}
     }
 }
 
-fn visit_match_expr_ids(m: &MatchExpr, f: &mut impl FnMut(AstId, Span)) {
-    // m.id is emitted by the caller (either `visit_expr_ids` for `Expr::Match`
-    // or `visit_stmt_ids` for `Stmt::Match`, since both share `MatchExpr::id`).
-    visit_expr_ids(&m.expr, f);
-    for arm in &m.arms {
-        visit_pattern_ids(&arm.pattern, f);
-        if let Some(guard) = &arm.guard {
-            visit_expr_ids(guard, f);
-        }
-        visit_expr_ids(&arm.body, f);
-    }
-}
-
-fn visit_expr_ids(expr: &Expr, f: &mut impl FnMut(AstId, Span)) {
-    f(expr.id(), expr.span());
-    match expr {
-        Expr::Ident(_) | Expr::Literal(_) => {}
-        Expr::Binary(e) => {
-            visit_expr_ids(&e.left, f);
-            visit_expr_ids(&e.right, f);
-        }
-        Expr::Unary(e) => visit_expr_ids(&e.expr, f),
-        Expr::Assign(e) => {
-            visit_expr_ids(&e.target, f);
-            visit_expr_ids(&e.value, f);
-        }
-        Expr::CompoundAssign(e) => {
-            visit_expr_ids(&e.target, f);
-            visit_expr_ids(&e.value, f);
-        }
-        Expr::ComparisonChain(e) => {
-            visit_expr_ids(&e.first, f);
-            for c in &e.comparisons {
-                visit_expr_ids(&c.right, f);
-            }
-        }
-        Expr::Call(e) => {
-            visit_expr_ids(&e.callee, f);
-            for ty in &e.type_args {
-                visit_type_ids(ty, f);
-            }
-            for a in &e.args {
-                visit_expr_ids(a, f);
-            }
-        }
-        Expr::MethodCall(e) => {
-            visit_expr_ids(&e.receiver, f);
-            for ty in &e.type_args {
-                visit_type_ids(ty, f);
-            }
-            for a in &e.args {
-                visit_expr_ids(a, f);
-            }
-        }
-        Expr::StaticMethodCall(e) => {
-            visit_type_ids(&e.target_type, f);
-            for ty in &e.type_args {
-                visit_type_ids(ty, f);
-            }
-            for a in &e.args {
-                visit_expr_ids(a, f);
-            }
-        }
-        Expr::FieldAccess(e) => visit_expr_ids(&e.expr, f),
-        Expr::Index(e) => {
-            visit_expr_ids(&e.expr, f);
-            visit_expr_ids(&e.index, f);
-        }
-        Expr::Block(b) => visit_block_ids(b, f),
-        Expr::If(e) => {
-            visit_condition_ids(&e.condition, f);
-            visit_block_ids(&e.then_block, f);
-            if let Some(eb) = &e.else_block {
-                visit_block_ids(eb, f);
-            }
-        }
-        Expr::Match(m) => visit_match_expr_ids(m, f),
-        Expr::Matches(m) => {
-            visit_expr_ids(&m.expr, f);
-            visit_pattern_ids(&m.pattern, f);
-            if let Some(guard) = &m.guard {
-                visit_expr_ids(guard, f);
-            }
-        }
-        Expr::Closure(c) => {
-            for p in &c.params {
-                f(p.id, p.name_span);
-                if let Some(ty) = &p.ty {
-                    visit_type_ids(ty, f);
-                }
-            }
-            visit_expr_ids(&c.body, f);
-        }
-        Expr::TemplateString(t) => {
-            for part in &t.parts {
-                if let TemplatePart::Interpolation { expr, .. } = part {
-                    visit_expr_ids(expr, f);
-                }
-            }
-        }
-        Expr::Cast(c) => {
-            visit_expr_ids(&c.expr, f);
-            visit_type_ids(&c.target_type, f);
-        }
-        Expr::StructLiteral(s) => {
-            for field in &s.fields {
-                visit_expr_ids(&field.value, f);
-            }
-        }
-        Expr::TupleLiteral(t) => {
-            for el in &t.elements {
-                visit_expr_ids(el, f);
-            }
-        }
-        Expr::LabeledBlock(lb) => visit_block_ids(&lb.block, f),
-        Expr::TryOp(t) => visit_expr_ids(&t.expr, f),
-        Expr::Spread(inner, _) => visit_expr_ids(inner, f),
-        Expr::Range(r) => {
-            visit_expr_ids(&r.start, f);
-            visit_expr_ids(&r.end, f);
-        }
-    }
-}
-
-fn visit_type_ids(ty: &Type, f: &mut impl FnMut(AstId, Span)) {
+pub fn walk_type<V: AstVisitor>(v: &mut V, ty: &Type) {
     match ty {
-        Type::Named(t) => f(t.id, t.span),
+        Type::Named(t) => v.visit_id(t.id, t.span),
         Type::Generic(t) => {
-            f(t.id, t.span);
+            v.visit_id(t.id, t.span);
             for a in &t.args {
-                visit_type_ids(a, f);
+                v.visit_type(a);
             }
         }
         Type::NamespacedGeneric(t) => {
-            f(t.id, t.span);
+            v.visit_id(t.id, t.span);
             for a in &t.args {
-                visit_type_ids(a, f);
+                v.visit_type(a);
             }
         }
         Type::Function(ft) => {
             for p in &ft.params {
-                visit_type_ids(p, f);
+                v.visit_type(p);
             }
-            visit_type_ids(&ft.return_type, f);
+            v.visit_type(&ft.return_type);
         }
         Type::Tuple(ts) => {
             for t in ts {
-                visit_type_ids(t, f);
+                v.visit_type(t);
             }
         }
-        Type::Reference(t) | Type::MutReference(t) => visit_type_ids(t, f),
+        Type::Reference(t) | Type::MutReference(t) => v.visit_type(t),
         Type::TypePackSpread(_, _) => {}
     }
 }
@@ -2281,6 +2355,22 @@ mod ast_id_tests {
         parser.parse().expect("parse")
     }
 
+    /// Collect every `(AstId, Span)` emitted while walking `items` using the
+    /// default [`AstVisitor`] traversal.
+    fn collect_ids(items: &[Item]) -> Vec<(AstId, Span)> {
+        struct Collector(Vec<(AstId, Span)>);
+        impl AstVisitor for Collector {
+            fn visit_id(&mut self, id: AstId, span: Span) {
+                self.0.push((id, span));
+            }
+        }
+        let mut c = Collector(Vec::new());
+        for item in items {
+            c.visit_item(item);
+        }
+        c.0
+    }
+
     const SAMPLE: &str = r#"
 use { println } from "core:cli";
 
@@ -2326,24 +2416,15 @@ test "addition" {
         assert_eq!(m1.ast_id_count(), m2.ast_id_count());
         assert!(m1.ast_id_count() > 0);
 
-        let mut ids_1 = Vec::new();
-        for item in &m1.items {
-            visit_item_ids(item, &mut |id, _| ids_1.push(id));
-        }
-        let mut ids_2 = Vec::new();
-        for item in &m2.items {
-            visit_item_ids(item, &mut |id, _| ids_2.push(id));
-        }
+        let ids_1: Vec<AstId> = collect_ids(&m1.items).into_iter().map(|(id, _)| id).collect();
+        let ids_2: Vec<AstId> = collect_ids(&m2.items).into_iter().map(|(id, _)| id).collect();
         assert_eq!(ids_1, ids_2);
     }
 
     #[test]
     fn ids_are_dense_and_unique() {
         let m = parse(SAMPLE);
-        let mut ids: Vec<AstId> = Vec::new();
-        for item in &m.items {
-            visit_item_ids(item, &mut |id, _| ids.push(id));
-        }
+        let ids: Vec<AstId> = collect_ids(&m.items).into_iter().map(|(id, _)| id).collect();
         assert!(!ids.is_empty());
 
         let mut seen: IndexSet<AstId> = IndexSet::default();
@@ -2417,10 +2498,7 @@ struct Point { x: i32, y: i32 }
     #[test]
     fn ids_dense_with_function_bodies_and_patterns() {
         let m = parse(SAMPLE_WITH_BODIES);
-        let mut ids: Vec<(AstId, Span)> = Vec::new();
-        for item in &m.items {
-            visit_item_ids(item, &mut |id, sp| ids.push((id, sp)));
-        }
+        let ids: Vec<(AstId, Span)> = collect_ids(&m.items);
         assert!(
             ids.len() > 20,
             "expected rich id coverage, got {}",

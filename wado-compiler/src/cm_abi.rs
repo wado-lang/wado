@@ -6,9 +6,9 @@
 //!
 //! Reference: <https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md>
 
-use crate::ast::{GenericType, Type};
 #[cfg(test)]
 use crate::ast::{AstId, NamedType};
+use crate::ast::{GenericType, Type};
 #[cfg(test)]
 use crate::token::Span;
 
