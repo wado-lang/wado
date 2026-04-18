@@ -351,6 +351,7 @@ fn visit_stmt_ids(stmt: &Stmt, f: &mut impl FnMut(AstId, Span)) {
     f(stmt.id(), stmt.span());
     match stmt {
         Stmt::Let(s) => {
+            visit_pattern_ids(&s.pattern, f);
             if let Some(ty) = &s.ty {
                 visit_type_ids(ty, f);
             }
@@ -389,6 +390,7 @@ fn visit_stmt_ids(stmt: &Stmt, f: &mut impl FnMut(AstId, Span)) {
             visit_block_ids(&s.body, f);
         }
         Stmt::ForOf(s) => {
+            visit_pattern_ids(&s.binding, f);
             visit_expr_ids(&s.iterable, f);
             visit_block_ids(&s.body, f);
         }
@@ -416,7 +418,10 @@ fn visit_condition_ids(cond: &Condition, f: &mut impl FnMut(AstId, Span)) {
         Condition::LetChain { elements, .. } => {
             for el in elements {
                 match el {
-                    ConditionElement::Let { expr, .. } => visit_expr_ids(expr, f),
+                    ConditionElement::Let { pattern, expr, .. } => {
+                        visit_pattern_ids(pattern, f);
+                        visit_expr_ids(expr, f);
+                    }
                     ConditionElement::Expr(e) => visit_expr_ids(e, f),
                 }
             }
@@ -424,10 +429,34 @@ fn visit_condition_ids(cond: &Condition, f: &mut impl FnMut(AstId, Span)) {
     }
 }
 
+fn visit_pattern_ids(pattern: &Pattern, f: &mut impl FnMut(AstId, Span)) {
+    match pattern {
+        Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => f(*id, *span),
+        Pattern::Tuple(ps, _) | Pattern::Or(ps) => {
+            for p in ps {
+                visit_pattern_ids(p, f);
+            }
+        }
+        Pattern::Struct { fields, .. } => {
+            for field in fields {
+                visit_pattern_ids(&field.pattern, f);
+            }
+        }
+        Pattern::Variant { bindings, .. } => {
+            for p in bindings {
+                visit_pattern_ids(p, f);
+            }
+        }
+        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } => {}
+    }
+}
+
 fn visit_match_expr_ids(m: &MatchExpr, f: &mut impl FnMut(AstId, Span)) {
-    f(m.id, m.span);
+    // m.id is emitted by the caller (either `visit_expr_ids` for `Expr::Match`
+    // or `visit_stmt_ids` for `Stmt::Match`, since both share `MatchExpr::id`).
     visit_expr_ids(&m.expr, f);
     for arm in &m.arms {
+        visit_pattern_ids(&arm.pattern, f);
         if let Some(guard) = &arm.guard {
             visit_expr_ids(guard, f);
         }
@@ -501,6 +530,7 @@ fn visit_expr_ids(expr: &Expr, f: &mut impl FnMut(AstId, Span)) {
         Expr::Match(m) => visit_match_expr_ids(m, f),
         Expr::Matches(m) => {
             visit_expr_ids(&m.expr, f);
+            visit_pattern_ids(&m.pattern, f);
             if let Some(guard) = &m.guard {
                 visit_expr_ids(guard, f);
             }
@@ -1750,8 +1780,18 @@ pub struct MatchesExpr {
 
 #[derive(Debug, Clone)]
 pub enum Pattern {
-    Ident(String),
-    MutIdent(String),
+    /// Plain identifier binding: `x`.
+    Ident {
+        id: AstId,
+        name: String,
+        span: Span,
+    },
+    /// Mutable identifier binding: `mut x`.
+    MutIdent {
+        id: AstId,
+        name: String,
+        span: Span,
+    },
     Literal(Literal),
     Wildcard,
     Tuple(Vec<Pattern>, /* has_rest */ bool),
@@ -2328,5 +2368,73 @@ test "addition" {
     fn ast_id_at_outside_returns_none() {
         let m = parse("fn add(a: i32, b: i32) -> i32 { return a + b; }\n");
         assert_eq!(m.ast_id_at(42, 1), None);
+    }
+
+    const SAMPLE_WITH_BODIES: &str = r#"
+fn add(a: i32, b: i32) -> i32 {
+    let c = a + b;
+    let mut d: i32 = c;
+    if let Some(v) = Option::<i32>::Some(d) {
+        return v;
+    }
+    for let i of 0..<c {
+        d = d + i;
+    }
+    let { x, y } = Point { x: 1, y: 2 };
+    return match d {
+        0 => x,
+        n => n + y,
+    };
+}
+
+struct Point { x: i32, y: i32 }
+"#;
+
+    #[test]
+    fn ids_dense_with_function_bodies_and_patterns() {
+        let m = parse(SAMPLE_WITH_BODIES);
+        let mut ids: Vec<(AstId, Span)> = Vec::new();
+        for item in &m.items {
+            visit_item_ids(item, &mut |id, sp| ids.push((id, sp)));
+        }
+        assert!(ids.len() > 20, "expected rich id coverage, got {}", ids.len());
+
+        let mut seen: IndexSet<AstId> = IndexSet::default();
+        for (id, sp) in &ids {
+            assert!(seen.insert(*id), "duplicate id: {id:?} at span {sp:?}");
+            assert!(
+                id.0 < m.ast_id_count(),
+                "id {} out of range (count={})",
+                id.0,
+                m.ast_id_count()
+            );
+        }
+        for i in 0..m.ast_id_count() {
+            assert!(seen.contains(&AstId(i)), "missing id {i} in dense range");
+        }
+    }
+
+    #[test]
+    fn pattern_leaf_ids_resolve_at_position() {
+        let src = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
+        let m = parse(src);
+        let pat_id = m
+            .items
+            .iter()
+            .find_map(|it| match it {
+                Item::Function(f) => f.body.as_ref().and_then(|b| {
+                    b.stmts.iter().find_map(|s| match s {
+                        Stmt::Let(l) => match &l.pattern {
+                            Pattern::Ident { id, .. } => Some(*id),
+                            _ => None,
+                        },
+                        _ => None,
+                    })
+                }),
+                _ => None,
+            })
+            .expect("let x pattern id");
+        let at_pat = m.ast_id_at(2, 9);
+        assert_eq!(at_pat, Some(pat_id));
     }
 }

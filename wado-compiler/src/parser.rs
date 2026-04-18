@@ -1861,9 +1861,15 @@ impl Parser {
 
     fn parse_pattern_atom(&mut self) -> ParseResult<Pattern> {
         if self.check(&TokenKind::Mut) {
+            let mut_span = self.peek().span;
             self.advance();
+            let ident_span = self.peek().span;
             let name = self.consume_ident()?;
-            return Ok(Pattern::MutIdent(name));
+            return Ok(Pattern::MutIdent {
+                id: self.alloc_ast_id(),
+                name,
+                span: mut_span.merge(&ident_span),
+            });
         }
         if self.check(&TokenKind::LParen) {
             // Tuple pattern with parentheses: (a, b, c)
@@ -1940,7 +1946,11 @@ impl Parser {
             } else {
                 // Bare identifier: could be a variable binding or a variant/enum case
                 // without payload. The resolver disambiguates using type information.
-                Ok(Pattern::Ident(name))
+                Ok(Pattern::Ident {
+                    id: self.alloc_ast_id(),
+                    name,
+                    span: start_span,
+                })
             }
         } else if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
             // Literal pattern: 42 or 3.14
@@ -2043,7 +2053,11 @@ impl Parser {
                         Pattern::Wildcard
                     } else {
                         // Shorthand: `{ x }` means `{ x: x }`
-                        Pattern::Ident(field_name.clone())
+                        Pattern::Ident {
+                            id: self.alloc_ast_id(),
+                            name: field_name.clone(),
+                            span: field_span,
+                        }
                     };
 
                     fields.push(StructPatternField {
@@ -5033,7 +5047,7 @@ mod tests {
                 // Check init
                 assert!(for_stmt.init.is_some());
                 if let Stmt::Let(let_stmt) = for_stmt.init.as_ref().unwrap().as_ref() {
-                    if let Pattern::Ident(name) = &let_stmt.pattern {
+                    if let Pattern::Ident { name, .. } = &let_stmt.pattern {
                         assert_eq!(name, "i");
                     } else {
                         panic!("expected ident pattern");
@@ -5341,8 +5355,8 @@ line 2
         // regardless of case — the resolver disambiguates
         let upper = parse_pattern_from("None");
         let lower = parse_pattern_from("none");
-        assert!(matches!(&upper, Pattern::Ident(name) if name == "None"));
-        assert!(matches!(&lower, Pattern::Ident(name) if name == "none"));
+        assert!(matches!(&upper, Pattern::Ident { name, .. } if name == "None"));
+        assert!(matches!(&lower, Pattern::Ident { name, .. } if name == "none"));
     }
 
     #[test]

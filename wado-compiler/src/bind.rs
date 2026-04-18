@@ -346,7 +346,7 @@ fn condition_references_var(condition: &crate::ast::Condition, name: &str) -> bo
 /// Nested idents inside variants/structs/tuples are real local bindings.
 fn collect_top_level_bare_idents(pattern: &crate::ast::Pattern) -> Vec<String> {
     match pattern {
-        crate::ast::Pattern::Ident(name) => vec![name.clone()],
+        crate::ast::Pattern::Ident { name, .. } => vec![name.clone()],
         crate::ast::Pattern::Or(alternatives) => alternatives
             .iter()
             .flat_map(collect_top_level_bare_idents)
@@ -507,8 +507,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             // during bind_expr above so the RHS can reference it. Now that
             // the RHS is bound, remove the old binding before define() so it
             // won't report a duplicate.
-            if let crate::ast::Pattern::Ident(name) | crate::ast::Pattern::MutIdent(name) =
-                &let_stmt.pattern
+            if let crate::ast::Pattern::Ident { name, .. }
+            | crate::ast::Pattern::MutIdent { name, .. } = &let_stmt.pattern
             {
                 let is_duplicate_in_scope = self
                     .scopes
@@ -551,7 +551,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         span: Span,
     ) -> Result<(), Bail> {
         match pattern {
-            crate::ast::Pattern::Ident(name) | crate::ast::Pattern::MutIdent(name) => {
+            crate::ast::Pattern::Ident { name, .. } | crate::ast::Pattern::MutIdent { name, .. } => {
                 self.define_uninit(name, is_mut, is_reactive, span)?;
             }
             crate::ast::Pattern::Tuple(patterns, _) => {
@@ -587,7 +587,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         span: Span,
     ) -> Result<(), Bail> {
         match pattern {
-            crate::ast::Pattern::Ident(name) | crate::ast::Pattern::MutIdent(name) => {
+            crate::ast::Pattern::Ident { name, .. } | crate::ast::Pattern::MutIdent { name, .. } => {
                 self.define(name, is_mut, is_reactive, span)?;
             }
             crate::ast::Pattern::Tuple(patterns, _) => {
@@ -1070,13 +1070,13 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// (the resolver disambiguates them using type information).
     fn bind_pattern(&mut self, pattern: &crate::ast::Pattern, span: Span) -> Result<(), Bail> {
         match pattern {
-            crate::ast::Pattern::Ident(name) => {
+            crate::ast::Pattern::Ident { name, .. } => {
                 let scope = self.scopes.last().unwrap();
                 if !scope.bindings.contains_key(name) {
                     self.define(name, false, false, span)?;
                 }
             }
-            crate::ast::Pattern::MutIdent(name) => {
+            crate::ast::Pattern::MutIdent { name, .. } => {
                 self.define(name, true, false, span)?;
             }
             crate::ast::Pattern::Tuple(patterns, _) => {
