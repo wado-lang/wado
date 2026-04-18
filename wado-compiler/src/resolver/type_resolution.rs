@@ -28,6 +28,7 @@ fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]) -> Type {
                 .map(|a| substitute_type_params(a, params, args))
                 .collect();
             Type::Generic(GenericType {
+                id: generic.id,
                 name: generic.name.clone(),
                 args: new_args,
                 span: generic.span,

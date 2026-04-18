@@ -1581,14 +1581,34 @@ pub enum Type {
     TypePackSpread(String, Span),
 }
 
+impl Type {
+    /// Returns the [`AstId`] for types that carry one (named types and
+    /// generics). Structural types (tuple, reference, function) aggregate
+    /// children that each carry their own ids.
+    pub fn id(&self) -> Option<AstId> {
+        match self {
+            Type::Named(t) => Some(t.id),
+            Type::Generic(t) => Some(t.id),
+            Type::NamespacedGeneric(t) => Some(t.id),
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::TypePackSpread(_, _) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct NamedType {
+    pub id: AstId,
     pub name: String,
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct GenericType {
+    pub id: AstId,
     pub name: String,
     pub args: Vec<Type>,
     pub span: Span,
@@ -1597,6 +1617,7 @@ pub struct GenericType {
 /// Namespaced generic type like `builtin::array<T>`
 #[derive(Debug, Clone)]
 pub struct NamespacedGenericType {
+    pub id: AstId,
     /// Namespace (e.g., "builtin")
     pub namespace: String,
     /// Type name (e.g., "array")

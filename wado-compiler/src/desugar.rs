@@ -125,6 +125,7 @@ fn desugar_type(ty: &Type, ctx: &DesugarContext) -> Type {
                 Type::Named(n.clone())
             } else {
                 Type::Named(crate::ast::NamedType {
+                    id: n.id,
                     name: stripped.to_string(),
                     span: n.span,
                 })
@@ -133,6 +134,7 @@ fn desugar_type(ty: &Type, ctx: &DesugarContext) -> Type {
         Type::Generic(g) => {
             let stripped = strip_namespace_prefix(&g.name, &ctx.namespace_names);
             Type::Generic(crate::ast::GenericType {
+                id: g.id,
                 name: if stripped.len() == g.name.len() {
                     g.name.clone()
                 } else {

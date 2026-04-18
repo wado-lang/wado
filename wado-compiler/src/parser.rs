@@ -1007,6 +1007,7 @@ impl Parser {
                 let self_span = self.peek().span;
                 self.advance();
                 let self_type = Type::Named(NamedType {
+                    id: self.alloc_ast_id(),
                     name: "Self".to_string(),
                     span: start_span,
                 });
@@ -2783,6 +2784,7 @@ impl Parser {
                         return Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
                             id: self.alloc_ast_id(),
                             target_type: Type::Generic(GenericType {
+                                id: self.alloc_ast_id(),
                                 name,
                                 args: type_args,
                                 span: start_span,
@@ -3346,7 +3348,9 @@ impl Parser {
         // Never type: !
         if self.check(&TokenKind::Not) {
             self.advance();
+            let id = self.alloc_ast_id();
             return Ok(Type::Named(NamedType {
+                id,
                 name: "!".to_string(),
                 span: start_span,
             }));
@@ -3367,6 +3371,7 @@ impl Parser {
                 self.parse_type()?
             } else {
                 Type::Named(NamedType {
+                    id: self.alloc_ast_id(),
                     name: "()".to_string(),
                     span: start_span,
                 })
@@ -3407,7 +3412,9 @@ impl Parser {
             if self.check(&TokenKind::RParen) {
                 self.advance();
                 // Unit type () - distinct from empty tuple []
+                let id = self.alloc_ast_id();
                 return Ok(Type::Named(NamedType {
+                    id,
                     name: "()".to_string(),
                     span: start_span,
                 }));
@@ -3440,6 +3447,7 @@ impl Parser {
                 let args = self.parse_type_args()?;
 
                 return Ok(Type::NamespacedGeneric(NamespacedGenericType {
+                    id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
                     args,
@@ -3448,6 +3456,7 @@ impl Parser {
             } else {
                 // Namespaced type without generics: namespace::type
                 return Ok(Type::NamespacedGeneric(NamespacedGenericType {
+                    id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
                     args: Vec::new(),
@@ -3461,12 +3470,14 @@ impl Parser {
             let args = self.parse_type_args()?;
 
             Ok(Type::Generic(GenericType {
+                id: self.alloc_ast_id(),
                 name,
                 args,
                 span: start_span,
             }))
         } else {
             Ok(Type::Named(NamedType {
+                id: self.alloc_ast_id(),
                 name,
                 span: start_span,
             }))
@@ -4133,6 +4144,7 @@ impl Parser {
                     });
                 }
                 args.push(Type::Named(crate::ast::NamedType {
+                    id: self.alloc_ast_id(),
                     name: param_name,
                     span: param_span,
                 }));
@@ -4152,6 +4164,7 @@ impl Parser {
         let end_span = self.tokens[self.pos - 1].span; // span of >
 
         Ok(Type::Generic(crate::ast::GenericType {
+            id: self.alloc_ast_id(),
             name,
             args,
             span: start_span.merge(&end_span),

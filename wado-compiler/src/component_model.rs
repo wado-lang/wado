@@ -1165,6 +1165,7 @@ impl WasiRegistry {
                     .map(|arg| self.resolve_type(arg))
                     .collect();
                 Type::Generic(GenericType {
+                    id: generic.id,
                     name: generic.name.clone(),
                     args: resolved_args,
                     span: generic.span,
@@ -1196,6 +1197,7 @@ impl WasiRegistry {
                 let resolved_args: Vec<Type> =
                     ng.args.iter().map(|arg| self.resolve_type(arg)).collect();
                 Type::NamespacedGeneric(crate::ast::NamespacedGenericType {
+                    id: ng.id,
                     namespace: ng.namespace.clone(),
                     name: ng.name.clone(),
                     args: resolved_args,
