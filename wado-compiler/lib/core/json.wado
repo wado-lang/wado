@@ -888,98 +888,53 @@ impl JsonDeserializer {
         let has_exp = self.has_exp_or_dot(raw);
         if has_exp {
             // Parse via f64 for scientific notation (e.g. 1e2 → 100)
-            match f64::from_str(*raw) {
-                Ok(v) => {
-                    if v != f64::floor(v) {
-                        return Result::Err(DeserializeError::unexpected_type(
-                            "expected integer, got float",
-                            start,
-                        ));
-                    }
-                    if v < -2147483648.0 || v > 2147483647.0 {
-                        return Result::Err(DeserializeError::overflow(
-                            "value out of range for i32",
-                            start,
-                        ));
-                    }
-                    return Result::Ok(v as i32);
-                },
-                Err(_) => return Result::Err(DeserializeError::invalid_value(
-                    "invalid number",
+            return match f64::from_str(*raw) {
+                Ok(v) && v != f64::floor(v) => Result::Err(DeserializeError::unexpected_type(
+                    "expected integer, got float",
                     start,
                 )),
-            }
+                Ok(v) && (v < -2147483648.0 || v > 2147483647.0) => Result::Err(
+                    DeserializeError::overflow("value out of range for i32", start),
+                ),
+                Ok(v) => Result::Ok(v as i32),
+                Err(_) => Result::Err(DeserializeError::invalid_value("invalid number", start)),
+            };
         }
-        let mut neg = false;
-        let mut idx = 0;
-        let len = raw.len();
-        if len > 0 && raw.get_byte(0) as i32 == '-' as i32 {
-            neg = true;
-            idx = 1;
-        }
-        let mut result = 0;
-        while idx < len {
-            let b = raw.get_byte(idx) as i32;
-            if b < '0' as i32 || b > '9' as i32 {
-                return Result::Err(DeserializeError::invalid_value(
-                    "invalid digit in number",
+        return match i32::from_str(*raw) {
+            Ok(v) => Result::Ok(v),
+            Err(e) => Result::Err(match e.kind() {
+                PosOverflow | NegOverflow => DeserializeError::overflow(
+                    "value out of range for i32",
                     start,
-                ));
-            }
-            let digit = b - '0' as i32;
-            result = result * 10 + digit;
-            idx += 1;
-        }
-        if neg {
-            result = -result;
-        }
-        return Result::Ok(result);
+                ),
+                _ => DeserializeError::invalid_value("invalid digit in number", start),
+            }),
+        };
     }
 
     pub fn parse_i64_from(&self, raw: &String, start: i64) -> Result<i64, DeserializeError> {
         let has_exp = self.has_exp_or_dot(raw);
         if has_exp {
-            match f64::from_str(*raw) {
-                Ok(v) => {
-                    if v != f64::floor(v) {
-                        return Result::Err(DeserializeError::unexpected_type(
-                            "expected integer, got float",
-                            start,
-                        ));
-                    }
-                    // f64 can represent integers exactly up to 2^53
-                    return Result::Ok(v as i64);
-                },
-                Err(_) => return Result::Err(DeserializeError::invalid_value(
-                    "invalid number",
+            return match f64::from_str(*raw) {
+                Ok(v) && v != f64::floor(v) => Result::Err(DeserializeError::unexpected_type(
+                    "expected integer, got float",
                     start,
                 )),
-            }
+                // f64 can represent integers exactly up to 2^53
+                Ok(v) => Result::Ok(v as i64),
+                Err(_) => Result::Err(DeserializeError::invalid_value("invalid number", start)),
+            };
         }
-        let mut neg = false;
-        let mut idx = 0;
-        let len = raw.len();
-        if len > 0 && raw.get_byte(0) as i32 == '-' as i32 {
-            neg = true;
-            idx = 1;
-        }
-        let mut result: i64 = 0;
-        while idx < len {
-            let b = raw.get_byte(idx) as i32;
-            if b < '0' as i32 || b > '9' as i32 {
-                return Result::Err(DeserializeError::invalid_value(
-                    "invalid digit in number",
+        return match i64::from_str(*raw) {
+            Ok(v) => Result::Ok(v),
+            Err(e) => Result::Err(match e.kind() {
+                PosOverflow | NegOverflow => DeserializeError::overflow(
+                    "value out of range for i64",
                     start,
-                ));
-            }
-            let digit = (b - '0' as i32) as i64;
-            result = result * 10 + digit;
-            idx += 1;
-        }
-        if neg {
-            result = -result;
-        }
-        return Result::Ok(result);
+                ),
+                _ => DeserializeError::invalid_value("invalid digit in number", start),
+            }),
+        };
     }
 
     pub fn parse_u64_from(&self, raw: &String, start: i64) -> Result<u64, DeserializeError> {
@@ -988,40 +943,29 @@ impl JsonDeserializer {
         }
         let has_exp = self.has_exp_or_dot(raw);
         if has_exp {
-            match f64::from_str(*raw) {
-                Ok(v) => {
-                    if v < 0.0 {
-                        return Result::Err(DeserializeError::overflow(
-                            "negative value for u64",
-                            start,
-                        ));
-                    }
-                    if v != f64::floor(v) {
-                        return Result::Err(DeserializeError::unexpected_type(
-                            "expected integer, got float",
-                            start,
-                        ));
-                    }
-                    return Result::Ok(v as u64);
-                },
-                Err(_) => return Result::Err(
-                    DeserializeError::invalid_value("invalid number", start),
+            return match f64::from_str(*raw) {
+                Ok(v) && v < 0.0 => Result::Err(DeserializeError::overflow(
+                    "negative value for u64",
+                    start,
+                )),
+                Ok(v) && v != f64::floor(v) => Result::Err(DeserializeError::unexpected_type(
+                    "expected integer, got float",
+                    start,
+                )),
+                Ok(v) => Result::Ok(v as u64),
+                Err(_) => Result::Err(DeserializeError::invalid_value("invalid number", start)),
+            };
+        }
+        return match u64::from_str(*raw) {
+            Ok(v) => Result::Ok(v),
+            Err(e) => Result::Err(match e.kind() {
+                PosOverflow | NegOverflow => DeserializeError::overflow(
+                    "value out of range for u64",
+                    start,
                 ),
-            }
-        }
-        let mut idx = 0;
-        let len = raw.len();
-        let mut result: u64 = 0;
-        while idx < len {
-            let b = raw.get_byte(idx) as i32;
-            if b < '0' as i32 || b > '9' as i32 {
-                return Result::Err(DeserializeError::invalid_value("invalid digit", start));
-            }
-            let digit = (b - '0' as i32) as u64;
-            result = result * 10 + digit;
-            idx += 1;
-        }
-        return Result::Ok(result);
+                _ => DeserializeError::invalid_value("invalid digit", start),
+            }),
+        };
     }
 
     /// Advances past a JSON number in `self.input` without allocating a String.
