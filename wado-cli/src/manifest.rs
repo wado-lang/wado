@@ -97,14 +97,46 @@ pub fn resolve_entry_point(project: &ProjectManifest, kind: EntryPointKind) -> O
     Some(project.root.join(relative))
 }
 
+/// Load a `wado.toml` directly from `dir` (does not walk parents).
+///
+/// Returns an error if the directory has no `wado.toml` or the file is invalid.
+fn load_from_dir(dir: &Path) -> Result<ProjectManifest, DiscoveryError> {
+    let candidate = dir.join(MANIFEST_FILENAME);
+    let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
+    let manifest: Manifest = content.parse().map_err(DiscoveryError::Parse)?;
+    Ok(ProjectManifest {
+        manifest,
+        root: dir.to_path_buf(),
+    })
+}
+
+/// Resolve an entry point from a project manifest, returning a `CliExit` error
+/// when the requested field is unset.
+fn entry_point_or_error(
+    project: &ProjectManifest,
+    kind: EntryPointKind,
+) -> Result<PathBuf, CliExit> {
+    resolve_entry_point(project, kind).ok_or_else(|| {
+        CliExit::error(format!(
+            "wado.toml found but [package].{} is not set",
+            kind.field_name()
+        ))
+    })
+}
+
 /// Resolve input file: use the explicit argument if given, otherwise discover
 /// `wado.toml` and use the entry point for `kind`.
+///
+/// When `explicit_input` points to a directory, load `<dir>/wado.toml` and
+/// resolve the entry point for `kind` (e.g. `wado run package-gale` →
+/// `package-gale/src/main.wado` via `[package].command`).
 ///
 /// # Errors
 ///
 /// Returns a `CliExit` if:
 /// - No input file and no `wado.toml` found
-/// - `wado.toml` found but the requested entry point is not set
+/// - The explicit input is a directory without `wado.toml`
+/// - `wado.toml` is found but the requested entry point is not set
 /// - `wado.toml` is invalid
 pub fn resolve_input(
     explicit_input: Option<String>,
@@ -112,7 +144,18 @@ pub fn resolve_input(
     usage: &str,
 ) -> Result<String, CliExit> {
     if let Some(input) = explicit_input {
-        return Ok(input);
+        let path = Path::new(&input);
+        if !path.is_dir() {
+            return Ok(input);
+        }
+        let project = load_from_dir(path).map_err(|e| match e {
+            DiscoveryError::Io(io_err) if io_err.kind() == io::ErrorKind::NotFound => {
+                CliExit::error(format!("no wado.toml found in directory '{input}'"))
+            }
+            other => CliExit::error(other),
+        })?;
+        let entry = entry_point_or_error(&project, kind)?;
+        return Ok(entry.to_string_lossy().into_owned());
     }
 
     let cwd = env::current_dir()
@@ -131,13 +174,7 @@ pub fn resolve_input(
         }
     };
 
-    let path = resolve_entry_point(&project, kind).ok_or_else(|| {
-        CliExit::error(format!(
-            "wado.toml found but [package].{} is not set",
-            kind.field_name()
-        ))
-    })?;
-
+    let path = entry_point_or_error(&project, kind)?;
     Ok(path.to_string_lossy().into_owned())
 }
 
@@ -231,6 +268,75 @@ lib = "src/lib.wado"
             resolve_entry_point(&project, EntryPointKind::Lib),
             Some(tmp.path().join("src/lib.wado"))
         );
+    }
+
+    #[test]
+    fn resolve_input_directory_arg_command() {
+        let tmp = tempfile::tempdir().unwrap();
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "src/main.wado"
+"#;
+        fs::write(tmp.path().join("wado.toml"), toml).unwrap();
+
+        let dir_arg = tmp.path().to_string_lossy().into_owned();
+        let resolved = resolve_input(Some(dir_arg), EntryPointKind::Command, "usage").unwrap();
+        assert_eq!(
+            resolved,
+            tmp.path()
+                .join("src/main.wado")
+                .to_string_lossy()
+                .into_owned()
+        );
+    }
+
+    #[test]
+    fn resolve_input_directory_arg_without_manifest() {
+        let tmp = tempfile::tempdir().unwrap();
+        let subdir = tmp.path().join("no-manifest");
+        fs::create_dir_all(&subdir).unwrap();
+
+        let err = resolve_input(
+            Some(subdir.to_string_lossy().into_owned()),
+            EntryPointKind::Command,
+            "usage",
+        )
+        .unwrap_err();
+        assert!(err.message.contains("no wado.toml found"));
+    }
+
+    #[test]
+    fn resolve_input_directory_arg_missing_entry_point() {
+        let tmp = tempfile::tempdir().unwrap();
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+command = "src/main.wado"
+"#;
+        fs::write(tmp.path().join("wado.toml"), toml).unwrap();
+
+        let err = resolve_input(
+            Some(tmp.path().to_string_lossy().into_owned()),
+            EntryPointKind::Service,
+            "usage",
+        )
+        .unwrap_err();
+        assert!(err.message.contains("[package].service is not set"));
+    }
+
+    #[test]
+    fn resolve_input_file_path_passthrough() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("main.wado");
+        fs::write(&file, "").unwrap();
+
+        let file_arg = file.to_string_lossy().into_owned();
+        let resolved =
+            resolve_input(Some(file_arg.clone()), EntryPointKind::Command, "usage").unwrap();
+        assert_eq!(resolved, file_arg);
     }
 
     #[test]
