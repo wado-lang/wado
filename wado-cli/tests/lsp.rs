@@ -60,6 +60,13 @@ impl LspSession {
         stdin.flush().unwrap();
     }
 
+    /// Write a raw byte sequence to the server (for malformed-input tests).
+    fn send_raw(&mut self, bytes: &[u8]) {
+        let stdin = self.child.stdin.as_mut().unwrap();
+        stdin.write_all(bytes).unwrap();
+        stdin.flush().unwrap();
+    }
+
     fn send_request(&mut self, method: &str, params: Value) -> i64 {
         let id = self.next_id;
         self.next_id += 1;
@@ -70,6 +77,43 @@ impl LspSession {
             "params": params,
         }));
         id
+    }
+
+    /// Send a request with a caller-provided id (e.g. a string id).
+    fn send_request_with_id(&mut self, id: Value, method: &str, params: Value) {
+        self.send(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params,
+        }));
+    }
+
+    /// Initialize boilerplate — sends `initialize` + reads response + sends
+    /// `initialized`. Returns the `initialize` response for callers that want
+    /// to inspect the advertised capabilities.
+    fn initialize(&mut self) -> Value {
+        self.send_request("initialize", json!({ "capabilities": {} }));
+        let resp = self.read_message();
+        self.send_notification("initialized", json!({}));
+        resp
+    }
+
+    /// Open a document and read+return the initial `publishDiagnostics`
+    /// notification that the server emits in response.
+    fn open_doc(&mut self, uri: &str, text: &str) -> Value {
+        self.send_notification(
+            "textDocument/didOpen",
+            json!({
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": "wado",
+                    "version": 1,
+                    "text": text,
+                }
+            }),
+        );
+        self.read_message()
     }
 
     fn send_notification(&mut self, method: &str, params: Value) {
@@ -653,6 +697,601 @@ fn lsp_exit_without_shutdown_returns_nonzero() {
         1,
         "exit without shutdown should return 1"
     );
+}
+
+// ===========================================================================
+// LSP spec conformance tests — base protocol
+//
+// These tests pin down behaviour described by LSP 3.18 (see wado-lsp/lsp.md):
+// JSON-RPC 2.0 framing, id echoing, `$/`-prefixed requests, the default
+// pattern for notifications vs. requests, and lifecycle messages.
+// ===========================================================================
+
+#[test]
+fn lsp_response_includes_jsonrpc_version_field() {
+    let mut session = LspSession::start();
+    let id = session.send_request("initialize", json!({ "capabilities": {} }));
+    let resp = session.read_message();
+    assert_eq!(resp["jsonrpc"], "2.0", "response must carry jsonrpc: 2.0");
+    assert_eq!(resp["id"], id);
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_request_with_string_id_is_echoed() {
+    let mut session = LspSession::start();
+    session.send_request_with_id(
+        json!("init-string-id"),
+        "initialize",
+        json!({ "capabilities": {} }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["jsonrpc"], "2.0");
+    assert_eq!(resp["id"], "init-string-id");
+    assert!(resp["result"].is_object(), "got: {resp}");
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_initialize_advertises_all_providers() {
+    let mut session = LspSession::start();
+    let resp = session.initialize();
+    let caps = &resp["result"]["capabilities"];
+    assert_eq!(caps["textDocumentSync"]["openClose"], true);
+    assert_eq!(caps["textDocumentSync"]["change"], 1);
+    assert_eq!(caps["definitionProvider"], true);
+    assert_eq!(caps["hoverProvider"], true);
+    assert_eq!(caps["referencesProvider"], true);
+    assert_eq!(caps["documentHighlightProvider"], true);
+    let st = &caps["semanticTokensProvider"];
+    assert_eq!(st["full"], true);
+    let types = st["legend"]["tokenTypes"].as_array().unwrap();
+    assert!(
+        types.contains(&json!("keyword")) && types.contains(&json!("function")),
+        "token types missing core entries: {types:?}"
+    );
+    let mods = st["legend"]["tokenModifiers"].as_array().unwrap();
+    assert!(mods.contains(&json!("declaration")), "got: {mods:?}");
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_initialized_notification_is_accepted() {
+    // `initialized` is a notification — it must not yield a response and must
+    // not crash the server. We verify by issuing a known request afterwards
+    // and confirming the server still responds.
+    let mut session = LspSession::start();
+    session.send_request("initialize", json!({ "capabilities": {} }));
+    let _ = session.read_message();
+    session.send_notification("initialized", json!({}));
+    // Next request must still succeed.
+    let id = session.send_request("shutdown", Value::Null);
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["result"], Value::Null);
+    session.send_notification("exit", Value::Null);
+    drop(session.child.stdin.take());
+    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+}
+
+#[test]
+fn lsp_dollar_notification_is_silently_ignored() {
+    // Per spec §$-notifications: "If a server or client receives notifications
+    // starting with '$/' it is free to ignore the notification." We confirm
+    // the server keeps running by issuing a normal request afterwards.
+    let mut session = LspSession::start();
+    session.initialize();
+    session.send_notification("$/cancelRequest", json!({ "id": 99 }));
+    session.send_notification("$/setTrace", json!({ "value": "off" }));
+    let id = session.send_request("shutdown", Value::Null);
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["result"], Value::Null);
+    session.send_notification("exit", Value::Null);
+    drop(session.child.stdin.take());
+    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+}
+
+#[test]
+fn lsp_dollar_request_returns_method_not_found() {
+    // Per spec §$-notifications: "If a server or client receives a request
+    // starting with '$/' it must error the request with error code
+    // MethodNotFound (e.g. -32601)."
+    let mut session = LspSession::start();
+    session.initialize();
+    let id = session.send_request("$/unknownDollar", json!({}));
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["error"]["code"], -32601);
+    assert!(resp["error"]["message"].is_string());
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_unknown_notification_is_silently_ignored() {
+    // Unknown notifications (no id) must not elicit any response. We confirm
+    // by issuing a normal request afterwards and expecting exactly one reply.
+    let mut session = LspSession::start();
+    session.initialize();
+    session.send_notification("workspace/didChangeSomethingBogus", json!({}));
+    let id = session.send_request("shutdown", Value::Null);
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    session.send_notification("exit", Value::Null);
+    drop(session.child.stdin.take());
+    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+}
+
+#[test]
+fn lsp_multiple_sequential_requests_all_get_responses() {
+    let mut session = LspSession::start();
+    session.initialize();
+    session.open_doc(
+        "file:///tmp/lsp_seq.wado",
+        "fn helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {\n    let _ = helper();\n}\n",
+    );
+
+    let id1 = session.send_request(
+        "textDocument/definition",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_seq.wado" },
+            "position": { "line": 4, "character": 13 }
+        }),
+    );
+    let id2 = session.send_request(
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_seq.wado" },
+            "position": { "line": 4, "character": 13 }
+        }),
+    );
+    let id3 = session.send_request(
+        "textDocument/references",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_seq.wado" },
+            "position": { "line": 0, "character": 4 },
+            "context": { "includeDeclaration": false }
+        }),
+    );
+
+    let r1 = session.read_message();
+    let r2 = session.read_message();
+    let r3 = session.read_message();
+    assert_eq!(r1["id"], id1);
+    assert_eq!(r2["id"], id2);
+    assert_eq!(r3["id"], id3);
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_content_type_header_is_accepted() {
+    // Per spec §header: `Content-Type` is optional and defaults to
+    // application/vscode-jsonrpc; charset=utf-8. The server must accept
+    // messages carrying an explicit Content-Type header.
+    let mut session = LspSession::start();
+    let body = serde_json::to_string(&json!({
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "initialize",
+        "params": { "capabilities": {} }
+    }))
+    .unwrap();
+    let raw = format!(
+        "Content-Type: application/vscode-jsonrpc; charset=utf-8\r\n\
+         Content-Length: {}\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    session.send_raw(raw.as_bytes());
+    let resp = session.read_message();
+    assert_eq!(resp["id"], 7);
+    assert!(resp["result"]["capabilities"].is_object());
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+// ===========================================================================
+// LSP spec conformance tests — lifecycle
+// ===========================================================================
+
+#[test]
+fn lsp_shutdown_returns_null_result() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let id = session.send_request("shutdown", Value::Null);
+    let resp = session.read_message();
+    assert_eq!(resp["jsonrpc"], "2.0");
+    assert_eq!(resp["id"], id);
+    // Spec §shutdown: the response result is `null`.
+    assert_eq!(resp["result"], Value::Null);
+    // Exit with shutdown flag set → exit code 0.
+    session.send_notification("exit", Value::Null);
+    drop(session.child.stdin.take());
+    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+}
+
+#[test]
+fn lsp_exit_after_shutdown_returns_zero() {
+    let mut session = LspSession::start();
+    session.initialize();
+    // `shutdown_and_exit` already asserts id echo and null result; we assert
+    // the exit-code = 0 contract explicitly here.
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+// ===========================================================================
+// LSP spec conformance tests — text document synchronization
+// ===========================================================================
+
+#[test]
+fn lsp_did_change_full_sync_last_change_wins() {
+    // Server advertises Full sync (change: 1). Per spec, the content change
+    // array contains the full document text and the last entry is the final
+    // document state.
+    let mut session = LspSession::start();
+    session.initialize();
+    session.open_doc(
+        "file:///tmp/lsp_full_sync.wado",
+        "export fn run() {\n    let x: i32 = \"oops\";\n}\n",
+    );
+    session.send_notification(
+        "textDocument/didChange",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_full_sync.wado", "version": 2 },
+            "contentChanges": [
+                { "text": "still broken \"nope\"" },
+                { "text": "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"ok\");\n}\n" }
+            ]
+        }),
+    );
+    let notif = session.read_message();
+    assert_eq!(notif["method"], "textDocument/publishDiagnostics");
+    let diags = notif["params"]["diagnostics"].as_array().unwrap();
+    assert!(
+        diags.is_empty(),
+        "last change should win and clear errors, got: {diags:?}"
+    );
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_did_change_empty_content_changes_is_noop() {
+    let mut session = LspSession::start();
+    session.initialize();
+    session.open_doc(
+        "file:///tmp/lsp_empty_change.wado",
+        "export fn run() {\n    let x: i32 = \"oops\";\n}\n",
+    );
+    session.send_notification(
+        "textDocument/didChange",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_empty_change.wado", "version": 2 },
+            "contentChanges": []
+        }),
+    );
+    // With no content changes, the server should not re-publish diagnostics.
+    // Confirm by issuing a request and expecting exactly that request's
+    // response (not a stray publishDiagnostics notification).
+    let id = session.send_request("shutdown", Value::Null);
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    session.send_notification("exit", Value::Null);
+    drop(session.child.stdin.take());
+    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+}
+
+#[test]
+fn lsp_did_open_on_empty_text_produces_no_errors() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let notif = session.open_doc("file:///tmp/lsp_empty.wado", "");
+    assert_eq!(notif["method"], "textDocument/publishDiagnostics");
+    // An empty file has no top-level items — compiler may warn or stay silent,
+    // but it must not crash the server.
+    assert!(notif["params"]["diagnostics"].is_array());
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+// ===========================================================================
+// LSP spec conformance tests — language features (empty / null results)
+// ===========================================================================
+
+#[test]
+fn lsp_definition_returns_null_for_whitespace_position() {
+    let mut session = LspSession::start();
+    session.initialize();
+    session.open_doc(
+        "file:///tmp/lsp_def_null.wado",
+        "fn f() -> i32 {\n    return 1;\n}\n",
+    );
+    let id = session.send_request(
+        "textDocument/definition",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_def_null.wado" },
+            // Column 0 on the blank `return` line: no identifier at this spot.
+            "position": { "line": 1, "character": 0 }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    // Spec §definition allows `Location | Location[] | LocationLink[] | null`.
+    assert!(
+        resp["result"].is_null(),
+        "definition on whitespace should be null, got: {}",
+        resp["result"]
+    );
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_hover_returns_null_for_whitespace_position() {
+    let mut session = LspSession::start();
+    session.initialize();
+    session.open_doc(
+        "file:///tmp/lsp_hover_null.wado",
+        "fn f() -> i32 {\n    return 1;\n}\n",
+    );
+    let id = session.send_request(
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_hover_null.wado" },
+            "position": { "line": 1, "character": 0 }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert!(
+        resp["result"].is_null(),
+        "hover on whitespace should be null, got: {}",
+        resp["result"]
+    );
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_references_returns_empty_array_for_whitespace_position() {
+    let mut session = LspSession::start();
+    session.initialize();
+    session.open_doc(
+        "file:///tmp/lsp_refs_empty.wado",
+        "fn f() -> i32 {\n    return 1;\n}\n",
+    );
+    let id = session.send_request(
+        "textDocument/references",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_refs_empty.wado" },
+            "position": { "line": 1, "character": 0 },
+            "context": { "includeDeclaration": true }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    let arr = resp["result"].as_array().expect("references returns array");
+    assert!(arr.is_empty(), "got: {arr:?}");
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_document_highlight_returns_empty_array_for_whitespace_position() {
+    let mut session = LspSession::start();
+    session.initialize();
+    session.open_doc(
+        "file:///tmp/lsp_hl_empty.wado",
+        "fn f() -> i32 {\n    return 1;\n}\n",
+    );
+    let id = session.send_request(
+        "textDocument/documentHighlight",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_hl_empty.wado" },
+            "position": { "line": 1, "character": 0 }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    let arr = resp["result"]
+        .as_array()
+        .expect("documentHighlight returns array");
+    assert!(arr.is_empty(), "got: {arr:?}");
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_references_without_context_defaults_to_exclude_declaration() {
+    // `ReferenceContext` is optional in our RPC shape (`#[serde(default)]`),
+    // which means an omitted `context` implies `includeDeclaration: false`.
+    let mut session = LspSession::start();
+    session.initialize();
+    session.open_doc(
+        "file:///tmp/lsp_refs_no_context.wado",
+        "fn helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {\n    let _ = helper();\n}\n",
+    );
+    let id = session.send_request(
+        "textDocument/references",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_refs_no_context.wado" },
+            "position": { "line": 0, "character": 4 }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    let arr = resp["result"].as_array().unwrap();
+    // Only the single call-site (line 5 `    let _ = helper();`), no declaration.
+    assert_eq!(arr.len(), 1, "got: {arr:?}");
+    assert_eq!(arr[0]["range"]["start"]["line"], 5);
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+// ===========================================================================
+// LSP spec conformance tests — semantic tokens
+// ===========================================================================
+
+#[test]
+fn lsp_semantic_tokens_full_returns_data_array() {
+    let mut session = LspSession::start();
+    session.initialize();
+    session.open_doc(
+        "file:///tmp/lsp_semtoks.wado",
+        "fn run() -> i32 {\n    return 42;\n}\n",
+    );
+    let id = session.send_request(
+        "textDocument/semanticTokens/full",
+        json!({ "textDocument": { "uri": "file:///tmp/lsp_semtoks.wado" } }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    let data = resp["result"]["data"].as_array().expect("data must be array");
+    // Delta-encoded tokens come in 5-tuples. Must be a non-empty multiple of 5.
+    assert!(!data.is_empty(), "expected semantic tokens, got none");
+    assert_eq!(
+        data.len() % 5,
+        0,
+        "semantic tokens data length must be a multiple of 5: {}",
+        data.len()
+    );
+    for v in data {
+        assert!(v.is_number(), "data must contain only integers: {v}");
+    }
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_semantic_tokens_unopened_document_returns_empty() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let id = session.send_request(
+        "textDocument/semanticTokens/full",
+        json!({ "textDocument": { "uri": "file:///tmp/lsp_never_opened.wado" } }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    let data = resp["result"]["data"].as_array().unwrap();
+    assert!(data.is_empty(), "got: {data:?}");
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+// ===========================================================================
+// LSP spec conformance tests — InvalidParams across all request methods
+// ===========================================================================
+
+#[test]
+fn lsp_invalid_params_on_definition() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let id = session.send_request("textDocument/definition", json!({ "nope": true }));
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["error"]["code"], -32602);
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_invalid_params_on_references() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let id = session.send_request("textDocument/references", json!({ "nope": true }));
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["error"]["code"], -32602);
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_invalid_params_on_document_highlight() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let id = session.send_request("textDocument/documentHighlight", json!({ "nope": true }));
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["error"]["code"], -32602);
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_invalid_params_on_semantic_tokens() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let id = session.send_request(
+        "textDocument/semanticTokens/full",
+        json!({ "wrong": "shape" }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["error"]["code"], -32602);
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+// ===========================================================================
+// Documented spec gaps — tests are `#[ignore]`'d until the behaviour is added.
+//
+// These tests encode LSP 3.18 requirements that the current dispatcher in
+// `wado-cli/src/lsp.rs` does not yet enforce. Run with
+// `cargo test -p wado-cli --test lsp -- --ignored` to see the current
+// observable behaviour.
+// ===========================================================================
+
+#[test]
+#[ignore = "spec gap: request before `initialize` should return -32002 ServerNotInitialized"]
+fn lsp_request_before_initialize_returns_server_not_initialized() {
+    let mut session = LspSession::start();
+    let id = session.send_request(
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": "file:///tmp/x.wado" },
+            "position": { "line": 0, "character": 0 }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["error"]["code"], -32002);
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+#[ignore = "spec gap: duplicate `initialize` should return -32600 InvalidRequest"]
+fn lsp_duplicate_initialize_returns_invalid_request() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let id = session.send_request("initialize", json!({ "capabilities": {} }));
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["error"]["code"], -32600);
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+#[ignore = "spec gap: requests after `shutdown` should return -32600 InvalidRequest"]
+fn lsp_request_after_shutdown_returns_invalid_request() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let id = session.send_request("shutdown", Value::Null);
+    let _ = session.read_message();
+    let id2 = session.send_request(
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": "file:///tmp/x.wado" },
+            "position": { "line": 0, "character": 0 }
+        }),
+    );
+    let resp = session.read_message();
+    let _ = id;
+    assert_eq!(resp["id"], id2);
+    assert_eq!(resp["error"]["code"], -32600);
+    session.send_notification("exit", Value::Null);
+    drop(session.child.stdin.take());
+    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+}
+
+#[test]
+#[ignore = "spec gap: malformed JSON should elicit a -32700 ParseError response rather than kill the server loop"]
+fn lsp_malformed_json_returns_parse_error() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let bogus = b"not valid json at all";
+    let raw = format!("Content-Length: {}\r\n\r\n", bogus.len());
+    session.send_raw(raw.as_bytes());
+    session.send_raw(bogus);
+    let resp = session.read_message();
+    assert_eq!(resp["error"]["code"], -32700);
+    assert_eq!(session.shutdown_and_exit(), 0);
 }
 
 // ===========================================================================
