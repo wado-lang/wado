@@ -770,6 +770,31 @@ ID : [a-z]+ ;";
         `ID has no CI; [a-z] must not be mirrored to [A-Z]:\n{output}`;
 }
 
+test "virtual tokens are marked and not match-generated" {
+    // Virtual tokens (declared in `tokens { }` without a real lexer rule) must
+    // still appear in the TokenKind enum, the TK_<name> constant table, and
+    // the token_kind_name dispatch — but they must not get a try_<name>
+    // matcher (the tokenizer cannot produce them directly), and the emitted
+    // entries should be tagged `// virtual` so downstream tooling can see the
+    // distinction.
+    let input = "grammar Test;
+tokens { VIRTUAL_TOK }
+rule : ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;";
+    let grammar = parse_grammar(input, "test.g4");
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "    VIRTUAL_TOK,  // virtual"),
+        `TokenKind member must be marked virtual:\n{output}`;
+    assert str_contains(&output, "global TK_VIRTUAL_TOK: i32 = ") &&
+        str_contains(&output, ";  // virtual"),
+        `TK_VIRTUAL_TOK constant must be marked virtual:\n{output}`;
+    assert str_contains(&output, "TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual"),
+        `token_kind_name arm must be marked virtual:\n{output}`;
+    assert !str_contains(&output, "fn try_virtual_tok("),
+        `virtual token must not get a matcher fn:\n{output}`;
+}
+
 test "caseInsensitive does not fold non-letters" {
     let input = "lexer grammar Test;
 options { caseInsensitive = true; }

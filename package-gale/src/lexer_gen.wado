@@ -16,7 +16,7 @@ use {
     LabelElement,
 } from "./ir.wado";
 use { to_lower, escape_char, literal_const_name } from "./gen_util.wado";
-use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec } from "./wadopoet.wado";
+use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
 
 pub struct LitToken {
     pub text: String,
@@ -124,21 +124,17 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, l
     let mut idx = 0;
     for let rule of lexer_rules {
         if !rule.is_fragment {
-            let name = `TK_{rule.name}`;
-            let init = `{idx}`;
-            GlobalSpec::new(&name, "i32", &init).emit(w);
+            let trailer = if rule.is_virtual { "  // virtual" } else { "" };
+            w.line(`global TK_{rule.name}: i32 = {idx};{trailer}`);
             idx += 1;
         }
     }
-    let eof_init = `{idx}`;
-    GlobalSpec::new("TK_EOF", "i32", &eof_init).emit(w);
+    w.line(`global TK_EOF: i32 = {idx};`);
     idx += 1;
-    let err_init = `{idx}`;
-    GlobalSpec::new("TK_ERROR", "i32", &err_init).emit(w);
+    w.line(`global TK_ERROR: i32 = {idx};`);
     idx += 1;
     for let lit of lit_tokens {
-        let init = `{idx}`;
-        GlobalSpec::new(&lit.const_name, "i32", &init).emit(w);
+        w.line(`global {lit.const_name}: i32 = {idx};`);
         idx += 1;
     }
     w.blank();
@@ -204,8 +200,10 @@ fn gen_lexer_match_fns(
     let empty_opts: Array<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
     for let rule of lexer_rules {
-        if rule.body.is_empty() {
-            // Virtual token (from `tokens { }` block): no match function needed
+        if rule.is_virtual {
+            // Virtual token (from `tokens { }` block): no match function
+            // needed — the tokenizer can never produce it directly. Only
+            // `type(X)` rewrites or actions can emit one.
         } else if !rule.is_fragment {
             if !is_keyword_rule_name(&rule.name, keywords)
                 && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
@@ -699,7 +697,7 @@ pub fn collect_keyword_rules(
 ) -> Array<KeywordInfo> {
     let mut result: Array<KeywordInfo> = [];
     for let rule of lexer_rules {
-        if rule.is_fragment || rule.body.is_empty() {
+        if rule.is_fragment || rule.is_virtual {
             continue;
         }
         let info = try_extract_keyword_info(rule, lexer_rules, grammar_opts);
@@ -1484,7 +1482,7 @@ fn gen_tokenize_fn(
             }
             for let rule of lexer_rules {
                 if !rule.is_fragment
-                    && !rule.body.is_empty()
+                    && !rule.is_virtual
                     && rule.mode == mi
                     && !is_keyword_rule_name(&rule.name, keywords)
                     && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
@@ -1561,7 +1559,7 @@ fn gen_tokenize_fn(
         }
         for let rule of lexer_rules {
             if !rule.is_fragment
-                && !rule.body.is_empty()
+                && !rule.is_virtual
                 && !is_keyword_rule_name(&rule.name, keywords)
                 && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
                 all_calls.push(compute_first_chars(
@@ -1710,7 +1708,8 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, li
     w.indent();
     for let rule of lexer_rules {
         if !rule.is_fragment {
-            w.line(`TK_{rule.name} => "{rule.name}",`);
+            let trailer = if rule.is_virtual { "  // virtual" } else { "" };
+            w.line(`TK_{rule.name} => "{rule.name}",{trailer}`);
         }
     }
     w.line("TK_EOF => \"Eof\",");
