@@ -30,7 +30,6 @@ To establish feasibility before this WEP was written, the following was verified
 
 - `cargo build -p wado-lsp --target wasm32-wasip2` succeeds with zero source changes (cold: 61 seconds).
 - A throw-away binary combining `wado-lsp` + `wado-compiler` + `tokio` (current-thread) + `serde_json` compiles to a `wasm32-wasip2` component, runs under `wasmtime`, reads `.wado` source from stdin, and writes LSP-shaped JSON diagnostics to stdout. The round-trip reports the expected type-mismatch diagnostic with correct zero-based LSP ranges.
-- Release `.wasm` size: 12 MB raw, 2.7 MB gzipped.
 - Incremental rebuild after touching `wado-compiler/src/lib.rs`: 43 seconds for `wasm32-wasip2` release, 60 seconds for native dev. The Wasm build is actually faster because native dev pays `opt-level = 2` on `cranelift-codegen`.
 
 ### Prerequisites to confirm at implementation time
@@ -75,7 +74,7 @@ wado-lsp/
 
 The "protocol-agnostic" framing in the current `wado-lsp/README.md` is removed. `wado-lsp` is the LSP package; its library surface exposes a typed `Engine` that other consumers may reuse, but its primary deliverable is the LSP server binary.
 
-No Cargo features gate the server. All dependencies (`tokio`, `serde_json`) are unconditional. The `wado-compiler` dependency dominates both binary size and build time, so splitting the server behind a feature flag would not meaningfully shrink the `Engine`-only consumption profile.
+No Cargo features gate the server. All dependencies (`tokio`, `serde_json`) are unconditional. `wado-compiler` dominates build time, so splitting the server behind a feature flag would not meaningfully change the `Engine`-only consumption profile.
 
 ### `wado-cli` is a thin client
 
@@ -118,10 +117,9 @@ Both workflows use the exact same server implementation, so observed behavior do
 
 This WEP does not design the browser playground integration. It requires only that the produced `wado-lsp.wasm` remain compatible with a generic browser-worker environment: no VS Code-specific imports leak into the Wasm module. A follow-up WEP will design the JS/TS host and transport (likely `MessagePort`-based JSON-RPC) for the public site.
 
-### Distribution and sizing
+### Distribution
 
 - VSIX is a single cross-platform artifact containing `wado-lsp.wasm`. No per-platform VSIX is needed.
-- CI enforces a gzip size ceiling on the Wasm artifact (initial target: 5 MB). Current measurement: 2.7 MB gzip.
 - The extension is published to both the Microsoft Marketplace and Open VSX as `wado-lang.wado`.
 
 ## Consequences
@@ -129,7 +127,7 @@ This WEP does not design the browser playground integration. It requires only th
 ### Benefits
 
 - One LSP implementation, not two. The same Rust code serves desktop (native), web (Wasm-in-VS-Code), and playground (Wasm-in-browser). No FFI duplication and no wire-protocol divergence.
-- Zero-install for end users. A single ~2.7 MB gzipped Wasm works on Windows, macOS, Linux, `vscode.dev`, and `github.dev` without platform-specific VSIXes.
+- Zero-install for end users. A single Wasm component works on Windows, macOS, Linux, `vscode.dev`, and `github.dev` without platform-specific VSIXes.
 - Fast inner loop for compiler developers. Native override gives sub-second rebuilds and full debugger access; Wasm hot-reload gives 40–60-second cycles with zero manual intervention.
 - Standard tooling. `vscode-languageclient` handles cancellation, progress, streaming, and future LSP features; no handwritten JSON-RPC on the TypeScript side.
 
@@ -152,7 +150,7 @@ This WEP does not design the browser playground integration. It requires only th
 - [x] Move the stdio LSP server from `wado-cli` to `wado-lsp`. Add `[[bin]] wado-lsp`. Delete `wado-cli/src/lsp_adapter.rs` and `wado-cli/src/lsp_rpc.rs`. Reduce `wado-cli/src/lsp.rs` to a delegation call.
 - [x] Move `FilesystemCompilerHost` to `wado-lsp`. Wire `wado-cli` to re-export or wrap it.
 - [x] Add `mise` tasks `build-wado-lsp-wasm` and `watch-wado-lsp-wasm`.
-- [x] Add a CI job that runs `cargo build -p wado-lsp --target wasm32-wasip2 --release`. (Gzip size enforcement deferred to a follow-up; the WEP records the 2.7 MB baseline.)
+- [x] Add a CI job that runs `cargo build -p wado-lsp --target wasm32-wasip2 --release`.
 - [ ] Implement the VS Code LSP client in `wado-vscode` with both subprocess and Wasm paths, the `wado.serverPath` setting, the `wado.restartLanguageServer` command, and the `FileSystemWatcher` auto-restart.
 - [ ] Add an end-to-end test that drives the Wasm build through an `initialize` / `didOpen` / `publishDiagnostics` exchange.
 - [x] Rewrite `wado-lsp/README.md` to reflect the new architecture.
