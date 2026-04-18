@@ -64,8 +64,7 @@ fn parse_args(arguments: Array<String>) -> Result<Options, String> {
         path: "",
     };
 
-    let mut i = 0;
-    while i < arguments.len() {
+    for let mut i = 0; i < arguments.len(); i += 1 {
         let a = arguments[i];
         if a == "-L" {
             if i + 1 >= arguments.len() {
@@ -79,13 +78,11 @@ fn parse_args(arguments: Array<String>) -> Result<Options, String> {
                     return Result::Err(`tree: invalid depth: {arguments[i + 1]}`);
                 },
             }
-            i += 2;
+            i += 1;  // consume the value; the loop step skips the flag
         } else if a == "-a" {
             opts.show_hidden = true;
-            i += 1;
         } else if a == "-d" {
             opts.dirs_only = true;
-            i += 1;
         } else if a == "-h" || a == "--help" {
             return Result::Err("__help__");
         } else if a.starts_with("-") {
@@ -95,7 +92,6 @@ fn parse_args(arguments: Array<String>) -> Result<Options, String> {
                 return Result::Err("tree: only one starting path is supported");
             }
             opts.path = a;
-            i += 1;
         }
     }
     return Result::Ok(opts);
