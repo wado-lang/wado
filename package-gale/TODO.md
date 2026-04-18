@@ -47,9 +47,6 @@ most of the new fields. "Parsed and stored" is not "used":
   ANTLR4 itself ignores these at codegen, so matching ANTLR4's behavior
   is fine, but a lint or doc comment in the generated output would make
   the information observable.
-- `LexerRule.is_virtual` — stored but not emitted differently from real
-  lexer rules. Generated lexers happily produce try_<name> functions for
-  virtual tokens that should never match. Should be gated.
 
 ## C. Representation quality of stored options
 

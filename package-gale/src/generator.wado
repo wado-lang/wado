@@ -93,7 +93,11 @@ fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
     e.set_pub();
     for let rule of lexer_rules {
         if !rule.is_fragment {
-            e.add_member(&rule.name);
+            if rule.is_virtual {
+                e.add_member_with_comment(&rule.name, &"virtual");
+            } else {
+                e.add_member(&rule.name);
+            }
         }
     }
     e.add_member("Eof");
