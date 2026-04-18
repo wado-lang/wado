@@ -150,7 +150,7 @@ This WEP does not design the browser playground integration. It requires only th
 - [x] Move the stdio LSP server from `wado-cli` to `wado-lsp`. Add `[[bin]] wado-lsp`. Delete `wado-cli/src/lsp_adapter.rs` and `wado-cli/src/lsp_rpc.rs`. Reduce `wado-cli/src/lsp.rs` to a delegation call.
 - [x] Move `FilesystemCompilerHost` to `wado-lsp`. Wire `wado-cli` to re-export or wrap it.
 - [x] Add `mise` tasks `build-wado-lsp-wasm` and `watch-wado-lsp-wasm`.
-- [x] Add a CI job that runs `cargo build -p wado-lsp --target wasm32-wasip2 --release`.
+- [ ] Add a CI job that runs `cargo build -p wado-lsp --target wasm32-wasip2 --release`. (Deferred until the VS Code extension lands and needs the artifact.)
 - [ ] Implement the VS Code LSP client in `wado-vscode` with both subprocess and Wasm paths, the `wado.serverPath` setting, the `wado.restartLanguageServer` command, and the `FileSystemWatcher` auto-restart.
 - [ ] Add an end-to-end test that drives the Wasm build through an `initialize` / `didOpen` / `publishDiagnostics` exchange.
 - [x] Rewrite `wado-lsp/README.md` to reflect the new architecture.
