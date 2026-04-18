@@ -406,7 +406,11 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
             let saved_labels = std::mem::take(&mut ctx.for_loop_labels);
             let body = desugar_block(&l.body, ctx);
             ctx.for_loop_labels = saved_labels;
-            Stmt::Loop(LoopStmt { id: l.id, body, span: l.span })
+            Stmt::Loop(LoopStmt {
+                id: l.id,
+                body,
+                span: l.span,
+            })
         }
         Stmt::Match(m) => Stmt::Match(Box::new(MatchExpr {
             id: m.id,
@@ -454,7 +458,10 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
                     span: c.span,
                 });
             }
-            Stmt::Continue(ContinueStmt { id: c.id, span: c.span })
+            Stmt::Continue(ContinueStmt {
+                id: c.id,
+                span: c.span,
+            })
         }
         Stmt::LabeledBlock(lb) => Stmt::LabeledBlock(LabeledBlockStmt {
             id: lb.id,

@@ -30,9 +30,7 @@ use crate::token::Span;
 /// [`SymbolKey`]. Local symbols are kept in a side table rather than
 /// polluting `SymbolTable::modules` (which is the name index used by item
 /// lookup).
-pub(crate) fn collect_references(
-    modules: &IndexMap<ModuleSource, Module>,
-) -> LocalBindings {
+pub(crate) fn collect_references(modules: &IndexMap<ModuleSource, Module>) -> LocalBindings {
     let mut out = LocalBindings::default();
     for (module_source, module) in modules {
         let mut collector = Collector {
@@ -404,4 +402,3 @@ impl Collector<'_> {
         }
     }
 }
-

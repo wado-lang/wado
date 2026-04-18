@@ -296,7 +296,8 @@ mod tests {
 
     #[tokio::test]
     async fn item_definition() {
-        let source = "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    return helper();\n}\n";
+        let source =
+            "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    return helper();\n}\n";
         let result = def_at(source, 4, 11)
             .await
             .expect("call-site resolves to fn helper");
@@ -314,9 +315,7 @@ mod tests {
             "    return x + y;\n",
             "}\n",
         );
-        let result = def_at(source, 3, 11)
-            .await
-            .expect("use of destructured x");
+        let result = def_at(source, 3, 11).await.expect("use of destructured x");
         assert_eq!(result.range.start.line, 2);
         assert_eq!(result.range.start.character, 10);
         assert_eq!(result.range.end.character, 11);
@@ -359,9 +358,7 @@ mod tests {
             "    return g(1);\n",
             "}\n",
         );
-        let result = def_at(source, 2, 25)
-            .await
-            .expect("capture of outer");
+        let result = def_at(source, 2, 25).await.expect("capture of outer");
         assert_eq!(result.range.start.line, 1);
         assert_eq!(result.range.start.character, 8);
         assert_eq!(result.range.end.character, 13);

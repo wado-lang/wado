@@ -2397,7 +2397,11 @@ struct Point { x: i32, y: i32 }
         for item in &m.items {
             visit_item_ids(item, &mut |id, sp| ids.push((id, sp)));
         }
-        assert!(ids.len() > 20, "expected rich id coverage, got {}", ids.len());
+        assert!(
+            ids.len() > 20,
+            "expected rich id coverage, got {}",
+            ids.len()
+        );
 
         let mut seen: IndexSet<AstId> = IndexSet::default();
         for (id, sp) in &ids {

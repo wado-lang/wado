@@ -551,7 +551,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         span: Span,
     ) -> Result<(), Bail> {
         match pattern {
-            crate::ast::Pattern::Ident { name, .. } | crate::ast::Pattern::MutIdent { name, .. } => {
+            crate::ast::Pattern::Ident { name, .. }
+            | crate::ast::Pattern::MutIdent { name, .. } => {
                 self.define_uninit(name, is_mut, is_reactive, span)?;
             }
             crate::ast::Pattern::Tuple(patterns, _) => {
@@ -587,7 +588,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         span: Span,
     ) -> Result<(), Bail> {
         match pattern {
-            crate::ast::Pattern::Ident { name, .. } | crate::ast::Pattern::MutIdent { name, .. } => {
+            crate::ast::Pattern::Ident { name, .. }
+            | crate::ast::Pattern::MutIdent { name, .. } => {
                 self.define(name, is_mut, is_reactive, span)?;
             }
             crate::ast::Pattern::Tuple(patterns, _) => {

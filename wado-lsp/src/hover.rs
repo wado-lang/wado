@@ -90,10 +90,7 @@ fn resolve_hover_signature_by_name(
     render_item_signature(annotated, symbol)
 }
 
-fn find_ident_at_position(
-    tokens: &[Token],
-    position: Position,
-) -> Option<(String, Range, Span)> {
+fn find_ident_at_position(tokens: &[Token], position: Position) -> Option<(String, Range, Span)> {
     let target_line = position.line as usize + 1;
     let target_col = position.character as usize + 1;
 
@@ -219,11 +216,7 @@ fn format_binding_name(name: &str) -> String {
     format!("let {name}")
 }
 
-fn find_let_in_condition(
-    cond: &ast::Condition,
-    target: AstId,
-    name: &str,
-) -> Option<String> {
+fn find_let_in_condition(cond: &ast::Condition, target: AstId, name: &str) -> Option<String> {
     use ast::{Condition, ConditionElement};
     match cond {
         Condition::Expr(e) => find_let_in_expr(e, target, name),
@@ -290,11 +283,18 @@ fn find_let_in_stmt(stmt: &Stmt, target: AstId, name: &str) -> Option<String> {
             None
         }
         Stmt::Expr(s) => find_let_in_expr(&s.expr, target, name),
-        Stmt::Return(s) => s.value.as_ref().and_then(|v| find_let_in_expr(v, target, name)),
+        Stmt::Return(s) => s
+            .value
+            .as_ref()
+            .and_then(|v| find_let_in_expr(v, target, name)),
         Stmt::TaskReturn(s) => find_let_in_expr(&s.value, target, name),
         Stmt::If(s) => find_let_in_condition(&s.condition, target, name)
             .or_else(|| find_let_in_block(&s.then_block, target, name))
-            .or_else(|| s.else_block.as_ref().and_then(|b| find_let_in_block(b, target, name))),
+            .or_else(|| {
+                s.else_block
+                    .as_ref()
+                    .and_then(|b| find_let_in_block(b, target, name))
+            }),
         Stmt::While(s) => find_let_in_condition(&s.condition, target, name)
             .or_else(|| find_let_in_block(&s.body, target, name)),
         Stmt::For(s) => {
@@ -332,8 +332,11 @@ fn find_let_in_stmt(stmt: &Stmt, target: AstId, name: &str) -> Option<String> {
 fn find_let_in_expr(expr: &Expr, target: AstId, name: &str) -> Option<String> {
     match expr {
         Expr::Block(b) => find_let_in_block(b, target, name),
-        Expr::If(e) => find_let_in_block(&e.then_block, target, name)
-            .or_else(|| e.else_block.as_ref().and_then(|b| find_let_in_block(b, target, name))),
+        Expr::If(e) => find_let_in_block(&e.then_block, target, name).or_else(|| {
+            e.else_block
+                .as_ref()
+                .and_then(|b| find_let_in_block(b, target, name))
+        }),
         Expr::Closure(c) => {
             for p in &c.params {
                 if p.id == target {

@@ -157,18 +157,14 @@ fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
     fn scan_pattern(pattern: &Pattern, target: AstId) -> Option<Span> {
         match pattern {
             Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => {
-                if *id == target {
-                    Some(*span)
-                } else {
-                    None
-                }
+                if *id == target { Some(*span) } else { None }
             }
             Pattern::Tuple(ps, _) | Pattern::Or(ps) => {
                 ps.iter().find_map(|p| scan_pattern(p, target))
             }
-            Pattern::Struct { fields, .. } => fields
-                .iter()
-                .find_map(|f| scan_pattern(&f.pattern, target)),
+            Pattern::Struct { fields, .. } => {
+                fields.iter().find_map(|f| scan_pattern(&f.pattern, target))
+            }
             Pattern::Variant { bindings, .. } => {
                 bindings.iter().find_map(|p| scan_pattern(p, target))
             }
