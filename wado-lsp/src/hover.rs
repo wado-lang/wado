@@ -1,17 +1,18 @@
 //! Hover information, powered by `wado_compiler::annotate`.
 //!
-//! Rendering strategy: lex + parse find the identifier at the cursor and the
-//! range of its on-screen span. `annotate` then looks up the name in the
-//! enclosing module's scope and pulls the matching AST item from the
-//! defining module. `wado_compiler::unparse` renders the signature so the
-//! compiler owns formatting of every declaration kind.
+//! Rendering strategy: `Annotated::ast_id_at` finds the innermost node at the
+//! cursor. If the node is an `IdentExpr` that resolves to a local binding, we
+//! render the let/param signature directly from the AST. Otherwise we fall
+//! back to item-level lookup through the symbol table and delegate signature
+//! rendering to `wado_compiler::unparse`.
 
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
-use wado_compiler::ast::{self, Item, Stmt};
+use wado_compiler::ast::{self, AstId, Expr, Item, Module, Stmt};
 use wado_compiler::lexer::Lexer;
-use wado_compiler::symbol::Symbol;
-use wado_compiler::token::{Token, TokenKind};
+use wado_compiler::name::ModuleSource;
+use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
+use wado_compiler::token::{Span, Token, TokenKind};
 use wado_compiler::unparse;
 
 use crate::diagnostics::{Position, Range};
@@ -30,22 +31,18 @@ pub async fn find_hover<H: CompilerHost>(
 ) -> Option<HoverResult> {
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize().ok()?;
-    let (ident, token_range) = find_ident_at_position(&tokens, position)?;
+    let (_ident_name, token_range, token_span) = find_ident_at_position(&tokens, position)?;
 
     let filename = uri_to_filename(uri);
     let annotated = annotate(source, host, Some(&filename)).await.ok()?;
 
-    let symbol = annotated
-        .symbols
-        .lookup_in_module(&annotated.entry_module_source, &ident)
-        .or_else(|| {
-            annotated
-                .modules
-                .keys()
-                .find_map(|ms| annotated.symbols.lookup_in_module(ms, &ident))
-        })?;
+    let module = annotated.entry_module_source.clone();
+    let line = position.line as usize + 1;
+    let col = position.character as usize + 1;
 
-    let signature = render_signature(&annotated, symbol)?;
+    let signature = resolve_hover_signature(&annotated, &module, &tokens, line, col)
+        .or_else(|| resolve_hover_signature_by_name(&annotated, source, position))?;
+    let _ = token_span;
 
     Some(HoverResult {
         contents: format!("```wado\n{signature}\n```"),
@@ -53,7 +50,50 @@ pub async fn find_hover<H: CompilerHost>(
     })
 }
 
-fn find_ident_at_position(tokens: &[Token], position: Position) -> Option<(String, Range)> {
+fn resolve_hover_signature(
+    annotated: &Annotated,
+    module: &ModuleSource,
+    _tokens: &[Token],
+    line: usize,
+    col: usize,
+) -> Option<String> {
+    let cursor_id = annotated.ast_id_at(module, line, col)?;
+    let cursor_key = SymbolKey::new(module.clone(), cursor_id);
+    let def_key = annotated
+        .referenced_symbol(&cursor_key)
+        .unwrap_or_else(|| cursor_key.clone());
+
+    let symbol = annotated.symbol_at(&def_key)?;
+    match &symbol.kind {
+        SymbolKind::Variable(_) => render_local_binding(annotated, &def_key, &symbol.name),
+        _ => render_item_signature(annotated, symbol),
+    }
+}
+
+fn resolve_hover_signature_by_name(
+    annotated: &Annotated,
+    source: &str,
+    position: Position,
+) -> Option<String> {
+    let mut lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().ok()?;
+    let (name, _range, _span) = find_ident_at_position(&tokens, position)?;
+    let symbol = annotated
+        .symbols
+        .lookup_in_module(&annotated.entry_module_source, &name)
+        .or_else(|| {
+            annotated
+                .modules
+                .keys()
+                .find_map(|ms| annotated.symbols.lookup_in_module(ms, &name))
+        })?;
+    render_item_signature(annotated, symbol)
+}
+
+fn find_ident_at_position(
+    tokens: &[Token],
+    position: Position,
+) -> Option<(String, Range, Span)> {
     let target_line = position.line as usize + 1;
     let target_col = position.character as usize + 1;
 
@@ -80,14 +120,13 @@ fn find_ident_at_position(tokens: &[Token], position: Position) -> Option<(Strin
                 character: (token.span.end_column - 1) as u32,
             },
         };
-        return Some((name.clone(), range));
+        return Some((name.clone(), range, token.span));
     }
     None
 }
 
-/// Render a signature for the given symbol by locating its AST item and
-/// delegating to `wado_compiler::unparse`.
-fn render_signature(annotated: &Annotated, symbol: &Symbol) -> Option<String> {
+/// Render a signature for the given item-level symbol.
+fn render_item_signature(annotated: &Annotated, symbol: &Symbol) -> Option<String> {
     let module = annotated.modules.get(&symbol.defined_at.module)?;
     for item in &module.items {
         if let Some(rendered) = item_info(item, &symbol.name) {
@@ -95,6 +134,166 @@ fn render_signature(annotated: &Annotated, symbol: &Symbol) -> Option<String> {
         }
     }
     None
+}
+
+/// Render a hover line for a local binding (`let x: T` / `fn f(x: T)`).
+fn render_local_binding(annotated: &Annotated, def_key: &SymbolKey, name: &str) -> Option<String> {
+    let module = annotated.modules.get(&def_key.module)?;
+    render_local_in_module(module, def_key.ast_id, name)
+}
+
+fn render_local_in_module(module: &Module, target: AstId, name: &str) -> Option<String> {
+    for item in &module.items {
+        if let Some(s) = render_local_in_item(item, target, name) {
+            return Some(s);
+        }
+    }
+    None
+}
+
+fn render_local_in_item(item: &Item, target: AstId, name: &str) -> Option<String> {
+    match item {
+        Item::Function(f) => {
+            for p in &f.params {
+                if p.id == target {
+                    let mut out = String::new();
+                    unparse::unparse_param_into(p, &mut out);
+                    return Some(out);
+                }
+            }
+            if let Some(body) = &f.body {
+                return find_let_in_block(body, target, name);
+            }
+            None
+        }
+        Item::Impl(imp) => {
+            for m in &imp.methods {
+                for p in &m.params {
+                    if p.id == target {
+                        let mut out = String::new();
+                        unparse::unparse_param_into(p, &mut out);
+                        return Some(out);
+                    }
+                }
+                if let Some(body) = &m.body
+                    && let Some(s) = find_let_in_block(body, target, name)
+                {
+                    return Some(s);
+                }
+            }
+            None
+        }
+        Item::Trait(t) => {
+            for m in &t.methods {
+                for p in &m.params {
+                    if p.id == target {
+                        let mut out = String::new();
+                        unparse::unparse_param_into(p, &mut out);
+                        return Some(out);
+                    }
+                }
+                if let Some(body) = &m.body
+                    && let Some(s) = find_let_in_block(body, target, name)
+                {
+                    return Some(s);
+                }
+            }
+            None
+        }
+        Item::Test(t) => find_let_in_block(&t.body, target, name),
+        Item::Global(g) => find_let_in_expr(&g.initializer, target, name),
+        _ => None,
+    }
+}
+
+fn find_let_in_block(block: &ast::Block, target: AstId, name: &str) -> Option<String> {
+    for stmt in &block.stmts {
+        if let Some(s) = find_let_in_stmt(stmt, target, name) {
+            return Some(s);
+        }
+    }
+    None
+}
+
+fn find_let_in_stmt(stmt: &Stmt, target: AstId, name: &str) -> Option<String> {
+    match stmt {
+        Stmt::Let(l) => {
+            if l.id == target {
+                let mut out = String::new();
+                out.push_str(if l.is_mut { "let mut " } else { "let " });
+                out.push_str(name);
+                if let Some(ty) = &l.ty {
+                    out.push_str(": ");
+                    unparse::unparse_type_into(ty, &mut out);
+                }
+                return Some(out);
+            }
+            if let Some(v) = &l.value {
+                return find_let_in_expr(v, target, name);
+            }
+            None
+        }
+        Stmt::Expr(s) => find_let_in_expr(&s.expr, target, name),
+        Stmt::Return(s) => s.value.as_ref().and_then(|v| find_let_in_expr(v, target, name)),
+        Stmt::TaskReturn(s) => find_let_in_expr(&s.value, target, name),
+        Stmt::If(s) => find_let_in_block(&s.then_block, target, name)
+            .or_else(|| s.else_block.as_ref().and_then(|b| find_let_in_block(b, target, name))),
+        Stmt::While(s) => find_let_in_block(&s.body, target, name),
+        Stmt::For(s) => {
+            if let Some(init) = &s.init
+                && let Some(r) = find_let_in_stmt(init, target, name)
+            {
+                return Some(r);
+            }
+            find_let_in_block(&s.body, target, name)
+        }
+        Stmt::ForOf(s) => find_let_in_block(&s.body, target, name),
+        Stmt::Loop(s) => find_let_in_block(&s.body, target, name),
+        Stmt::Match(m) => {
+            for arm in &m.arms {
+                if let Some(r) = find_let_in_expr(&arm.body, target, name) {
+                    return Some(r);
+                }
+            }
+            None
+        }
+        Stmt::Break(_) | Stmt::Continue(_) => None,
+        Stmt::Assert(_) => None,
+        Stmt::LabeledBlock(s) => find_let_in_block(&s.block, target, name),
+    }
+}
+
+fn find_let_in_expr(expr: &Expr, target: AstId, name: &str) -> Option<String> {
+    match expr {
+        Expr::Block(b) => find_let_in_block(b, target, name),
+        Expr::If(e) => find_let_in_block(&e.then_block, target, name)
+            .or_else(|| e.else_block.as_ref().and_then(|b| find_let_in_block(b, target, name))),
+        Expr::Closure(c) => {
+            for p in &c.params {
+                if p.id == target {
+                    let mut out = String::from("|");
+                    out.push_str(&p.name);
+                    if let Some(ty) = &p.ty {
+                        out.push_str(": ");
+                        unparse::unparse_type_into(ty, &mut out);
+                    }
+                    out.push('|');
+                    return Some(out);
+                }
+            }
+            find_let_in_expr(&c.body, target, name)
+        }
+        Expr::LabeledBlock(lb) => find_let_in_block(&lb.block, target, name),
+        Expr::Match(m) => {
+            for arm in &m.arms {
+                if let Some(r) = find_let_in_expr(&arm.body, target, name) {
+                    return Some(r);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 fn item_info(item: &Item, name: &str) -> Option<String> {
@@ -139,45 +338,7 @@ fn item_info(item: &Item, name: &str) -> Option<String> {
             }
             None
         }
-        Item::Function(f) => {
-            for param in &f.params {
-                if param.name == name && param.self_kind == ast::SelfKind::None {
-                    let mut out = String::new();
-                    unparse::unparse_param_into(param, &mut out);
-                    return Some(out);
-                }
-            }
-            if let Some(body) = &f.body {
-                return find_let_info(body, name);
-            }
-            None
-        }
         _ => None,
-    }
-}
-
-fn find_let_info(block: &ast::Block, name: &str) -> Option<String> {
-    for stmt in &block.stmts {
-        if let Stmt::Let(l) = stmt
-            && pattern_matches(&l.pattern, name)
-        {
-            let mut out = String::new();
-            out.push_str(if l.is_mut { "let mut " } else { "let " });
-            out.push_str(name);
-            if let Some(ty) = &l.ty {
-                out.push_str(": ");
-                unparse::unparse_type_into(ty, &mut out);
-            }
-            return Some(out);
-        }
-    }
-    None
-}
-
-fn pattern_matches(pattern: &ast::Pattern, name: &str) -> bool {
-    match pattern {
-        ast::Pattern::Ident(n) | ast::Pattern::MutIdent(n) => n == name,
-        _ => false,
     }
 }
 

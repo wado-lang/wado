@@ -1,19 +1,19 @@
 //! Go-to-definition, powered by `wado_compiler::annotate`.
 //!
 //! Resolution flow:
-//! 1. Lex the source to find the identifier at the cursor.
-//! 2. Run `annotate` to produce a fully-resolved [`Annotated`] snapshot.
-//! 3. Look up the identifier in the entry module's scope — this traverses
-//!    `use` imports, so a name defined in another file resolves to that
-//!    file's definition.
-//! 4. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`]
-//!    (module URI + identifier span).
+//! 1. Run `annotate` to produce a fully-resolved [`Annotated`] snapshot.
+//! 2. Use `Annotated::ast_id_at` to find the innermost AST node at the cursor.
+//! 3. If that node is a use-site (Ident of a local), follow
+//!    `Annotated::referenced_symbol` to the binding [`SymbolKey`].
+//! 4. Otherwise, fall back to per-module name lookup for item-level symbols.
+//! 5. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`].
 
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
+use wado_compiler::ast::{self, AstId, Item, Module};
 use wado_compiler::lexer::Lexer;
 use wado_compiler::name::ModuleSource;
-use wado_compiler::symbol::Symbol;
+use wado_compiler::symbol::{Symbol, SymbolKey};
 use wado_compiler::token::{Span, TokenKind};
 
 use crate::diagnostics::{Position, Range};
@@ -34,13 +34,20 @@ pub async fn find_definition<H: CompilerHost>(
     uri: &str,
     host: &H,
 ) -> Option<DefinitionResult> {
-    let ident = find_ident_at_position(source, position)?;
-
     let filename = uri_to_filename(uri);
     let annotated = annotate(source, host, Some(&filename)).await.ok()?;
 
-    let symbol = resolve_ident(&annotated, &filename, &ident)?;
-    let span = annotated.name_span_of(&symbol.defined_at).or(symbol.span)?;
+    let module = annotated.entry_module_source.clone();
+    let line = position.line as usize + 1;
+    let col = position.character as usize + 1;
+
+    let def_key = resolve_def_key(&annotated, &module, source, position, line, col)?;
+
+    let symbol = annotated.symbol_at(&def_key)?;
+    let span = annotated
+        .name_span_of(&def_key)
+        .or(symbol.span)
+        .or_else(|| span_of_ast_id(annotated.modules.get(&def_key.module)?, def_key.ast_id))?;
     let def_uri = symbol_uri(&annotated, symbol, uri)?;
     Some(DefinitionResult {
         uri: def_uri,
@@ -48,7 +55,44 @@ pub async fn find_definition<H: CompilerHost>(
     })
 }
 
-/// Scan `tokens` for an identifier whose span covers `position`.
+/// Resolve the defining [`SymbolKey`] for the identifier at the cursor.
+///
+/// Tries in order:
+/// 1. `ast_id_at` → `referenced_symbol` (local variable / parameter)
+/// 2. `ast_id_at` → key points directly to a declared symbol (item)
+/// 3. Lexer-driven name lookup in the entry module (imports, cross-module)
+fn resolve_def_key(
+    annotated: &Annotated,
+    module: &ModuleSource,
+    source: &str,
+    position: Position,
+    line: usize,
+    col: usize,
+) -> Option<SymbolKey> {
+    if let Some(ast_id) = annotated.ast_id_at(module, line, col) {
+        let cursor_key = SymbolKey::new(module.clone(), ast_id);
+        if let Some(def) = annotated.referenced_symbol(&cursor_key) {
+            return Some(def);
+        }
+        if annotated.symbol_at(&cursor_key).is_some() {
+            return Some(cursor_key);
+        }
+    }
+
+    let ident = find_ident_at_position(source, position)?;
+    let entry = &annotated.entry_module_source;
+    if let Some(sym) = annotated.symbols.lookup_in_module(entry, &ident) {
+        return Some(sym.defined_at.clone());
+    }
+    annotated
+        .modules
+        .keys()
+        .find_map(|ms| annotated.symbols.lookup_in_module(ms, &ident))
+        .map(|s| s.defined_at.clone())
+}
+
+/// Scan `tokens` for an identifier whose span covers `position`. Used as a
+/// fallback when the AST-id cursor lookup does not yield a resolvable symbol.
 fn find_ident_at_position(source: &str, position: Position) -> Option<String> {
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize().ok()?;
@@ -62,14 +106,13 @@ fn find_ident_at_position(source: &str, position: Position) -> Option<String> {
         if let TokenKind::Ident(name) = &token.kind {
             return Some(name.clone());
         }
-        if let Some(name) = token.kind.as_ident_name() {
-            // Contextual keywords-as-identifiers (`flags`, `type`, `of`, `from`).
-            if matches!(
+        if token.kind.as_ident_name().is_some()
+            && matches!(
                 token.kind,
                 TokenKind::Flags | TokenKind::Type | TokenKind::Of | TokenKind::From
-            ) {
-                return Some(name.to_string());
-            }
+            )
+        {
+            return token.kind.as_ident_name().map(str::to_string);
         }
     }
     None
@@ -88,29 +131,33 @@ fn token_contains(span: &Span, target_line: usize, target_col: usize) -> bool {
     true
 }
 
-fn resolve_ident<'a>(annotated: &'a Annotated, filename: &str, ident: &str) -> Option<&'a Symbol> {
-    let entry = &annotated.entry_module_source;
-    if let Some(sym) = annotated.symbols.lookup_in_module(entry, ident) {
-        return Some(sym);
+/// Best-effort span for an arbitrary [`AstId`] — walks module items looking for
+/// a matching id. Used only when `name_span_of` has no name-span and the
+/// symbol has no declared span (rare).
+fn span_of_ast_id(module: &Module, target: AstId) -> Option<Span> {
+    for item in &module.items {
+        if let Some(span) = item_span_if_match(item, target) {
+            return Some(span);
+        }
     }
-    // Fall back to searching every module: catches definitions hovered while
-    // editing a non-entry file.
-    let _ = filename;
-    annotated
-        .modules
-        .keys()
-        .find_map(|ms| annotated.symbols.lookup_in_module(ms, ident))
+    None
+}
+
+fn item_span_if_match(item: &Item, target: AstId) -> Option<Span> {
+    match item {
+        Item::Function(f) if f.id == target => Some(f.span),
+        Item::Struct(s) if s.id == target => Some(s.span),
+        Item::Enum(e) if e.id == target => Some(e.span),
+        Item::Variant(v) if v.id == target => Some(v.span),
+        Item::Flags(fl) if fl.id == target => Some(fl.span),
+        Item::Trait(t) if t.id == target => Some(t.span),
+        Item::Newtype(n) if n.id == target => Some(n.span),
+        Item::Global(g) if g.id == target => Some(g.span),
+        _ => None,
+    }
 }
 
 /// Derive the URI for a symbol's defining module.
-///
-/// Prefers the URI the request was made against when the symbol lives in the
-/// entry module (keeps the `file://` scheme the client expects); otherwise
-/// synthesises a `file://` URI from the module's on-disk path.
-///
-/// `ModuleSource::Local` paths are stored relative to the entry module's
-/// directory (see `loader::resolve_module_path`), so they are resolved against
-/// the request URI's parent to produce an absolute `file://` URI.
 fn symbol_uri(annotated: &Annotated, symbol: &Symbol, request_uri: &str) -> Option<String> {
     let module = &symbol.defined_at.module;
     if module == &annotated.entry_module_source {
@@ -119,7 +166,6 @@ fn symbol_uri(annotated: &Annotated, symbol: &Symbol, request_uri: &str) -> Opti
     match module {
         ModuleSource::EntryPoint { filename } => Some(filename_to_uri(filename)),
         ModuleSource::Local { path } => Some(resolve_local_uri(path, request_uri)),
-        // Core / WASI / Remote modules have no navigable URI.
         _ => None,
     }
 }
@@ -170,4 +216,9 @@ fn span_to_range(span: &Span) -> Range {
             character: span.end_column.saturating_sub(1) as u32,
         },
     }
+}
+
+#[allow(dead_code)]
+fn _touch_ast_module_import(module: &ast::Module) {
+    let _ = module;
 }
