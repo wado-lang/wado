@@ -386,7 +386,8 @@ mod tests {
 
     #[tokio::test]
     async fn assignment_marks_target_as_write() {
-        let source = "fn f() {\n    let mut x: i32 = 0;\n    x = 1;\n    x += 2;\n    let y = x;\n}\n";
+        let source =
+            "fn f() {\n    let mut x: i32 = 0;\n    x = 1;\n    x += 2;\n    let y = x;\n}\n";
         let hl = highlights_at(source, 1, 12).await;
         assert_eq!(
             summarize(&hl),

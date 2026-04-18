@@ -51,7 +51,10 @@ fn position_from_one_based(line: u32, column: u32) -> Position {
 /// Run diagnostics query and print results.
 pub async fn run_diagnostics(filename: &str, json_output: bool) {
     let prepared = prepare_query(filename);
-    let diagnostics = prepared.engine.diagnostics(&prepared.uri, &prepared.host).await;
+    let diagnostics = prepared
+        .engine
+        .diagnostics(&prepared.uri, &prepared.host)
+        .await;
 
     if json_output {
         print_diagnostics_json(filename, &diagnostics);

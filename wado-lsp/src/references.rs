@@ -47,9 +47,7 @@ pub async fn find_references<H: CompilerHost>(
     };
 
     let mut out = Vec::new();
-    if include_declaration
-        && let Some(loc) = declaration_location(&annotated, &def_key, uri)
-    {
+    if include_declaration && let Some(loc) = declaration_location(&annotated, &def_key, uri) {
         out.push(loc);
     }
     for use_key in annotated.references_to(&def_key) {
@@ -160,7 +158,8 @@ mod tests {
 
     #[tokio::test]
     async fn local_var_uses() {
-        let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    let y = x + x;\n    return y + x;\n}\n";
+        let source =
+            "fn f() -> i32 {\n    let x: i32 = 1;\n    let y = x + x;\n    return y + x;\n}\n";
         let refs = refs_at(source, 1, 8, false).await;
         assert_eq!(
             ranges(&refs),
