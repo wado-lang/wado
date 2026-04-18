@@ -153,7 +153,8 @@ fn gen_struct_for_alt(w: &mut CodeWriter, type_name: &String, alt: &Alternative,
 }
 
 fn repeat_inner_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<Field> {
-    if let Group(alts) = elem {
+    if let Group(g) = elem {
+        let alts = &g.alternatives;
         if is_simple_cst_group(alts) {
             return Option::<Field>::Some(Field {
                 name: group_field_base_name(alts),
@@ -250,12 +251,12 @@ fn has_emitted(emitted: &Array<String>, name: &String) -> bool {
 }
 
 fn extract_group_alts(elem: &Element) -> Option<&Array<Alternative>> {
-    if let Group(alts) = elem {
-        return Option::Some(alts);
+    if let Group(g) = elem {
+        return Option::Some(&g.alternatives);
     }
     if let Repeat(rep) = elem {
-        if let Group(alts) = &rep.element {
-            return Option::Some(alts);
+        if let Group(g) = &rep.element {
+            return Option::Some(&g.alternatives);
         }
     }
     return null;
@@ -266,7 +267,8 @@ fn gen_group_variant_type(w: &mut CodeWriter, alts: &Array<Alternative>) {
     let mut v = VariantSpec::new(&type_name);
     v.set_pub();
     for let alt of alts {
-        if let RuleRef(name) = &alt.elements[0] {
+        if let RuleRef(r) = &alt.elements[0] {
+            let name = &r.name;
             let case_name = to_pascal_case(name);
             let payload = rule_type_name(name);
             v.add_case_with_payload(&case_name, &payload);
@@ -371,25 +373,28 @@ fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
 }
 
 fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<Field> {
-    if let RuleRef(name) = elem {
+    if let RuleRef(r) = elem {
+        let name = &r.name;
         return Option::<Field>::Some(Field {
             name: escape_ident(&to_snake_case(name)),
             type_str: rule_type_name(name),
         });
     }
-    if let TokenRef(name) = elem {
+    if let TokenRef(t) = elem {
+        let name = &t.name;
         return Option::<Field>::Some(Field {
             name: escape_ident(&to_lower(name)),
             type_str: "Token",
         });
     }
-    if let Literal(text) = elem {
+    if let Literal(l) = elem {
+        let text = &l.text;
         return Option::<Field>::Some(Field {
             name: literal_field_name(text),
             type_str: "Token",
         });
     }
-    if let Wildcard = elem {
+    if let Wildcard(_) = elem {
         return Option::<Field>::Some(Field {
             name: "wildcard",
             type_str: "Token",
@@ -443,7 +448,8 @@ fn element_to_field(elem: &Element, rule_name: &String, group_counter: &mut i32)
         }
         return null;
     }
-    if let Group(alts) = elem {
+    if let Group(g) = elem {
+        let alts = &g.alternatives;
         if is_simple_cst_group(alts) {
             return Option::<Field>::Some(Field {
                 name: group_field_base_name(alts),

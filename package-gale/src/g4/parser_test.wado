@@ -40,13 +40,13 @@ value : STRING | NUMBER | 'true' | 'false' ;";
     let g = parse(input).unwrap();
     let rule = &g.parser_rules[0];
     assert rule.alternatives.len() == 4;
-    if let TokenRef(name) = rule.alternatives[0].elements[0] {
-        assert name == "STRING";
+    if let TokenRef(t) = rule.alternatives[0].elements[0] {
+        assert t.name == "STRING";
     } else {
         panic("expected TokenRef");
     }
-    if let Literal(text) = rule.alternatives[2].elements[0] {
-        assert text == "true";
+    if let Literal(l) = rule.alternatives[2].elements[0] {
+        assert l.text == "true";
     } else {
         panic("expected Literal");
     }
@@ -76,8 +76,8 @@ obj : '{' pair (',' pair)* '}' ;";
     let g = parse(input).unwrap();
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 4;
-    if let Literal(text) = elems[0] {
-        assert text == "{";
+    if let Literal(l) = elems[0] {
+        assert l.text == "{";
     } else {
         panic("expected Literal");
     }
@@ -660,7 +660,7 @@ any : . ;";
     let g = parse(input).unwrap();
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 1;
-    if let Wildcard = elems[0] {
+    if let Wildcard(_) = elems[0] {
         // ok
     } else {
         panic("expected Wildcard element");
@@ -699,8 +699,8 @@ expr : sub[1, 2] ;";
     let g = parse(input).unwrap();
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 1;
-    if let RuleRef(name) = elems[0] {
-        assert name == "sub";
+    if let RuleRef(r) = elems[0] {
+        assert r.name == "sub";
     } else {
         panic("expected RuleRef sub");
     }
@@ -882,8 +882,8 @@ expr : sub[arr[0], xs[1]] ;";
     let g = parse(input).unwrap();
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 1;
-    if let RuleRef(name) = elems[0] {
-        assert name == "sub";
+    if let RuleRef(r) = elems[0] {
+        assert r.name == "sub";
     } else {
         panic("expected RuleRef sub");
     }
@@ -947,8 +947,8 @@ noise : ~( 'a' | 'b' | 'c' ) ;";
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 1;
     if let Not(n) = &elems[0] {
-        if let Group(alts) = &n.element {
-            assert alts.len() == 3;
+        if let Group(g) = &n.element {
+            assert g.alternatives.len() == 3;
         } else {
             panic("expected Group inside Not");
         }
@@ -1066,4 +1066,161 @@ expr : ID ;";
     }
     assert saw_foo, "tokens{} block must still register FOO as virtual token";
     assert saw_bar, "tokens{} block must still register BAR as virtual token";
+}
+
+test "alt-prefix angle options attach to the alternative" {
+    // ANTLR4 element options appearing before the first element of an
+    // alternative belong to the alternative, not to any element. The
+    // canonical use is `<assoc=right>` on a left-recursive alt.
+    // Spec: vendor/antlr4/doc/left-recursion.md, vendor/antlr4/doc/options.md.
+    let input = "grammar Test;
+r : <assoc=right> A '**' B ;";
+    let g = parse(input).unwrap();
+    let alt = &g.parser_rules[0].alternatives[0];
+    assert alt.options.len() == 1;
+    assert alt.options[0].name == "assoc";
+    assert alt.options[0].value == "right";
+    assert alt.elements.len() == 3;
+}
+
+test "rule-ref angle options attach to the ref" {
+    let input = "grammar Test;
+r : foo<p=3> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let RuleRef(r) = &elems[0] {
+        assert r.name == "foo";
+        assert r.options.len() == 1;
+        assert r.options[0].name == "p";
+        assert r.options[0].value == "3";
+    } else {
+        panic("expected RuleRef");
+    }
+}
+
+test "token-ref angle options attach to the ref" {
+    let input = "grammar Test;
+r : ID<assoc=right> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let TokenRef(t) = &elems[0] {
+        assert t.name == "ID";
+        assert t.options.len() == 1;
+        assert t.options[0].name == "assoc";
+        assert t.options[0].value == "right";
+    } else {
+        panic("expected TokenRef");
+    }
+}
+
+test "literal angle options attach to the literal" {
+    let input = "grammar Test;
+r : '+'<p=3> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Literal(l) = &elems[0] {
+        assert l.text == "+";
+        assert l.options.len() == 1;
+        assert l.options[0].name == "p";
+        assert l.options[0].value == "3";
+    } else {
+        panic("expected Literal");
+    }
+}
+
+test "wildcard angle options attach to the wildcard" {
+    let input = "grammar Test;
+r : .<assoc=right> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Wildcard(w) = &elems[0] {
+        assert w.options.len() == 1;
+        assert w.options[0].name == "assoc";
+        assert w.options[0].value == "right";
+    } else {
+        panic("expected Wildcard");
+    }
+}
+
+test "group-level options attach to the group" {
+    // `( options { assoc=right; } : a | b )` attaches the options to the
+    // enclosing group, not to any inner alternative.
+    let input = "grammar Test;
+r : (options { assoc=right; } : A | B) ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Group(g) = &elems[0] {
+        assert g.alternatives.len() == 2;
+        assert g.options.len() == 1;
+        assert g.options[0].name == "assoc";
+        assert g.options[0].value == "right";
+    } else {
+        panic("expected Group");
+    }
+}
+
+test "multi-entry angle block captures every option" {
+    let input = "grammar Test;
+r : A<assoc=right, fail='bad'> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let TokenRef(t) = &elems[0] {
+        assert t.options.len() == 2;
+        assert t.options[0].name == "assoc";
+        assert t.options[0].value == "right";
+        assert t.options[1].name == "fail";
+        assert t.options[1].value == "'bad'";
+    } else {
+        panic("expected TokenRef");
+    }
+}
+
+test "options under label attach to the inner atom" {
+    // `x=ID<assoc=right>` — the `<...>` belongs to the ID, not the label.
+    let input = "grammar Test;
+r : x=ID<assoc=right> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Label(lbl) = &elems[0] {
+        assert lbl.name == "x";
+        if let TokenRef(t) = &lbl.element {
+            assert t.name == "ID";
+            assert t.options.len() == 1;
+            assert t.options[0].name == "assoc";
+        } else {
+            panic("expected TokenRef inside Label");
+        }
+    } else {
+        panic("expected Label");
+    }
+}
+
+test "options under repeat attach to the inner atom" {
+    // `ID<p=3>*` — the `<...>` attaches to ID; the `*` wraps the whole thing.
+    let input = "grammar Test;
+r : ID<p=3>* ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Repeat(rep) = &elems[0] {
+        if let TokenRef(t) = &rep.element {
+            assert t.name == "ID";
+            assert t.options.len() == 1;
+            assert t.options[0].name == "p";
+            assert t.options[0].value == "3";
+        } else {
+            panic("expected TokenRef inside Repeat");
+        }
+    } else {
+        panic("expected Repeat");
+    }
+}
+
+test "malformed angle block does not panic" {
+    // Best-effort recovery: a broken option list should still let the rest
+    // of the grammar parse.
+    let input = "grammar Test;
+r : A<foo=> ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].alternatives.len() == 1;
 }

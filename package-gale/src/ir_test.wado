@@ -41,9 +41,9 @@ test "ParserRule with alternatives" {
         visibility: Visibility::Default,
         options: [],
         alternatives: [
-            Alternative { label: Option::<String>::Some("Str"), elements: [Element::TokenRef("STRING")] },
-            Alternative { label: Option::<String>::Some("Num"), elements: [Element::TokenRef("NUMBER")] },
-            Alternative { label: null, elements: [Element::Literal("true")] },
+            Alternative { label: Option::<String>::Some("Str"), options: [], elements: [Element::TokenRef(TokenRefElement::new("STRING"))] },
+            Alternative { label: Option::<String>::Some("Num"), options: [], elements: [Element::TokenRef(TokenRefElement::new("NUMBER"))] },
+            Alternative { label: null, options: [], elements: [Element::Literal(LiteralElement::new("true"))] },
         ],
     };
     assert rule.name == "value";
@@ -56,29 +56,29 @@ test "ParserRule with alternatives" {
 }
 
 test "Element variants" {
-    let rule_ref = Element::RuleRef("expr");
-    let token_ref = Element::TokenRef("INT");
-    let literal = Element::Literal("+");
+    let rule_ref = Element::RuleRef(RuleRefElement::new("expr"));
+    let token_ref = Element::TokenRef(TokenRefElement::new("INT"));
+    let literal = Element::Literal(LiteralElement::new("+"));
     let repeat = Element::Repeat(RepeatElement {
         kind: RepeatKind::Star,
-        element: Element::TokenRef("INT"),
+        element: Element::TokenRef(TokenRefElement::new("INT")),
         non_greedy: false,
     });
     let label = Element::Label(LabelElement {
         name: "op",
         list: false,
-        element: Element::Literal("+"),
+        element: Element::Literal(LiteralElement::new("+")),
     });
 
-    if let RuleRef(name) = rule_ref {
-        assert name == "expr";
+    if let RuleRef(r) = rule_ref {
+        assert r.name == "expr";
     } else {
         panic("expected RuleRef");
     }
 
     if let Repeat(r) = repeat {
-        if let TokenRef(name) = r.element {
-            assert name == "INT";
+        if let TokenRef(t) = r.element {
+            assert t.name == "INT";
         } else {
             panic("expected TokenRef inside Repeat");
         }

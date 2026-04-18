@@ -101,17 +101,17 @@ fn collect_lits_from_elements(elements: &Array<Element>, seen: &mut Array<String
 }
 
 fn collect_lits_from_element(elem: &Element, seen: &mut Array<String>, result: &mut Array<LitToken>) {
-    if let Literal(text) = elem {
-        if !seen_contains(seen, text) {
-            seen.push(*text);
-            result.push(LitToken { text: *text, const_name: literal_const_name(text) });
+    if let Literal(l) = elem {
+        if !seen_contains(seen, &l.text) {
+            seen.push(l.text);
+            result.push(LitToken { text: l.text, const_name: literal_const_name(&l.text) });
         }
     }
     if let Repeat(rep) = elem {
         collect_lits_from_element(&rep.element, seen, result);
     }
-    if let Group(alts) = elem {
-        for let alt of alts {
+    if let Group(g) = elem {
+        for let alt of &g.alternatives {
             collect_lits_from_elements(&alt.elements, seen, result);
         }
     }

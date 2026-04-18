@@ -106,14 +106,15 @@ fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
 }
 
 fn repeat_inner_walk_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<WalkField> {
-    if let Group(alts) = elem {
+    if let Group(g) = elem {
+        let alts = &g.alternatives;
         if is_simple_cst_group(alts) {
             let mut cases: Array<GroupCaseInfo> = [];
             for let alt of alts {
-                if let RuleRef(name) = &alt.elements[0] {
+                if let RuleRef(r) = &alt.elements[0] {
                     cases.push(GroupCaseInfo {
-                        case_name: to_pascal_case(name),
-                        rule_name: *name,
+                        case_name: to_pascal_case(&r.name),
+                        rule_name: r.name,
                     });
                 }
             }
@@ -236,23 +237,23 @@ fn collect_walk_fields(elements: &Array<Element>, rule_name: &String, group_coun
 }
 
 fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut i32) -> Option<WalkField> {
-    if let RuleRef(name) = elem {
+    if let RuleRef(r) = elem {
         return Option::Some(WalkField {
-            name: escape_ident(&to_snake_case(name)),
-            action: WalkAction::WalkRule(*name),
+            name: escape_ident(&to_snake_case(&r.name)),
+            action: WalkAction::WalkRule(r.name),
             wrapper: WalkWrapper::Direct,
         });
     }
-    if let TokenRef(name) = elem {
+    if let TokenRef(t) = elem {
         return Option::Some(WalkField {
-            name: escape_ident(&to_lower(name)),
+            name: escape_ident(&to_lower(&t.name)),
             action: WalkAction::VisitToken,
             wrapper: WalkWrapper::Direct,
         });
     }
-    if let Literal(text) = elem {
+    if let Literal(l) = elem {
         return Option::Some(WalkField {
-            name: literal_field_name(text),
+            name: literal_field_name(&l.text),
             action: WalkAction::VisitToken,
             wrapper: WalkWrapper::Direct,
         });
@@ -289,14 +290,15 @@ fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut
         }
         return null;
     }
-    if let Group(alts) = elem {
+    if let Group(g) = elem {
+        let alts = &g.alternatives;
         if is_simple_cst_group(alts) {
             let mut cases: Array<GroupCaseInfo> = [];
             for let alt of alts {
-                if let RuleRef(name) = &alt.elements[0] {
+                if let RuleRef(r) = &alt.elements[0] {
                     cases.push(GroupCaseInfo {
-                        case_name: to_pascal_case(name),
-                        rule_name: *name,
+                        case_name: to_pascal_case(&r.name),
+                        rule_name: r.name,
                     });
                 }
             }

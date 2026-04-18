@@ -73,23 +73,99 @@ pub struct ParserRule {
 }
 
 /// Alternative is one branch of a parser rule, optionally labeled.
+///
+/// `options` carries the alt-level element options parsed from a leading
+/// `<key = value, ...>` before the first element (e.g. `<assoc=right>`
+/// on a left-recursive alternative). See ANTLR4 `doc/left-recursion.md`
+/// and `doc/options.md`.
 pub struct Alternative {
     pub label: Option<String>,
+    pub options: Array<GrammarOption>,
     pub elements: Array<Element>,
 }
 
+impl Alternative {
+    pub fn new(elements: Array<Element>) -> Alternative {
+        return Alternative { label: null, options: [], elements };
+    }
+}
+
 /// Element is a single unit within an alternative.
+///
+/// Option-bearing variants (`RuleRef`, `TokenRef`, `Literal`, `Wildcard`,
+/// `Group`) each wrap a struct that carries the element's own
+/// `options: Array<GrammarOption>` field — parsed from a trailing
+/// `<key=value, ...>` angle block in the `.g4` source, or (for `Group`)
+/// from a leading `options { ... }` block prequel. See ANTLR4
+/// `doc/options.md` for the accepted option names and value shapes.
+/// Transformer variants (`Repeat`, `Label`, `Not`) carry no options of
+/// their own — in ANTLR4 a `<...>` on `x=ID<opt>`, `~ID<opt>`, or
+/// `ID<opt>*` attaches to the inner atom, not to the transformer.
 pub variant Element {
-    RuleRef(String),
-    TokenRef(String),
-    Literal(String),
-    Group(Array<Alternative>),
+    RuleRef(RuleRefElement),
+    TokenRef(TokenRefElement),
+    Literal(LiteralElement),
+    Group(GroupElement),
     Repeat(RepeatElement),
     Label(LabelElement),
     /// `.` wildcard — matches any single token. ANTLR4 spec: doc/wildcard.md.
-    Wildcard,
+    Wildcard(WildcardElement),
     /// `~ X` set complement — matches any token NOT in the inner set.
     Not(NotElement),
+}
+
+pub struct RuleRefElement {
+    pub name: String,
+    pub options: Array<GrammarOption>,
+}
+
+impl RuleRefElement {
+    pub fn new(name: String) -> RuleRefElement {
+        return RuleRefElement { name, options: [] };
+    }
+}
+
+pub struct TokenRefElement {
+    pub name: String,
+    pub options: Array<GrammarOption>,
+}
+
+impl TokenRefElement {
+    pub fn new(name: String) -> TokenRefElement {
+        return TokenRefElement { name, options: [] };
+    }
+}
+
+pub struct LiteralElement {
+    pub text: String,
+    pub options: Array<GrammarOption>,
+}
+
+impl LiteralElement {
+    pub fn new(text: String) -> LiteralElement {
+        return LiteralElement { text, options: [] };
+    }
+}
+
+pub struct WildcardElement {
+    pub options: Array<GrammarOption>,
+}
+
+impl WildcardElement {
+    pub fn new() -> WildcardElement {
+        return WildcardElement { options: [] };
+    }
+}
+
+pub struct GroupElement {
+    pub alternatives: Array<Alternative>,
+    pub options: Array<GrammarOption>,
+}
+
+impl GroupElement {
+    pub fn new(alternatives: Array<Alternative>) -> GroupElement {
+        return GroupElement { alternatives, options: [] };
+    }
 }
 
 pub struct RepeatElement {
