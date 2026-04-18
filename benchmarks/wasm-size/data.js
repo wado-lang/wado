@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776504239243,
+  "lastUpdate": 1776508876251,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14181,6 +14181,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f2db7bdcac7c14f5e2403bd31decda143a3a0dd3"
         },
         "date": 1776504239149,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "96541069c0bed481cc1ad24678fbd0d26e5fd680",
+          "message": "Merge pull request #874 from wado-lang/claude/review-todo-tasks-SW0fO\n\nGale: tag virtual tokens and gate emission on `is_virtual`",
+          "timestamp": "2026-04-18T19:37:22+09:00",
+          "tree_id": "6de6decb6cfb3ab3736eb4a25cbd8d2eb6d6cd7c",
+          "url": "https://github.com/wado-lang/wado/commit/96541069c0bed481cc1ad24678fbd0d26e5fd680"
+        },
+        "date": 1776508876154,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
