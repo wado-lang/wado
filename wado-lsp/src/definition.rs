@@ -222,3 +222,86 @@ fn span_to_range(span: &Span) -> Range {
 fn _touch_ast_module_import(module: &ast::Module) {
     let _ = module;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
+
+    struct TestHost {
+        sources: HashMap<String, Vec<u8>>,
+    }
+
+    impl TestHost {
+        fn new(path: &str, source: &str) -> Self {
+            let mut sources = HashMap::new();
+            sources.insert(path.to_string(), source.as_bytes().to_vec());
+            Self { sources }
+        }
+    }
+
+    impl CompilerHost for TestHost {
+        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+            self.sources
+                .get(path)
+                .cloned()
+                .ok_or_else(|| SourceError::NotFound {
+                    path: path.to_string(),
+                })
+        }
+
+        fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
+    }
+
+    async fn def_at(source: &str, line: u32, character: u32) -> Option<DefinitionResult> {
+        let path = "/test.wado";
+        let uri = format!("file://{path}");
+        let host = TestHost::new(path, source);
+        find_definition(source, Position { line, character }, &uri, &host).await
+    }
+
+    #[tokio::test]
+    async fn param_definition() {
+        let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
+        let result = def_at(source, 1, 11)
+            .await
+            .expect("definition of a in body");
+        assert_eq!(result.range.start.line, 0);
+        assert_eq!(result.range.start.character, 7);
+        assert_eq!(result.range.end.character, 8);
+    }
+
+    #[tokio::test]
+    async fn local_var_definition() {
+        let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
+        let result = def_at(source, 2, 11)
+            .await
+            .expect("definition of x in return");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 8);
+        assert_eq!(result.range.end.character, 9);
+    }
+
+    #[tokio::test]
+    async fn shadow_resolution() {
+        let source = "fn f() -> i32 {\n    let x = 1;\n    let x = x + 1;\n    return x;\n}\n";
+        let result = def_at(source, 2, 12)
+            .await
+            .expect("RHS x resolves to outer let");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 8);
+        assert_eq!(result.range.end.character, 9);
+    }
+
+    #[tokio::test]
+    async fn item_definition() {
+        let source = "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    return helper();\n}\n";
+        let result = def_at(source, 4, 11)
+            .await
+            .expect("call-site resolves to fn helper");
+        assert_eq!(result.range.start.line, 0);
+        assert_eq!(result.range.start.character, 3);
+        assert_eq!(result.range.end.character, 9);
+    }
+}

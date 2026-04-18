@@ -349,3 +349,67 @@ fn uri_to_filename(uri: &str) -> String {
         uri.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
+
+    struct TestHost {
+        sources: HashMap<String, Vec<u8>>,
+    }
+
+    impl TestHost {
+        fn new(path: &str, source: &str) -> Self {
+            let mut sources = HashMap::new();
+            sources.insert(path.to_string(), source.as_bytes().to_vec());
+            Self { sources }
+        }
+    }
+
+    impl CompilerHost for TestHost {
+        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+            self.sources
+                .get(path)
+                .cloned()
+                .ok_or_else(|| SourceError::NotFound {
+                    path: path.to_string(),
+                })
+        }
+
+        fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
+    }
+
+    async fn hover_at(source: &str, line: u32, character: u32) -> Option<HoverResult> {
+        let path = "/test.wado";
+        let uri = format!("file://{path}");
+        let host = TestHost::new(path, source);
+        find_hover(source, Position { line, character }, &uri, &host).await
+    }
+
+    #[tokio::test]
+    async fn local_var_hover() {
+        let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
+        let result = hover_at(source, 2, 11).await.expect("hover on x");
+        assert_eq!(result.contents, "```wado\nlet x: i32\n```");
+    }
+
+    #[tokio::test]
+    async fn param_hover() {
+        let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
+        let result = hover_at(source, 1, 11).await.expect("hover on a");
+        assert_eq!(result.contents, "```wado\na: i32\n```");
+    }
+
+    #[tokio::test]
+    async fn fn_hover() {
+        let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\nfn run() -> i32 {\n    return add(1, 2);\n}\n";
+        let result = hover_at(source, 4, 12).await.expect("hover on add call");
+        assert!(
+            result.contents.contains("fn add(a: i32, b: i32) -> i32"),
+            "got: {}",
+            result.contents
+        );
+    }
+}
