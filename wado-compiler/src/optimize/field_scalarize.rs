@@ -932,20 +932,20 @@ fn scalarize_loop(
 
     // Step 5: Replace field accesses in the loop body, and insert write-back/re-read
     // around function calls (only for fields the callee actually accesses).
-    // Collect all labels defined within the loop body: breaks targeting these labels
-    // stay within the HFS scope and don't need write-back.
-    let inner_labels = {
-        let mut labels = IndexSet::default();
-        collect_inner_labels(loop_body, &mut labels);
-        labels
-    };
+    // Track labels that lexically ENCLOSE the current position inside the loop body:
+    // a break targeting one of those stays in the HFS scope (no write-back needed),
+    // while a break to any other label escapes and requires a write-back. Using a
+    // dynamic set matches TIR break resolution, which always binds to the nearest
+    // enclosing label — so a sibling LabeledBlock with the same name (e.g. one
+    // brought in by inlining) never shadows an outer break target.
+    let enclosing_labels = IndexSet::default();
     replace_in_block(
         loop_body,
         &candidates,
         local_types,
         type_table,
         cache,
-        &inner_labels,
+        &enclosing_labels,
         0,
     );
 
@@ -1354,136 +1354,11 @@ struct ReplaceCtx<'a> {
     local_types: &'a [TypeId],
     type_table: &'a TypeTable,
     cache: &'a FieldUsageCache,
-    inner_labels: &'a IndexSet<String>,
+    /// Labels of `LabeledBlock`s that lexically enclose the current position.
+    /// A `break` whose target is in this set stays within the HFS scope; any
+    /// other target escapes and requires a write-back before the break.
+    enclosing_labels: &'a IndexSet<String>,
     loop_depth: usize,
-}
-
-/// Collect all labels defined within a block (at any nesting depth).
-/// Used to determine whether a `break` targets an inner scope (no write-back
-/// needed) or escapes the current block (write-back needed).
-fn collect_inner_labels(block: &TirBlock, labels: &mut IndexSet<String>) {
-    for stmt in &block.stmts {
-        collect_inner_labels_in_stmt(stmt, labels);
-    }
-}
-
-fn collect_inner_labels_in_stmt(stmt: &TirStmt, labels: &mut IndexSet<String>) {
-    match &stmt.kind {
-        TirStmtKind::LabeledBlock { label, block } => {
-            labels.insert(label.clone());
-            collect_inner_labels(block, labels);
-        }
-        TirStmtKind::If {
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_inner_labels(then_block, labels);
-            if let Some(eb) = else_block {
-                collect_inner_labels(eb, labels);
-            }
-        }
-        TirStmtKind::IfLet {
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_inner_labels(then_block, labels);
-            if let Some(eb) = else_block {
-                collect_inner_labels(eb, labels);
-            }
-        }
-        TirStmtKind::Loop { body } => {
-            collect_inner_labels(body, labels);
-        }
-        TirStmtKind::Expr(expr) => {
-            collect_inner_labels_in_expr(expr, labels);
-        }
-        TirStmtKind::Let { value, .. } => {
-            collect_inner_labels_in_expr(value, labels);
-        }
-        _ => {}
-    }
-}
-
-fn collect_inner_labels_in_expr(expr: &TirExpr, labels: &mut IndexSet<String>) {
-    match &expr.kind {
-        TirExprKind::LabeledBlock { label, block, .. } => {
-            labels.insert(label.clone());
-            collect_inner_labels(block, labels);
-        }
-        TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. } => {
-            collect_inner_labels_in_expr(inner, labels);
-        }
-        TirExprKind::Binary { left, right, .. }
-        | TirExprKind::Assign {
-            target: left,
-            value: right,
-        } => {
-            collect_inner_labels_in_expr(left, labels);
-            collect_inner_labels_in_expr(right, labels);
-        }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_inner_labels_in_expr(&arg.expr, labels);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            collect_inner_labels_in_expr(receiver, labels);
-            for arg in args {
-                collect_inner_labels_in_expr(&arg.expr, labels);
-            }
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_inner_labels_in_expr(condition, labels);
-            collect_inner_labels(then_branch, labels);
-            if let Some(eb) = else_branch {
-                collect_inner_labels(eb, labels);
-            }
-        }
-        TirExprKind::Block(block) => {
-            collect_inner_labels(block, labels);
-        }
-        TirExprKind::Index { expr: e, index } => {
-            collect_inner_labels_in_expr(e, labels);
-            collect_inner_labels_in_expr(index, labels);
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_inner_labels_in_expr(&field.value, labels);
-            }
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                collect_inner_labels_in_expr(elem, labels);
-            }
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_inner_labels_in_expr(scrutinee, labels);
-            for arm in arms {
-                collect_inner_labels(arm, labels);
-            }
-            collect_inner_labels(default, labels);
-        }
-        TirExprKind::Match { expr: e, arms } => {
-            collect_inner_labels_in_expr(e, labels);
-            for arm in arms {
-                collect_inner_labels_in_expr(&arm.body, labels);
-            }
-        }
-        _ => {}
-    }
 }
 
 fn replace_in_block(
@@ -1492,14 +1367,14 @@ fn replace_in_block(
     local_types: &[TypeId],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
-    inner_labels: &IndexSet<String>,
+    enclosing_labels: &IndexSet<String>,
     loop_depth: usize,
 ) {
     let ctx = ReplaceCtx {
         local_types,
         type_table,
         cache,
-        inner_labels,
+        enclosing_labels,
         loop_depth,
     };
     let span = crate::token::Span::new(0, 0, 0, 0);
@@ -1544,7 +1419,7 @@ fn replace_in_block(
                     local_types,
                     type_table,
                     cache,
-                    inner_labels,
+                    enclosing_labels,
                     loop_depth,
                 );
                 if let Some(eb) = else_block {
@@ -1554,7 +1429,7 @@ fn replace_in_block(
                         local_types,
                         type_table,
                         cache,
-                        inner_labels,
+                        enclosing_labels,
                         loop_depth,
                     );
                 }
@@ -1599,7 +1474,7 @@ fn replace_in_block(
                     local_types,
                     type_table,
                     cache,
-                    inner_labels,
+                    enclosing_labels,
                     loop_depth,
                 );
                 if let Some(eb) = else_block {
@@ -1609,7 +1484,7 @@ fn replace_in_block(
                         local_types,
                         type_table,
                         cache,
-                        inner_labels,
+                        enclosing_labels,
                         loop_depth,
                     );
                 }
@@ -1628,20 +1503,25 @@ fn replace_in_block(
                     local_types,
                     type_table,
                     cache,
-                    inner_labels,
+                    enclosing_labels,
                     loop_depth + 1,
                 );
                 new_stmts.push(stmt);
                 continue;
             }
-            TirStmtKind::LabeledBlock { block: inner, .. } => {
+            TirStmtKind::LabeledBlock {
+                label,
+                block: inner,
+            } => {
+                let mut extended = enclosing_labels.clone();
+                extended.insert(label.clone());
                 replace_in_block(
                     inner,
                     candidates,
                     local_types,
                     type_table,
                     cache,
-                    inner_labels,
+                    &extended,
                     loop_depth,
                 );
                 new_stmts.push(stmt);
@@ -1667,7 +1547,7 @@ fn replace_in_block(
                             local_types,
                             type_table,
                             cache,
-                            inner_labels,
+                            enclosing_labels,
                             loop_depth,
                         );
                     }
@@ -1677,7 +1557,7 @@ fn replace_in_block(
                         local_types,
                         type_table,
                         cache,
-                        inner_labels,
+                        enclosing_labels,
                         loop_depth,
                     );
                 }
@@ -1687,17 +1567,20 @@ fn replace_in_block(
             _ => {}
         }
 
-        // Insert write-back before return/break statements that escape this
-        // block's scope. Breaks targeting labels defined *within* this block
-        // stay in scope (the block's own exit handles write-back), so they
-        // are excluded.
+        // Insert write-back before return/break statements that escape the HFS
+        // scope. A `break` whose target is a label that lexically ENCLOSES this
+        // statement stays within the HFS scope (the block's own exit handles
+        // write-back). Any other `break` target escapes, so we must write back
+        // first. Matching by lexical enclosure (not by name-anywhere-in-scope)
+        // matches TIR break resolution and is required when inlining brings in
+        // a sibling labeled block that reuses a label name.
         //
         // Exception: unlabeled `break` at loop_depth 0 exits the HFS loop
         // directly — the post-loop write-backs handle the sync, so we skip
         // inserting redundant write-backs here.
         if matches!(stmt.kind, TirStmtKind::Return { .. })
             || matches!(&stmt.kind, TirStmtKind::Break { label, .. }
-                if !label.as_ref().is_some_and(|l| inner_labels.contains(l.as_str())))
+                if !label.as_ref().is_some_and(|l| enclosing_labels.contains(l.as_str())))
         {
             replace_in_stmt(&mut stmt, candidates, &ctx);
             let skip_wb =
@@ -2395,19 +2278,23 @@ fn replace_in_expr(expr: &mut TirExpr, candidates: &[ScalarizeCandidate], ctx: &
                 replace_in_expr(p, candidates, ctx);
             }
         }
-        TirExprKind::LabeledBlock { block, .. } => {
+        TirExprKind::LabeledBlock { label, block, .. } => {
             // Use replace_in_block (with write-back/re-read sync) instead of
             // replace_in_block_stmts (field replacement only). This ensures
             // function calls inside labeled block expressions get proper
             // write-back/re-read around them, even when the labeled block
             // is nested inside a let value or other expression context.
+            // Extend the enclosing-labels set with this block's label so that
+            // a break targeting it is recognized as staying in the HFS scope.
+            let mut extended = ctx.enclosing_labels.clone();
+            extended.insert(label.clone());
             replace_in_block(
                 block,
                 candidates,
                 ctx.local_types,
                 ctx.type_table,
                 ctx.cache,
-                ctx.inner_labels,
+                &extended,
                 ctx.loop_depth,
             );
         }

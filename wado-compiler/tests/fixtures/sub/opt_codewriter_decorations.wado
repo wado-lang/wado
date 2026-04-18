@@ -1,0 +1,18 @@
+// Helper with two C-style for-loops used by opt_codewriter_miscompile.wado.
+//
+// Because this file has its own module-level loop counter (starting at 0),
+// the two for-loops get labels __for_0 and __for_1.  When inlined into
+// emit_alts (whose outer HFS loop is ALSO __for_1 in the main module),
+// the old collect_inner_labels pass sees __for_1 inside the body and wrongly
+// concludes that `break __for_1` (the outer loop's exit) stays within scope,
+// so it omits the write-back and the indent_level scalar diverges from the
+// struct field.
+#[inline(always)]
+pub fn emit_decorations(buf: &mut String, hashes: i32, dots: i32) {
+    for let mut i = 0; i < hashes; i += 1 {
+        buf.push('#');
+    }
+    for let mut i = 0; i < dots; i += 1 {
+        buf.push('.');
+    }
+}

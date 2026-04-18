@@ -1,0 +1,133 @@
+// Miscompile pattern extracted from package-gale/src/lexer_gen.wado:gen_lexer_alts.
+//
+// Runtime failure (gale at -O3 --optimize-inline-threshold 18+):
+//   `CodeWriter: unbalanced indentation (level=N>0)` inside `CodeWriter::to_string`.
+//
+// Root cause (HFS pass in wado-compiler/src/optimize/field_scalarize.rs):
+// `collect_inner_labels` flattened every label name anywhere in the loop body.
+// When a callee that was inlined into the HFS scope defines a label with the
+// same name as the outer for-of's own label block, HFS mistakes `break __for_1`
+// — which targets the outer block that encloses the whole HFS scope — as
+// "staying within scope", skips the write-back before the break, and the
+// N-1 `end()` decrements accumulated in the scalar are never flushed back.
+//
+// The collision is triggered here by splitting emit_decorations into a separate
+// sub-module (sub/opt_codewriter_decorations.wado).  That module has its own
+// loop counter starting at 0, so its two C-style for-loops get labels __for_0
+// and __for_1.  In this main module, write_indent's loop is __for_0, making
+// emit_alts's outer loop __for_1 — the same name as emit_decorations's second
+// loop.  The #[inline(always)] attribute forces inlining at any optimisation
+// level, so the collision (and thus the miscompile) fires at default -O2.
+//
+// Shape of the miscompiled caller:
+//
+//   for let mut i = 0; i < N; i += 1 {     ← HFS scope, label __for_1
+//       if i > 0 { w.begin(...); }
+//       w.begin(...);
+//       opaque_call(w);       // forces HFS to flush + re-read
+//       w.end();
+//   }
+//   for let mut i = 1; i < N; i += 1 {
+//       w.end();              // after the fix these run and re-balance
+//   }
+
+use { emit_decorations } from "./sub/opt_codewriter_decorations.wado";
+
+pub struct Writer {
+    buf: String,
+    indent_level: i32,
+    fresh_line: bool,
+    id_counter: i32,
+}
+
+impl Writer {
+    pub fn new() -> Writer {
+        return Writer {
+            buf: String::with_capacity(64),
+            indent_level: 0,
+            fresh_line: true,
+            id_counter: 0,
+        };
+    }
+
+    #[inline(always)]
+    fn next_id(&mut self) -> i32 {
+        self.id_counter += 1;
+        return self.id_counter;
+    }
+
+    #[inline(always)]
+    fn write_indent(&mut self) {
+        for let mut i = 0; i < self.indent_level; i += 1 {
+            self.buf.push_str("    ");
+        }
+    }
+
+    #[inline(always)]
+    pub fn line(&mut self, text: &String) {
+        self.write_indent();
+        self.buf.push_str(*text);
+        self.buf.push('\n');
+        self.fresh_line = true;
+    }
+
+    #[inline(always)]
+    pub fn begin(&mut self, opener: &String) {
+        self.write_indent();
+        self.buf.push_str(*opener);
+        self.buf.push_str(" {\n");
+        self.fresh_line = true;
+        self.indent_level += 1;
+    }
+
+    #[inline(always)]
+    pub fn end(&mut self) {
+        self.indent_level -= 1;
+        self.write_indent();
+        self.buf.push_str("}\n");
+        self.fresh_line = true;
+    }
+}
+
+#[inline(never)]
+fn emit_body(w: &mut Writer, tag: &String) {
+    w.line(`pos = saved_{*tag};`);
+    w.line(`body_{*tag};`);
+    w.line(`ok_{*tag} = true;`);
+}
+
+// emit_alts's outer for-loop gets label __for_1 in this module's counter
+// (write_indent's loop above consumed __for_0).  emit_decorations (imported
+// from the sub-module) is #[inline(always)] and its second loop is ALSO
+// labelled __for_1 in that module's counter.  The name collision is what
+// the HFS fix corrects.
+#[inline(never)]
+fn emit_alts(w: &mut Writer, n: i32) {
+    let id = w.next_id();
+    w.line(`let saved_{id} = pos;`);
+    w.line(`let mut ok_{id} = false;`);
+    for let mut i = 0; i < n; i += 1 {
+        if i > 0 {
+            w.begin(`if !ok_{id}`);
+        }
+        w.begin(`label_{id}:`);
+        emit_decorations(&mut w.buf, 1, 0);
+        emit_body(w, `{id}`);
+        w.end();
+    }
+    for let mut i = 1; i < n; i += 1 {
+        w.end();
+    }
+    w.line(`if !ok_{id} \{ return -1; \}`);
+}
+
+export fn run() {
+    let mut w = Writer::new();
+    emit_alts(&mut w, 3);
+    assert w.indent_level == 0, `expected level=0, got {w.indent_level}`;
+    emit_alts(&mut w, 4);
+    assert w.indent_level == 0, `expected level=0, got {w.indent_level}`;
+}
+
+__DATA__
+{"stdout": ""}
