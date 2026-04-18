@@ -1,15 +1,21 @@
 use std::path::PathBuf;
 
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use wado_lsp::Diagnostic;
 
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::lsp_type::{
+    self, JsonRpcError, JsonRpcErrorResponse, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse,
+    PublishDiagnosticsParams,
+};
+
+const JSONRPC_VERSION: &str = "2.0";
 
 /// Read one JSON-RPC message (Content-Length framed).
 pub async fn read_message<R: tokio::io::AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
-) -> Result<Option<Value>, String> {
+) -> Result<Option<JsonRpcRequest>, String> {
     let mut content_length: Option<usize> = None;
     loop {
         let mut header = String::new();
@@ -45,12 +51,7 @@ pub async fn read_message<R: tokio::io::AsyncRead + Unpin>(
         .map_err(|e| format!("invalid JSON: {e}"))
 }
 
-/// Write one JSON-RPC message (Content-Length framed).
-pub async fn write_message<W: AsyncWrite + Unpin>(
-    writer: &mut W,
-    msg: &Value,
-) -> Result<(), String> {
-    let body = serde_json::to_string(msg).map_err(|e| format!("serialize error: {e}"))?;
+async fn write_serialized<W: AsyncWrite + Unpin>(writer: &mut W, body: String) -> Result<(), String> {
     let header = format!("Content-Length: {}\r\n\r\n", body.len());
     writer
         .write_all(header.as_bytes())
@@ -67,38 +68,34 @@ pub async fn write_message<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
-/// Send a JSON-RPC response.
-pub async fn send_response<W: AsyncWrite + Unpin>(
+/// Send a typed JSON-RPC response.
+pub async fn send_response<W: AsyncWrite + Unpin, T: Serialize>(
     writer: &mut W,
     id: &Value,
-    result: Value,
+    result: T,
 ) -> Result<(), String> {
-    write_message(
-        writer,
-        &json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": result,
-        }),
-    )
-    .await
+    let msg = JsonRpcResponse {
+        jsonrpc: JSONRPC_VERSION,
+        id,
+        result,
+    };
+    let body = serde_json::to_string(&msg).map_err(|e| format!("serialize error: {e}"))?;
+    write_serialized(writer, body).await
 }
 
-/// Send a JSON-RPC notification (no id).
-pub async fn send_notification<W: AsyncWrite + Unpin>(
+/// Send a typed JSON-RPC notification.
+pub async fn send_notification<W: AsyncWrite + Unpin, T: Serialize>(
     writer: &mut W,
-    method: &str,
-    params: Value,
+    method: &'static str,
+    params: T,
 ) -> Result<(), String> {
-    write_message(
-        writer,
-        &json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-        }),
-    )
-    .await
+    let msg = JsonRpcNotification {
+        jsonrpc: JSONRPC_VERSION,
+        method,
+        params,
+    };
+    let body = serde_json::to_string(&msg).map_err(|e| format!("serialize error: {e}"))?;
+    write_serialized(writer, body).await
 }
 
 /// Send a JSON-RPC error response.
@@ -108,42 +105,36 @@ pub async fn send_error<W: AsyncWrite + Unpin>(
     code: i32,
     message: String,
 ) -> Result<(), String> {
-    write_message(
-        writer,
-        &json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": { "code": code, "message": message },
-        }),
-    )
-    .await
+    let msg = JsonRpcErrorResponse {
+        jsonrpc: JSONRPC_VERSION,
+        id,
+        error: JsonRpcError { code, message },
+    };
+    let body = serde_json::to_string(&msg).map_err(|e| format!("serialize error: {e}"))?;
+    write_serialized(writer, body).await
 }
 
-/// Convert engine diagnostics to LSP JSON format.
-pub fn diagnostics_to_json(diagnostics: &[Diagnostic]) -> Value {
-    Value::Array(
-        diagnostics
-            .iter()
-            .map(|d| {
-                json!({
-                    "range": {
-                        "start": {
-                            "line": d.range.start.line,
-                            "character": d.range.start.character,
-                        },
-                        "end": {
-                            "line": d.range.end.line,
-                            "character": d.range.end.character,
-                        },
-                    },
-                    "severity": d.severity as u32,
-                    "code": d.code,
-                    "source": "wado",
-                    "message": d.message,
-                })
-            })
-            .collect(),
-    )
+/// Convert engine diagnostics to LSP diagnostics.
+pub fn diagnostics_to_lsp(diagnostics: &[wado_lsp::Diagnostic]) -> Vec<lsp_type::Diagnostic> {
+    diagnostics
+        .iter()
+        .map(|d| lsp_type::Diagnostic {
+            range: lsp_type::Range {
+                start: lsp_type::Position {
+                    line: d.range.start.line,
+                    character: d.range.start.character,
+                },
+                end: lsp_type::Position {
+                    line: d.range.end.line,
+                    character: d.range.end.character,
+                },
+            },
+            severity: Some(d.severity as u32),
+            code: Some(d.code.clone()),
+            source: Some("wado".to_string()),
+            message: d.message.clone(),
+        })
+        .collect()
 }
 
 /// Build a silent filesystem host rooted at the directory containing `uri`.
@@ -163,16 +154,10 @@ pub async fn publish_diagnostics<W: AsyncWrite + Unpin>(
     writer: &mut W,
 ) -> Result<(), String> {
     let host = host_for_uri(uri);
-
     let diagnostics = engine.diagnostics(uri, &host).await;
-
-    send_notification(
-        writer,
-        "textDocument/publishDiagnostics",
-        json!({
-            "uri": uri,
-            "diagnostics": diagnostics_to_json(&diagnostics),
-        }),
-    )
-    .await
+    let params = PublishDiagnosticsParams {
+        uri: uri.to_string(),
+        diagnostics: diagnostics_to_lsp(&diagnostics),
+    };
+    send_notification(writer, "textDocument/publishDiagnostics", params).await
 }
