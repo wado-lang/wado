@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776467598972,
+  "lastUpdate": 1776472046392,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13805,6 +13805,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 18727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "166b37057ed76dd1518051b49df794c5e39aaf5b",
+          "message": "Merge pull request #865 from wado-lang/claude/add-sql-highlight-benchmark-lSpWJ\n\nAdd sqlite_highlight wasm-size comparison (Gale vs tree-sitter)",
+          "timestamp": "2026-04-18T09:23:50+09:00",
+          "tree_id": "836cb8eeb50ff5ae8a0ad40f3dd2c432093c55e6",
+          "url": "https://github.com/wado-lang/wado/commit/166b37057ed76dd1518051b49df794c5e39aaf5b"
+        },
+        "date": 1776472046108,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 664108,
             "unit": "bytes"
           }
         ]
