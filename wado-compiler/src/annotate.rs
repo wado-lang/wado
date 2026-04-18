@@ -112,7 +112,8 @@ impl Annotated {
     #[must_use]
     pub fn references_to(&self, def_key: &SymbolKey) -> Vec<SymbolKey> {
         self.iter_references()
-            .filter_map(|(use_key, target)| (target == def_key).then(|| use_key.clone()))
+            .filter(|&(_use_key, target)| target == def_key)
+            .map(|(use_key, _target)| use_key.clone())
             .collect()
     }
 
