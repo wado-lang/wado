@@ -411,91 +411,107 @@ mod tests {
         find_hover(source, Position { line, character }, &uri, &host).await
     }
 
-    #[tokio::test]
-    async fn local_var_hover() {
-        let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
-        let result = hover_at(source, 2, 11).await.expect("hover on x");
-        assert_eq!(result.contents.value, "```wado\nlet x: i32\n```");
+    #[test]
+    fn local_var_hover() {
+        futures::executor::block_on(async {
+            let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
+            let result = hover_at(source, 2, 11).await.expect("hover on x");
+            assert_eq!(result.contents.value, "```wado\nlet x: i32\n```");
+        });
     }
 
-    #[tokio::test]
-    async fn param_hover() {
-        let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
-        let result = hover_at(source, 1, 11).await.expect("hover on a");
-        assert_eq!(result.contents.value, "```wado\na: i32\n```");
+    #[test]
+    fn param_hover() {
+        futures::executor::block_on(async {
+            let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
+            let result = hover_at(source, 1, 11).await.expect("hover on a");
+            assert_eq!(result.contents.value, "```wado\na: i32\n```");
+        });
     }
 
-    #[tokio::test]
-    async fn fn_hover() {
-        let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\nfn run() -> i32 {\n    return add(1, 2);\n}\n";
-        let result = hover_at(source, 4, 12).await.expect("hover on add call");
-        assert!(
-            result
-                .contents
-                .value
-                .contains("fn add(a: i32, b: i32) -> i32"),
-            "got: {}",
-            result.contents.value
-        );
+    #[test]
+    fn fn_hover() {
+        futures::executor::block_on(async {
+            let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\nfn run() -> i32 {\n    return add(1, 2);\n}\n";
+            let result = hover_at(source, 4, 12).await.expect("hover on add call");
+            assert!(
+                result
+                    .contents
+                    .value
+                    .contains("fn add(a: i32, b: i32) -> i32"),
+                "got: {}",
+                result.contents.value
+            );
+        });
     }
 
-    #[tokio::test]
-    async fn let_mut_hover() {
-        let source = "fn f() -> i32 {\n    let mut x: i32 = 1;\n    return x;\n}\n";
-        let result = hover_at(source, 2, 11).await.expect("hover on x");
-        assert_eq!(result.contents.value, "```wado\nlet mut x: i32\n```");
+    #[test]
+    fn let_mut_hover() {
+        futures::executor::block_on(async {
+            let source = "fn f() -> i32 {\n    let mut x: i32 = 1;\n    return x;\n}\n";
+            let result = hover_at(source, 2, 11).await.expect("hover on x");
+            assert_eq!(result.contents.value, "```wado\nlet mut x: i32\n```");
+        });
     }
 
-    #[tokio::test]
-    async fn destructured_field_hover() {
-        let source = concat!(
-            "struct Point { x: i32, y: i32 }\n",
-            "fn f(p: Point) -> i32 {\n",
-            "    let { x, y } = p;\n",
-            "    return x;\n",
-            "}\n",
-        );
-        let result = hover_at(source, 3, 11).await.expect("hover on x");
-        assert_eq!(result.contents.value, "```wado\nlet x\n```");
+    #[test]
+    fn destructured_field_hover() {
+        futures::executor::block_on(async {
+            let source = concat!(
+                "struct Point { x: i32, y: i32 }\n",
+                "fn f(p: Point) -> i32 {\n",
+                "    let { x, y } = p;\n",
+                "    return x;\n",
+                "}\n",
+            );
+            let result = hover_at(source, 3, 11).await.expect("hover on x");
+            assert_eq!(result.contents.value, "```wado\nlet x\n```");
+        });
     }
 
-    #[tokio::test]
-    async fn closure_param_hover() {
-        let source = concat!(
-            "fn f() -> i32 {\n",
-            "    let g = |x: i32| x + 1;\n",
-            "    return g(1);\n",
-            "}\n",
-        );
-        let result = hover_at(source, 1, 21).await.expect("hover on x");
-        assert_eq!(result.contents.value, "```wado\n|x: i32|\n```");
+    #[test]
+    fn closure_param_hover() {
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn f() -> i32 {\n",
+                "    let g = |x: i32| x + 1;\n",
+                "    return g(1);\n",
+                "}\n",
+            );
+            let result = hover_at(source, 1, 21).await.expect("hover on x");
+            assert_eq!(result.contents.value, "```wado\n|x: i32|\n```");
+        });
     }
 
-    #[tokio::test]
-    async fn if_let_binding_hover() {
-        let source = concat!(
-            "fn f(opt: Option<i32>) -> i32 {\n",
-            "    if let Some(v) = opt {\n",
-            "        return v;\n",
-            "    }\n",
-            "    return 0;\n",
-            "}\n",
-        );
-        let result = hover_at(source, 2, 15).await.expect("hover on v");
-        assert_eq!(result.contents.value, "```wado\nlet v\n```");
+    #[test]
+    fn if_let_binding_hover() {
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn f(opt: Option<i32>) -> i32 {\n",
+                "    if let Some(v) = opt {\n",
+                "        return v;\n",
+                "    }\n",
+                "    return 0;\n",
+                "}\n",
+            );
+            let result = hover_at(source, 2, 15).await.expect("hover on v");
+            assert_eq!(result.contents.value, "```wado\nlet v\n```");
+        });
     }
 
-    #[tokio::test]
-    async fn match_arm_binding_hover() {
-        let source = concat!(
-            "fn f(opt: Option<i32>) -> i32 {\n",
-            "    return match opt {\n",
-            "        Some(v) => v,\n",
-            "        None => 0,\n",
-            "    };\n",
-            "}\n",
-        );
-        let result = hover_at(source, 2, 19).await.expect("hover on v");
-        assert_eq!(result.contents.value, "```wado\nlet v\n```");
+    #[test]
+    fn match_arm_binding_hover() {
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn f(opt: Option<i32>) -> i32 {\n",
+                "    return match opt {\n",
+                "        Some(v) => v,\n",
+                "        None => 0,\n",
+                "    };\n",
+                "}\n",
+            );
+            let result = hover_at(source, 2, 19).await.expect("hover on v");
+            assert_eq!(result.contents.value, "```wado\nlet v\n```");
+        });
     }
 }

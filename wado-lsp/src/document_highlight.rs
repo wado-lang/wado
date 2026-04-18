@@ -392,61 +392,69 @@ mod tests {
             .collect()
     }
 
-    #[tokio::test]
-    async fn read_only_uses() {
-        let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x + x;\n}\n";
-        let hl = highlights_at(source, 1, 8).await;
-        assert_eq!(
-            summarize(&hl),
-            vec![
-                (1, 8, HighlightKind::Write),
-                (2, 11, HighlightKind::Read),
-                (2, 15, HighlightKind::Read),
-            ]
-        );
+    #[test]
+    fn read_only_uses() {
+        futures::executor::block_on(async {
+            let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x + x;\n}\n";
+            let hl = highlights_at(source, 1, 8).await;
+            assert_eq!(
+                summarize(&hl),
+                vec![
+                    (1, 8, HighlightKind::Write),
+                    (2, 11, HighlightKind::Read),
+                    (2, 15, HighlightKind::Read),
+                ]
+            );
+        });
     }
 
-    #[tokio::test]
-    async fn assignment_marks_target_as_write() {
-        let source =
-            "fn f() {\n    let mut x: i32 = 0;\n    x = 1;\n    x += 2;\n    let y = x;\n}\n";
-        let hl = highlights_at(source, 1, 12).await;
-        assert_eq!(
-            summarize(&hl),
-            vec![
-                (1, 12, HighlightKind::Write),
-                (2, 4, HighlightKind::Write),
-                (3, 4, HighlightKind::Write),
-                (4, 12, HighlightKind::Read),
-            ]
-        );
+    #[test]
+    fn assignment_marks_target_as_write() {
+        futures::executor::block_on(async {
+            let source =
+                "fn f() {\n    let mut x: i32 = 0;\n    x = 1;\n    x += 2;\n    let y = x;\n}\n";
+            let hl = highlights_at(source, 1, 12).await;
+            assert_eq!(
+                summarize(&hl),
+                vec![
+                    (1, 12, HighlightKind::Write),
+                    (2, 4, HighlightKind::Write),
+                    (3, 4, HighlightKind::Write),
+                    (4, 12, HighlightKind::Read),
+                ]
+            );
+        });
     }
 
-    #[tokio::test]
-    async fn cursor_on_use_site_works() {
-        let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x + x;\n}\n";
-        let hl = highlights_at(source, 2, 11).await;
-        assert_eq!(
-            summarize(&hl),
-            vec![
-                (1, 8, HighlightKind::Write),
-                (2, 11, HighlightKind::Read),
-                (2, 15, HighlightKind::Read),
-            ]
-        );
+    #[test]
+    fn cursor_on_use_site_works() {
+        futures::executor::block_on(async {
+            let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x + x;\n}\n";
+            let hl = highlights_at(source, 2, 11).await;
+            assert_eq!(
+                summarize(&hl),
+                vec![
+                    (1, 8, HighlightKind::Write),
+                    (2, 11, HighlightKind::Read),
+                    (2, 15, HighlightKind::Read),
+                ]
+            );
+        });
     }
 
-    #[tokio::test]
-    async fn function_highlights_within_file() {
-        let source = "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    return helper() + helper();\n}\n";
-        let hl = highlights_at(source, 0, 4).await;
-        assert_eq!(
-            summarize(&hl),
-            vec![
-                (0, 3, HighlightKind::Write),
-                (4, 11, HighlightKind::Read),
-                (4, 22, HighlightKind::Read),
-            ]
-        );
+    #[test]
+    fn function_highlights_within_file() {
+        futures::executor::block_on(async {
+            let source = "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    return helper() + helper();\n}\n";
+            let hl = highlights_at(source, 0, 4).await;
+            assert_eq!(
+                summarize(&hl),
+                vec![
+                    (0, 3, HighlightKind::Write),
+                    (4, 11, HighlightKind::Read),
+                    (4, 22, HighlightKind::Read),
+                ]
+            );
+        });
     }
 }

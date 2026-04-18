@@ -133,8 +133,9 @@ pub async fn dispatch<W: Write>(
         }
         "textDocument/definition" => {
             if let Some(id) = id {
-                let Some(p) =
-                    transport::decode_or_error::<TextDocumentPositionParams, _>(writer, id, params)?
+                let Some(p) = transport::decode_or_error::<TextDocumentPositionParams, _>(
+                    writer, id, params,
+                )?
                 else {
                     return Ok(());
                 };
@@ -147,8 +148,9 @@ pub async fn dispatch<W: Write>(
         }
         "textDocument/hover" => {
             if let Some(id) = id {
-                let Some(p) =
-                    transport::decode_or_error::<TextDocumentPositionParams, _>(writer, id, params)?
+                let Some(p) = transport::decode_or_error::<TextDocumentPositionParams, _>(
+                    writer, id, params,
+                )?
                 else {
                     return Ok(());
                 };
@@ -159,8 +161,7 @@ pub async fn dispatch<W: Write>(
         }
         "textDocument/references" => {
             if let Some(id) = id {
-                let Some(p) =
-                    transport::decode_or_error::<ReferenceParams, _>(writer, id, params)?
+                let Some(p) = transport::decode_or_error::<ReferenceParams, _>(writer, id, params)?
                 else {
                     return Ok(());
                 };
@@ -178,8 +179,9 @@ pub async fn dispatch<W: Write>(
         }
         "textDocument/documentHighlight" => {
             if let Some(id) = id {
-                let Some(p) =
-                    transport::decode_or_error::<TextDocumentPositionParams, _>(writer, id, params)?
+                let Some(p) = transport::decode_or_error::<TextDocumentPositionParams, _>(
+                    writer, id, params,
+                )?
                 else {
                     return Ok(());
                 };

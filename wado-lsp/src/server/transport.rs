@@ -35,9 +35,7 @@ pub enum ReadError {
 ///
 /// Returns `Ok(None)` on clean EOF, `Err(ReadError::Parse)` for malformed
 /// framing or JSON bodies, and `Err(ReadError::Io)` for transport failures.
-pub fn read_message<R: BufRead>(
-    reader: &mut R,
-) -> Result<Option<JsonRpcRequest>, ReadError> {
+pub fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<JsonRpcRequest>, ReadError> {
     let mut content_length: Option<usize> = None;
     loop {
         let mut header = String::new();
@@ -133,11 +131,7 @@ pub fn send_error<W: Write>(
 /// Decode request params. On failure, send an `InvalidParams` error response
 /// to the client and return `Ok(None)` so the caller can skip the request.
 /// Returns `Err` only if the error response itself fails to write.
-pub fn decode_or_error<P, W>(
-    writer: &mut W,
-    id: &Value,
-    params: Value,
-) -> Result<Option<P>, String>
+pub fn decode_or_error<P, W>(writer: &mut W, id: &Value, params: Value) -> Result<Option<P>, String>
 where
     P: DeserializeOwned,
     W: Write,

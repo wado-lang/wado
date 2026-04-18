@@ -157,51 +157,63 @@ mod tests {
             .collect()
     }
 
-    #[tokio::test]
-    async fn local_var_uses() {
-        let source =
-            "fn f() -> i32 {\n    let x: i32 = 1;\n    let y = x + x;\n    return y + x;\n}\n";
-        let refs = refs_at(source, 1, 8, false).await;
-        assert_eq!(
-            ranges(&refs),
-            vec![(2, 12, 2, 13), (2, 16, 2, 17), (3, 15, 3, 16),]
-        );
+    #[test]
+    fn local_var_uses() {
+        futures::executor::block_on(async {
+            let source =
+                "fn f() -> i32 {\n    let x: i32 = 1;\n    let y = x + x;\n    return y + x;\n}\n";
+            let refs = refs_at(source, 1, 8, false).await;
+            assert_eq!(
+                ranges(&refs),
+                vec![(2, 12, 2, 13), (2, 16, 2, 17), (3, 15, 3, 16),]
+            );
+        });
     }
 
-    #[tokio::test]
-    async fn includes_declaration_when_requested() {
-        let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
-        let refs = refs_at(source, 1, 8, true).await;
-        assert_eq!(ranges(&refs), vec![(1, 8, 1, 9), (2, 11, 2, 12),]);
+    #[test]
+    fn includes_declaration_when_requested() {
+        futures::executor::block_on(async {
+            let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
+            let refs = refs_at(source, 1, 8, true).await;
+            assert_eq!(ranges(&refs), vec![(1, 8, 1, 9), (2, 11, 2, 12),]);
+        });
     }
 
-    #[tokio::test]
-    async fn function_references_from_call_site() {
-        let source = "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    let a = helper();\n    let b = helper();\n    return a + b;\n}\n";
-        // cursor on the declaration of `helper`
-        let refs = refs_at(source, 0, 4, false).await;
-        assert_eq!(ranges(&refs), vec![(4, 12, 4, 18), (5, 12, 5, 18),]);
+    #[test]
+    fn function_references_from_call_site() {
+        futures::executor::block_on(async {
+            let source = "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    let a = helper();\n    let b = helper();\n    return a + b;\n}\n";
+            // cursor on the declaration of `helper`
+            let refs = refs_at(source, 0, 4, false).await;
+            assert_eq!(ranges(&refs), vec![(4, 12, 4, 18), (5, 12, 5, 18),]);
+        });
     }
 
-    #[tokio::test]
-    async fn cursor_on_use_site_finds_all_uses() {
-        let source = "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    let a = helper();\n    let b = helper();\n    return a + b;\n}\n";
-        // cursor on the first call to `helper`
-        let refs = refs_at(source, 4, 13, false).await;
-        assert_eq!(ranges(&refs), vec![(4, 12, 4, 18), (5, 12, 5, 18),]);
+    #[test]
+    fn cursor_on_use_site_finds_all_uses() {
+        futures::executor::block_on(async {
+            let source = "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    let a = helper();\n    let b = helper();\n    return a + b;\n}\n";
+            // cursor on the first call to `helper`
+            let refs = refs_at(source, 4, 13, false).await;
+            assert_eq!(ranges(&refs), vec![(4, 12, 4, 18), (5, 12, 5, 18),]);
+        });
     }
 
-    #[tokio::test]
-    async fn param_references() {
-        let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
-        let refs = refs_at(source, 0, 7, false).await;
-        assert_eq!(ranges(&refs), vec![(1, 11, 1, 12)]);
+    #[test]
+    fn param_references() {
+        futures::executor::block_on(async {
+            let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
+            let refs = refs_at(source, 0, 7, false).await;
+            assert_eq!(ranges(&refs), vec![(1, 11, 1, 12)]);
+        });
     }
 
-    #[tokio::test]
-    async fn no_match_outside_identifier() {
-        let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
-        let refs = refs_at(source, 0, 0, false).await;
-        assert!(refs.is_empty(), "got: {refs:?}");
+    #[test]
+    fn no_match_outside_identifier() {
+        futures::executor::block_on(async {
+            let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
+            let refs = refs_at(source, 0, 0, false).await;
+            assert!(refs.is_empty(), "got: {refs:?}");
+        });
     }
 }
