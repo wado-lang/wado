@@ -18,10 +18,13 @@ pub use host::FilesystemCompilerHost;
 pub use hover::{HoverResult, MarkupContent, MarkupKind};
 pub use references::ReferenceLocation;
 
-/// Protocol-agnostic language service engine.
+/// Language service engine backing both the `wado-lsp` binary and direct
+/// library consumers.
 ///
-/// Manages open documents and provides language service queries (diagnostics, etc.).
-/// IO-free: all file access goes through `CompilerHost`. Compatible with `wasm32-unknown-unknown`.
+/// Manages open documents and answers LSP-style queries (diagnostics, hover,
+/// definition, references, document highlight, semantic tokens). `Engine`
+/// itself performs no I/O: every query takes a `&impl CompilerHost`, so the
+/// caller decides how imported modules are loaded.
 pub struct Engine {
     /// Open documents: URI → source text
     documents: IndexMap<String, String>,

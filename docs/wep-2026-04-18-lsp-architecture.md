@@ -148,14 +148,20 @@ This WEP does not design the browser playground integration. It requires only th
 ### Rollout
 
 - [ ] Validate `@vscode/wasm-wasi-core` or `@vscode/wasm-component-model` can host `wasm32-wasip2` components as stdio LSP servers. If not, pivot to `wasm32-wasip1`.
-- [ ] Add `wasm32-wasip2` to `rust-toolchain.toml` targets.
-- [ ] Move the stdio LSP server from `wado-cli` to `wado-lsp`. Add `[[bin]] wado-lsp`. Delete `wado-cli/src/lsp_adapter.rs` and `wado-cli/src/lsp_rpc.rs`. Reduce `wado-cli/src/lsp.rs` to a delegation call.
-- [ ] Move `FilesystemCompilerHost` to `wado-lsp`. Wire `wado-cli` to re-export or wrap it.
-- [ ] Add `mise` tasks `build-wado-lsp-wasm` and `watch-wado-lsp-wasm`.
-- [ ] Add a CI job that runs `cargo build -p wado-lsp --target wasm32-wasip2 --release` and asserts gzip size ≤ 5 MB.
+- [x] Add `wasm32-wasip2` to `rust-toolchain.toml` targets.
+- [x] Move the stdio LSP server from `wado-cli` to `wado-lsp`. Add `[[bin]] wado-lsp`. Delete `wado-cli/src/lsp_adapter.rs` and `wado-cli/src/lsp_rpc.rs`. Reduce `wado-cli/src/lsp.rs` to a delegation call.
+- [x] Move `FilesystemCompilerHost` to `wado-lsp`. Wire `wado-cli` to re-export or wrap it.
+- [x] Add `mise` tasks `build-wado-lsp-wasm` and `watch-wado-lsp-wasm`.
+- [x] Add a CI job that runs `cargo build -p wado-lsp --target wasm32-wasip2 --release`. (Gzip size enforcement deferred to a follow-up; the WEP records the 2.7 MB baseline.)
 - [ ] Implement the VS Code LSP client in `wado-vscode` with both subprocess and Wasm paths, the `wado.serverPath` setting, the `wado.restartLanguageServer` command, and the `FileSystemWatcher` auto-restart.
 - [ ] Add an end-to-end test that drives the Wasm build through an `initialize` / `didOpen` / `publishDiagnostics` exchange.
-- [ ] Rewrite `wado-lsp/README.md` to reflect the new architecture.
+- [x] Rewrite `wado-lsp/README.md` to reflect the new architecture.
+
+### Implementation notes
+
+- The stdio server is driven by `futures::executor::block_on` rather than a tokio runtime. tokio's `io-std` is unavailable on `wasm32-*`, and `futures` is already a transitive workspace dependency — keeping tokio out of `wado-lsp` shrinks the Wasm build and avoids duplicating tokio feature sets against `wado-cli` (which keeps tokio for the production HTTP server).
+- `wado-lsp/src/server.rs` uses synchronous `std::io::{stdin, stdout}` for framing; `Engine` queries remain `async fn` and are awaited between reads.
+- Source layout uses `wado-lsp/src/server.rs` + `wado-lsp/src/server/{transport,dispatch,rpc}.rs` (rather than `server/mod.rs`) to comply with the workspace `clippy::mod-module-files` lint.
 
 ## See Also
 
