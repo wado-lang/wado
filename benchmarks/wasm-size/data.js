@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776526984560,
+  "lastUpdate": 1776527189228,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14357,6 +14357,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dc914e53fdcdf256e848ce9f464e931d27e40c2e"
         },
         "date": 1776526984321,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dcbd318021cb2aad528fc7d995dc9b814a4a3e0c",
+          "message": "Merge pull request #879 from wado-lang/claude/plan-gale-ir-gaps-Lk2pb\n\nGale: close IR/codegen gaps for element options and `assoc=right`",
+          "timestamp": "2026-04-19T00:42:30+09:00",
+          "tree_id": "0e09541f212b3b4679ed6b4e34ad8a2268614c85",
+          "url": "https://github.com/wado-lang/wado/commit/dcbd318021cb2aad528fc7d995dc9b814a4a3e0c"
+        },
+        "date": 1776527189157,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
