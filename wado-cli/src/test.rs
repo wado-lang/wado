@@ -13,7 +13,7 @@ use wasmtime::Engine;
 use wasmtime::component::Component;
 
 use crate::args::{self, CliExit};
-use crate::compile;
+use crate::compile::{self, OptLevel};
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Epoch tick interval for wasmtime's epoch-based interruption.
@@ -27,6 +27,7 @@ pub struct TestOptions {
     pub paths: Vec<String>,
     pub filter: Option<String>,
     pub jobs: usize,
+    pub opt_level: OptLevel,
     /// Preopened directories as `(host_path, guest_path)` pairs.
     pub preopened_dirs: Vec<(String, String)>,
 }
@@ -35,6 +36,7 @@ pub struct TestOptions {
 enum Opt {
     Filter,
     Parallel,
+    OptLevel,
     Dir,
     NoDir,
     Help,
@@ -44,6 +46,7 @@ impl Opt {
     const ALL: &[Self] = &[
         Self::Filter,
         Self::Parallel,
+        Self::OptLevel,
         Self::Dir,
         Self::NoDir,
         Self::Help,
@@ -63,6 +66,7 @@ impl Opt {
                 value: Some("<N>"),
                 desc: "Number of parallel workers (default: num CPUs)",
             },
+            Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::Dir => args::OptSpec {
                 long: Some("dir"),
                 short: None,
@@ -158,6 +162,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut paths: Vec<String> = Vec::new();
     let mut filter: Option<String> = None;
     let mut jobs: Option<usize> = None;
+    let mut opt_level = OptLevel::default();
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
     let mut explicit_dirs = false;
     let mut no_dir = false;
@@ -175,6 +180,25 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                             return Err(CliExit::error("--parallel requires a positive integer"));
                         }
                     }
+                }
+                Opt::OptLevel => {
+                    let val = parser.optional_value();
+                    let level_str = val
+                        .as_ref()
+                        .map(|v| v.to_string_lossy())
+                        .unwrap_or_default();
+                    opt_level = match level_str.as_ref() {
+                        "" | "0" | "g" => OptLevel::O0,
+                        "1" => OptLevel::O1,
+                        "2" => OptLevel::O2,
+                        "3" => OptLevel::O3,
+                        "s" => OptLevel::Os,
+                        _ => {
+                            return Err(CliExit::error(format!(
+                                "unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
+                            )));
+                        }
+                    };
                 }
                 Opt::Dir => {
                     let dir_spec = args::require_string(&mut parser)?;
@@ -225,6 +249,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         paths,
         filter,
         jobs,
+        opt_level,
         preopened_dirs,
     })
 }
@@ -333,6 +358,7 @@ struct TodoCompileError {
 async fn collect_test_jobs(
     paths: &[String],
     filter: Option<&str>,
+    opt_level: OptLevel,
     overall_start: Instant,
 ) -> Result<(
     Vec<Arc<CompiledTestModule>>,
@@ -349,7 +375,7 @@ async fn collect_test_jobs(
         let compile_start = Instant::now();
         let compile_result = compile::try_compile_with_full_opts(
             path,
-            crate::compile::OptLevel::default(),
+            opt_level,
             wado_compiler::LogLevel::default(),
             Some("test".to_string()),
             false,
@@ -645,14 +671,20 @@ pub async fn run(opts: TestOptions) {
     let overall_start = Instant::now();
 
     // Phase 1: Compile all files and collect test jobs
-    let (modules, jobs, todo_compile_errors) =
-        match collect_test_jobs(&opts.paths, opts.filter.as_deref(), overall_start).await {
-            Ok(result) => result,
-            Err(e) => {
-                eprintln!("Error collecting tests: {e}");
-                process::exit(1);
-            }
-        };
+    let (modules, jobs, todo_compile_errors) = match collect_test_jobs(
+        &opts.paths,
+        opts.filter.as_deref(),
+        opts.opt_level,
+        overall_start,
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("Error collecting tests: {e}");
+            process::exit(1);
+        }
+    };
 
     let total_tests = jobs.len() + todo_compile_errors.len();
     if total_tests == 0 {

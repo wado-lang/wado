@@ -175,6 +175,72 @@ jobs:
 
       - run: mise run test-wado
 
+  test-gale-o1:
+    name: Test (Gale O1)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
+      - uses: rui314/setup-mold@v1
+
+      - uses: jdx/mise-action@v3
+        with:
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          MISE_VERBOSE: ${{ runner.debug }}
+
+      - run: mise run test-gale-o1
+
+  test-gale-o2:
+    name: Test (Gale O2)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
+      - uses: rui314/setup-mold@v1
+
+      - uses: jdx/mise-action@v3
+        with:
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          MISE_VERBOSE: ${{ runner.debug }}
+
+      - run: mise run test-gale-o2
+
+  test-gale-o3:
+    name: Test (Gale O3)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
+      - uses: rui314/setup-mold@v1
+
+      - uses: jdx/mise-action@v3
+        with:
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          MISE_VERBOSE: ${{ runner.debug }}
+
+      - run: mise run test-gale-o3
+
   check-wasm32:
     name: Check (wasm32)
     runs-on: ubuntu-latest
@@ -187,13 +253,25 @@ jobs:
   test:
     name: Test
     if: always()
-    needs: [test-core, test-wado, test-e2e-o0, test-e2e-o1, test-e2e-o3, test-e2e-os, check-wasm32]
+    needs:
+      [
+        test-core,
+        test-wado,
+        test-gale-o1,
+        test-gale-o2,
+        test-gale-o3,
+        test-e2e-o0,
+        test-e2e-o1,
+        test-e2e-o3,
+        test-e2e-os,
+        check-wasm32,
+      ]
     runs-on: ubuntu-latest
     permissions: {}
     steps:
       - name: Check all jobs passed
         run: |
-          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check-wasm32.result }}"
+          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-gale-o1.result }} ${{ needs.test-gale-o2.result }} ${{ needs.test-gale-o3.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check-wasm32.result }}"
           for result in $results; do
             if [ "$result" != "success" ]; then
               echo "One or more jobs failed"
