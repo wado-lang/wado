@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776527189228,
+  "lastUpdate": 1776551540078,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14401,6 +14401,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dcbd318021cb2aad528fc7d995dc9b814a4a3e0c"
         },
         "date": 1776527189157,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eb0cbe463a71dd7035c0d9f4546ed69ebd7ce741",
+          "message": "Merge pull request #880 from wado-lang/claude/fix-wasm32-compatibility-B50Tc\n\ndocs(kiln): delegate generator execution to CompilerHost",
+          "timestamp": "2026-04-19T07:28:27+09:00",
+          "tree_id": "d498d9fb3cf86f9ac8947d3d426ae4dfcc581b83",
+          "url": "https://github.com/wado-lang/wado/commit/eb0cbe463a71dd7035c0d9f4546ed69ebd7ce741"
+        },
+        "date": 1776551539794,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
