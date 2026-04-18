@@ -15,6 +15,9 @@ Compares WebAssembly binary sizes across different languages.
 - `hello_world` - Minimal "Hello, World!" program
 - `pi_approx` - Pi approximation using Leibniz formula (1M iterations)
 - `zlib` - gzip decompress from stdin (read gzip data from stdin, decompress, write to stdout)
+- `sqlite_highlight` - SQL syntax highlighter (reads SQL from stdin, writes HTML to stdout).
+  Wado uses the Gale-generated highlighter from `SQLite.g4`; Rust uses
+  `tree-sitter` + `tree-sitter-sequel`.
 
 ## Results
 
@@ -48,6 +51,15 @@ Reads gzip data from stdin and decompresses it.
 | zig      |       20,072 | stdin + gzip decompress (std.compress) |
 | c        |       33,439 | stdin + gzip decompress (zlib 1.3.1)   |
 | rust     |       88,014 | stdin + gzip decompress (zlib-rs)      |
+
+### sqlite_highlight
+
+Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
+
+| Language | Size (bytes) | Notes                                       |
+| -------- | -----------: | ------------------------------------------- |
+| wado     |      664,108 | Gale-generated highlighter from `SQLite.g4` |
+| rust     |    3,481,212 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage
 

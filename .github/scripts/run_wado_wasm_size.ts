@@ -13,6 +13,7 @@ const PROGRAMS: [string, string][] = [
   ['hello_world', 'wasm-size/hello_world/hello_world.wado'],
   ['pi_approx', 'wasm-size/pi_approx/pi_approx.wado'],
   ['zlib', 'wasm-size/zlib/zlib.wado'],
+  ['sqlite_highlight', 'wasm-size/sqlite_highlight/sqlite_highlight.wado'],
 ];
 
 const tmp = mkdtempSync(join(tmpdir(), 'wasm-size-'));
