@@ -167,8 +167,37 @@ fn symbol_char_names(c: char) -> Option<[String, String]> {
         '}' => Option::Some(["rbrace", "RBRACE"]),
         '[' => Option::Some(["lbracket", "LBRACKET"]),
         ']' => Option::Some(["rbracket", "RBRACKET"]),
+        '?' => Option::Some(["question", "QUESTION"]),
+        '@' => Option::Some(["at", "AT"]),
+        '#' => Option::Some(["hash", "HASH"]),
+        '$' => Option::Some(["dollar", "DOLLAR"]),
+        '\\' => Option::Some(["backslash", "BSLASH"]),
+        '`' => Option::Some(["backtick", "BTICK"]),
+        '"' => Option::Some(["dquote", "DQUOTE"]),
+        '\'' => Option::Some(["squote", "SQUOTE"]),
         _ => null,
     };
+}
+
+/// Lowercase hex representation of `c`'s Unicode scalar value, used as a
+/// collision-free fallback when a character has no entry in
+/// [`symbol_char_names`].  For ASCII this is two digits (e.g. `?` → `3f`).
+fn char_hex_name(c: char) -> String {
+    let code = c as i32;
+    let mut result = String::with_capacity(6);
+    let mut started = false;
+    for let mut shift = 28; shift >= 0; shift -= 4 {
+        let nibble = (code >> shift) & 0xf;
+        if nibble != 0 || started || shift == 0 {
+            started = true;
+            if nibble < 10 {
+                result.push(char::from_u32_unchecked(('0' as i32 + nibble) as u32));
+            } else {
+                result.push(char::from_u32_unchecked(('a' as i32 + nibble - 10) as u32));
+            }
+        }
+    }
+    return result;
 }
 
 /// Field base name for a parser-side `~ X` (set complement). The inner element
@@ -196,8 +225,11 @@ pub fn literal_field_name(text: &String) -> String {
     for let c of chars {
         if 'a' <= c <= 'z' || 'A' <= c <= 'Z' || '0' <= c <= '9' {
             result.push(c.to_ascii_lowercase());
+        } else if let Some(names) = symbol_char_names(c) {
+            result.push_str(names.0);
         } else {
-            result.push('_');
+            result.push_str("u");
+            result.push_str(char_hex_name(c));
         }
     }
     return result;
@@ -473,7 +505,11 @@ pub fn literal_const_name(text: &String) -> String {
         } else if let Some(names) = symbol_char_names(c) {
             result.push_str(names.1);
         } else {
-            result.push('_');
+            // Unknown character: encode the Unicode scalar as hex so distinct
+            // characters never collapse to the same name (e.g. `?`, `@`, `#`
+            // all used to degenerate to a single `_`).
+            result.push_str("U");
+            result.push_str(char_hex_name(c));
         }
     }
     return result;

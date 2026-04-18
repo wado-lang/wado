@@ -101,8 +101,39 @@ description = "Run Wado module tests"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo run -p wado-cli -- test example/*.wado wado-compiler/lib/core wasm-size/*/*.wado package-gale
+# In CI, package-gale runs in its own per-optlevel jobs (test-gale-o1/o2/o3)
+# so it is excluded here to keep this job fast. Locally, we include it so
+# a single `mise run test-wado` covers everything.
+targets=(example/*.wado wado-compiler/lib/core wasm-size/*/*.wado)
+if [ -z "${CI:-}" ]; then
+    targets+=(package-gale)
+fi
+cargo run -p wado-cli -- test "${targets[@]}"
 cargo run -p wado-cli -- test --dir benchmark::. benchmark/*/*.wado
+"""
+
+[tasks.test-gale-o1]
+description = "Run package-gale tests with -O1"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo run -p wado-cli -- test -O1 package-gale
+"""
+
+[tasks.test-gale-o2]
+description = "Run package-gale tests with -O2"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo run -p wado-cli -- test -O2 package-gale
+"""
+
+[tasks.test-gale-o3]
+description = "Run package-gale tests with -O3"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo run -p wado-cli -- test -O3 package-gale
 """
 
 [tasks.test-cov]

@@ -82,11 +82,8 @@ test "roundtrip Config" {
 
 // from serde_synth_serialize.wado
 // Test: compiler-synthesized Serialize for a struct
-
-struct Point {
-    x: f64,
-    y: f64,
-}
+// (Point and User are declared once above; both Serialize and
+// Deserialize impls apply to those single definitions.)
 
 impl Serialize for Point;
 
@@ -98,12 +95,6 @@ test "synthesized serialize Point" {
     } else {
         panic("serialize Point failed");
     }
-}
-
-struct User {
-    user_name: String,
-    age: i32,
-    active: bool,
 }
 
 impl Serialize for User;

@@ -1,0 +1,73 @@
+// HFS miscompilation: the pass emitted a spurious `_hfs_x = obj.x;`
+// (re-read) after calling a method whose receiver is declared `&self`,
+// even though the caller's `self` has type `&mut T`.  The re-read was
+// placed after the enclosing `if`, so any local increment of `_hfs_x`
+// inside the `if` body was overwritten.
+//
+// Concretely, in a loop body that does
+//
+//     if !self.at_end() {         // at_end takes &self
+//         text.push(self.chars[self.pos]);
+//         self.pos += 1;          // increments ghost `_hfs_pos`
+//     }
+//
+// HFS treated the call as if it could mutate `self.pos` and inserted
+// `_hfs_pos = self.pos;` after the `if` — clobbering the increment.
+//
+// Fix: when the callee parameter at this position is typed `&T`, skip
+// the re-read regardless of the caller's argument type.  A `&T`
+// parameter cannot mutate the referent, so the ghost stays authoritative.
+//
+// Reproduction was seen at -O1 only in the gale G4 lexer's
+// `read_char_class` method, emitting `[^"\nn]` for input `[^"\n]`.
+
+struct Lexer {
+    chars: Array<char>,
+    pos: i32,
+}
+
+impl Lexer {
+    fn at_end(&self) -> bool {
+        return self.pos >= self.chars.len();
+    }
+
+    fn read_char_class(&mut self) -> String {
+        self.pos += 1;
+        let mut text = String::with_capacity(16);
+        text.push('[');
+        loop {
+            if self.at_end() {
+                return text;
+            }
+            let c = self.chars[self.pos];
+            self.pos += 1;
+            if c == '\\' {
+                text.push(c);
+                if !self.at_end() {
+                    text.push(self.chars[self.pos]);
+                    self.pos += 1;
+                }
+                continue;
+            }
+            if c == ']' {
+                text.push(c);
+                return text;
+            }
+            text.push(c);
+        }
+    }
+}
+
+export fn run() {
+    let mut lx = Lexer { chars: "[^\"\\n]".chars().collect(), pos: 0 };
+    let tok = lx.read_char_class();
+    assert tok == "[^\"\\n]", `expected [^"\\n] got {tok}`;
+
+    // Two escapes in a row — exercises the branch twice.
+    let mut lx2 = Lexer { chars: "[\\t\\n]".chars().collect(), pos: 0 };
+    let tok2 = lx2.read_char_class();
+    assert tok2 == "[\\t\\n]", `expected [\\t\\n] got {tok2}`;
+}
+
+__DATA__
+{"stdout": ""}

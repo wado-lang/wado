@@ -39,8 +39,17 @@ const MIN_ACCESS_COUNT: usize = 4;
 /// `None` = all fields potentially accessed (conservative).
 type ParamFieldUsage = Option<IndexSet<u32>>;
 
-/// Maps each function (by module + name) to its per-parameter field usage.
-type FieldUsageCache = IndexMap<(ModuleSource, String), IndexMap<u32, ParamFieldUsage>>;
+/// Per-function cache entry: field usage plus the set of parameter positions
+/// that are immutable references (`&T`). A callee cannot modify the struct
+/// through a `&T` parameter, so re-read after the call is unnecessary even
+/// when the caller's argument has type `&mut T`.
+struct FuncUsageEntry {
+    params: IndexMap<u32, ParamFieldUsage>,
+    immut_ref_params: IndexSet<u32>,
+}
+
+/// Maps each function (by module + name) to its usage info.
+type FieldUsageCache = IndexMap<(ModuleSource, String), FuncUsageEntry>;
 
 pub fn scalarize_hot_fields(project: &mut FlatPackage) -> bool {
     // Phase 1: Build field usage cache (immutable access to all functions)
@@ -61,9 +70,21 @@ fn build_field_usage_cache(project: &FlatPackage) -> FieldUsageCache {
     let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        let usage = analyze_function_field_usage(&func, &type_table);
-        if !usage.is_empty() {
-            cache.insert((func.module_source.clone(), func.name.clone()), usage);
+        let params = analyze_function_field_usage(&func, &type_table);
+        let mut immut_ref_params = IndexSet::default();
+        for (position, param) in func.params.iter().enumerate() {
+            if matches!(type_table.get(param.type_id), ResolvedType::Ref(_)) {
+                immut_ref_params.insert(position as u32);
+            }
+        }
+        if !params.is_empty() || !immut_ref_params.is_empty() {
+            cache.insert(
+                (func.module_source.clone(), func.name.clone()),
+                FuncUsageEntry {
+                    params,
+                    immut_ref_params,
+                },
+            );
         }
     }
     cache
@@ -1962,6 +1983,17 @@ fn add_sync_fields_for_arg(
         return;
     }
 
+    // Look up the callee's entry in the cache.
+    let cache_key = (func_ref.module_source.clone(), func_ref.name.clone());
+    let callee = cache.get(&cache_key);
+
+    // If the callee's parameter at this position is typed `&T` (not `&mut T`),
+    // the callee cannot mutate through the reference — re-read is unnecessary
+    // regardless of how the caller typed the argument. This matters for
+    // `self.method()` calls where `self: &mut T` is coerced to an `&T` parameter.
+    let callee_immut = callee.is_some_and(|e| e.immut_ref_params.contains(&param_position));
+    let is_immut_ref = is_immut_ref || callee_immut;
+
     // Helper: add fields to write_back and optionally re_read.
     // Immutable ref args (`&T`) only need write-back — the callee cannot modify
     // through an immutable reference, so re-read is unnecessary.
@@ -1972,12 +2004,11 @@ fn add_sync_fields_for_arg(
         }
     };
 
-    // Look up the callee's field usage in the cache (keyed by param position).
-    let cache_key = (func_ref.module_source.clone(), func_ref.name.clone());
-
-    match cache.get(&cache_key) {
-        Some(param_usage) => {
-            match param_usage.get(&param_position) {
+    // Treat an entry with empty `params` the same as a cache miss — we have no
+    // field usage info, so we must be conservative.
+    match callee.filter(|e| !e.params.is_empty()) {
+        Some(entry) => {
+            match entry.params.get(&param_position) {
                 Some(Some(field_set)) => {
                     // Precise: only sync fields the callee accesses
                     for c in candidates {

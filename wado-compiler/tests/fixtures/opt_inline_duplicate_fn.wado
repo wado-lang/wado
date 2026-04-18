@@ -1,0 +1,36 @@
+// Regression test: duplicate top-level function definitions are a
+// compile error.
+//
+// Before this check, the analyzer silently overwrote earlier entries in
+// the per-module symbol map (last-def-wins at the name level), but
+// codegen's `register_single_function` kept the FIRST registered body
+// (first-def-wins).  The inliner in turn used IndexMap::insert (also
+// last-def-wins) for its candidate map, so callers saw different bodies
+// at different optimization levels.  This differential miscompiled
+// gale's generated TypeScript tokenizer at -O3.
+//
+// The analyzer now rejects duplicates at the `analyze` stage, so no
+// downstream phase ever observes a conflict.
+
+#[inline(always)]
+fn dup() -> i32 {
+    return 1;
+}
+
+#[inline(always)]
+fn dup() -> i32 {
+    return 2;
+}
+
+#[inline(always)]
+fn dup() -> i32 {
+    return 3;
+}
+
+export fn run() {
+    let r = dup();
+    assert r == 1, `expected 1 got {r}`;
+}
+
+__DATA__
+{"compile_error": "duplicate definition 'dup'"}
