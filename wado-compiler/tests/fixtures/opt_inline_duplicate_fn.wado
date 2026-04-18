@@ -1,0 +1,35 @@
+// Regression test: three top-level functions share the same name.
+//
+// Codegen registers the first definition and silently drops duplicates
+// (see `register_single_function` in `wir_build/functions.rs`).  The inliner
+// used to overwrite duplicates in its candidate map, so at -O2/-O3 callers
+// got the LAST-def body while at -O0 they got the FIRST-def body.  That
+// differential miscompiled gale's generated tokenizer at -O3 (different
+// literal-probe functions collapsed to one name).
+//
+// The inliner now mirrors codegen (first-def wins), so `r == 1` at every
+// optimization level.  `#[inline(always)]` forces the inliner path
+// regardless of body-size heuristics.
+
+#[inline(always)]
+fn dup() -> i32 {
+    return 1;
+}
+
+#[inline(always)]
+fn dup() -> i32 {
+    return 2;
+}
+
+#[inline(always)]
+fn dup() -> i32 {
+    return 3;
+}
+
+export fn run() {
+    let r = dup();
+    assert r == 1, `expected 1 got {r}`;
+}
+
+__DATA__
+{"stdout": ""}
