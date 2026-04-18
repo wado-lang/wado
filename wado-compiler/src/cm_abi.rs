@@ -6,7 +6,10 @@
 //!
 //! Reference: <https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md>
 
-use crate::ast::{AstId, GenericType, NamedType, Type};
+use crate::ast::{GenericType, Type};
+#[cfg(test)]
+use crate::ast::{AstId, NamedType};
+#[cfg(test)]
 use crate::token::Span;
 
 /// Round `offset` up to the next multiple of `align`.
@@ -451,18 +454,20 @@ pub fn cm_result_return_info(ty: &Type) -> Option<(bool, bool)> {
 }
 
 /// Helper: create a `Type::Named` with a dummy span. Useful for tests.
-pub fn named_type(name: &str) -> Type {
+#[cfg(test)]
+pub(crate) fn named_type(name: &str) -> Type {
     Type::Named(NamedType {
-        id: AstId(0),
+        id: AstId::fresh(),
         name: name.to_string(),
         span: Span::new(0, 0, 1, 1),
     })
 }
 
 /// Helper: create a `Type::Generic` with a dummy span. Useful for tests.
-pub fn generic_type(name: &str, args: Vec<Type>) -> Type {
+#[cfg(test)]
+pub(crate) fn generic_type(name: &str, args: Vec<Type>) -> Type {
     Type::Generic(GenericType {
-        id: AstId(0),
+        id: AstId::fresh(),
         name: name.to_string(),
         args,
         span: Span::new(0, 0, 1, 1),

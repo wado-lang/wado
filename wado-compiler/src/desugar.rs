@@ -1858,15 +1858,15 @@ mod tests {
     fn test_desugar_compound_assign() {
         // x += 1
         let ca = CompoundAssignExpr {
-            id: crate::ast::AstId(0),
+            id: crate::ast::AstId::fresh(),
             target: Expr::Ident(IdentExpr {
-                id: crate::ast::AstId(0),
+                id: crate::ast::AstId::fresh(),
                 name: "x".to_string(),
                 span: dummy_span(),
             }),
             op: CompoundAssignOp::Add,
             value: Expr::Literal(LiteralExpr {
-                id: crate::ast::AstId(0),
+                id: crate::ast::AstId::fresh(),
                 value: crate::ast::Literal::Number("1".to_string()),
                 span: dummy_span(),
             }),
@@ -1903,9 +1903,9 @@ mod tests {
 
         // 0 < x < 10
         let chain = ComparisonChainExpr {
-            id: crate::ast::AstId(0),
+            id: crate::ast::AstId::fresh(),
             first: Expr::Literal(LiteralExpr {
-                id: crate::ast::AstId(0),
+                id: crate::ast::AstId::fresh(),
                 value: crate::ast::Literal::Number("0".to_string()),
                 span: dummy_span(),
             }),
@@ -1913,7 +1913,7 @@ mod tests {
                 ChainedComparison {
                     op: BinaryOp::Lt,
                     right: Expr::Ident(IdentExpr {
-                        id: crate::ast::AstId(0),
+                        id: crate::ast::AstId::fresh(),
                         name: "x".to_string(),
                         span: dummy_span(),
                     }),
@@ -1922,7 +1922,7 @@ mod tests {
                 ChainedComparison {
                     op: BinaryOp::Lt,
                     right: Expr::Literal(LiteralExpr {
-                        id: crate::ast::AstId(0),
+                        id: crate::ast::AstId::fresh(),
                         value: crate::ast::Literal::Number("10".to_string()),
                         span: dummy_span(),
                     }),

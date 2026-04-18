@@ -5980,7 +5980,7 @@ fn synthesize_record_stream_reads(project: &mut Package) {
             continue;
         };
         let ast_type = crate::ast::Type::Named(crate::ast::NamedType {
-            id: crate::ast::AstId(0),
+            id: crate::ast::AstId::fresh(),
             name: elem_name.clone(),
             span: synth_span(),
         });
@@ -6328,7 +6328,7 @@ fn synthesize_stream_read_func(
         wasi_package: Some("filesystem"),
     };
     let ast_type = crate::ast::Type::Named(crate::ast::NamedType {
-        id: crate::ast::AstId(0),
+        id: crate::ast::AstId::fresh(),
         name: elem_name.to_string(),
         span: synth_span(),
     });
@@ -8439,7 +8439,7 @@ mod tests {
 
     fn named_type(name: &str) -> Type {
         Type::Named(NamedType {
-            id: crate::ast::AstId(0),
+            id: crate::ast::AstId::fresh(),
             name: name.to_string(),
             span: synth_span(),
         })

@@ -14,6 +14,30 @@ use crate::token::Span;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstId(pub u32);
 
+impl AstId {
+    /// Allocate a fresh `AstId` for a transient AST node that is never owned
+    /// by a parsed [`Module`].
+    ///
+    /// Use cases:
+    /// - Synthesized `Type::Named` / `Type::Generic` operands passed to type
+    ///   query functions (`cm_size_with_registry`, `synthesize_lift_*`), which
+    ///   only read the type's `name` and structural fields.
+    /// - Unit test fixtures that fabricate AST nodes to exercise registries.
+    ///
+    /// The returned id is globally unique within a process. It is *not* a
+    /// sentinel: there is no reserved "synthetic" value. Because transient
+    /// nodes never enter a `Module.items` tree and never become
+    /// [`SymbolKey`](crate::symbol::SymbolKey) lookup targets, they cannot
+    /// collide with parser-allocated ids — those live in per-module dense
+    /// ranges indexed by `(ModuleSource, AstId)`.
+    #[must_use]
+    pub fn fresh() -> Self {
+        use core::sync::atomic::{AtomicU32, Ordering};
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
 /// Discriminator for the kind of AST node an [`AstPtr`] points to.
 ///
 /// Mirrors the shape of `Item` and the named members reachable from items

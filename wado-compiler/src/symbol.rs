@@ -457,7 +457,7 @@ mod tests {
         let core_cli = ModuleSource::cli();
         let key = table.define(
             &core_cli,
-            AstId(0),
+            AstId::fresh(),
             "println",
             SymbolKind::Function(FunctionSymbol {
                 params: vec!["message".to_string()],
@@ -482,7 +482,7 @@ mod tests {
         let core_cli = ModuleSource::cli();
         let key = table.define(
             &core_cli,
-            AstId(0),
+            AstId::fresh(),
             "println",
             SymbolKind::Function(FunctionSymbol {
                 params: vec![],
@@ -509,7 +509,7 @@ mod tests {
 
         let key = table.define(
             &geometry,
-            AstId(0),
+            AstId::fresh(),
             "Point",
             SymbolKind::Struct(StructSymbol {
                 fields: vec!["x".to_string(), "y".to_string()],
@@ -534,7 +534,7 @@ mod tests {
 
         let key = table.define(
             &geometry,
-            AstId(0),
+            AstId::fresh(),
             "Point",
             SymbolKind::Struct(StructSymbol {
                 fields: vec!["x".to_string(), "y".to_string()],
