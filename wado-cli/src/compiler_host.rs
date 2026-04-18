@@ -1,89 +1,71 @@
-//! Filesystem-based compiler host for CLI usage
+//! Filesystem-based compiler host for CLI usage.
 //!
-//! This module provides `FilesystemCompilerHost` which implements
-//! `wado_compiler::CompilerHost` using filesystem I/O.
+//! Wraps [`wado_lsp::FilesystemCompilerHost`] with CLI-specific decorations:
+//! phase-tracking timestamps, log-level filtering, and stderr printing.
 
 use std::path::PathBuf;
-use std::sync::Mutex;
 use std::time::Instant;
 
 use wado_compiler::{Code, CompilerHost, Diagnostic, LogLevel, Severity, SourceError};
 
-/// Filesystem-based compiler host
+/// Filesystem-based compiler host for the CLI.
 ///
-/// This is the standard host used by the CLI. It loads sources from the filesystem
-/// and prints diagnostics to stderr with optional timestamps for phase tracking.
+/// Loads sources and collects diagnostics via an inner
+/// [`wado_lsp::FilesystemCompilerHost`], then layers stderr printing with
+/// timestamps and a log-level filter on top.
 #[derive(Debug)]
 pub struct FilesystemCompilerHost {
-    /// Base path for resolving relative imports
-    base_path: PathBuf,
-    /// Collected diagnostics (for programmatic access)
-    diagnostics: Mutex<Vec<Diagnostic>>,
-    /// Whether to print diagnostics to stderr
+    inner: wado_lsp::FilesystemCompilerHost,
     print_diagnostics: bool,
-    /// Log level for filtering output
     log_level: LogLevel,
-    /// Start time for timestamp calculation
     start_time: Instant,
 }
 
 impl FilesystemCompilerHost {
-    /// Create a new filesystem host with the given base path
     #[must_use]
     pub fn new(base_path: PathBuf) -> Self {
         Self {
-            base_path,
-            diagnostics: Mutex::new(Vec::new()),
+            inner: wado_lsp::FilesystemCompilerHost::new(base_path),
             print_diagnostics: true,
             log_level: LogLevel::Info,
             start_time: Instant::now(),
         }
     }
 
-    /// Create a host that collects diagnostics without printing
+    /// Collect diagnostics without printing — equivalent to the bare
+    /// `wado_lsp::FilesystemCompilerHost`, but kept for API compatibility.
     #[must_use]
     pub fn silent(base_path: PathBuf) -> Self {
         Self {
-            base_path,
-            diagnostics: Mutex::new(Vec::new()),
+            inner: wado_lsp::FilesystemCompilerHost::new(base_path),
             print_diagnostics: false,
             log_level: LogLevel::Off,
             start_time: Instant::now(),
         }
     }
 
-    /// Create a host with a specific log level
     #[must_use]
     pub fn with_log_level(base_path: PathBuf, log_level: LogLevel) -> Self {
         Self {
-            base_path,
-            diagnostics: Mutex::new(Vec::new()),
+            inner: wado_lsp::FilesystemCompilerHost::new(base_path),
             print_diagnostics: true,
             log_level,
             start_time: Instant::now(),
         }
     }
 
-    /// Get all collected diagnostics
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
-        self.diagnostics.lock().unwrap().clone()
+        self.inner.diagnostics()
     }
 
-    /// Check if any errors were reported
     pub fn has_errors(&self) -> bool {
-        self.diagnostics
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|d| d.severity == Severity::Error)
+        self.inner.has_errors()
     }
 
-    /// Get the base path
     pub fn base_path(&self) -> &PathBuf {
-        &self.base_path
+        self.inner.base_path()
     }
 
-    /// Check if the given severity should be logged at the current level
     fn should_log(&self, severity: Severity) -> bool {
         match self.log_level {
             LogLevel::Off => false,
@@ -113,7 +95,6 @@ impl FilesystemCompilerHost {
         format!("[{hours:02}:{minutes:02}:{seconds:02}.{frac:04}]")
     }
 
-    /// Format diagnostic with timestamp for span tracking
     fn format_diagnostic(&self, diagnostic: &Diagnostic) -> String {
         let timestamp = self.format_timestamp();
 
@@ -143,21 +124,14 @@ impl FilesystemCompilerHost {
 
 impl CompilerHost for FilesystemCompilerHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        let full_path = self.base_path.join(path);
-        std::fs::read(&full_path).map_err(|e| SourceError::IoError {
-            path: full_path.display().to_string(),
-            message: e.to_string(),
-        })
+        self.inner.load_source(path).await
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        // Always collect diagnostics (for errors check)
-        self.diagnostics.lock().unwrap().push(diagnostic.clone());
-
-        // Print if enabled and severity passes the log level filter
         if self.print_diagnostics && self.should_log(diagnostic.severity) {
             let formatted = self.format_diagnostic(&diagnostic);
             eprintln!("{formatted}");
         }
+        self.inner.collect_diagnostic(diagnostic);
     }
 }

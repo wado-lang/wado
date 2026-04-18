@@ -20,8 +20,6 @@ pub mod dump;
 pub mod format;
 pub mod init;
 pub mod lsp;
-pub mod lsp_adapter;
-pub mod lsp_rpc;
 pub mod manifest;
 pub mod query;
 pub mod query_adapter;
