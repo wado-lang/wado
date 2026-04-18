@@ -60,6 +60,21 @@ These are the upstream pages that matter most when working on the g4 parser, the
 
 For everything else (target-specific runtimes, IDE integration, building ANTLR itself, etc.), browse `vendor/antlr4/doc/` directly.
 
+## Debugging Grammars with `gale dump`
+
+`gale dump` pretty-prints the parsed `Grammar` IR so you can inspect what the
+g4 frontend actually produced, without going through code generation. Use it
+to check whether a construct was parsed into the IR as expected before
+blaming the code generator.
+
+```sh
+# Dump the full IR (multiple files are merged, same as `gale gen`).
+cargo run --bin wado -- run package-gale -- dump path/to/Grammar.g4
+
+# Dump a single rule — searches parser rules first, then lexer rules.
+cargo run --bin wado -- run package-gale -- dump --rule expr path/to/Grammar.g4
+```
+
 ## Running Tests
 
 ```sh

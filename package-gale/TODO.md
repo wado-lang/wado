@@ -29,9 +29,14 @@ the IR, but two sub-kinds of the same feature were left unhandled:
 The previous sweep populated the IR but the code generator still ignores
 most of the new fields. "Parsed and stored" is not "used":
 
-- `Grammar.options.caseInsensitive = true` — generated lexer is still
-  case-sensitive. Needs a pass over lexer-gen to fold `tolower` into
-  literal matching (or switch to case-insensitive char comparisons).
+- ~~`Grammar.options.caseInsensitive = true` — generated lexer is still
+  case-sensitive.~~ **Done** (this branch). Grammar-level and rule-level
+  `caseInsensitive` now fold ASCII letters: literals emit
+  `chars[pos] != 'x' && chars[pos] != 'X'`, char ranges fold `[a-z]` to
+  include `[A-Z]` (and vice versa), keyword classifier honors
+  `char_ci[i]`. Rule-level `caseInsensitive = false` overrides a
+  grammar-level `true`. Driver coverage lives in
+  `tests/grammars/ci_sql.g4` + `tests/driver_ci_sql_test.wado`.
 - `Grammar.options.superClass` / `tokenVocab` / `language` — completely
   ignored. `tokenVocab` in particular is non-trivial: it implies loading
   another grammar's token ids.

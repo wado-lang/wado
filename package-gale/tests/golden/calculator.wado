@@ -1184,9 +1184,9 @@ fn try_ws(chars: &Array<char>, start: i32) -> i32 {
 fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
     let len = end - start;
     if len == 1 {
-        if (chars[start] == 'e' || chars[start] == 'E') {
+        if chars[start].eq_ignore_ascii_case(&'e') {
             if chars[start + 0] == 'e' { return TK_EULER; }
-        } else if (chars[start] == 'i' || chars[start] == 'I') {
+        } else if chars[start].eq_ignore_ascii_case(&'i') {
             if chars[start + 0] == 'i' { return TK_I; }
         }
     }
