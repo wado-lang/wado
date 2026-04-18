@@ -14,11 +14,11 @@
 
 use crate::ast::{
     AstId, Block, Condition, ConditionElement, Expr, Item, MatchExpr, Module, Pattern, Stmt,
-    StructPatternField, TemplatePart,
+    TemplatePart,
 };
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
-use crate::symbol::{SymbolKey, Symbol, SymbolKind, VariableSymbol};
+use crate::symbol::{Symbol, SymbolKey, SymbolKind, VariableSymbol};
 use crate::token::Span;
 
 /// Collect (`use-site SymbolKey` → `definition SymbolKey`) references for every
@@ -71,12 +71,12 @@ impl Collector<'_> {
         self.scopes.pop();
     }
 
-    fn define_local(&mut self, name: &str, ast_id: AstId, span: Span) {
+    fn define_local(&mut self, name: &str, ast_id: AstId, span: Span, is_mut: bool) {
         let key = SymbolKey::new(self.module.clone(), ast_id);
         let symbol = Symbol {
             name: name.to_string(),
             kind: SymbolKind::Variable(VariableSymbol {
-                is_mut: false,
+                is_mut,
                 is_reactive: false,
             }),
             defined_at: key.clone(),
@@ -103,7 +103,7 @@ impl Collector<'_> {
                 if let Some(body) = &f.body {
                     self.push_scope();
                     for p in &f.params {
-                        self.define_local(&p.name, p.id, p.name_span);
+                        self.define_local(&p.name, p.id, p.name_span, p.is_mut);
                     }
                     self.visit_block(body);
                     self.pop_scope();
@@ -114,7 +114,7 @@ impl Collector<'_> {
                     if let Some(body) = &m.body {
                         self.push_scope();
                         for p in &m.params {
-                            self.define_local(&p.name, p.id, p.name_span);
+                            self.define_local(&p.name, p.id, p.name_span, p.is_mut);
                         }
                         self.visit_block(body);
                         self.pop_scope();
@@ -126,7 +126,7 @@ impl Collector<'_> {
                     if let Some(body) = &m.body {
                         self.push_scope();
                         for p in &m.params {
-                            self.define_local(&p.name, p.id, p.name_span);
+                            self.define_local(&p.name, p.id, p.name_span, p.is_mut);
                         }
                         self.visit_block(body);
                         self.pop_scope();
@@ -161,7 +161,7 @@ impl Collector<'_> {
                 if let Some(v) = &s.value {
                     self.visit_expr(v);
                 }
-                self.bind_pattern(&s.pattern, s.id, s.name_span);
+                self.bind_pattern(&s.pattern, s.is_mut);
             }
             Stmt::Expr(s) => self.visit_expr(&s.expr),
             Stmt::Return(s) => {
@@ -202,7 +202,7 @@ impl Collector<'_> {
             Stmt::ForOf(s) => {
                 self.visit_expr(&s.iterable);
                 self.push_scope();
-                self.bind_pattern(&s.binding, s.id, s.span);
+                self.bind_pattern(&s.binding, s.is_mut);
                 self.visit_block(&s.body);
                 self.pop_scope();
             }
@@ -230,12 +230,12 @@ impl Collector<'_> {
             Condition::LetChain { elements, .. } => {
                 for el in elements {
                     match el {
-                        ConditionElement::Let { pattern, expr, span } => {
+                        ConditionElement::Let { pattern, expr, .. } => {
                             self.visit_expr(expr);
-                            // Bindings from let-chain patterns use the pattern span; the AST does
-                            // not carry a dedicated id for the ConditionElement, so we use the
-                            // `span.start` as a stable anchor via the pattern's textual name.
-                            self.bind_pattern_anchor(pattern, *span);
+                            // if-let / while-let bindings are introduced into the current
+                            // scope. Mutability inherits from the pattern's MutIdent marker;
+                            // there is no enclosing LetStmt to carry it.
+                            self.bind_pattern(pattern, false);
                         }
                         ConditionElement::Expr(e) => self.visit_expr(e),
                     }
@@ -248,7 +248,7 @@ impl Collector<'_> {
         self.visit_expr(&m.expr);
         for arm in &m.arms {
             self.push_scope();
-            self.bind_match_pattern(&arm.pattern, arm.span);
+            self.bind_pattern(&arm.pattern, false);
             if let Some(guard) = &arm.guard {
                 self.visit_expr(guard);
             }
@@ -321,9 +321,9 @@ impl Collector<'_> {
             Expr::Match(m) => self.visit_match_expr(m),
             Expr::Matches(m) => {
                 self.visit_expr(&m.expr);
-                // pattern bindings in `matches` do not escape; open a scope for the guard only.
+                // Pattern bindings in `matches` do not escape; open a scope for the guard only.
                 self.push_scope();
-                self.bind_match_pattern(&m.pattern, m.span);
+                self.bind_pattern(&m.pattern, false);
                 if let Some(g) = &m.guard {
                     self.visit_expr(g);
                 }
@@ -332,7 +332,7 @@ impl Collector<'_> {
             Expr::Closure(c) => {
                 self.push_scope();
                 for p in &c.params {
-                    self.define_local(&p.name, p.id, p.name_span);
+                    self.define_local(&p.name, p.id, p.name_span, p.is_mut);
                 }
                 self.visit_expr(&c.body);
                 self.pop_scope();
@@ -365,95 +365,43 @@ impl Collector<'_> {
         }
     }
 
-    /// Bind the names introduced by a `let` pattern using the `let` statement's
-    /// own id as the defining [`AstId`]. For simple `let x = ...` this is
-    /// exactly what LSP needs; for destructuring patterns this gives
-    /// statement-level granularity rather than per-binding, which is good
-    /// enough for MVP.
-    fn bind_pattern(&mut self, pattern: &Pattern, let_id: AstId, name_span: Span) {
+    /// Walk a binding pattern and register each leaf `Ident` / `MutIdent` as a
+    /// local symbol. `let_is_mut` is OR-ed with per-leaf mutability so that
+    /// `let mut [a, b]` makes both bindings mutable; `if let Some(x)` passes
+    /// `false` and relies entirely on `Pattern::MutIdent` for mutability.
+    fn bind_pattern(&mut self, pattern: &Pattern, let_is_mut: bool) {
         match pattern {
-            Pattern::Ident(name) | Pattern::MutIdent(name) => {
-                self.define_local(name, let_id, name_span);
+            Pattern::Ident { id, name, span } => {
+                self.define_local(name, *id, *span, let_is_mut);
+            }
+            Pattern::MutIdent { id, name, span } => {
+                self.define_local(name, *id, *span, true);
             }
             Pattern::Tuple(patterns, _) => {
                 for p in patterns {
-                    self.bind_pattern(p, let_id, name_span);
+                    self.bind_pattern(p, let_is_mut);
                 }
             }
             Pattern::Struct { fields, .. } => {
-                for StructPatternField { field_name, pattern, span } in fields {
-                    match pattern {
-                        Pattern::Ident(_) | Pattern::MutIdent(_) => {
-                            self.define_local(field_name, let_id, *span);
-                        }
-                        _ => self.bind_pattern(pattern, let_id, *span),
-                    }
+                for field in fields {
+                    self.bind_pattern(&field.pattern, let_is_mut);
                 }
             }
             Pattern::Variant { bindings, .. } => {
                 for p in bindings {
-                    self.bind_pattern(p, let_id, name_span);
+                    self.bind_pattern(p, let_is_mut);
                 }
             }
             Pattern::Or(pats) => {
+                // Or-patterns require all alternatives to bind the same names.
+                // Walk the first alternative; its leaf ids become the defining
+                // SymbolKeys. Subsequent alternatives add no new bindings.
                 if let Some(p) = pats.first() {
-                    self.bind_pattern(p, let_id, name_span);
+                    self.bind_pattern(p, let_is_mut);
                 }
             }
             Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } => {}
         }
-    }
-
-    /// Bind let-chain pattern using the pattern's span start as a synthetic
-    /// anchor (no dedicated [`AstId`] exists for [`ConditionElement`]). Falls
-    /// back to simple Ident bindings only; this is MVP behavior for if-let
-    /// patterns.
-    fn bind_pattern_anchor(&mut self, pattern: &Pattern, span: Span) {
-        // let-chain patterns do not have their own AstId; we cannot surface them
-        // to LSP as definitions. Still bind into the scope so nested uses
-        // resolve lexically even if the binding AstId is a placeholder.
-        match pattern {
-            Pattern::Ident(name) | Pattern::MutIdent(name) => {
-                if let Some(scope) = self.scopes.last_mut() {
-                    scope.insert(name.clone(), AstId(0));
-                }
-                let _ = span; // unused
-            }
-            Pattern::Tuple(patterns, _) => {
-                for p in patterns {
-                    self.bind_pattern_anchor(p, span);
-                }
-            }
-            Pattern::Struct { fields, .. } => {
-                for StructPatternField { field_name, pattern, span: fspan } in fields {
-                    match pattern {
-                        Pattern::Ident(_) | Pattern::MutIdent(_) => {
-                            if let Some(scope) = self.scopes.last_mut() {
-                                scope.insert(field_name.clone(), AstId(0));
-                            }
-                            let _ = fspan;
-                        }
-                        _ => self.bind_pattern_anchor(pattern, *fspan),
-                    }
-                }
-            }
-            Pattern::Variant { bindings, .. } => {
-                for p in bindings {
-                    self.bind_pattern_anchor(p, span);
-                }
-            }
-            Pattern::Or(pats) => {
-                if let Some(p) = pats.first() {
-                    self.bind_pattern_anchor(p, span);
-                }
-            }
-            Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } => {}
-        }
-    }
-
-    fn bind_match_pattern(&mut self, pattern: &Pattern, span: Span) {
-        // Match arm bindings — same placeholder AstId approach as let-chain.
-        self.bind_pattern_anchor(pattern, span);
     }
 }
 

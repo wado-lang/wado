@@ -304,4 +304,98 @@ mod tests {
         assert_eq!(result.range.start.character, 3);
         assert_eq!(result.range.end.character, 9);
     }
+
+    #[tokio::test]
+    async fn struct_destructuring_binding_definition() {
+        let source = concat!(
+            "struct Point { x: i32, y: i32 }\n",
+            "fn f(p: Point) -> i32 {\n",
+            "    let { x, y } = p;\n",
+            "    return x + y;\n",
+            "}\n",
+        );
+        let result = def_at(source, 3, 11)
+            .await
+            .expect("use of destructured x");
+        assert_eq!(result.range.start.line, 2);
+        assert_eq!(result.range.start.character, 10);
+        assert_eq!(result.range.end.character, 11);
+    }
+
+    #[tokio::test]
+    async fn tuple_destructuring_binding_definition() {
+        let source = concat!(
+            "fn f() -> i32 {\n",
+            "    let [a, b] = [1, 2];\n",
+            "    return a + b;\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 11).await.expect("use of a");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 9);
+        assert_eq!(result.range.end.character, 10);
+    }
+
+    #[tokio::test]
+    async fn closure_param_definition() {
+        let source = concat!(
+            "fn f() -> i32 {\n",
+            "    let g = |x: i32| x + 1;\n",
+            "    return g(1);\n",
+            "}\n",
+        );
+        let result = def_at(source, 1, 21).await.expect("use of x in body");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 13);
+        assert_eq!(result.range.end.character, 14);
+    }
+
+    #[tokio::test]
+    async fn closure_capture_definition() {
+        let source = concat!(
+            "fn f() -> i32 {\n",
+            "    let outer = 10;\n",
+            "    let g = |x: i32| x + outer;\n",
+            "    return g(1);\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 25)
+            .await
+            .expect("capture of outer");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 8);
+        assert_eq!(result.range.end.character, 13);
+    }
+
+    #[tokio::test]
+    async fn if_let_binding_definition() {
+        let source = concat!(
+            "fn f(opt: Option<i32>) -> i32 {\n",
+            "    if let Some(v) = opt {\n",
+            "        return v;\n",
+            "    }\n",
+            "    return 0;\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 15).await.expect("use of v");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 16);
+        assert_eq!(result.range.end.character, 17);
+    }
+
+    #[tokio::test]
+    async fn match_arm_binding_definition() {
+        let source = concat!(
+            "fn f(opt: Option<i32>) -> i32 {\n",
+            "    return match opt {\n",
+            "        Some(v) => v,\n",
+            "        None => 0,\n",
+            "    };\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 19).await.expect("use of v in arm");
+        assert_eq!(result.range.start.line, 2);
+        assert_eq!(result.range.start.character, 13);
+        assert_eq!(result.range.end.character, 14);
+    }
 }

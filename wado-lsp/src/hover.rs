@@ -215,14 +215,70 @@ fn find_let_in_block(block: &ast::Block, target: AstId, name: &str) -> Option<St
     None
 }
 
+fn format_binding_name(name: &str) -> String {
+    format!("let {name}")
+}
+
+fn find_let_in_condition(
+    cond: &ast::Condition,
+    target: AstId,
+    name: &str,
+) -> Option<String> {
+    use ast::{Condition, ConditionElement};
+    match cond {
+        Condition::Expr(e) => find_let_in_expr(e, target, name),
+        Condition::LetChain { elements, .. } => {
+            for el in elements {
+                match el {
+                    ConditionElement::Let { pattern, expr, .. } => {
+                        if pattern_contains_ident(pattern, target) {
+                            return Some(format_binding_name(name));
+                        }
+                        if let Some(r) = find_let_in_expr(expr, target, name) {
+                            return Some(r);
+                        }
+                    }
+                    ConditionElement::Expr(e) => {
+                        if let Some(r) = find_let_in_expr(e, target, name) {
+                            return Some(r);
+                        }
+                    }
+                }
+            }
+            None
+        }
+    }
+}
+
+fn pattern_contains_ident(pattern: &ast::Pattern, target: AstId) -> bool {
+    match pattern {
+        ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => *id == target,
+        ast::Pattern::Tuple(ps, _) | ast::Pattern::Or(ps) => {
+            ps.iter().any(|p| pattern_contains_ident(p, target))
+        }
+        ast::Pattern::Struct { fields, .. } => fields
+            .iter()
+            .any(|f| pattern_contains_ident(&f.pattern, target)),
+        ast::Pattern::Variant { bindings, .. } => {
+            bindings.iter().any(|p| pattern_contains_ident(p, target))
+        }
+        _ => false,
+    }
+}
+
 fn find_let_in_stmt(stmt: &Stmt, target: AstId, name: &str) -> Option<String> {
     match stmt {
         Stmt::Let(l) => {
-            if l.id == target {
+            if pattern_contains_ident(&l.pattern, target) {
                 let mut out = String::new();
                 out.push_str(if l.is_mut { "let mut " } else { "let " });
                 out.push_str(name);
-                if let Some(ty) = &l.ty {
+                if let Some(ty) = &l.ty
+                    && matches!(
+                        &l.pattern,
+                        ast::Pattern::Ident { .. } | ast::Pattern::MutIdent { .. }
+                    )
+                {
                     out.push_str(": ");
                     unparse::unparse_type_into(ty, &mut out);
                 }
@@ -236,9 +292,11 @@ fn find_let_in_stmt(stmt: &Stmt, target: AstId, name: &str) -> Option<String> {
         Stmt::Expr(s) => find_let_in_expr(&s.expr, target, name),
         Stmt::Return(s) => s.value.as_ref().and_then(|v| find_let_in_expr(v, target, name)),
         Stmt::TaskReturn(s) => find_let_in_expr(&s.value, target, name),
-        Stmt::If(s) => find_let_in_block(&s.then_block, target, name)
+        Stmt::If(s) => find_let_in_condition(&s.condition, target, name)
+            .or_else(|| find_let_in_block(&s.then_block, target, name))
             .or_else(|| s.else_block.as_ref().and_then(|b| find_let_in_block(b, target, name))),
-        Stmt::While(s) => find_let_in_block(&s.body, target, name),
+        Stmt::While(s) => find_let_in_condition(&s.condition, target, name)
+            .or_else(|| find_let_in_block(&s.body, target, name)),
         Stmt::For(s) => {
             if let Some(init) = &s.init
                 && let Some(r) = find_let_in_stmt(init, target, name)
@@ -247,10 +305,18 @@ fn find_let_in_stmt(stmt: &Stmt, target: AstId, name: &str) -> Option<String> {
             }
             find_let_in_block(&s.body, target, name)
         }
-        Stmt::ForOf(s) => find_let_in_block(&s.body, target, name),
+        Stmt::ForOf(s) => {
+            if pattern_contains_ident(&s.binding, target) {
+                return Some(format_binding_name(name));
+            }
+            find_let_in_block(&s.body, target, name)
+        }
         Stmt::Loop(s) => find_let_in_block(&s.body, target, name),
         Stmt::Match(m) => {
             for arm in &m.arms {
+                if pattern_contains_ident(&arm.pattern, target) {
+                    return Some(format_binding_name(name));
+                }
                 if let Some(r) = find_let_in_expr(&arm.body, target, name) {
                     return Some(r);
                 }
@@ -286,9 +352,21 @@ fn find_let_in_expr(expr: &Expr, target: AstId, name: &str) -> Option<String> {
         Expr::LabeledBlock(lb) => find_let_in_block(&lb.block, target, name),
         Expr::Match(m) => {
             for arm in &m.arms {
+                if pattern_contains_ident(&arm.pattern, target) {
+                    return Some(format_binding_name(name));
+                }
                 if let Some(r) = find_let_in_expr(&arm.body, target, name) {
                     return Some(r);
                 }
+            }
+            None
+        }
+        Expr::Matches(m) => {
+            if pattern_contains_ident(&m.pattern, target) {
+                return Some(format_binding_name(name));
+            }
+            if let Some(g) = &m.guard {
+                return find_let_in_expr(g, target, name);
             }
             None
         }
@@ -411,5 +489,65 @@ mod tests {
             "got: {}",
             result.contents
         );
+    }
+
+    #[tokio::test]
+    async fn let_mut_hover() {
+        let source = "fn f() -> i32 {\n    let mut x: i32 = 1;\n    return x;\n}\n";
+        let result = hover_at(source, 2, 11).await.expect("hover on x");
+        assert_eq!(result.contents, "```wado\nlet mut x: i32\n```");
+    }
+
+    #[tokio::test]
+    async fn destructured_field_hover() {
+        let source = concat!(
+            "struct Point { x: i32, y: i32 }\n",
+            "fn f(p: Point) -> i32 {\n",
+            "    let { x, y } = p;\n",
+            "    return x;\n",
+            "}\n",
+        );
+        let result = hover_at(source, 3, 11).await.expect("hover on x");
+        assert_eq!(result.contents, "```wado\nlet x\n```");
+    }
+
+    #[tokio::test]
+    async fn closure_param_hover() {
+        let source = concat!(
+            "fn f() -> i32 {\n",
+            "    let g = |x: i32| x + 1;\n",
+            "    return g(1);\n",
+            "}\n",
+        );
+        let result = hover_at(source, 1, 21).await.expect("hover on x");
+        assert_eq!(result.contents, "```wado\n|x: i32|\n```");
+    }
+
+    #[tokio::test]
+    async fn if_let_binding_hover() {
+        let source = concat!(
+            "fn f(opt: Option<i32>) -> i32 {\n",
+            "    if let Some(v) = opt {\n",
+            "        return v;\n",
+            "    }\n",
+            "    return 0;\n",
+            "}\n",
+        );
+        let result = hover_at(source, 2, 15).await.expect("hover on v");
+        assert_eq!(result.contents, "```wado\nlet v\n```");
+    }
+
+    #[tokio::test]
+    async fn match_arm_binding_hover() {
+        let source = concat!(
+            "fn f(opt: Option<i32>) -> i32 {\n",
+            "    return match opt {\n",
+            "        Some(v) => v,\n",
+            "        None => 0,\n",
+            "    };\n",
+            "}\n",
+        );
+        let result = hover_at(source, 2, 19).await.expect("hover on v");
+        assert_eq!(result.contents, "```wado\nlet v\n```");
     }
 }

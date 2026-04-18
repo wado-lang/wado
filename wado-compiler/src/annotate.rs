@@ -152,7 +152,29 @@ fn name_span_in_module(module: &Module, ast_id: AstId) -> Option<Span> {
 }
 
 fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
-    use crate::ast::{Block, Expr, MatchExpr, Stmt};
+    use crate::ast::{Block, Expr, MatchExpr, Pattern, Stmt};
+
+    fn scan_pattern(pattern: &Pattern, target: AstId) -> Option<Span> {
+        match pattern {
+            Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => {
+                if *id == target {
+                    Some(*span)
+                } else {
+                    None
+                }
+            }
+            Pattern::Tuple(ps, _) | Pattern::Or(ps) => {
+                ps.iter().find_map(|p| scan_pattern(p, target))
+            }
+            Pattern::Struct { fields, .. } => fields
+                .iter()
+                .find_map(|f| scan_pattern(&f.pattern, target)),
+            Pattern::Variant { bindings, .. } => {
+                bindings.iter().find_map(|p| scan_pattern(p, target))
+            }
+            _ => None,
+        }
+    }
 
     fn scan_block(block: &Block, target: AstId) -> Option<Span> {
         for stmt in &block.stmts {
@@ -166,8 +188,8 @@ fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
     fn scan_stmt(stmt: &Stmt, target: AstId) -> Option<Span> {
         match stmt {
             Stmt::Let(s) => {
-                if s.id == target {
-                    return Some(s.name_span);
+                if let Some(span) = scan_pattern(&s.pattern, target) {
+                    return Some(span);
                 }
                 if let Some(v) = &s.value
                     && let Some(span) = scan_expr(v, target)
@@ -218,8 +240,8 @@ fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
                 return scan_block(&s.body, target);
             }
             Stmt::ForOf(s) => {
-                if s.id == target {
-                    return Some(s.span);
+                if let Some(span) = scan_pattern(&s.binding, target) {
+                    return Some(span);
                 }
                 if let Some(span) = scan_expr(&s.iterable, target) {
                     return Some(span);
@@ -254,7 +276,10 @@ fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
             Condition::LetChain { elements, .. } => {
                 for el in elements {
                     match el {
-                        ConditionElement::Let { expr, .. } => {
+                        ConditionElement::Let { pattern, expr, .. } => {
+                            if let Some(span) = scan_pattern(pattern, target) {
+                                return Some(span);
+                            }
                             if let Some(span) = scan_expr(expr, target) {
                                 return Some(span);
                             }
@@ -276,6 +301,9 @@ fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
             return Some(span);
         }
         for arm in &m.arms {
+            if let Some(span) = scan_pattern(&arm.pattern, target) {
+                return Some(span);
+            }
             if let Some(guard) = &arm.guard
                 && let Some(span) = scan_expr(guard, target)
             {
@@ -356,6 +384,9 @@ fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
             Expr::Match(m) => scan_match(m, target),
             Expr::Matches(m) => {
                 if let Some(span) = scan_expr(&m.expr, target) {
+                    return Some(span);
+                }
+                if let Some(span) = scan_pattern(&m.pattern, target) {
                     return Some(span);
                 }
                 if let Some(g) = &m.guard {
