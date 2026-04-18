@@ -1,7 +1,7 @@
 use serde_json::Value;
 use tokio::io::{AsyncWrite, BufReader};
 
-use crate::lsp_adapter;
+use crate::lsp_adapter::{self, ReadError};
 use crate::lsp_rpc::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     InitializeResult, JsonRpcRequest, PublishDiagnosticsParams, ReferenceParams, SemanticTokens,
@@ -10,24 +10,55 @@ use crate::lsp_rpc::{
     text_document_sync_kind,
 };
 
+/// Tracks server lifecycle per LSP 3.18 §Server lifecycle.
+///
+/// - `initialized` flips to `true` once the server has *responded* to
+///   `initialize`. Before that, requests must be rejected with
+///   `ServerNotInitialized` and notifications (except `exit`) must be dropped.
+/// - `shutdown_requested` flips to `true` once the server has responded to
+///   `shutdown`. After that, every request except `exit` must fail with
+///   `InvalidRequest` and every notification except `exit` must be dropped.
+#[derive(Default)]
+struct Lifecycle {
+    initialized: bool,
+    shutdown_requested: bool,
+}
+
 /// Run the LSP server over stdio.
 pub async fn run() {
     let mut reader = BufReader::new(tokio::io::stdin());
     let mut writer = tokio::io::stdout();
     let mut engine = wado_lsp::Engine::new();
-    let mut shutdown_requested = false;
+    let mut lifecycle = Lifecycle::default();
 
     loop {
         let request = match lsp_adapter::read_message(&mut reader).await {
             Ok(Some(msg)) => msg,
             Ok(None) => break, // EOF
-            Err(e) => {
-                eprintln!("wado-lsp: {e}");
+            Err(ReadError::Parse(msg)) => {
+                // Per JSON-RPC 2.0 §5.1: respond with ParseError (id: null)
+                // and keep the loop running so a well-formed follow-up can
+                // still be processed.
+                if lsp_adapter::send_error(
+                    &mut writer,
+                    &Value::Null,
+                    error_codes::PARSE_ERROR,
+                    msg,
+                )
+                .await
+                .is_err()
+                {
+                    break;
+                }
+                continue;
+            }
+            Err(ReadError::Io(msg)) => {
+                eprintln!("wado-lsp: {msg}");
                 break;
             }
         };
 
-        if let Err(e) = dispatch(&mut engine, &mut writer, &mut shutdown_requested, request).await {
+        if let Err(e) = dispatch(&mut engine, &mut writer, &mut lifecycle, request).await {
             eprintln!("wado-lsp: {e}");
             break;
         }
@@ -37,16 +68,64 @@ pub async fn run() {
 async fn dispatch<W: AsyncWrite + Unpin>(
     engine: &mut wado_lsp::Engine,
     writer: &mut W,
-    shutdown_requested: &mut bool,
+    lifecycle: &mut Lifecycle,
     request: JsonRpcRequest,
 ) -> Result<(), String> {
     let method = request.method.as_str();
     let id = request.id.as_ref();
     let params = request.params;
 
+    // `exit` is always processed, regardless of lifecycle state.
+    if method == "exit" {
+        std::process::exit(i32::from(!lifecycle.shutdown_requested));
+    }
+
+    // Pre-initialize: only `initialize` is allowed. Other requests get
+    // -32002 ServerNotInitialized; notifications are dropped silently.
+    if !lifecycle.initialized && method != "initialize" {
+        if let Some(id) = id {
+            lsp_adapter::send_error(
+                writer,
+                id,
+                error_codes::SERVER_NOT_INITIALIZED,
+                format!("server not initialized: received {method} before initialize"),
+            )
+            .await?;
+        }
+        return Ok(());
+    }
+
+    // Post-shutdown: only `exit` is allowed (handled above). Requests get
+    // -32600 InvalidRequest; notifications are dropped silently.
+    if lifecycle.shutdown_requested {
+        if let Some(id) = id {
+            lsp_adapter::send_error(
+                writer,
+                id,
+                error_codes::INVALID_REQUEST,
+                format!("server is shutting down: rejected {method}"),
+            )
+            .await?;
+        }
+        return Ok(());
+    }
+
     match method {
         "initialize" => {
             if let Some(id) = id {
+                if lifecycle.initialized {
+                    // LSP 3.18 §initialize: the `initialize` request is sent
+                    // as the first request from the client. A second one is
+                    // a protocol error.
+                    lsp_adapter::send_error(
+                        writer,
+                        id,
+                        error_codes::INVALID_REQUEST,
+                        "server already initialized".to_string(),
+                    )
+                    .await?;
+                    return Ok(());
+                }
                 let result = InitializeResult {
                     capabilities: ServerCapabilities {
                         text_document_sync: Some(TextDocumentSyncOptions {
@@ -71,17 +150,15 @@ async fn dispatch<W: AsyncWrite + Unpin>(
                     }),
                 };
                 lsp_adapter::send_response(writer, id, result).await?;
+                lifecycle.initialized = true;
             }
         }
         "initialized" => {} // no-op
         "shutdown" => {
-            *shutdown_requested = true;
+            lifecycle.shutdown_requested = true;
             if let Some(id) = id {
                 lsp_adapter::send_response(writer, id, Value::Null).await?;
             }
-        }
-        "exit" => {
-            std::process::exit(i32::from(!*shutdown_requested));
         }
         "textDocument/didOpen" => {
             let Ok(p) = serde_json::from_value::<DidOpenTextDocumentParams>(params) else {

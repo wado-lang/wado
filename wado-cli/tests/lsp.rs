@@ -1220,16 +1220,13 @@ fn lsp_invalid_params_on_semantic_tokens() {
 }
 
 // ===========================================================================
-// Documented spec gaps — tests are `#[ignore]`'d until the behaviour is added.
+// LSP spec conformance tests — lifecycle enforcement
 //
-// These tests encode LSP 3.18 requirements that the current dispatcher in
-// `wado-cli/src/lsp.rs` does not yet enforce. Run with
-// `cargo test -p wado-cli --test lsp -- --ignored` to see the current
-// observable behaviour.
+// Covers the "only `initialize` first" and "no work after `shutdown`" rules
+// (LSP 3.18 §Server lifecycle) plus JSON-RPC 2.0 §5.1 parse-error recovery.
 // ===========================================================================
 
 #[test]
-#[ignore = "spec gap: request before `initialize` should return -32002 ServerNotInitialized"]
 fn lsp_request_before_initialize_returns_server_not_initialized() {
     let mut session = LspSession::start();
     let id = session.send_request(
@@ -1242,11 +1239,40 @@ fn lsp_request_before_initialize_returns_server_not_initialized() {
     let resp = session.read_message();
     assert_eq!(resp["id"], id);
     assert_eq!(resp["error"]["code"], -32002);
+    assert!(resp["error"]["message"].is_string());
+    // Cannot `shutdown` gracefully here — that would also be rejected with
+    // ServerNotInitialized. Send `exit` directly; per spec this is allowed
+    // before `initialize` and must exit non-zero when no shutdown was seen.
+    session.send_notification("exit", Value::Null);
+    drop(session.child.stdin.take());
+    assert_eq!(session.child.wait().unwrap().code().unwrap(), 1);
+}
+
+#[test]
+fn lsp_notification_before_initialize_is_silently_dropped() {
+    // Notifications before `initialize` must be dropped (spec §initialize).
+    // We confirm by initializing afterwards and seeing a normal response.
+    let mut session = LspSession::start();
+    session.send_notification(
+        "textDocument/didOpen",
+        json!({
+            "textDocument": {
+                "uri": "file:///tmp/lsp_pre_init.wado",
+                "languageId": "wado",
+                "version": 1,
+                "text": "fn f() {}\n"
+            }
+        }),
+    );
+    // No publishDiagnostics should have been emitted for that didOpen.
+    let id = session.send_request("initialize", json!({ "capabilities": {} }));
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert!(resp["result"]["capabilities"].is_object());
     assert_eq!(session.shutdown_and_exit(), 0);
 }
 
 #[test]
-#[ignore = "spec gap: duplicate `initialize` should return -32600 InvalidRequest"]
 fn lsp_duplicate_initialize_returns_invalid_request() {
     let mut session = LspSession::start();
     session.initialize();
@@ -1258,13 +1284,15 @@ fn lsp_duplicate_initialize_returns_invalid_request() {
 }
 
 #[test]
-#[ignore = "spec gap: requests after `shutdown` should return -32600 InvalidRequest"]
 fn lsp_request_after_shutdown_returns_invalid_request() {
     let mut session = LspSession::start();
     session.initialize();
-    let id = session.send_request("shutdown", Value::Null);
-    let _ = session.read_message();
-    let id2 = session.send_request(
+    let id_shut = session.send_request("shutdown", Value::Null);
+    let shut_resp = session.read_message();
+    assert_eq!(shut_resp["id"], id_shut);
+    assert_eq!(shut_resp["result"], Value::Null);
+
+    let id_req = session.send_request(
         "textDocument/hover",
         json!({
             "textDocument": { "uri": "file:///tmp/x.wado" },
@@ -1272,25 +1300,86 @@ fn lsp_request_after_shutdown_returns_invalid_request() {
         }),
     );
     let resp = session.read_message();
-    let _ = id;
-    assert_eq!(resp["id"], id2);
+    assert_eq!(resp["id"], id_req);
     assert_eq!(resp["error"]["code"], -32600);
+
+    session.send_notification("exit", Value::Null);
+    drop(session.child.stdin.take());
+    // Exit after shutdown → code 0.
+    assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
+}
+
+#[test]
+fn lsp_notification_after_shutdown_is_silently_dropped() {
+    let mut session = LspSession::start();
+    session.initialize();
+    let id_shut = session.send_request("shutdown", Value::Null);
+    let _ = session.read_message();
+    // This didOpen must not be processed and must not produce a
+    // publishDiagnostics notification.
+    session.send_notification(
+        "textDocument/didOpen",
+        json!({
+            "textDocument": {
+                "uri": "file:///tmp/lsp_post_shutdown.wado",
+                "languageId": "wado",
+                "version": 1,
+                "text": "fn f() {}\n"
+            }
+        }),
+    );
+    // Follow with a request we expect to fail with InvalidRequest — its
+    // response is the *next* message the client sees, proving the stray
+    // didOpen did not emit anything.
+    let id = session.send_request(
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_post_shutdown.wado" },
+            "position": { "line": 0, "character": 0 }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["error"]["code"], -32600);
+    let _ = id_shut;
+
     session.send_notification("exit", Value::Null);
     drop(session.child.stdin.take());
     assert_eq!(session.child.wait().unwrap().code().unwrap(), 0);
 }
 
 #[test]
-#[ignore = "spec gap: malformed JSON should elicit a -32700 ParseError response rather than kill the server loop"]
-fn lsp_malformed_json_returns_parse_error() {
+fn lsp_malformed_json_returns_parse_error_and_keeps_server_alive() {
     let mut session = LspSession::start();
     session.initialize();
+
     let bogus = b"not valid json at all";
-    let raw = format!("Content-Length: {}\r\n\r\n", bogus.len());
-    session.send_raw(raw.as_bytes());
+    let header = format!("Content-Length: {}\r\n\r\n", bogus.len());
+    session.send_raw(header.as_bytes());
     session.send_raw(bogus);
+
+    let resp = session.read_message();
+    assert_eq!(resp["jsonrpc"], "2.0");
+    assert_eq!(resp["error"]["code"], -32700);
+    // JSON-RPC 2.0: when the id cannot be determined, response id is null.
+    assert!(resp["id"].is_null(), "got: {}", resp["id"]);
+
+    // Server must still be alive — follow-up requests are processed.
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_missing_content_length_returns_parse_error() {
+    let mut session = LspSession::start();
+    session.initialize();
+
+    // A terminated header block with no Content-Length: header.
+    session.send_raw(b"NoLengthHeader: hello\r\n\r\n");
+
     let resp = session.read_message();
     assert_eq!(resp["error"]["code"], -32700);
+    assert!(resp["id"].is_null());
+
     assert_eq!(session.shutdown_and_exit(), 0);
 }
 
