@@ -14,11 +14,14 @@ wado-compiler = { path = "../wado-compiler" }
 indexmap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-# Not `workspace = true`: the workspace entry unconditionally enables
-# `rt-multi-thread`, which tokio refuses to build for `wasm32-*`. The LSP
-# server only needs a current-thread runtime and the `#[tokio::main]` macro.
-tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+# `futures::executor::block_on` drives the async server loop without pulling
+# in a full multi-threaded runtime. wado-cli keeps tokio for HTTP serving;
+# wado-lsp stays minimal so the `wasm32-wasip2` artifact doesn't bundle a
+# scheduler it can't use anyway.
+futures = { workspace = true }
 
+# Dev-only: `#[tokio::test]` drives the async unit tests. Not built for
+# `wasm32-wasip2` because tests don't run there.
 [dev-dependencies]
 tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 

@@ -184,16 +184,29 @@ jobs:
       - uses: actions/checkout@v6
       - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
 
+  build-wado-lsp-wasip2:
+    name: Build wado-lsp (wasm32-wasip2)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
+      - run: cargo build --locked -p wado-lsp --bin wado-lsp --target wasm32-wasip2 --release
+
   test:
     name: Test
     if: always()
-    needs: [test-core, test-wado, test-e2e-o0, test-e2e-o1, test-e2e-o3, test-e2e-os, check-wasm32]
+    needs: [test-core, test-wado, test-e2e-o0, test-e2e-o1, test-e2e-o3, test-e2e-os, check-wasm32, build-wado-lsp-wasip2]
     runs-on: ubuntu-latest
     permissions: {}
     steps:
       - name: Check all jobs passed
         run: |
-          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check-wasm32.result }}"
+          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check-wasm32.result }} ${{ needs.build-wado-lsp-wasip2.result }}"
           for result in $results; do
             if [ "$result" != "success" ]; then
               echo "One or more jobs failed"
