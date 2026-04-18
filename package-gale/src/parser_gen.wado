@@ -76,6 +76,18 @@ struct PredictionBranch {
     child: PredictionNode,
 }
 
+/// Return the index of an existing branch whose child equals `child`, or -1
+/// when no branch matches. Callers use this to fold a new (token, child) entry
+/// into an existing branch instead of creating a duplicate.
+fn find_merge_branch(branches: &Array<PredictionBranch>, child: &PredictionNode) -> i32 {
+    for let mut b = 0; b < branches.len(); b += 1 {
+        if prediction_node_eq(&branches[b].child, child) {
+            return b;
+        }
+    }
+    return -1;
+}
+
 fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>, alt_elements: &Array<Array<Element>>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
     // Build initial SLL configs: one per alternative, at element position 0.
     let mut configs: Array<SllConfig> = [];
@@ -604,49 +616,26 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
             }
         }
 
-        if next_alts.len() == 1 {
+        let child = if next_alts.len() == 1 {
             // Resolved: this token uniquely identifies one alternative.
-            let mut merged = false;
-            for let mut b = 0; b < branches.len(); b += 1 {
-                if let Leaf(idx) = branches[b].child {
-                    if idx == next_alts[0] {
-                        branches[b].tokens.push(*tk);
-                        merged = true;
-                    }
-                }
-            }
-            if !merged {
-                branches.push(PredictionBranch {
-                    tokens: [*tk],
-                    child: PredictionNode::Leaf(next_alts[0]),
-                });
+            PredictionNode::Leaf(next_alts[0]);
+        } else if opaque_alts.len() > 0 {
+            // Still ambiguous with opaque alts: try expansion before giving up.
+            let expanded = try_expand_opaque(&closed, tk, &next_configs, opaque_alts, depth + 1, max_depth, ctx);
+            if let Some(node) = expanded {
+                node;
+            } else {
+                PredictionNode::Backtrack(next_alts);
             }
         } else {
             // Still ambiguous: recurse with deeper lookahead.
-            // If opaque alts exist, try expanding them before giving up.
-            let child = if opaque_alts.len() > 0 {
-                let expanded = try_expand_opaque(&closed, tk, &next_configs, opaque_alts, depth + 1, max_depth, ctx);
-                if let Some(node) = expanded {
-                    node;
-                } else {
-                    PredictionNode::Backtrack(next_alts);
-                }
-            } else {
-                build_sll_node(&deduped, depth + 1, max_depth, ctx);
-            };
-            let mut merged = false;
-            for let mut b = 0; b < branches.len(); b += 1 {
-                if prediction_node_eq(&branches[b].child, &child) {
-                    branches[b].tokens.push(*tk);
-                    merged = true;
-                }
-            }
-            if !merged {
-                branches.push(PredictionBranch {
-                    tokens: [*tk],
-                    child,
-                });
-            }
+            build_sll_node(&deduped, depth + 1, max_depth, ctx);
+        };
+        let idx = find_merge_branch(&branches, &child);
+        if idx >= 0 {
+            branches[idx].tokens.push(*tk);
+        } else {
+            branches.push(PredictionBranch { tokens: [*tk], child });
         }
     }
 
@@ -765,14 +754,10 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         } else {
             PredictionNode::Backtrack(token_alts.sorted());
         };
-        let mut merged = false;
-        for let mut b = 0; b < branches.len(); b += 1 {
-            if prediction_node_eq(&branches[b].child, &child) {
-                branches[b].tokens.push(*tk);
-                merged = true;
-            }
-        }
-        if !merged {
+        let idx = find_merge_branch(&branches, &child);
+        if idx >= 0 {
+            branches[idx].tokens.push(*tk);
+        } else {
             branches.push(PredictionBranch { tokens: [*tk], child });
         }
     }

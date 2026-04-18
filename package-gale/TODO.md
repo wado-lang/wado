@@ -124,13 +124,6 @@ scans per sql_stmt entry, not 9). Expect another perf improvement on
   (they are semantic-predicate-gated, not LR-gated, and out of scope
   for this work per WEP-2026-03-02).
 
-## Code Quality
-
-### `parser_gen.wado`
-
-- **Duplicated branch merge logic**: SLL prediction tree building has
-  similar merge/dedup patterns in multiple places. Could be consolidated.
-
 ## Generated Parser Bugs
 
 (none currently)
