@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776513520151,
+  "lastUpdate": 1776526856261,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14269,6 +14269,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/99fdaae281d1279a1f6de4765b60f7cc2d91adb3"
         },
         "date": 1776513519864,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "43e7caf5052198127e0420c5788672907cb5583a",
+          "message": "Merge pull request #877 from wado-lang/claude/research-lsp-architecture-r77D8\n\ndocs: WEP for LSP architecture (wasm32-wasip2 + native subprocess override)",
+          "timestamp": "2026-04-19T00:36:46+09:00",
+          "tree_id": "b28d67ce72bfb221ae2f73a6e82dffbb2ca841d0",
+          "url": "https://github.com/wado-lang/wado/commit/43e7caf5052198127e0420c5788672907cb5583a"
+        },
+        "date": 1776526855919,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
