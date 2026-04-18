@@ -17,6 +17,7 @@ use crate::hashmap::IndexMap;
 use crate::loader;
 use crate::logger::{Bail, Logger};
 use crate::name::ModuleSource;
+use crate::reference_collector;
 use crate::resolver::Resolver;
 use crate::resolver::orchestration::AnnotateState;
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
@@ -39,6 +40,13 @@ pub struct Annotated {
     pub symbols: SymbolTable,
     pub types: TypeTable,
     pub(crate) state: AnnotateState,
+    /// Cross-references produced by [`reference_collector`]. Maps
+    /// `(module, IdentExpr.id)` to the binding's defining `SymbolKey`.
+    pub(crate) references: IndexMap<SymbolKey, SymbolKey>,
+    /// Synthetic [`Symbol`] entries for local bindings (let / param /
+    /// closure param) so that [`Annotated::symbol_at`] answers for
+    /// definition keys produced by the reference collector.
+    pub(crate) locals: IndexMap<SymbolKey, Symbol>,
 }
 
 /// A definition location, assembled from a [`SymbolKey`].
@@ -64,10 +72,20 @@ impl Annotated {
     }
 
     /// Symbol for the given key, or `None` if the key does not refer to a
-    /// declared symbol.
+    /// declared symbol. Falls back to the synthetic local table when the key
+    /// names a `let` / parameter binding rather than an item.
     #[must_use]
     pub fn symbol_at(&self, key: &SymbolKey) -> Option<&Symbol> {
-        self.symbols.get(key)
+        self.symbols.get(key).or_else(|| self.locals.get(key))
+    }
+
+    /// Resolve a use-site `SymbolKey` (typically an [`IdentExpr`] id) to the
+    /// `SymbolKey` of its defining binding. Returns `None` if the key does
+    /// not appear in the reference map — in which case the caller should
+    /// fall back to name-based lookup via the symbol table.
+    #[must_use]
+    pub fn referenced_symbol(&self, key: &SymbolKey) -> Option<SymbolKey> {
+        self.references.get(key).cloned()
     }
 
     /// Resolved type for the declaring symbol at `key`, if `key` refers to a
@@ -95,7 +113,7 @@ impl Annotated {
     /// key does not refer to a declared symbol.
     #[must_use]
     pub fn definition_of(&self, key: &SymbolKey) -> Option<Definition> {
-        let sym = self.symbols.get(key)?;
+        let sym = self.symbol_at(key)?;
         let defined_at = &sym.defined_at;
         Some(Definition {
             module: defined_at.module.clone(),
@@ -126,8 +144,313 @@ fn name_span_in_module(module: &Module, ast_id: AstId) -> Option<Span> {
         if let Some(span) = name_span_of_item(item, ast_id) {
             return Some(span);
         }
+        if let Some(span) = name_span_of_binding_in_item(item, ast_id) {
+            return Some(span);
+        }
     }
     None
+}
+
+fn name_span_of_binding_in_item(item: &Item, target: AstId) -> Option<Span> {
+    use crate::ast::{Block, Expr, MatchExpr, Stmt};
+
+    fn scan_block(block: &Block, target: AstId) -> Option<Span> {
+        for stmt in &block.stmts {
+            if let Some(span) = scan_stmt(stmt, target) {
+                return Some(span);
+            }
+        }
+        None
+    }
+
+    fn scan_stmt(stmt: &Stmt, target: AstId) -> Option<Span> {
+        match stmt {
+            Stmt::Let(s) => {
+                if s.id == target {
+                    return Some(s.name_span);
+                }
+                if let Some(v) = &s.value
+                    && let Some(span) = scan_expr(v, target)
+                {
+                    return Some(span);
+                }
+            }
+            Stmt::Expr(s) => return scan_expr(&s.expr, target),
+            Stmt::Return(s) => {
+                if let Some(v) = &s.value {
+                    return scan_expr(v, target);
+                }
+            }
+            Stmt::TaskReturn(s) => return scan_expr(&s.value, target),
+            Stmt::If(s) => {
+                if let Some(span) = scan_condition(&s.condition, target) {
+                    return Some(span);
+                }
+                if let Some(span) = scan_block(&s.then_block, target) {
+                    return Some(span);
+                }
+                if let Some(eb) = &s.else_block {
+                    return scan_block(eb, target);
+                }
+            }
+            Stmt::While(s) => {
+                if let Some(span) = scan_condition(&s.condition, target) {
+                    return Some(span);
+                }
+                return scan_block(&s.body, target);
+            }
+            Stmt::For(s) => {
+                if let Some(init) = &s.init
+                    && let Some(span) = scan_stmt(init, target)
+                {
+                    return Some(span);
+                }
+                if let Some(cond) = &s.condition
+                    && let Some(span) = scan_condition(cond, target)
+                {
+                    return Some(span);
+                }
+                if let Some(u) = &s.update
+                    && let Some(span) = scan_expr(u, target)
+                {
+                    return Some(span);
+                }
+                return scan_block(&s.body, target);
+            }
+            Stmt::ForOf(s) => {
+                if s.id == target {
+                    return Some(s.span);
+                }
+                if let Some(span) = scan_expr(&s.iterable, target) {
+                    return Some(span);
+                }
+                return scan_block(&s.body, target);
+            }
+            Stmt::Loop(s) => return scan_block(&s.body, target),
+            Stmt::Match(m) => return scan_match(m, target),
+            Stmt::Break(s) => {
+                if let Some(v) = &s.value {
+                    return scan_expr(v, target);
+                }
+            }
+            Stmt::Continue(_) => {}
+            Stmt::Assert(s) => {
+                if let Some(span) = scan_expr(&s.condition, target) {
+                    return Some(span);
+                }
+                if let Some(msg) = &s.message {
+                    return scan_expr(msg, target);
+                }
+            }
+            Stmt::LabeledBlock(s) => return scan_block(&s.block, target),
+        }
+        None
+    }
+
+    fn scan_condition(cond: &crate::ast::Condition, target: AstId) -> Option<Span> {
+        use crate::ast::{Condition, ConditionElement};
+        match cond {
+            Condition::Expr(e) => scan_expr(e, target),
+            Condition::LetChain { elements, .. } => {
+                for el in elements {
+                    match el {
+                        ConditionElement::Let { expr, .. } => {
+                            if let Some(span) = scan_expr(expr, target) {
+                                return Some(span);
+                            }
+                        }
+                        ConditionElement::Expr(e) => {
+                            if let Some(span) = scan_expr(e, target) {
+                                return Some(span);
+                            }
+                        }
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    fn scan_match(m: &MatchExpr, target: AstId) -> Option<Span> {
+        if let Some(span) = scan_expr(&m.expr, target) {
+            return Some(span);
+        }
+        for arm in &m.arms {
+            if let Some(guard) = &arm.guard
+                && let Some(span) = scan_expr(guard, target)
+            {
+                return Some(span);
+            }
+            if let Some(span) = scan_expr(&arm.body, target) {
+                return Some(span);
+            }
+        }
+        None
+    }
+
+    fn scan_expr(expr: &Expr, target: AstId) -> Option<Span> {
+        match expr {
+            Expr::Ident(_) | Expr::Literal(_) => None,
+            Expr::Binary(e) => scan_expr(&e.left, target).or_else(|| scan_expr(&e.right, target)),
+            Expr::Unary(e) => scan_expr(&e.expr, target),
+            Expr::Assign(e) => scan_expr(&e.target, target).or_else(|| scan_expr(&e.value, target)),
+            Expr::CompoundAssign(e) => {
+                scan_expr(&e.target, target).or_else(|| scan_expr(&e.value, target))
+            }
+            Expr::ComparisonChain(e) => {
+                if let Some(span) = scan_expr(&e.first, target) {
+                    return Some(span);
+                }
+                for c in &e.comparisons {
+                    if let Some(span) = scan_expr(&c.right, target) {
+                        return Some(span);
+                    }
+                }
+                None
+            }
+            Expr::Call(e) => {
+                if let Some(span) = scan_expr(&e.callee, target) {
+                    return Some(span);
+                }
+                for a in &e.args {
+                    if let Some(span) = scan_expr(a, target) {
+                        return Some(span);
+                    }
+                }
+                None
+            }
+            Expr::MethodCall(e) => {
+                if let Some(span) = scan_expr(&e.receiver, target) {
+                    return Some(span);
+                }
+                for a in &e.args {
+                    if let Some(span) = scan_expr(a, target) {
+                        return Some(span);
+                    }
+                }
+                None
+            }
+            Expr::StaticMethodCall(e) => {
+                for a in &e.args {
+                    if let Some(span) = scan_expr(a, target) {
+                        return Some(span);
+                    }
+                }
+                None
+            }
+            Expr::FieldAccess(e) => scan_expr(&e.expr, target),
+            Expr::Index(e) => scan_expr(&e.expr, target).or_else(|| scan_expr(&e.index, target)),
+            Expr::Block(b) => scan_block(b, target),
+            Expr::If(e) => {
+                if let Some(span) = scan_condition(&e.condition, target) {
+                    return Some(span);
+                }
+                if let Some(span) = scan_block(&e.then_block, target) {
+                    return Some(span);
+                }
+                if let Some(eb) = &e.else_block {
+                    return scan_block(eb, target);
+                }
+                None
+            }
+            Expr::Match(m) => scan_match(m, target),
+            Expr::Matches(m) => {
+                if let Some(span) = scan_expr(&m.expr, target) {
+                    return Some(span);
+                }
+                if let Some(g) = &m.guard {
+                    return scan_expr(g, target);
+                }
+                None
+            }
+            Expr::Closure(c) => {
+                for p in &c.params {
+                    if p.id == target {
+                        return Some(p.name_span);
+                    }
+                }
+                scan_expr(&c.body, target)
+            }
+            Expr::TemplateString(t) => {
+                for part in &t.parts {
+                    if let crate::ast::TemplatePart::Interpolation { expr, .. } = part
+                        && let Some(span) = scan_expr(expr, target)
+                    {
+                        return Some(span);
+                    }
+                }
+                None
+            }
+            Expr::Cast(c) => scan_expr(&c.expr, target),
+            Expr::StructLiteral(s) => {
+                for field in &s.fields {
+                    if let Some(span) = scan_expr(&field.value, target) {
+                        return Some(span);
+                    }
+                }
+                None
+            }
+            Expr::TupleLiteral(t) => {
+                for el in &t.elements {
+                    if let Some(span) = scan_expr(el, target) {
+                        return Some(span);
+                    }
+                }
+                None
+            }
+            Expr::LabeledBlock(lb) => scan_block(&lb.block, target),
+            Expr::TryOp(t) => scan_expr(&t.expr, target),
+            Expr::Spread(inner, _) => scan_expr(inner, target),
+            Expr::Range(r) => scan_expr(&r.start, target).or_else(|| scan_expr(&r.end, target)),
+        }
+    }
+
+    match item {
+        Item::Function(f) => {
+            for p in &f.params {
+                if p.id == target {
+                    return Some(p.name_span);
+                }
+            }
+            if let Some(body) = &f.body {
+                return scan_block(body, target);
+            }
+            None
+        }
+        Item::Impl(imp) => {
+            for m in &imp.methods {
+                for p in &m.params {
+                    if p.id == target {
+                        return Some(p.name_span);
+                    }
+                }
+                if let Some(body) = &m.body
+                    && let Some(span) = scan_block(body, target)
+                {
+                    return Some(span);
+                }
+            }
+            None
+        }
+        Item::Trait(t) => {
+            for m in &t.methods {
+                for p in &m.params {
+                    if p.id == target {
+                        return Some(p.name_span);
+                    }
+                }
+                if let Some(body) = &m.body
+                    && let Some(span) = scan_block(body, target)
+                {
+                    return Some(span);
+                }
+            }
+            None
+        }
+        Item::Test(t) => scan_block(&t.body, target),
+        Item::Global(g) => scan_expr(&g.initializer, target),
+        _ => None,
+    }
 }
 
 fn name_span_of_item(item: &Item, target: AstId) -> Option<Span> {
@@ -304,12 +627,19 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
     // shared `Rc<RefCell<TypeTable>>` held by `state.type_table`.
     let types = state.type_table.borrow().clone();
 
+    let bindings = {
+        let _span = logger.span("resolve/reference_collect");
+        reference_collector::collect_references(&load_result.modules)
+    };
+
     Ok(Annotated {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
         symbols,
         types,
         state,
+        references: bindings.references,
+        locals: bindings.locals,
     })
 }
 

@@ -24,6 +24,7 @@ pub mod name;
 pub mod optimize;
 pub mod package;
 pub mod parser;
+pub(crate) mod reference_collector;
 pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
