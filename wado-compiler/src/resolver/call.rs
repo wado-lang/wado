@@ -220,7 +220,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     {
                         let self_name = self.type_table.borrow().type_name(self_type_id);
                         let synthetic_call = ast::CallExpr {
+                            id: call.id,
                             callee: Expr::Ident(ast::IdentExpr {
+                                id: ident.id,
                                 name: format!("{self_name}::{suffix}"),
                                 span: ident.span,
                             }),

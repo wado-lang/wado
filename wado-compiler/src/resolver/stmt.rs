@@ -2123,6 +2123,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let into_iter_receiver = if is_enumerate {
             // iterable.enumerate().into_iter() — construct enumerate() call AST
             Expr::MethodCall(Box::new(MethodCallExpr {
+                id: for_of.id,
                 receiver: for_of.iterable.clone(),
                 method: "enumerate".to_string(),
                 type_args: vec![],
@@ -2136,12 +2137,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // let mut __iter_N = receiver.into_iter();
         let into_iter_let = LetStmt {
+            id: for_of.id,
             pattern: Pattern::Ident(iter_var.clone()),
             name_span: span,
             is_mut: true,
             is_reactive: false,
             ty: None,
             value: Some(Expr::MethodCall(Box::new(MethodCallExpr {
+                id: for_of.id,
                 receiver: into_iter_receiver,
                 method: "into_iter".to_string(),
                 type_args: vec![],
@@ -2173,7 +2176,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // __iter_N.next()
         let next_call = Expr::MethodCall(Box::new(MethodCallExpr {
+            id: for_of.id,
             receiver: Expr::Ident(IdentExpr {
+                id: for_of.id,
                 name: iter_var,
                 span,
             }),
@@ -2213,14 +2218,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 _ => UnaryOp::Ref,
             };
             let ref_let = Stmt::Let(LetStmt {
+                id: for_of.id,
                 pattern: for_of.binding.clone(),
                 name_span: span,
                 is_mut: for_of.is_mut,
                 is_reactive: false,
                 ty: None,
                 value: Some(Expr::Unary(Box::new(UnaryExpr {
+                    id: for_of.id,
                     op: ref_op,
                     expr: Expr::Ident(IdentExpr {
+                        id: for_of.id,
                         name: elem_var,
                         span,
                     }),
@@ -2240,6 +2248,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // if let Some(v) = __iter_N.next() { body } else { break; }
         let if_let = IfStmt {
+            id: for_of.id,
             condition: Condition::LetChain {
                 elements: vec![ConditionElement::Let {
                     pattern: some_pattern,
@@ -2252,6 +2261,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             else_block: Some(Block {
                 id: for_of.body.id,
                 stmts: vec![Stmt::Break(BreakStmt {
+                    id: for_of.id,
                     label: None,
                     value: None,
                     span,

@@ -764,6 +764,7 @@ pub enum Stmt {
 /// Creates a new scope with local bindings. The label is required to reduce syntactic ambiguity.
 #[derive(Debug, Clone)]
 pub struct LabeledBlockStmt {
+    pub id: AstId,
     pub label: String,
     pub block: Block,
     pub span: Span,
@@ -773,6 +774,7 @@ pub struct LabeledBlockStmt {
 /// If the expression is false, prints a power-assert style error message and calls unreachable
 #[derive(Debug, Clone)]
 pub struct AssertStmt {
+    pub id: AstId,
     pub condition: Expr,
     /// Optional message expression (typically a String literal or template string)
     pub message: Option<Expr>,
@@ -781,6 +783,7 @@ pub struct AssertStmt {
 
 #[derive(Debug, Clone)]
 pub struct LetStmt {
+    pub id: AstId,
     pub pattern: Pattern,
     /// Span of the pattern's leading token: exactly the identifier for
     /// `Ident`/`MutIdent` patterns, or the opening delimiter/constructor for
@@ -798,12 +801,14 @@ pub struct LetStmt {
 
 #[derive(Debug, Clone)]
 pub struct ExprStmt {
+    pub id: AstId,
     pub expr: Expr,
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct ReturnStmt {
+    pub id: AstId,
     pub value: Option<Expr>,
     pub span: Span,
 }
@@ -812,6 +817,7 @@ pub struct ReturnStmt {
 /// Only valid inside `export async fn` bodies.
 #[derive(Debug, Clone)]
 pub struct TaskReturnStmt {
+    pub id: AstId,
     pub value: Expr,
     pub span: Span,
 }
@@ -845,6 +851,7 @@ pub enum Condition {
 
 #[derive(Debug, Clone)]
 pub struct IfStmt {
+    pub id: AstId,
     pub condition: Condition,
     pub then_block: Block,
     pub else_block: Option<Block>,
@@ -853,6 +860,7 @@ pub struct IfStmt {
 
 #[derive(Debug, Clone)]
 pub struct WhileStmt {
+    pub id: AstId,
     pub condition: Condition,
     pub body: Block,
     pub span: Span,
@@ -862,6 +870,7 @@ pub struct WhileStmt {
 /// Also supports pattern conditions: `for init; let Some(x) = iter.next(); update { body }`
 #[derive(Debug, Clone)]
 pub struct ForStmt {
+    pub id: AstId,
     /// Initialization statement (e.g., `let i = 0`)
     pub init: Option<Box<Stmt>>,
     /// Loop condition (e.g., `i < 10` or `let Some(x) = iter.next()`)
@@ -876,6 +885,7 @@ pub struct ForStmt {
 /// Iterates over elements of an Array<T>
 #[derive(Debug, Clone)]
 pub struct ForOfStmt {
+    pub id: AstId,
     /// Pattern to bind each element (Ident for simple, Struct/Tuple for destructuring)
     pub binding: Pattern,
     /// Whether the binding is mutable
@@ -889,6 +899,7 @@ pub struct ForOfStmt {
 /// Infinite loop: `loop { body }`
 #[derive(Debug, Clone)]
 pub struct LoopStmt {
+    pub id: AstId,
     pub body: Block,
     pub span: Span,
 }
@@ -896,6 +907,7 @@ pub struct LoopStmt {
 /// Break statement: `break;`, `break label;`, or `break label: expr;`
 #[derive(Debug, Clone)]
 pub struct BreakStmt {
+    pub id: AstId,
     /// Optional label to break to (for labeled blocks)
     pub label: Option<String>,
     /// Optional value to return from the labeled block
@@ -906,7 +918,50 @@ pub struct BreakStmt {
 /// Continue statement: `continue;`
 #[derive(Debug, Clone)]
 pub struct ContinueStmt {
+    pub id: AstId,
     pub span: Span,
+}
+
+impl Stmt {
+    /// Returns the parse-stable [`AstId`] for this statement.
+    pub fn id(&self) -> AstId {
+        match self {
+            Stmt::Let(s) => s.id,
+            Stmt::Expr(s) => s.id,
+            Stmt::Return(s) => s.id,
+            Stmt::TaskReturn(s) => s.id,
+            Stmt::If(s) => s.id,
+            Stmt::While(s) => s.id,
+            Stmt::For(s) => s.id,
+            Stmt::ForOf(s) => s.id,
+            Stmt::Loop(s) => s.id,
+            Stmt::Match(s) => s.id,
+            Stmt::Break(s) => s.id,
+            Stmt::Continue(s) => s.id,
+            Stmt::Assert(s) => s.id,
+            Stmt::LabeledBlock(s) => s.id,
+        }
+    }
+
+    /// Returns the source [`Span`] for this statement.
+    pub fn span(&self) -> Span {
+        match self {
+            Stmt::Let(s) => s.span,
+            Stmt::Expr(s) => s.span,
+            Stmt::Return(s) => s.span,
+            Stmt::TaskReturn(s) => s.span,
+            Stmt::If(s) => s.span,
+            Stmt::While(s) => s.span,
+            Stmt::For(s) => s.span,
+            Stmt::ForOf(s) => s.span,
+            Stmt::Loop(s) => s.span,
+            Stmt::Match(s) => s.span,
+            Stmt::Break(s) => s.span,
+            Stmt::Continue(s) => s.span,
+            Stmt::Assert(s) => s.span,
+            Stmt::LabeledBlock(s) => s.span,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -947,6 +1002,7 @@ pub enum Expr {
 /// The value is the last expression in the block (if any).
 #[derive(Debug, Clone)]
 pub struct LabeledBlockExpr {
+    pub id: AstId,
     pub label: String,
     pub block: Block,
     pub span: Span,
@@ -955,6 +1011,7 @@ pub struct LabeledBlockExpr {
 /// Postfix `?` operator: `expr?`
 #[derive(Debug, Clone)]
 pub struct TryOpExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub span: Span,
 }
@@ -969,6 +1026,7 @@ pub enum RangeKind {
 /// Range expression: `start..<end` or `start..=end`
 #[derive(Debug, Clone)]
 pub struct RangeExpr {
+    pub id: AstId,
     pub start: Expr,
     pub end: Expr,
     pub kind: RangeKind,
@@ -976,6 +1034,40 @@ pub struct RangeExpr {
 }
 
 impl Expr {
+    /// Returns the parse-stable [`AstId`] for this expression.
+    ///
+    /// For `Expr::Spread(inner, _)` the id of the inner expression is returned,
+    /// since spread is a compile-time splice operation without its own identity.
+    pub fn id(&self) -> AstId {
+        match self {
+            Expr::Ident(e) => e.id,
+            Expr::Literal(e) => e.id,
+            Expr::Binary(e) => e.id,
+            Expr::Unary(e) => e.id,
+            Expr::Assign(e) => e.id,
+            Expr::CompoundAssign(e) => e.id,
+            Expr::ComparisonChain(e) => e.id,
+            Expr::Call(e) => e.id,
+            Expr::MethodCall(e) => e.id,
+            Expr::StaticMethodCall(e) => e.id,
+            Expr::FieldAccess(e) => e.id,
+            Expr::Index(e) => e.id,
+            Expr::Block(e) => e.id,
+            Expr::If(e) => e.id,
+            Expr::Match(e) => e.id,
+            Expr::Matches(e) => e.id,
+            Expr::Closure(e) => e.id,
+            Expr::TemplateString(e) => e.id,
+            Expr::Cast(e) => e.id,
+            Expr::StructLiteral(e) => e.id,
+            Expr::TupleLiteral(e) => e.id,
+            Expr::LabeledBlock(e) => e.id,
+            Expr::TryOp(e) => e.id,
+            Expr::Spread(inner, _) => inner.id(),
+            Expr::Range(e) => e.id,
+        }
+    }
+
     /// Get the source span for this expression
     pub fn span(&self) -> Span {
         match self {
@@ -1115,6 +1207,7 @@ impl Expr {
 /// Type cast expression: `expr as Type`
 #[derive(Debug, Clone)]
 pub struct CastExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub target_type: Type,
     pub span: Span,
@@ -1123,6 +1216,7 @@ pub struct CastExpr {
 /// Struct literal expression: `Point { x: 10, y: 20 }` or implicit `{ x: 10, y: 20 }`
 #[derive(Debug, Clone)]
 pub struct StructLiteralExpr {
+    pub id: AstId,
     /// The struct type name. None for implicit struct literals like `{ x: 1, y: 2 }`
     /// which require type context (e.g., `let p: Point = { x: 1, y: 2 }`).
     pub name: Option<String>,
@@ -1148,6 +1242,7 @@ pub struct StructLiteralField {
 /// Can be coerced to Array<T> when all elements have the same type.
 #[derive(Debug, Clone)]
 pub struct TupleLiteralExpr {
+    pub id: AstId,
     pub elements: Vec<Expr>,
     pub span: Span,
 }
@@ -1155,6 +1250,7 @@ pub struct TupleLiteralExpr {
 /// Assignment expression: `x = value` or `x.field = value`
 #[derive(Debug, Clone)]
 pub struct AssignExpr {
+    pub id: AstId,
     pub target: Expr,
     pub value: Expr,
     pub span: Span,
@@ -1178,6 +1274,7 @@ pub enum CompoundAssignOp {
 /// Compound assignment expression: `x += value`
 #[derive(Debug, Clone)]
 pub struct CompoundAssignExpr {
+    pub id: AstId,
     pub target: Expr,
     pub op: CompoundAssignOp,
     pub value: Expr,
@@ -1186,12 +1283,14 @@ pub struct CompoundAssignExpr {
 
 #[derive(Debug, Clone)]
 pub struct IdentExpr {
+    pub id: AstId,
     pub name: String,
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct LiteralExpr {
+    pub id: AstId,
     pub value: Literal,
     pub span: Span,
 }
@@ -1223,6 +1322,7 @@ pub enum Literal {
 
 #[derive(Debug, Clone)]
 pub struct BinaryExpr {
+    pub id: AstId,
     pub left: Expr,
     pub op: BinaryOp,
     pub right: Expr,
@@ -1262,6 +1362,7 @@ pub struct ChainedComparison {
 /// Comparison chain expression: `a < b < c` or `0 <= x <= 100`
 #[derive(Debug, Clone)]
 pub struct ComparisonChainExpr {
+    pub id: AstId,
     pub first: Expr,
     pub comparisons: Vec<ChainedComparison>,
     pub span: Span,
@@ -1269,6 +1370,7 @@ pub struct ComparisonChainExpr {
 
 #[derive(Debug, Clone)]
 pub struct UnaryExpr {
+    pub id: AstId,
     pub op: UnaryOp,
     pub expr: Expr,
     pub span: Span,
@@ -1286,6 +1388,7 @@ pub enum UnaryOp {
 
 #[derive(Debug, Clone)]
 pub struct CallExpr {
+    pub id: AstId,
     pub callee: Expr,
     /// Explicit type arguments for generic functions: `foo::<i32>(x)`
     pub type_args: Vec<Type>,
@@ -1297,6 +1400,7 @@ pub struct CallExpr {
 
 #[derive(Debug, Clone)]
 pub struct MethodCallExpr {
+    pub id: AstId,
     pub receiver: Expr,
     pub method: String,
     /// Explicit type arguments for generic methods: `obj.foo::<i32>(x)`
@@ -1310,6 +1414,7 @@ pub struct MethodCallExpr {
 /// Static method call expression: `Array::<i32>::with_capacity(100)` or `Point::origin()`
 #[derive(Debug, Clone)]
 pub struct StaticMethodCallExpr {
+    pub id: AstId,
     /// The target type (e.g., `Array<i32>` or `Point`)
     pub target_type: Type,
     /// The method name (e.g., `with_capacity` or `origin`)
@@ -1325,6 +1430,7 @@ pub struct StaticMethodCallExpr {
 
 #[derive(Debug, Clone)]
 pub struct FieldAccessExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub field: String,
     pub span: Span,
@@ -1332,6 +1438,7 @@ pub struct FieldAccessExpr {
 
 #[derive(Debug, Clone)]
 pub struct IndexExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub index: Expr,
     pub span: Span,
@@ -1339,6 +1446,7 @@ pub struct IndexExpr {
 
 #[derive(Debug, Clone)]
 pub struct IfExpr {
+    pub id: AstId,
     pub condition: Condition,
     pub then_block: Block,
     pub else_block: Option<Block>,
@@ -1347,6 +1455,7 @@ pub struct IfExpr {
 
 #[derive(Debug, Clone)]
 pub struct MatchExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub arms: Vec<MatchArm>,
     pub span: Span,
@@ -1365,6 +1474,7 @@ pub struct MatchArm {
 /// Returns true if the pattern matches and the optional guard is true.
 #[derive(Debug, Clone)]
 pub struct MatchesExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub pattern: Pattern,
     /// Optional guard expression (the condition after `&&`)
@@ -1412,6 +1522,7 @@ pub struct StructPatternField {
 
 #[derive(Debug, Clone)]
 pub struct ClosureExpr {
+    pub id: AstId,
     pub params: Vec<ClosureParam>,
     pub body: Expr,
     /// Pre-desugar source text, set by the desugar phase before transforming the body.
@@ -1432,6 +1543,7 @@ pub struct ClosureParam {
 /// Template string expression: `Hello, {name}!`
 #[derive(Debug, Clone)]
 pub struct TemplateStringExpr {
+    pub id: AstId,
     pub parts: Vec<TemplatePart>,
     pub span: Span,
 }

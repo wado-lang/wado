@@ -334,6 +334,7 @@ fn desugar_pattern(p: &Pattern) -> Pattern {
 fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
     match stmt {
         Stmt::Let(l) => Stmt::Let(LetStmt {
+            id: l.id,
             pattern: desugar_pattern(&l.pattern),
             name_span: l.name_span,
             is_mut: l.is_mut,
@@ -343,18 +344,22 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
             span: l.span,
         }),
         Stmt::Expr(e) => Stmt::Expr(crate::ast::ExprStmt {
+            id: e.id,
             expr: desugar_expr(&e.expr),
             span: e.span,
         }),
         Stmt::Return(r) => Stmt::Return(ReturnStmt {
+            id: r.id,
             value: r.value.as_ref().map(desugar_expr),
             span: r.span,
         }),
         Stmt::TaskReturn(tr) => Stmt::TaskReturn(TaskReturnStmt {
+            id: tr.id,
             value: desugar_expr(&tr.value),
             span: tr.span,
         }),
         Stmt::If(i) => Stmt::If(IfStmt {
+            id: i.id,
             condition: desugar_condition(&i.condition),
             then_block: desugar_block(&i.then_block, ctx),
             else_block: i.else_block.as_ref().map(|b| desugar_block(b, ctx)),
@@ -370,9 +375,10 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
             let saved_labels = std::mem::take(&mut ctx.for_loop_labels);
             let body = desugar_block(&l.body, ctx);
             ctx.for_loop_labels = saved_labels;
-            Stmt::Loop(LoopStmt { body, span: l.span })
+            Stmt::Loop(LoopStmt { id: l.id, body, span: l.span })
         }
         Stmt::Match(m) => Stmt::Match(Box::new(MatchExpr {
+            id: m.id,
             expr: desugar_expr(&m.expr),
             arms: m
                 .arms
@@ -393,12 +399,14 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
                 && let Some((outer_label, _)) = ctx.for_loop_labels.last()
             {
                 return Stmt::Break(BreakStmt {
+                    id: b.id,
                     label: Some(outer_label.clone()),
                     value: b.value.as_ref().map(|v| Box::new(desugar_expr(v))),
                     span: b.span,
                 });
             }
             Stmt::Break(BreakStmt {
+                id: b.id,
                 label: b.label.clone(),
                 value: b.value.as_ref().map(|v| Box::new(desugar_expr(v))),
                 span: b.span,
@@ -409,14 +417,16 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
             // (this will skip to the update expression)
             if let Some((_, body_label)) = ctx.for_loop_labels.last() {
                 return Stmt::Break(BreakStmt {
+                    id: c.id,
                     label: Some(body_label.clone()),
                     value: None,
                     span: c.span,
                 });
             }
-            Stmt::Continue(ContinueStmt { span: c.span })
+            Stmt::Continue(ContinueStmt { id: c.id, span: c.span })
         }
         Stmt::LabeledBlock(lb) => Stmt::LabeledBlock(LabeledBlockStmt {
+            id: lb.id,
             label: lb.label.clone(),
             block: desugar_block(&lb.block, ctx),
             span: lb.span,
@@ -466,22 +476,26 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         Expr::Ident(i) => Expr::Ident(i.clone()),
         Expr::Literal(l) => Expr::Literal(l.clone()),
         Expr::Binary(b) => Expr::Binary(Box::new(BinaryExpr {
+            id: b.id,
             left: desugar_expr(&b.left),
             op: b.op,
             right: desugar_expr(&b.right),
             span: b.span,
         })),
         Expr::Unary(u) => Expr::Unary(Box::new(UnaryExpr {
+            id: u.id,
             op: u.op,
             expr: desugar_expr(&u.expr),
             span: u.span,
         })),
         Expr::Assign(a) => Expr::Assign(Box::new(AssignExpr {
+            id: a.id,
             target: desugar_expr(&a.target),
             value: desugar_expr(&a.value),
             span: a.span,
         })),
         Expr::Call(c) => Expr::Call(Box::new(CallExpr {
+            id: c.id,
             callee: desugar_expr(&c.callee),
             type_args: c.type_args.clone(),
             args: c.args.iter().map(desugar_expr).collect(),
@@ -489,6 +503,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             span: c.span,
         })),
         Expr::MethodCall(m) => Expr::MethodCall(Box::new(MethodCallExpr {
+            id: m.id,
             receiver: desugar_expr(&m.receiver),
             method: m.method.clone(),
             type_args: m.type_args.clone(),
@@ -497,6 +512,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             span: m.span,
         })),
         Expr::StaticMethodCall(s) => Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+            id: s.id,
             target_type: s.target_type.clone(),
             method: s.method.clone(),
             type_args: s.type_args.clone(),
@@ -505,11 +521,13 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             span: s.span,
         })),
         Expr::FieldAccess(f) => Expr::FieldAccess(Box::new(FieldAccessExpr {
+            id: f.id,
             expr: desugar_expr(&f.expr),
             field: f.field.clone(),
             span: f.span,
         })),
         Expr::Index(i) => Expr::Index(Box::new(IndexExpr {
+            id: i.id,
             expr: desugar_expr(&i.expr),
             index: desugar_expr(&i.index),
             span: i.span,
@@ -533,6 +551,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         Expr::If(i) => {
             if let Some(ctx) = ctx {
                 Expr::If(Box::new(IfExpr {
+                    id: i.id,
                     condition: desugar_condition(&i.condition),
                     then_block: desugar_block(&i.then_block, ctx),
                     else_block: i.else_block.as_ref().map(|b| desugar_block(b, ctx)),
@@ -547,6 +566,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     current_parent_id: AstId(0),
                 };
                 Expr::If(Box::new(IfExpr {
+                    id: i.id,
                     condition: desugar_condition(&i.condition),
                     then_block: desugar_block(&i.then_block, &mut temp_ctx),
                     else_block: i
@@ -558,6 +578,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             }
         }
         Expr::Match(m) => Expr::Match(Box::new(MatchExpr {
+            id: m.id,
             expr: desugar_expr(&m.expr),
             arms: m
                 .arms
@@ -574,6 +595,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         Expr::Closure(c) => {
             let source_text = crate::unparse::unparse_expr_simple(&Expr::Closure(c.clone()));
             Expr::Closure(Box::new(ClosureExpr {
+                id: c.id,
                 params: c.params.clone(),
                 body: desugar_expr(&c.body),
                 source_text: Some(source_text),
@@ -582,11 +604,13 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         }
         Expr::TemplateString(t) => Expr::TemplateString(Box::new(desugar_template_string(t))),
         Expr::Cast(c) => Expr::Cast(Box::new(CastExpr {
+            id: c.id,
             expr: desugar_expr(&c.expr),
             target_type: c.target_type.clone(),
             span: c.span,
         })),
         Expr::StructLiteral(s) => Expr::StructLiteral(Box::new(StructLiteralExpr {
+            id: s.id,
             name: s.name.clone(),
             fields: s
                 .fields
@@ -602,6 +626,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             span: s.span,
         })),
         Expr::TupleLiteral(t) => Expr::TupleLiteral(Box::new(TupleLiteralExpr {
+            id: t.id,
             elements: t.elements.iter().map(desugar_expr).collect(),
             span: t.span,
         })),
@@ -609,6 +634,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             // Labeled block expressions can contain statements including asserts
             if let Some(ctx) = ctx {
                 Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
+                    id: lb.id,
                     label: lb.label.clone(),
                     block: desugar_block(&lb.block, ctx),
                     span: lb.span,
@@ -622,6 +648,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     current_parent_id: AstId(0),
                 };
                 Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
+                    id: lb.id,
                     label: lb.label.clone(),
                     block: desugar_block(&lb.block, &mut ctx),
                     span: lb.span,
@@ -634,10 +661,12 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         Expr::Matches(m) => desugar_matches_expr(m),
         Expr::Spread(inner, span) => Expr::Spread(Box::new(desugar_expr(inner)), *span),
         Expr::TryOp(qm) => Expr::TryOp(Box::new(crate::ast::TryOpExpr {
+            id: qm.id,
             expr: desugar_expr(&qm.expr),
             span: qm.span,
         })),
         Expr::Range(range) => Expr::Range(Box::new(crate::ast::RangeExpr {
+            id: range.id,
             start: desugar_expr(&range.start),
             end: desugar_expr(&range.end),
             kind: range.kind,
@@ -657,6 +686,7 @@ fn desugar_matches_expr(m: &crate::ast::MatchesExpr) -> Expr {
         desugar_expr(guard)
     } else {
         Expr::Literal(LiteralExpr {
+            id: m.id,
             value: Literal::Bool(true),
             span: m.span,
         })
@@ -664,12 +694,14 @@ fn desugar_matches_expr(m: &crate::ast::MatchesExpr) -> Expr {
 
     // The wildcard arm: `false`
     let wildcard_body = Expr::Literal(LiteralExpr {
+        id: m.id,
         value: Literal::Bool(false),
         span: m.span,
     });
 
     // Build a match expression
     Expr::Match(Box::new(MatchExpr {
+        id: m.id,
         expr: scrutinee,
         arms: vec![
             MatchArm {
@@ -708,6 +740,7 @@ fn desugar_compound_assign(ca: &CompoundAssignExpr) -> Expr {
     };
 
     let binary_expr = Expr::Binary(Box::new(BinaryExpr {
+        id: ca.id,
         left: target.clone(),
         op,
         right: value,
@@ -715,6 +748,7 @@ fn desugar_compound_assign(ca: &CompoundAssignExpr) -> Expr {
     }));
 
     Expr::Assign(Box::new(AssignExpr {
+        id: ca.id,
         target,
         value: binary_expr,
         span: ca.span,
@@ -733,6 +767,7 @@ fn desugar_comparison_chain(chain: &ComparisonChainExpr) -> Expr {
         // Single comparison, just a binary expr
         let cmp = &chain.comparisons[0];
         return Expr::Binary(Box::new(BinaryExpr {
+            id: chain.id,
             left: first,
             op: cmp.op,
             right: desugar_expr(&cmp.right),
@@ -747,6 +782,7 @@ fn desugar_comparison_chain(chain: &ComparisonChainExpr) -> Expr {
     for cmp in &chain.comparisons {
         let right = desugar_expr(&cmp.right);
         let comparison = Expr::Binary(Box::new(BinaryExpr {
+            id: chain.id,
             left: prev.clone(),
             op: cmp.op,
             right: right.clone(),
@@ -756,6 +792,7 @@ fn desugar_comparison_chain(chain: &ComparisonChainExpr) -> Expr {
         result = Some(match result {
             None => comparison,
             Some(acc) => Expr::Binary(Box::new(BinaryExpr {
+                id: chain.id,
                 left: acc,
                 op: BinaryOp::And,
                 right: comparison,
@@ -771,6 +808,7 @@ fn desugar_comparison_chain(chain: &ComparisonChainExpr) -> Expr {
 
 fn desugar_template_string(t: &TemplateStringExpr) -> TemplateStringExpr {
     TemplateStringExpr {
+        id: t.id,
         parts: t
             .parts
             .iter()
@@ -808,18 +846,21 @@ fn desugar_while(w: &WhileStmt, ctx: &mut DesugarContext) -> Stmt {
         Condition::Expr(cond) => {
             // while cond { body } -> loop { if !cond { break; } body }
             let negated_cond = Expr::Unary(Box::new(UnaryExpr {
+                id: ctx.synth_id(),
                 op: UnaryOp::Not,
                 expr: desugar_expr(cond),
                 span,
             }));
 
             let break_stmt = Stmt::Break(BreakStmt {
+                id: ctx.synth_id(),
                 label: None,
                 value: None,
                 span,
             });
 
             let if_break = Stmt::If(IfStmt {
+                id: ctx.synth_id(),
                 condition: Condition::Expr(negated_cond),
                 then_block: Block {
                     id: ctx.synth_id(),
@@ -834,6 +875,7 @@ fn desugar_while(w: &WhileStmt, ctx: &mut DesugarContext) -> Stmt {
             loop_stmts.extend(desugar_block(&w.body, ctx).stmts);
 
             Stmt::Loop(LoopStmt {
+                id: ctx.synth_id(),
                 body: Block {
                     id: ctx.synth_id(),
                     stmts: loop_stmts,
@@ -845,12 +887,14 @@ fn desugar_while(w: &WhileStmt, ctx: &mut DesugarContext) -> Stmt {
         Condition::LetChain { .. } => {
             // while let ... { body } -> loop { if let ... { body } else { break; } }
             let break_stmt = Stmt::Break(BreakStmt {
+                id: ctx.synth_id(),
                 label: None,
                 value: None,
                 span,
             });
 
             let if_chain = Stmt::If(IfStmt {
+                id: ctx.synth_id(),
                 condition: desugar_condition(&w.condition),
                 then_block: desugar_block(&w.body, ctx),
                 else_block: Some(Block {
@@ -862,6 +906,7 @@ fn desugar_while(w: &WhileStmt, ctx: &mut DesugarContext) -> Stmt {
             });
 
             Stmt::Loop(LoopStmt {
+                id: ctx.synth_id(),
                 body: Block {
                     id: ctx.synth_id(),
                     stmts: vec![if_chain],
@@ -926,6 +971,7 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
 
     // Wrap body in labeled block for continue handling
     let labeled_body = Stmt::LabeledBlock(LabeledBlockStmt {
+        id: ctx.synth_id(),
         label: body_label,
         block: desugared_body,
         span,
@@ -936,18 +982,21 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
         Some(Condition::Expr(cond)) => {
             // Expr condition: if !cond { break __for_N; }
             let negated_cond = Expr::Unary(Box::new(UnaryExpr {
+                id: ctx.synth_id(),
                 op: UnaryOp::Not,
                 expr: desugar_expr(cond),
                 span,
             }));
 
             let break_outer = Stmt::Break(BreakStmt {
+                id: ctx.synth_id(),
                 label: Some(outer_label.clone()),
                 value: None,
                 span,
             });
 
             let if_break = Stmt::If(IfStmt {
+                id: ctx.synth_id(),
                 condition: Condition::Expr(negated_cond),
                 then_block: Block {
                     id: ctx.synth_id(),
@@ -961,6 +1010,7 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
             let mut stmts = vec![if_break, labeled_body];
             if let Some(update) = &f.update {
                 stmts.push(Stmt::Expr(ExprStmt {
+                    id: ctx.synth_id(),
                     expr: desugar_expr(update),
                     span,
                 }));
@@ -974,6 +1024,7 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
         Some(Condition::LetChain { .. }) => {
             // Let chain condition: if let ... { body; update; } else { break __for_N; }
             let break_outer = Stmt::Break(BreakStmt {
+                id: ctx.synth_id(),
                 label: Some(outer_label.clone()),
                 value: None,
                 span,
@@ -982,12 +1033,14 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
             let mut then_stmts = vec![labeled_body];
             if let Some(update) = &f.update {
                 then_stmts.push(Stmt::Expr(ExprStmt {
+                    id: ctx.synth_id(),
                     expr: desugar_expr(update),
                     span,
                 }));
             }
 
             let if_chain = Stmt::If(IfStmt {
+                id: ctx.synth_id(),
                 condition: desugar_condition(f.condition.as_ref().unwrap()),
                 then_block: Block {
                     id: ctx.synth_id(),
@@ -1013,6 +1066,7 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
             let mut stmts = vec![labeled_body];
             if let Some(update) = &f.update {
                 stmts.push(Stmt::Expr(ExprStmt {
+                    id: ctx.synth_id(),
                     expr: desugar_expr(update),
                     span,
                 }));
@@ -1026,6 +1080,7 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
     };
 
     let loop_stmt = Stmt::Loop(LoopStmt {
+        id: ctx.synth_id(),
         body: loop_body,
         span,
     });
@@ -1038,6 +1093,7 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
     outer_stmts.push(loop_stmt);
 
     Stmt::LabeledBlock(LabeledBlockStmt {
+        id: ctx.synth_id(),
         label: outer_label,
         block: Block {
             id: ctx.synth_id(),
@@ -1062,6 +1118,7 @@ fn desugar_for_of(f: &ForOfStmt, ctx: &mut DesugarContext) -> Stmt {
     ctx.for_loop_labels = saved_labels;
 
     Stmt::ForOf(ForOfStmt {
+        id: ctx.synth_id(),
         binding: desugar_pattern(&f.binding),
         is_mut: f.is_mut,
         iterable: desugar_expr(&f.iterable),
@@ -1112,6 +1169,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
 
     for (var_name, _source, expr) in &intermediates {
         stmts.push(Stmt::Let(LetStmt {
+            id: ctx.synth_id(),
             pattern: Pattern::Ident(var_name.clone()),
             name_span: span,
             is_mut: false,
@@ -1129,6 +1187,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     // Store condition in a variable (scoped to this labeled block)
     let cond_var = "__cond".to_string();
     stmts.push(Stmt::Let(LetStmt {
+        id: ctx.synth_id(),
         pattern: Pattern::Ident(cond_var.clone()),
         name_span: span,
         is_mut: false,
@@ -1144,16 +1203,19 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
 
     // Helper to create #function literal expression
     let function_expr = Expr::Literal(LiteralExpr {
+        id: ctx.synth_id(),
         value: Literal::LocationFunction,
         span,
     });
     // Helper to create #file literal expression
     let file_expr = Expr::Literal(LiteralExpr {
+        id: ctx.synth_id(),
         value: Literal::LocationFile,
         span,
     });
     // Helper to create #line literal expression
     let line_expr = Expr::Literal(LiteralExpr {
+        id: ctx.synth_id(),
         value: Literal::LocationLine,
         span,
     });
@@ -1191,6 +1253,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
         template_parts.push(TemplatePart::String(format!("{source}: ")));
         template_parts.push(TemplatePart::Interpolation {
             expr: Box::new(Expr::Ident(IdentExpr {
+                id: ctx.synth_id(),
                 name: var_name.clone(),
                 span,
             })),
@@ -1202,13 +1265,16 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     }
 
     let error_message = Expr::TemplateString(Box::new(TemplateStringExpr {
+        id: ctx.synth_id(),
         parts: template_parts,
         span,
     }));
 
     // Build: panic(error_message)
     let panic_call = Expr::Call(Box::new(CallExpr {
+        id: ctx.synth_id(),
         callee: Expr::Ident(IdentExpr {
+            id: ctx.synth_id(),
             name: "panic".to_string(),
             span,
         }),
@@ -1220,9 +1286,12 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
 
     // Build: if !__cond { panic(...); }
     let if_stmt = Stmt::If(IfStmt {
+        id: ctx.synth_id(),
         condition: Condition::Expr(Expr::Unary(Box::new(UnaryExpr {
+            id: ctx.synth_id(),
             op: UnaryOp::Not,
             expr: Expr::Ident(IdentExpr {
+                id: ctx.synth_id(),
                 name: cond_var,
                 span,
             }),
@@ -1231,6 +1300,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
         then_block: Block {
             id: ctx.synth_id(),
             stmts: vec![Stmt::Expr(ExprStmt {
+                id: ctx.synth_id(),
                 expr: panic_call,
                 span,
             })],
@@ -1243,6 +1313,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
 
     // Wrap everything in a labeled block
     Stmt::LabeledBlock(LabeledBlockStmt {
+        id: ctx.synth_id(),
         label: format!("__assert_{assert_id}"),
         block: Block {
             id: ctx.synth_id(),
@@ -1319,6 +1390,7 @@ fn reconstruct_with_intermediates(expr: &Expr, intermediates: &[(String, String,
     for (var_name, int_source, _) in intermediates {
         if &source == int_source {
             return Expr::Ident(IdentExpr {
+                id: expr.id(),
                 name: var_name.clone(),
                 span: expr.span(),
             });
@@ -1328,12 +1400,14 @@ fn reconstruct_with_intermediates(expr: &Expr, intermediates: &[(String, String,
     // Otherwise, recursively reconstruct
     match expr {
         Expr::Binary(bin) => Expr::Binary(Box::new(BinaryExpr {
+            id: bin.id,
             left: reconstruct_with_intermediates(&bin.left, intermediates),
             op: bin.op,
             right: reconstruct_with_intermediates(&bin.right, intermediates),
             span: bin.span,
         })),
         Expr::Unary(unary) => Expr::Unary(Box::new(UnaryExpr {
+            id: unary.id,
             op: unary.op,
             expr: reconstruct_with_intermediates(&unary.expr, intermediates),
             span: unary.span,
