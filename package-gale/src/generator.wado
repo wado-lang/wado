@@ -31,7 +31,7 @@ use { gen_parser } from "./parser_gen.wado";
 use { gen_visitor } from "./visitor_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
-use { CodeWriter, StructSpec, VariantSpec } from "./wadopoet.wado";
+use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 
 pub struct GenerateOptions {
     pub highlight: bool,
@@ -89,19 +89,20 @@ fn gen_runtime(w: &mut CodeWriter) {
 }
 
 fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
-    w.begin("pub enum TokenKind");
+    let mut e = EnumSpec::new("TokenKind");
+    e.set_pub();
     for let rule of lexer_rules {
         if !rule.is_fragment {
             if rule.is_virtual {
-                w.line(`{rule.name},  // virtual`);
+                e.add_member_with_comment(&rule.name, &"virtual");
             } else {
-                w.line(`{rule.name},`);
+                e.add_member(&rule.name);
             }
         }
     }
-    w.line("Eof,");
-    w.line("Error,");
-    w.end();
+    e.add_member("Eof");
+    e.add_member("Error");
+    e.emit(w);
     w.blank();
 }
 

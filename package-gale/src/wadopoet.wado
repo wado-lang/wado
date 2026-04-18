@@ -237,9 +237,14 @@ impl VariantSpec {
     }
 }
 
+pub struct EnumMember {
+    pub name: String,
+    pub trailing_comment: Option<String>,
+}
+
 pub struct EnumSpec {
     pub name: String,
-    members: Array<String>,
+    members: Array<EnumMember>,
     is_pub: bool,
 }
 
@@ -254,7 +259,19 @@ impl EnumSpec {
     }
 
     pub fn add_member(&mut self, name: &String) -> &mut EnumSpec with stores[self] {
-        self.members.push(*name);
+        self.members.push(EnumMember { name: *name, trailing_comment: null });
+        return self;
+    }
+
+    pub fn add_member_with_comment(
+        &mut self,
+        name: &String,
+        comment: &String,
+    ) -> &mut EnumSpec with stores[self] {
+        self.members.push(EnumMember {
+            name: *name,
+            trailing_comment: Option::<String>::Some(*comment),
+        });
         return self;
     }
 
@@ -262,7 +279,11 @@ impl EnumSpec {
         let prefix = if self.is_pub { "pub " } else { "" };
         w.begin(`{prefix}enum {self.name}`);
         for let member of &self.members {
-            w.line(`{*member},`);
+            if let Some(c) = &member.trailing_comment {
+                w.line(`{member.name},  // {*c}`);
+            } else {
+                w.line(`{member.name},`);
+            }
         }
         w.end();
     }
@@ -406,6 +427,7 @@ pub struct GlobalSpec {
     initializer: String,
     is_pub: bool,
     is_mut: bool,
+    trailing_comment: Option<String>,
 }
 
 impl GlobalSpec {
@@ -416,6 +438,7 @@ impl GlobalSpec {
             initializer: *initializer,
             is_pub: false,
             is_mut: false,
+            trailing_comment: null,
         };
     }
 
@@ -429,10 +452,20 @@ impl GlobalSpec {
         return self;
     }
 
+    pub fn set_trailing_comment(&mut self, comment: &String) -> &mut GlobalSpec with stores[self] {
+        self.trailing_comment = Option::<String>::Some(*comment);
+        return self;
+    }
+
     pub fn emit(&self, w: &mut CodeWriter) {
         let vis = if self.is_pub { "pub " } else { "" };
         let mutability = if self.is_mut { "mut " } else { "" };
-        w.line(`{vis}global {mutability}{self.name}: {self.type_str} = {self.initializer};`);
+        let trailer = if let Some(c) = &self.trailing_comment {
+            `  // {*c}`;
+        } else {
+            "";
+        };
+        w.line(`{vis}global {mutability}{self.name}: {self.type_str} = {self.initializer};{trailer}`);
     }
 }
 

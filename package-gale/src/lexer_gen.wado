@@ -16,7 +16,7 @@ use {
     LabelElement,
 } from "./ir.wado";
 use { to_lower, escape_char, literal_const_name } from "./gen_util.wado";
-use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
+use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec } from "./wadopoet.wado";
 
 pub struct LitToken {
     pub text: String,
@@ -124,17 +124,25 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, l
     let mut idx = 0;
     for let rule of lexer_rules {
         if !rule.is_fragment {
-            let trailer = if rule.is_virtual { "  // virtual" } else { "" };
-            w.line(`global TK_{rule.name}: i32 = {idx};{trailer}`);
+            let name = `TK_{rule.name}`;
+            let init = `{idx}`;
+            let mut g = GlobalSpec::new(&name, "i32", &init);
+            if rule.is_virtual {
+                g.set_trailing_comment(&"virtual");
+            }
+            g.emit(w);
             idx += 1;
         }
     }
-    w.line(`global TK_EOF: i32 = {idx};`);
+    let eof_init = `{idx}`;
+    GlobalSpec::new("TK_EOF", "i32", &eof_init).emit(w);
     idx += 1;
-    w.line(`global TK_ERROR: i32 = {idx};`);
+    let err_init = `{idx}`;
+    GlobalSpec::new("TK_ERROR", "i32", &err_init).emit(w);
     idx += 1;
     for let lit of lit_tokens {
-        w.line(`global {lit.const_name}: i32 = {idx};`);
+        let init = `{idx}`;
+        GlobalSpec::new(&lit.const_name, "i32", &init).emit(w);
         idx += 1;
     }
     w.blank();
