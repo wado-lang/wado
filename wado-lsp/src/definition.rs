@@ -5,16 +5,15 @@
 //! 2. Use `Annotated::ast_id_at` to find the innermost AST node at the cursor.
 //! 3. If that node is a use-site (Ident of a local), follow
 //!    `Annotated::referenced_symbol` to the binding [`SymbolKey`].
-//! 4. Otherwise, fall back to per-module name lookup for item-level symbols.
+//! 4. Otherwise the cursor AST id itself points at a declared symbol.
 //! 5. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`].
 
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
 use wado_compiler::ast::{self, AstId, Item, Module};
-use wado_compiler::lexer::Lexer;
 use wado_compiler::name::ModuleSource;
 use wado_compiler::symbol::{Symbol, SymbolKey};
-use wado_compiler::token::{Span, TokenKind};
+use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
 
@@ -41,7 +40,7 @@ pub async fn find_definition<H: CompilerHost>(
     let line = position.line as usize + 1;
     let col = position.character as usize + 1;
 
-    let def_key = resolve_def_key(&annotated, &module, source, position, line, col)?;
+    let def_key = resolve_def_key(&annotated, &module, line, col)?;
 
     let symbol = annotated.symbol_at(&def_key)?;
     let span = annotated
@@ -58,77 +57,25 @@ pub async fn find_definition<H: CompilerHost>(
 /// Resolve the defining [`SymbolKey`] for the identifier at the cursor.
 ///
 /// Tries in order:
-/// 1. `ast_id_at` → `referenced_symbol` (local variable / parameter)
-/// 2. `ast_id_at` → key points directly to a declared symbol (item)
-/// 3. Lexer-driven name lookup in the entry module (imports, cross-module)
+/// 1. `ast_id_at` → `referenced_symbol` (use-site → definition: local, param,
+///    imported item, etc.)
+/// 2. `ast_id_at` → key points directly to a declared symbol (cursor on the
+///    defining occurrence itself).
 fn resolve_def_key(
     annotated: &Annotated,
     module: &ModuleSource,
-    source: &str,
-    position: Position,
     line: usize,
     col: usize,
 ) -> Option<SymbolKey> {
-    if let Some(ast_id) = annotated.ast_id_at(module, line, col) {
-        let cursor_key = SymbolKey::new(module.clone(), ast_id);
-        if let Some(def) = annotated.referenced_symbol(&cursor_key) {
-            return Some(def);
-        }
-        if annotated.symbol_at(&cursor_key).is_some() {
-            return Some(cursor_key);
-        }
+    let ast_id = annotated.ast_id_at(module, line, col)?;
+    let cursor_key = SymbolKey::new(module.clone(), ast_id);
+    if let Some(def) = annotated.referenced_symbol(&cursor_key) {
+        return Some(def);
     }
-
-    let ident = find_ident_at_position(source, position)?;
-    let entry = &annotated.entry_module_source;
-    if let Some(sym) = annotated.symbols.lookup_in_module(entry, &ident) {
-        return Some(sym.defined_at.clone());
-    }
-    annotated
-        .modules
-        .keys()
-        .find_map(|ms| annotated.symbols.lookup_in_module(ms, &ident))
-        .map(|s| s.defined_at.clone())
-}
-
-/// Scan `tokens` for an identifier whose span covers `position`. Used as a
-/// fallback when the AST-id cursor lookup does not yield a resolvable symbol.
-fn find_ident_at_position(source: &str, position: Position) -> Option<String> {
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().ok()?;
-    let target_line = position.line as usize + 1;
-    let target_col = position.character as usize + 1;
-
-    for token in &tokens {
-        if !token_contains(&token.span, target_line, target_col) {
-            continue;
-        }
-        if let TokenKind::Ident(name) = &token.kind {
-            return Some(name.clone());
-        }
-        if token.kind.as_ident_name().is_some()
-            && matches!(
-                token.kind,
-                TokenKind::Flags | TokenKind::Type | TokenKind::Of | TokenKind::From
-            )
-        {
-            return token.kind.as_ident_name().map(str::to_string);
-        }
+    if annotated.symbol_at(&cursor_key).is_some() {
+        return Some(cursor_key);
     }
     None
-}
-
-fn token_contains(span: &Span, target_line: usize, target_col: usize) -> bool {
-    if target_line < span.line || target_line > span.end_line {
-        return false;
-    }
-    if target_line == span.line && target_col < span.column {
-        return false;
-    }
-    if target_line == span.end_line && target_col >= span.end_column {
-        return false;
-    }
-    true
 }
 
 /// Best-effort span for an arbitrary [`AstId`] — walks module items looking for

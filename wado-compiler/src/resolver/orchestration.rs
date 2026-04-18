@@ -32,7 +32,7 @@ use crate::compiler_host::CompilerHost;
 use crate::component_model::WasiRegistry;
 use crate::logger::{Bail, Logger};
 use crate::name::{self as name, ModuleSource};
-use crate::symbol::SymbolTable;
+use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::world_registry::WorldRegistry;
 
@@ -68,6 +68,15 @@ pub(crate) struct AnnotateState {
     pub(crate) builtin_registry: BuiltinRegistry,
     pub(crate) global_known_type_names: IndexSet<String>,
     pub(crate) all_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
+    /// Use→def map for local variables: `(module, IdentExpr.id)` →
+    /// `(module, defining AstId)`. Populated by [`Resolver::resolve_ident`]
+    /// whenever a name resolves to a local binding. Consumed by LSP
+    /// `definition` / `hover` to jump to the defining pattern / parameter.
+    pub(crate) references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
+    /// Locally-defined [`Symbol`]s (let bindings, parameters, closure
+    /// parameters). Keyed by the binding's defining [`SymbolKey`]. Populated
+    /// alongside [`Self::references`] as the resolver walks function bodies.
+    pub(crate) local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -659,6 +668,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             builtin_registry,
             global_known_type_names,
             all_module_func_indices,
+            references: Rc::new(RefCell::new(IndexMap::default())),
+            local_symbols: Rc::new(RefCell::new(IndexMap::default())),
         })
     }
 
@@ -845,6 +856,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 pending_anonymous_structs: Vec::new(),
                 current_module_func_index: IndexMap::default(), // Built in resolve_module
                 loaded_module_func_indices: state.all_module_func_indices.clone(),
+                references: Rc::clone(&state.references),
+                local_symbols: Rc::clone(&state.local_symbols),
             };
             // known_type_names_cache is pre-computed globally; no per-module rebuild needed
 

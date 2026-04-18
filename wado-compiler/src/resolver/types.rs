@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self};
+use crate::ast::{self, AstId};
 use crate::name::ModuleSource;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -645,6 +645,14 @@ pub(super) struct LocalVar {
     pub(super) index: u32,
     #[allow(dead_code)] // For future mutability checking
     pub(super) is_mut: bool,
+    /// `AstId` of the node that introduced this binding (pattern, parameter,
+    /// closure parameter). `None` for resolver-synthesized temporaries whose
+    /// names cannot be referenced from source (e.g., `__qm_v`, `__b`).
+    ///
+    /// Used by [`Resolver`] to record `use → def` edges when an `IdentExpr`
+    /// resolves to this local, so that LSP can translate a cursor position
+    /// into the defining [`SymbolKey`].
+    pub(super) defining_ast_id: Option<AstId>,
 }
 
 /// Method lookup result including return type, self parameter kind, and parameter types
@@ -802,8 +810,20 @@ impl FunctionContext {
         self.scopes.pop();
     }
 
-    /// Add a local variable to the current scope
-    pub(super) fn add_local(&mut self, name: String, type_id: TypeId, is_mut: bool) -> u32 {
+    /// Add a local variable to the current scope.
+    ///
+    /// `defining_ast_id` identifies the source AST node that introduced this
+    /// binding and is used by the resolver to record `use → def` edges. Pass
+    /// `Some(id)` for user-visible bindings (let patterns, parameters, closure
+    /// parameters); pass `None` for resolver-synthesized temporaries whose
+    /// names cannot appear in source (e.g., `__qm_v`, `__b`).
+    pub(super) fn add_local(
+        &mut self,
+        name: String,
+        type_id: TypeId,
+        is_mut: bool,
+        defining_ast_id: Option<AstId>,
+    ) -> u32 {
         let index = self.next_local;
         self.next_local += 1;
         self.local_types.push(type_id);
@@ -816,6 +836,7 @@ impl FunctionContext {
                 type_id,
                 index,
                 is_mut,
+                defining_ast_id,
             },
         );
         index
@@ -840,6 +861,7 @@ impl FunctionContext {
                 return Some(VarRef::Local {
                     index: local.index,
                     type_id: local.type_id,
+                    defining_ast_id: local.defining_ast_id,
                 });
             }
         }
@@ -848,6 +870,7 @@ impl FunctionContext {
         if let Some((ref_name, inner_type_id)) = self.deref_overrides.get(name).cloned()
             && let Some(ref_local) = self.outer_locals.get(&ref_name).cloned()
         {
+            let outer_defining_ast_id = self.outer_locals.get(name).and_then(|l| l.defining_ast_id);
             let capture_index = if let Some(&idx) = self.captured_vars.get(&ref_name) {
                 idx
             } else {
@@ -859,12 +882,14 @@ impl FunctionContext {
                 index: capture_index,
                 ref_type_id: ref_local.type_id,
                 inner_type_id,
+                defining_ast_id: outer_defining_ast_id,
             });
         }
 
         // Check outer context (for closures)
         if let Some(outer_local) = self.outer_locals.get(name) {
             let inner_type_id = outer_local.type_id;
+            let outer_defining_ast_id = outer_local.defining_ast_id;
 
             // If this outer local has been address-taken (boxed), capture via DerefCapture
             if let Some(&ref_type_id) = self.outer_box_types.get(name) {
@@ -879,6 +904,7 @@ impl FunctionContext {
                     index: capture_index,
                     ref_type_id,
                     inner_type_id,
+                    defining_ast_id: outer_defining_ast_id,
                 });
             }
 
@@ -887,6 +913,7 @@ impl FunctionContext {
                 return Some(VarRef::Capture {
                     index: capture_index,
                     type_id: inner_type_id,
+                    defining_ast_id: outer_defining_ast_id,
                 });
             }
 
@@ -897,6 +924,7 @@ impl FunctionContext {
             return Some(VarRef::Capture {
                 index: capture_index,
                 type_id: inner_type_id,
+                defining_ast_id: outer_defining_ast_id,
             });
         }
 
@@ -922,6 +950,7 @@ impl FunctionContext {
                         type_id: effective_type_id,
                         index: local.index,
                         is_mut: local.is_mut,
+                        defining_ast_id: local.defining_ast_id,
                     };
                     (name.clone(), index, effective_local)
                 })
@@ -938,16 +967,19 @@ pub(super) enum VarRef {
     Local {
         index: u32,
         type_id: TypeId,
+        defining_ast_id: Option<AstId>,
     },
     Capture {
         index: u32,
         type_id: TypeId,
+        defining_ast_id: Option<AstId>,
     },
     /// Captured by mutable reference: `*self.__capture_N` (dereferenced)
     DerefCapture {
         index: u32,
         ref_type_id: TypeId,
         inner_type_id: TypeId,
+        defining_ast_id: Option<AstId>,
     },
 }
 

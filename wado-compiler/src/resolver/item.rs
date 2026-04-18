@@ -399,7 +399,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
-            let index = ctx.add_local(param.name.clone(), type_id, param.is_mut);
+            let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
+            scope.record_local_symbol(param.id, &param.name, param.name_span, param.is_mut);
             params.push(TirParam {
                 name: param.name.clone(),
                 type_id,
@@ -796,7 +797,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     scope.resolve_type(&param.ty)
                 }
             };
-            let index = ctx.add_local(param.name.clone(), type_id, param.is_mut);
+            let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
+            scope.record_local_symbol(param.id, &param.name, param.name_span, param.is_mut);
             params.push(TirParam {
                 name: param.name.clone(),
                 type_id,

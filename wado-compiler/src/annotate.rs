@@ -17,7 +17,6 @@ use crate::hashmap::IndexMap;
 use crate::loader;
 use crate::logger::{Bail, Logger};
 use crate::name::ModuleSource;
-use crate::reference_collector;
 use crate::resolver::Resolver;
 use crate::resolver::orchestration::AnnotateState;
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
@@ -40,13 +39,19 @@ pub struct Annotated {
     pub symbols: SymbolTable,
     pub types: TypeTable,
     pub(crate) state: AnnotateState,
-    /// Cross-references produced by [`reference_collector`]. Maps
-    /// `(module, IdentExpr.id)` to the binding's defining `SymbolKey`.
+    /// Use→def map populated by the real resolver as it walks function
+    /// bodies in `lower_tir_from_state`. Maps `(module, IdentExpr.id)` to
+    /// the binding's defining `SymbolKey`.
     pub(crate) references: IndexMap<SymbolKey, SymbolKey>,
-    /// Synthetic [`Symbol`] entries for local bindings (let / param /
-    /// closure param) so that [`Annotated::symbol_at`] answers for
-    /// definition keys produced by the reference collector.
+    /// Local binding [`Symbol`] entries (let / param / closure param)
+    /// emitted by the resolver alongside `references`. Keyed by the
+    /// binding's defining [`SymbolKey`]; consulted by
+    /// [`Annotated::symbol_at`] when the key does not name an item-level
+    /// symbol.
     pub(crate) locals: IndexMap<SymbolKey, Symbol>,
+    /// TIR modules produced by [`crate::resolver::Resolver::lower_tir_from_state`].
+    /// The batch compiler consumes these directly; LSP queries ignore them.
+    pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
 }
 
 /// A definition location, assembled from a [`SymbolKey`].
@@ -121,6 +126,14 @@ impl Annotated {
             span: sym.span,
             uri: self.uri_of(&defined_at.module),
         })
+    }
+
+    /// Span of the AST node identified by `key` — the source range of the
+    /// node itself, not the module's name span. Useful for computing hover /
+    /// highlight ranges from use sites.
+    #[must_use]
+    pub fn span_of_key(&self, key: &SymbolKey) -> Option<Span> {
+        self.modules.get(&key.module)?.span_of_ast_id(key.ast_id)
     }
 
     /// Span of the defining identifier for the symbol at `key`.
@@ -649,15 +662,34 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
         )?
     };
 
-    // Take an immutable snapshot of the type table at the end of annotate.
-    // LSP queries read this snapshot; lowering continues to intern into the
-    // shared `Rc<RefCell<TypeTable>>` held by `state.type_table`.
+    // Run the full body-level resolve pass so `state.references` and
+    // `state.local_symbols` are populated by the real resolver. This is the
+    // single source of truth for use→def edges — LSP and batch compilation
+    // both consume what the resolver recorded here, with no separate lexical
+    // re-scan to drift out of sync.
+    let tir_modules = {
+        let _span = logger.span("resolve/lower_tir");
+        Resolver::lower_tir_from_state(
+            &state,
+            &symbols,
+            &load_result.modules,
+            load_result.entry_module_source.clone(),
+            logger,
+            &load_result.included_files,
+        )?
+    };
+
+    // Take an immutable snapshot of the type table at the end of lowering.
+    // LSP queries read this snapshot; any further lowering (none today) would
+    // continue interning into the shared `Rc<RefCell<TypeTable>>` held by
+    // `state.type_table`.
     let types = state.type_table.borrow().clone();
 
-    let bindings = {
-        let _span = logger.span("resolve/reference_collect");
-        reference_collector::collect_references(&load_result.modules)
-    };
+    // Drain the resolver's shared reference / local maps into owned IndexMaps
+    // so LSP queries can hand out `&Symbol` references without juggling
+    // `RefCell` borrows.
+    let references = std::mem::take(&mut *state.references.borrow_mut());
+    let locals = std::mem::take(&mut *state.local_symbols.borrow_mut());
 
     Ok(Annotated {
         entry_module_source: load_result.entry_module_source,
@@ -665,31 +697,8 @@ pub(crate) fn annotate_loaded<H: CompilerHost>(
         symbols,
         types,
         state,
-        references: bindings.references,
-        locals: bindings.locals,
+        references,
+        locals,
+        tir_modules,
     })
-}
-
-/// Lower an [`Annotated`] snapshot to TIR modules.
-///
-/// Reads `annotated.state` to resolve every item in every module. New types
-/// created during lowering (anonymous structs, monomorphic instances) are
-/// interned into the shared [`TypeTable`] behind `state.type_table`; the
-/// public `annotated.types` snapshot is NOT updated because callers that
-/// drive `lower_tir` (e.g. `compile_with_options`) no longer read the
-/// snapshot after this point.
-pub(crate) fn lower_tir<H: CompilerHost>(
-    annotated: &Annotated,
-    logger: &Logger<'_, H>,
-    included_files: &IndexMap<[String; 2], Vec<u8>>,
-) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
-    let _span = logger.span("resolve/lower_tir");
-    Resolver::lower_tir_from_state(
-        &annotated.state,
-        &annotated.symbols,
-        &annotated.modules,
-        annotated.entry_module_source.clone(),
-        logger,
-        included_files,
-    )
 }

@@ -700,6 +700,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 else if self.function_return_types.contains_key(&ident.name)
                     || matches!(ident.name.as_str(), "Ok" | "Err" | "Some" | "None")
                 {
+                    self.record_item_reference_by_name(ident.id, &ident.name);
                     (None, ident.name.clone(), true)
                 }
                 // Check for prelude functions (panic, unreachable)
@@ -711,6 +712,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 else if self.imported_functions.contains(&ident.name) {
                     // Get module source from symbol table for codegen
                     if let Some(symbol) = self.symbols.lookup(&ident.name) {
+                        self.record_item_reference_by_name(ident.id, &ident.name);
                         (
                             Some(symbol.module_source().clone()),
                             symbol.name.clone(),

@@ -570,7 +570,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
 
         // let mut __b = Builder::new_literal(capacity);
-        let builder_index = ctx.add_local("__b".to_string(), builder_type, true);
+        let builder_index = ctx.add_local("__b".to_string(), builder_type, true, None);
         let mut stmts = vec![TirStmt::new(
             TirStmtKind::Let {
                 name: "__b".to_string(),
@@ -833,7 +833,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             span,
         );
 
-        let builder_index = ctx.add_local("__b".to_string(), builder_type, true);
+        let builder_index = ctx.add_local("__b".to_string(), builder_type, true, None);
         let mut stmts = vec![TirStmt::new(
             TirStmtKind::Let {
                 name: "__b".to_string(),

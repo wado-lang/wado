@@ -1,18 +1,17 @@
 //! Hover information, powered by `wado_compiler::annotate`.
 //!
-//! Rendering strategy: `Annotated::ast_id_at` finds the innermost node at the
-//! cursor. If the node is an `IdentExpr` that resolves to a local binding, we
-//! render the let/param signature directly from the AST. Otherwise we fall
-//! back to item-level lookup through the symbol table and delegate signature
-//! rendering to `wado_compiler::unparse`.
+//! Rendering strategy: `Annotated::ast_id_at` finds the innermost AST node at
+//! the cursor. If the node is a use site that resolves via
+//! `Annotated::referenced_symbol`, we follow that to the defining
+//! [`SymbolKey`]; otherwise the cursor key itself refers to a declared
+//! symbol. Locals render as `let`/param signatures (computed from the
+//! defining AST node); items delegate to `wado_compiler::unparse`.
 
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
 use wado_compiler::ast::{self, AstId, Expr, Item, Module, Stmt};
-use wado_compiler::lexer::Lexer;
-use wado_compiler::name::ModuleSource;
 use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
-use wado_compiler::token::{Span, Token, TokenKind};
+use wado_compiler::token::Span;
 use wado_compiler::unparse;
 
 use crate::diagnostics::{Position, Range};
@@ -29,10 +28,6 @@ pub async fn find_hover<H: CompilerHost>(
     uri: &str,
     host: &H,
 ) -> Option<HoverResult> {
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().ok()?;
-    let (_ident_name, token_range, token_span) = find_ident_at_position(&tokens, position)?;
-
     let filename = uri_to_filename(uri);
     let annotated = annotate(source, host, Some(&filename)).await.ok()?;
 
@@ -40,86 +35,36 @@ pub async fn find_hover<H: CompilerHost>(
     let line = position.line as usize + 1;
     let col = position.character as usize + 1;
 
-    let signature = resolve_hover_signature(&annotated, &module, &tokens, line, col)
-        .or_else(|| resolve_hover_signature_by_name(&annotated, source, position))?;
-    let _ = token_span;
-
-    Some(HoverResult {
-        contents: format!("```wado\n{signature}\n```"),
-        range: token_range,
-    })
-}
-
-fn resolve_hover_signature(
-    annotated: &Annotated,
-    module: &ModuleSource,
-    _tokens: &[Token],
-    line: usize,
-    col: usize,
-) -> Option<String> {
-    let cursor_id = annotated.ast_id_at(module, line, col)?;
-    let cursor_key = SymbolKey::new(module.clone(), cursor_id);
+    let cursor_id = annotated.ast_id_at(&module, line, col)?;
+    let cursor_key = SymbolKey::new(module, cursor_id);
     let def_key = annotated
         .referenced_symbol(&cursor_key)
         .unwrap_or_else(|| cursor_key.clone());
 
     let symbol = annotated.symbol_at(&def_key)?;
-    match &symbol.kind {
-        SymbolKind::Variable(_) => render_local_binding(annotated, &def_key, &symbol.name),
-        _ => render_item_signature(annotated, symbol),
-    }
+    let signature = match &symbol.kind {
+        SymbolKind::Variable(_) => render_local_binding(&annotated, &def_key, &symbol.name)?,
+        _ => render_item_signature(&annotated, symbol)?,
+    };
+
+    let cursor_span = annotated.span_of_key(&cursor_key)?;
+    Some(HoverResult {
+        contents: format!("```wado\n{signature}\n```"),
+        range: span_to_range(&cursor_span),
+    })
 }
 
-fn resolve_hover_signature_by_name(
-    annotated: &Annotated,
-    source: &str,
-    position: Position,
-) -> Option<String> {
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().ok()?;
-    let (name, _range, _span) = find_ident_at_position(&tokens, position)?;
-    let symbol = annotated
-        .symbols
-        .lookup_in_module(&annotated.entry_module_source, &name)
-        .or_else(|| {
-            annotated
-                .modules
-                .keys()
-                .find_map(|ms| annotated.symbols.lookup_in_module(ms, &name))
-        })?;
-    render_item_signature(annotated, symbol)
-}
-
-fn find_ident_at_position(tokens: &[Token], position: Position) -> Option<(String, Range, Span)> {
-    let target_line = position.line as usize + 1;
-    let target_col = position.character as usize + 1;
-
-    for token in tokens {
-        let TokenKind::Ident(name) = &token.kind else {
-            continue;
-        };
-        if target_line < token.span.line || target_line > token.span.end_line {
-            continue;
-        }
-        if target_line == token.span.line && target_col < token.span.column {
-            continue;
-        }
-        if target_line == token.span.end_line && target_col >= token.span.end_column {
-            continue;
-        }
-        let range = Range {
-            start: Position {
-                line: (token.span.line - 1) as u32,
-                character: (token.span.column - 1) as u32,
-            },
-            end: Position {
-                line: (token.span.end_line - 1) as u32,
-                character: (token.span.end_column - 1) as u32,
-            },
-        };
-        return Some((name.clone(), range, token.span));
+fn span_to_range(span: &Span) -> Range {
+    Range {
+        start: Position {
+            line: span.line.saturating_sub(1) as u32,
+            character: span.column.saturating_sub(1) as u32,
+        },
+        end: Position {
+            line: span.end_line.saturating_sub(1) as u32,
+            character: span.end_column.saturating_sub(1) as u32,
+        },
     }
-    None
 }
 
 /// Render a signature for the given item-level symbol.

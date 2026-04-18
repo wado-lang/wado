@@ -183,6 +183,33 @@ impl Module {
         self.ast_id_count
     }
 
+    /// Return the [`Span`] of the AST node bearing the given [`AstId`].
+    /// Returns `None` if no id-bearing node in this module has that id.
+    pub fn span_of_ast_id(&self, target: AstId) -> Option<Span> {
+        struct SpanFinder {
+            target: AstId,
+            result: Option<Span>,
+        }
+        impl AstVisitor for SpanFinder {
+            fn visit_id(&mut self, id: AstId, span: Span) {
+                if self.result.is_none() && id == self.target {
+                    self.result = Some(span);
+                }
+            }
+        }
+        let mut finder = SpanFinder {
+            target,
+            result: None,
+        };
+        for item in &self.items {
+            finder.visit_item(item);
+            if finder.result.is_some() {
+                break;
+            }
+        }
+        finder.result
+    }
+
     /// Find the [`AstId`] of the smallest id-bearing AST node whose span
     /// contains the given 1-based `(line, column)` position. Returns `None`
     /// if no id-bearing node contains the position.
