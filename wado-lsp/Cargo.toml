@@ -5,14 +5,22 @@ edition = "2024"
 description = "Language service engine for the Wado programming language"
 license = { workspace = true }
 
+[[bin]]
+name = "wado-lsp"
+path = "src/bin/wado-lsp.rs"
+
 [dependencies]
 wado-compiler = { path = "../wado-compiler" }
 indexmap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Not `workspace = true`: the workspace entry unconditionally enables
+# `rt-multi-thread`, which tokio refuses to build for `wasm32-*`. The LSP
+# server only needs a current-thread runtime and the `#[tokio::main]` macro.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 
 [lints]
 workspace = true

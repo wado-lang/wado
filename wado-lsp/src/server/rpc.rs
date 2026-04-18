@@ -1,8 +1,9 @@
-//! LSP JSON-RPC envelope and request/response param types used by `wado lsp`.
+//! LSP JSON-RPC envelope and request/response param types used by the stdio
+//! server.
 //!
-//! Semantic LSP types (Position, Range, Diagnostic, ...) live in `wado-lsp`
-//! and are reused here. This module only defines the protocol-handling
-//! layer: JSON-RPC framing, request param shapes, server capabilities.
+//! Semantic LSP types (Position, Range, Diagnostic, ...) live at the crate root
+//! and are reused here. This module only defines the protocol-handling layer:
+//! JSON-RPC framing, request param shapes, server capabilities.
 //!
 //! Spec reference:
 //! <https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/>.
@@ -10,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use wado_lsp::Position;
+use crate::Position;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextDocumentIdentifier {
@@ -90,7 +91,7 @@ pub struct SemanticTokens {
 #[serde(rename_all = "camelCase")]
 pub struct PublishDiagnosticsParams {
     pub uri: String,
-    pub diagnostics: Vec<wado_lsp::Diagnostic>,
+    pub diagnostics: Vec<crate::Diagnostic>,
 }
 
 #[derive(Debug, Clone, Serialize)]

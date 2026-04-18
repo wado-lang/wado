@@ -1,11 +1,19 @@
+//! Content-Length-framed JSON-RPC transport for the LSP server.
+//!
+//! I/O is synchronous (via `std::io`) so the module builds for
+//! `wasm32-wasip2`, where tokio's `io-std` feature is not available. The
+//! wrapping runtime is still async: dispatch awaits `Engine` queries between
+//! blocking `read_message` / `send_*` calls.
+
+use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
-use crate::compiler_host::FilesystemCompilerHost;
-use crate::lsp_rpc::{
+use crate::Engine;
+use crate::host::FilesystemCompilerHost;
+use crate::server::rpc::{
     JsonRpcError, JsonRpcErrorResponse, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse,
     PublishDiagnosticsParams, error_codes,
 };
@@ -27,15 +35,14 @@ pub enum ReadError {
 ///
 /// Returns `Ok(None)` on clean EOF, `Err(ReadError::Parse)` for malformed
 /// framing or JSON bodies, and `Err(ReadError::Io)` for transport failures.
-pub async fn read_message<R: tokio::io::AsyncRead + Unpin>(
-    reader: &mut BufReader<R>,
+pub fn read_message<R: BufRead>(
+    reader: &mut R,
 ) -> Result<Option<JsonRpcRequest>, ReadError> {
     let mut content_length: Option<usize> = None;
     loop {
         let mut header = String::new();
         let n: usize = reader
             .read_line(&mut header)
-            .await
             .map_err(|e| ReadError::Io(format!("read error: {e}")))?;
         if n == 0 {
             return Ok(None); // EOF
@@ -58,7 +65,6 @@ pub async fn read_message<R: tokio::io::AsyncRead + Unpin>(
     let mut body = vec![0u8; length];
     reader
         .read_exact(&mut body)
-        .await
         .map_err(|e| ReadError::Io(format!("read body error: {e}")))?;
 
     serde_json::from_slice(&body)
@@ -66,28 +72,20 @@ pub async fn read_message<R: tokio::io::AsyncRead + Unpin>(
         .map_err(|e| ReadError::Parse(format!("invalid JSON: {e}")))
 }
 
-async fn write_serialized<W: AsyncWrite + Unpin>(
-    writer: &mut W,
-    body: String,
-) -> Result<(), String> {
+fn write_serialized<W: Write>(writer: &mut W, body: String) -> Result<(), String> {
     let header = format!("Content-Length: {}\r\n\r\n", body.len());
     writer
         .write_all(header.as_bytes())
-        .await
         .map_err(|e| format!("write error: {e}"))?;
     writer
         .write_all(body.as_bytes())
-        .await
         .map_err(|e| format!("write error: {e}"))?;
-    writer
-        .flush()
-        .await
-        .map_err(|e| format!("flush error: {e}"))?;
+    writer.flush().map_err(|e| format!("flush error: {e}"))?;
     Ok(())
 }
 
 /// Send a typed JSON-RPC response.
-pub async fn send_response<W: AsyncWrite + Unpin, T: Serialize>(
+pub fn send_response<W: Write, T: Serialize>(
     writer: &mut W,
     id: &Value,
     result: T,
@@ -98,11 +96,11 @@ pub async fn send_response<W: AsyncWrite + Unpin, T: Serialize>(
         result,
     };
     let body = serde_json::to_string(&msg).map_err(|e| format!("serialize error: {e}"))?;
-    write_serialized(writer, body).await
+    write_serialized(writer, body)
 }
 
 /// Send a typed JSON-RPC notification.
-pub async fn send_notification<W: AsyncWrite + Unpin, T: Serialize>(
+pub fn send_notification<W: Write, T: Serialize>(
     writer: &mut W,
     method: &'static str,
     params: T,
@@ -113,11 +111,11 @@ pub async fn send_notification<W: AsyncWrite + Unpin, T: Serialize>(
         params,
     };
     let body = serde_json::to_string(&msg).map_err(|e| format!("serialize error: {e}"))?;
-    write_serialized(writer, body).await
+    write_serialized(writer, body)
 }
 
 /// Send a JSON-RPC error response.
-pub async fn send_error<W: AsyncWrite + Unpin>(
+pub fn send_error<W: Write>(
     writer: &mut W,
     id: &Value,
     code: i32,
@@ -129,20 +127,20 @@ pub async fn send_error<W: AsyncWrite + Unpin>(
         error: JsonRpcError { code, message },
     };
     let body = serde_json::to_string(&msg).map_err(|e| format!("serialize error: {e}"))?;
-    write_serialized(writer, body).await
+    write_serialized(writer, body)
 }
 
 /// Decode request params. On failure, send an `InvalidParams` error response
 /// to the client and return `Ok(None)` so the caller can skip the request.
 /// Returns `Err` only if the error response itself fails to write.
-pub async fn decode_or_error<P, W>(
+pub fn decode_or_error<P, W>(
     writer: &mut W,
     id: &Value,
     params: Value,
 ) -> Result<Option<P>, String>
 where
     P: DeserializeOwned,
-    W: AsyncWrite + Unpin,
+    W: Write,
 {
     match serde_json::from_value(params) {
         Ok(p) => Ok(Some(p)),
@@ -152,26 +150,25 @@ where
                 id,
                 error_codes::INVALID_PARAMS,
                 format!("invalid params: {e}"),
-            )
-            .await?;
+            )?;
             Ok(None)
         }
     }
 }
 
-/// Build a silent filesystem host rooted at the directory containing `uri`.
+/// Build a filesystem host rooted at the directory containing `uri`.
 pub fn host_for_uri(uri: &str) -> FilesystemCompilerHost {
     let filename = uri.strip_prefix("file://").unwrap_or(uri);
     let base_path = std::path::Path::new(filename)
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
-    FilesystemCompilerHost::silent(base_path)
+    FilesystemCompilerHost::new(base_path)
 }
 
 /// Publish diagnostics for a document.
-pub async fn publish_diagnostics<W: AsyncWrite + Unpin>(
-    engine: &wado_lsp::Engine,
+pub async fn publish_diagnostics<W: Write>(
+    engine: &Engine,
     uri: &str,
     writer: &mut W,
 ) -> Result<(), String> {
@@ -181,5 +178,5 @@ pub async fn publish_diagnostics<W: AsyncWrite + Unpin>(
         uri: uri.to_string(),
         diagnostics,
     };
-    send_notification(writer, "textDocument/publishDiagnostics", params).await
+    send_notification(writer, "textDocument/publishDiagnostics", params)
 }

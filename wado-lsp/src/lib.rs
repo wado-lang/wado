@@ -1,10 +1,12 @@
 mod definition;
 mod diagnostics;
 mod document_highlight;
+pub mod host;
 mod hover;
 mod location;
 mod references;
 pub mod semantic_tokens;
+pub mod server;
 
 use indexmap::IndexMap;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic as CompilerDiagnostic, LogLevel};
@@ -12,6 +14,7 @@ use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic as CompilerDiagnos
 pub use definition::DefinitionResult;
 pub use diagnostics::{Diagnostic, Position, Range, Severity};
 pub use document_highlight::{DocumentHighlight, HighlightKind};
+pub use host::FilesystemCompilerHost;
 pub use hover::{HoverResult, MarkupContent, MarkupKind};
 pub use references::ReferenceLocation;
 

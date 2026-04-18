@@ -259,6 +259,28 @@ run = "rm -f ~/.vscode/extensions/wado-lang.wado-0.0.1"
 description = "Run wado-vscode tests"
 run = "cd wado-vscode && npm install && npm run test:unit && npm run test"
 
+[tasks.build-wado-lsp-wasm]
+description = "Build wado-lsp for wasm32-wasip2 and copy into wado-vscode/out/"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo build -p wado-lsp --bin wado-lsp --target wasm32-wasip2 --release
+mkdir -p wado-vscode/out
+cp target/wasm32-wasip2/release/wado-lsp.wasm wado-vscode/out/wado_lsp.wasm
+"""
+
+[tasks.watch-wado-lsp-wasm]
+description = "Watch wado-lsp and rebuild the wasm32-wasip2 artifact on change"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo watch \
+    -w wado-lsp \
+    -w wado-compiler \
+    -w wado-manifest \
+    -s 'mise run build-wado-lsp-wasm'
+"""
+
 [tasks.update-wado-vscode-grammar]
 description = "Regenerate wado-vscode syntax files from syntax.rs"
 run = """
