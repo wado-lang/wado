@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776551540078,
+  "lastUpdate": 1776554365979,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14445,6 +14445,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eb0cbe463a71dd7035c0d9f4546ed69ebd7ce741"
         },
         "date": 1776551539794,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f7d61d000670979f8a33e7c32dbaa21a6ee2ae3c",
+          "message": "Merge pull request #881 from wado-lang/claude/lsp-architecture-review-TyI7S\n\nMove LSP server implementation into wado-lsp crate",
+          "timestamp": "2026-04-19T08:15:11+09:00",
+          "tree_id": "f3f7283ff1f31970fac98a065c874503fa48e201",
+          "url": "https://github.com/wado-lang/wado/commit/f7d61d000670979f8a33e7c32dbaa21a6ee2ae3c"
+        },
+        "date": 1776554365696,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
