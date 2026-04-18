@@ -25,6 +25,19 @@ use {
     parse_text,
 } from "core:prelude/fpfmt.wado";
 
+use {
+    IntErrorKind,
+    ParseIntError,
+    ParseFloatError,
+    parse_u64_digits,
+    parse_signed_prefix,
+    parse_unsigned_prefix,
+    assert_radix,
+    parse_i64_radix,
+    parse_u64_radix,
+    parse_f64_from_str,
+} from "core:prelude/intparse.wado";
+
 /// Copy bytes from linear memory to a new GC array (internal helper)
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr: builtin::array<u8> = builtin::array_new(len);
@@ -378,6 +391,21 @@ impl i8 {
         self.fmt_into(&mut f);
         return buf;
     }
+
+    pub fn from_str(s: String) -> Result<i8, ParseIntError> {
+        return i8::from_str_radix(s, 10);
+    }
+
+    pub fn from_str_hex(s: String) -> Result<i8, ParseIntError> {
+        return i8::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError> {
+        return match parse_i64_radix(s, radix, 127, 128) {
+            Ok(v) => Result::Ok(v as i8),
+            Err(e) => Result::Err(e),
+        };
+    }
 }
 
 impl u8 {
@@ -401,6 +429,21 @@ impl u8 {
         let mut f = Formatter::new(&mut buf);
         self.fmt_into(&mut f);
         return buf;
+    }
+
+    pub fn from_str(s: String) -> Result<u8, ParseIntError> {
+        return u8::from_str_radix(s, 10);
+    }
+
+    pub fn from_str_hex(s: String) -> Result<u8, ParseIntError> {
+        return u8::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError> {
+        return match parse_u64_radix(s, radix, 255) {
+            Ok(v) => Result::Ok(v as u8),
+            Err(e) => Result::Err(e),
+        };
     }
 }
 
@@ -426,6 +469,21 @@ impl i16 {
         self.fmt_into(&mut f);
         return buf;
     }
+
+    pub fn from_str(s: String) -> Result<i16, ParseIntError> {
+        return i16::from_str_radix(s, 10);
+    }
+
+    pub fn from_str_hex(s: String) -> Result<i16, ParseIntError> {
+        return i16::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError> {
+        return match parse_i64_radix(s, radix, 32767, 32768) {
+            Ok(v) => Result::Ok(v as i16),
+            Err(e) => Result::Err(e),
+        };
+    }
 }
 
 impl u16 {
@@ -449,6 +507,21 @@ impl u16 {
         let mut f = Formatter::new(&mut buf);
         self.fmt_into(&mut f);
         return buf;
+    }
+
+    pub fn from_str(s: String) -> Result<u16, ParseIntError> {
+        return u16::from_str_radix(s, 10);
+    }
+
+    pub fn from_str_hex(s: String) -> Result<u16, ParseIntError> {
+        return u16::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError> {
+        return match parse_u64_radix(s, radix, 65535) {
+            Ok(v) => Result::Ok(v as u16),
+            Err(e) => Result::Err(e),
+        };
     }
 }
 
@@ -497,6 +570,21 @@ impl i32 {
         self.fmt_into(&mut f);
         return buf;
     }
+
+    pub fn from_str(s: String) -> Result<i32, ParseIntError> {
+        return i32::from_str_radix(s, 10);
+    }
+
+    pub fn from_str_hex(s: String) -> Result<i32, ParseIntError> {
+        return i32::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError> {
+        return match parse_i64_radix(s, radix, 2147483647, 2147483648) {
+            Ok(v) => Result::Ok(v as i32),
+            Err(e) => Result::Err(e),
+        };
+    }
 }
 
 impl u32 {
@@ -528,6 +616,21 @@ impl u32 {
         let mut f = Formatter::new(&mut buf);
         self.fmt_into(&mut f);
         return buf;
+    }
+
+    pub fn from_str(s: String) -> Result<u32, ParseIntError> {
+        return u32::from_str_radix(s, 10);
+    }
+
+    pub fn from_str_hex(s: String) -> Result<u32, ParseIntError> {
+        return u32::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError> {
+        return match parse_u64_radix(s, radix, 4294967295) {
+            Ok(v) => Result::Ok(v as u32),
+            Err(e) => Result::Err(e),
+        };
     }
 }
 
@@ -595,6 +698,18 @@ impl i64 {
         let mut f = Formatter::new(&mut buf);
         self.fmt_into(&mut f);
         return buf;
+    }
+
+    pub fn from_str(s: String) -> Result<i64, ParseIntError> {
+        return i64::from_str_radix(s, 10);
+    }
+
+    pub fn from_str_hex(s: String) -> Result<i64, ParseIntError> {
+        return i64::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError> {
+        return parse_i64_radix(s, radix, 9223372036854775807, 9223372036854775808);
     }
 }
 
@@ -694,6 +809,18 @@ impl u64 {
         let mut f = Formatter::new(&mut buf);
         self.fmt_into(&mut f);
         return buf;
+    }
+
+    pub fn from_str(s: String) -> Result<u64, ParseIntError> {
+        return u64::from_str_radix(s, 10);
+    }
+
+    pub fn from_str_hex(s: String) -> Result<u64, ParseIntError> {
+        return u64::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError> {
+        return parse_u64_radix(s, radix, u64::MAX);
     }
 }
 
@@ -976,11 +1103,11 @@ impl f32 {
         return *self - *self == 0.0;
     }
 
-    pub fn parse(s: String) -> Option<f32> {
-        if let Some(v) = parse_text(s) {
-            return Option::Some(v as f32);
-        }
-        return null;
+    pub fn from_str(s: String) -> Result<f32, ParseFloatError> {
+        return match parse_f64_from_str(s) {
+            Ok(v) => Result::Ok(v as f32),
+            Err(e) => Result::Err(e),
+        };
     }
 
     /// Reinterprets the bits of this f32 as an i32.
@@ -1319,8 +1446,8 @@ impl f64 {
         return *self - *self == 0.0;
     }
 
-    pub fn parse(s: String) -> Option<f64> {
-        return parse_text(s);
+    pub fn from_str(s: String) -> Result<f64, ParseFloatError> {
+        return parse_f64_from_str(s);
     }
 
     /// Reinterprets the bits of this f64 as an i64.

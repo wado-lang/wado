@@ -90,7 +90,7 @@ fn parse_status_code(s: String) -> Option<u16> {
     if s.is_empty() {
         return null;
     }
-    if let Some(f) = f64::parse(s) {
+    if let Ok(f) = f64::from_str(s) {
         let code = f as i32;
         if code >= 100 && code <= 599 && f == code as f64 {
             return Option::<u16>::Some(code as u16);

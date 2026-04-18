@@ -42,20 +42,6 @@ struct Stats {
     files: i32,
 }
 
-fn parse_nonneg_int(s: String) -> Option<i32> {
-    if s.is_empty() {
-        return null;
-    }
-    let mut n: i32 = 0;
-    for let c of s.chars() {
-        if c < '0' || c > '9' {
-            return null;
-        }
-        n = n * 10 + (c as i32 - '0' as i32);
-    }
-    return Option::Some(n);
-}
-
 fn parse_args(arguments: Array<String>) -> Result<Options, String> {
     let mut opts = Options {
         max_depth: -1,
@@ -70,11 +56,11 @@ fn parse_args(arguments: Array<String>) -> Result<Options, String> {
             if i + 1 >= arguments.len() {
                 return Result::Err("tree: option -L requires a numeric argument");
             }
-            match parse_nonneg_int(arguments[i + 1]) {
-                Some(n) => {
+            match i32::from_str(arguments[i + 1]) {
+                Ok(n) && n >= 0 => {
                     opts.max_depth = n;
                 },
-                None => {
+                _ => {
                     return Result::Err(`tree: invalid depth: {arguments[i + 1]}`);
                 },
             }

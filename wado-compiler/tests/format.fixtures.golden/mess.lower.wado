@@ -31,6 +31,14 @@ pub struct i128 {
     high: i64,
 }
 
+pub struct ParseIntError {
+    pub kind: IntErrorKind,
+}
+
+pub struct ParseFloatError {
+    pub kind: FloatErrorKind,
+}
+
 pub struct String {
     repr: builtin::array<u8>,
     used: i32,
@@ -289,6 +297,10 @@ pub struct "Box<f32>" {
     value: f32,
 }
 
+pub struct "Box<Result<i32,IntErrorKind>>" {
+    value: Result<i32, IntErrorKind>,
+}
+
 pub struct "Box<bool>" {
     value: bool,
 }
@@ -362,6 +374,18 @@ pub enum SpecialKind {
     Zero,
     Inf,
     NaN,
+}
+
+pub enum IntErrorKind {
+    Empty,
+    InvalidDigit,
+    PosOverflow,
+    NegOverflow,
+}
+
+pub enum FloatErrorKind {
+    Empty,
+    Invalid,
 }
 
 pub enum ErrorCode {
@@ -5513,6 +5537,29 @@ pub fn u128::from_string(s: String) -> u128 {
     return result;
 }
 
+pub fn u128::from_str(s: String) -> Result<u128, ParseIntError> {
+    return "core::prelude/int128.wado::u128::from_str_radix"(s, 10);
+}
+
+pub fn u128::from_str_hex(s: String) -> Result<u128, ParseIntError> {
+    return "core::prelude/int128.wado::u128::from_str_radix"(s, 16);
+}
+
+pub fn u128::from_str_radix(s: String, radix: u32) -> Result<u128, ParseIntError> {
+    "core::prelude/intparse.wado::assert_radix"(radix);
+    let prefix: Result<i32, IntErrorKind> = "core::prelude/intparse.wado::parse_unsigned_prefix"(s);
+    let __pattern_temp_0: Result<i32, IntErrorKind> = prefix;
+    if __variant_test(__pattern_temp_0, case=1, name=Err) {
+        let k: IntErrorKind = __variant_payload(__pattern_temp_0, case=1);
+        return Result<u128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
+    }
+    let start: i32 = Box<Result<i32,IntErrorKind>> { value: prefix }."Result<i32,IntErrorKind>::unwrap"();
+    return match "core::prelude/intparse.wado::parse_u128_digits"(s, start, s.String::len(), radix) {
+        Ok(v) => Result<u128, ParseIntError>::Ok(v),
+        Err(k) => Result<u128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k)),
+    };
+}
+
 pub fn u128::zero() -> u128 {
     return u128 { low: 0, high: 0 };
 }
@@ -5911,6 +5958,52 @@ pub fn i128::from_string(s: String) -> i128 {
         return result.i128::neg();
     }
     return result;
+}
+
+pub fn i128::from_str(s: String) -> Result<i128, ParseIntError> {
+    return "core::prelude/int128.wado::i128::from_str_radix"(s, 10);
+}
+
+pub fn i128::from_str_hex(s: String) -> Result<i128, ParseIntError> {
+    return "core::prelude/int128.wado::i128::from_str_radix"(s, 16);
+}
+
+pub fn i128::from_str_radix(s: String, radix: u32) -> Result<i128, ParseIntError> {
+    "core::prelude/intparse.wado::assert_radix"(radix);
+    let __pattern_temp_0: [bool, i32] = match "core::prelude/intparse.wado::parse_signed_prefix"(s) {
+        Ok(p) => p,
+        Err(k) => {
+            return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
+        },
+    };
+    let is_negative: bool = __pattern_temp_0.0;
+    let start: i32 = __pattern_temp_0.1;
+    let max_pos: u128 = "core::prelude/int128.wado::u128::from_pair"(18446744073709551615, 9223372036854775807 as u64);
+    let max_neg_abs: u128 = "core::prelude/int128.wado::u128::from_pair"(0, 9223372036854775808);
+    return match "core::prelude/intparse.wado::parse_u128_digits"(s, start, s.String::len(), radix) {
+        Ok(v) => if is_negative {
+            if (v."u128^Ord::cmp"(&max_neg_abs) == Ordering::Greater) {
+                Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(IntErrorKind::NegOverflow));
+            } else {
+                let pos: i128 = i128 { low: v.u128::low(), high: v.u128::high() as i64 };
+                Result<i128, ParseIntError>::Ok(pos.i128::neg());
+            }
+        } else {
+            if (v."u128^Ord::cmp"(&max_pos) == Ordering::Greater) {
+                Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(IntErrorKind::PosOverflow));
+            } else {
+                Result<i128, ParseIntError>::Ok(i128 { low: v.u128::low(), high: v.u128::high() as i64 });
+            };
+        },
+        Err(k) => {
+            let kind: IntErrorKind = if (is_negative && (k == IntErrorKind::PosOverflow)) {
+                IntErrorKind::NegOverflow;
+            } else {
+                k;
+            };
+            Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(kind));
+        },
+    };
 }
 
 pub fn i128::zero() -> i128 {
@@ -6771,6 +6864,745 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J:
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn ParseIntError::new(kind: IntErrorKind) -> ParseIntError {
+    return ParseIntError { kind: kind };
+}
+
+pub fn ParseIntError::kind(self: &ParseIntError) -> IntErrorKind {
+    return self.kind;
+}
+
+pub fn ParseFloatError::new(kind: FloatErrorKind) -> ParseFloatError {
+    return ParseFloatError { kind: kind };
+}
+
+pub fn ParseFloatError::kind(self: &ParseFloatError) -> FloatErrorKind {
+    return self.kind;
+}
+
+fn digit_value(b: u8) -> i32 {
+    let c: i32 = b as i32;
+    if ((c >= '0' as i32) && (c <= '9' as i32)) {
+        return (c - '0' as i32);
+    }
+    if ((c >= 'a' as i32) && (c <= 'z' as i32)) {
+        return ((c - 'a' as i32) + 10);
+    }
+    if ((c >= 'A' as i32) && (c <= 'Z' as i32)) {
+        return ((c - 'A' as i32) + 10);
+    }
+    return -1;
+}
+
+pub fn parse_u64_digits(s: String, start: i32, end: i32, radix: u32) -> Result<u64, IntErrorKind> {
+    if (start >= end) {
+        return Result<u64, IntErrorKind>::Err(IntErrorKind::Empty);
+    }
+    let r: u64 = radix as u64;
+    let max_before_mul: u64 = (18446744073709551615 / r);
+    let max_digit_for_overflow: u64 = (18446744073709551615 - (max_before_mul * r));
+    let bytes: builtin::array<u8> = s.String::internal_raw_bytes();
+    let mut acc: u64 = 0;
+    __for_0: {
+        let mut i: i32 = start;
+        loop {
+            if !(i < end) {
+                break __for_0;
+            }
+            __for_0_body: {
+                let d: i32 = "core::prelude/intparse.wado::digit_value"(core::builtin::array_get_u8(bytes, i));
+                if ((d < 0) || (d >= radix as i32)) {
+                    return Result<u64, IntErrorKind>::Err(IntErrorKind::InvalidDigit);
+                }
+                let d64: u64 = d as u64;
+                if ((acc > max_before_mul) || ((acc == max_before_mul) && (d64 > max_digit_for_overflow))) {
+                    return Result<u64, IntErrorKind>::Err(IntErrorKind::PosOverflow);
+                }
+                acc = ((acc * r) + d64);
+            }
+            i = (i + 1);
+        }
+    }
+    return Result<u64, IntErrorKind>::Ok(acc);
+}
+
+pub fn parse_u128_digits(s: String, start: i32, end: i32, radix: u32) -> Result<u128, IntErrorKind> {
+    if (start >= end) {
+        return Result<u128, IntErrorKind>::Err(IntErrorKind::Empty);
+    }
+    let r: u128 = "core::prelude/int128.wado::u128::from_u64"(radix as u64);
+    let max128: u128 = "core::prelude/int128.wado::u128::from_pair"(18446744073709551615, 18446744073709551615);
+    let divmod: [u128, u128] = max128.u128::div_rem(&r);
+    let max_before_mul: u128 = divmod.0;
+    let max_digit_for_overflow: u128 = divmod.1;
+    let bytes: builtin::array<u8> = s.String::internal_raw_bytes();
+    let mut acc: u128 = "core::prelude/int128.wado::u128::from_u64"(0);
+    __for_1: {
+        let mut i: i32 = start;
+        loop {
+            if !(i < end) {
+                break __for_1;
+            }
+            __for_1_body: {
+                let d: i32 = "core::prelude/intparse.wado::digit_value"(core::builtin::array_get_u8(bytes, i));
+                if ((d < 0) || (d >= radix as i32)) {
+                    return Result<u128, IntErrorKind>::Err(IntErrorKind::InvalidDigit);
+                }
+                let d128: u128 = "core::prelude/int128.wado::u128::from_u64"(d as u64);
+                if ((acc."u128^Ord::cmp"(&max_before_mul) == Ordering::Greater) || (acc."u128^Eq::eq"(&max_before_mul) && (d128."u128^Ord::cmp"(&max_digit_for_overflow) == Ordering::Greater))) {
+                    return Result<u128, IntErrorKind>::Err(IntErrorKind::PosOverflow);
+                }
+                acc = acc."u128^Mul::mul"(&r)."u128^Add::add"(&d128);
+            }
+            i = (i + 1);
+        }
+    }
+    return Result<u128, IntErrorKind>::Ok(acc);
+}
+
+pub fn parse_signed_prefix(s: String) -> Result<[bool, i32], IntErrorKind> {
+    let len: i32 = s.String::len();
+    if (len == 0) {
+        return Result<[bool, i32], IntErrorKind>::Err(IntErrorKind::Empty);
+    }
+    let first: u8 = s.String::get_byte(0);
+    let is_negative: bool = (first == '-' as u8);
+    let has_sign: bool = (is_negative || (first == '+' as u8));
+    if (has_sign && (len == 1)) {
+        return Result<[bool, i32], IntErrorKind>::Err(IntErrorKind::InvalidDigit);
+    }
+    let start: i32 = if has_sign {
+        1;
+    } else {
+        0;
+    };
+    return Result<[bool, i32], IntErrorKind>::Ok([is_negative, start]);
+}
+
+pub fn parse_unsigned_prefix(s: String) -> Result<i32, IntErrorKind> {
+    let len: i32 = s.String::len();
+    if (len == 0) {
+        return Result<i32, IntErrorKind>::Err(IntErrorKind::Empty);
+    }
+    let first: u8 = s.String::get_byte(0);
+    if (first == '+' as u8) {
+        if (len == 1) {
+            return Result<i32, IntErrorKind>::Err(IntErrorKind::InvalidDigit);
+        }
+        return Result<i32, IntErrorKind>::Ok(1);
+    }
+    return Result<i32, IntErrorKind>::Ok(0);
+}
+
+pub fn assert_radix(radix: u32) {
+    if ((radix < 2) || (radix > 36)) {
+        core::internal::panic("from_str_radix: radix must be in 2..=36");
+    }
+}
+
+pub fn parse_i64_radix(s: String, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
+    "core::prelude/intparse.wado::assert_radix"(radix);
+    let __pattern_temp_0: [bool, i32] = match "core::prelude/intparse.wado::parse_signed_prefix"(s) {
+        Ok(p) => p,
+        Err(k) => {
+            return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
+        },
+    };
+    let is_negative: bool = __pattern_temp_0.0;
+    let start: i32 = __pattern_temp_0.1;
+    return match "core::prelude/intparse.wado::parse_u64_digits"(s, start, s.String::len(), radix) {
+        Ok(v) => if is_negative {
+            if (v > min_abs) {
+                Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(IntErrorKind::NegOverflow));
+            } else {
+                Result<i64, ParseIntError>::Ok((0 - v) as i64);
+            }
+        } else {
+            if (v > max as u64) {
+                Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(IntErrorKind::PosOverflow));
+            } else {
+                Result<i64, ParseIntError>::Ok(v as i64);
+            };
+        },
+        Err(k) => {
+            let kind: IntErrorKind = if (is_negative && (k == IntErrorKind::PosOverflow)) {
+                IntErrorKind::NegOverflow;
+            } else {
+                k;
+            };
+            Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(kind));
+        },
+    };
+}
+
+pub fn parse_u64_radix(s: String, radix: u32, max: u64) -> Result<u64, ParseIntError> {
+    "core::prelude/intparse.wado::assert_radix"(radix);
+    let start: i32 = match "core::prelude/intparse.wado::parse_unsigned_prefix"(s) {
+        Ok(i) => i,
+        Err(k) => {
+            return Result<u64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
+        },
+    };
+    return match "core::prelude/intparse.wado::parse_u64_digits"(s, start, s.String::len(), radix) {
+        Ok(v) => if (v > max) {
+            Result<u64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(IntErrorKind::PosOverflow));
+        } else {
+            Result<u64, ParseIntError>::Ok(v);
+        },
+        Err(k) => Result<u64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k)),
+    };
+}
+
+pub fn parse_f64_from_str(s: String) -> Result<f64, ParseFloatError> {
+    if (s.String::len() == 0) {
+        return Result<f64, ParseFloatError>::Err("core::prelude/intparse.wado::ParseFloatError::new"(FloatErrorKind::Empty));
+    }
+    return match "core::prelude/fpfmt.wado::parse_text"(s) {
+        Some(v) => Result<f64, ParseFloatError>::Ok(v),
+        None => Result<f64, ParseFloatError>::Err("core::prelude/intparse.wado::ParseFloatError::new"(FloatErrorKind::Invalid)),
+    };
+}
+
+pub fn "IntErrorKind^Eq::eq"(self: &IntErrorKind, other: &IntErrorKind) -> bool {
+    return (*self == *other);
+}
+
+pub fn "IntErrorKind^Ord::cmp"(self: &IntErrorKind, other: &IntErrorKind) -> Ordering {
+    let a: IntErrorKind = *self;
+    let b: IntErrorKind = *other;
+    if (a < b) {
+        return Ordering::Less;
+    }
+    if (a > b) {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "FloatErrorKind^Eq::eq"(self: &FloatErrorKind, other: &FloatErrorKind) -> bool {
+    return (*self == *other);
+}
+
+pub fn "FloatErrorKind^Ord::cmp"(self: &FloatErrorKind, other: &FloatErrorKind) -> Ordering {
+    let a: FloatErrorKind = *self;
+    let b: FloatErrorKind = *other;
+    if (a < b) {
+        return Ordering::Less;
+    }
+    if (a > b) {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "ParseIntError^Eq::eq"(self: &ParseIntError, other: &ParseIntError) -> bool {
+    return self.kind."IntErrorKind^Eq::eq"(&other.kind);
+}
+
+pub fn "ParseIntError^Ord::cmp"(self: &ParseIntError, other: &ParseIntError) -> Ordering {
+    let c: Ordering = self.kind."IntErrorKind^Ord::cmp"(&other.kind);
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "ParseFloatError^Eq::eq"(self: &ParseFloatError, other: &ParseFloatError) -> bool {
+    return self.kind."FloatErrorKind^Eq::eq"(&other.kind);
+}
+
+pub fn "ParseFloatError^Ord::cmp"(self: &ParseFloatError, other: &ParseFloatError) -> Ordering {
+    let c: Ordering = self.kind."FloatErrorKind^Ord::cmp"(&other.kind);
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "IntErrorKind^Inspect::inspect"(self: &IntErrorKind, f: &mut Formatter) {
+    if (*self == 0) {
+        f.Formatter::write_str("IntErrorKind::Empty");
+    } else {
+        if (*self == 1) {
+            f.Formatter::write_str("IntErrorKind::InvalidDigit");
+        } else {
+            if (*self == 2) {
+                f.Formatter::write_str("IntErrorKind::PosOverflow");
+            } else {
+                if (*self == 3) {
+                    f.Formatter::write_str("IntErrorKind::NegOverflow");
+                };
+            };
+        };
+    };
+}
+
+pub fn "FloatErrorKind^Inspect::inspect"(self: &FloatErrorKind, f: &mut Formatter) {
+    if (*self == 0) {
+        f.Formatter::write_str("FloatErrorKind::Empty");
+    } else {
+        if (*self == 1) {
+            f.Formatter::write_str("FloatErrorKind::Invalid");
+        };
+    };
+}
+
+pub fn "ParseIntError^Inspect::inspect"(self: &ParseIntError, f: &mut Formatter) {
+    f.Formatter::write_str("ParseIntError { ");
+    f.Formatter::write_str("kind: ");
+    self.kind."IntErrorKind^Inspect::inspect"(f);
+    f.Formatter::write_str(" }");
+}
+
+pub fn "ParseFloatError^Inspect::inspect"(self: &ParseFloatError, f: &mut Formatter) {
+    f.Formatter::write_str("ParseFloatError { ");
+    f.Formatter::write_str("kind: ");
+    self.kind."FloatErrorKind^Inspect::inspect"(f);
+    f.Formatter::write_str(" }");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|I::Item| -> bool");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str("Stream<u8>");
+}
+
+pub fn "Future<Result<unit,ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str("Future<Result<(), ErrorCode>>");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|&T| -> bool");
+}
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> &T");
+}
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    f.Formatter::write_str("|&T, &T| -> Ordering");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(ArraySlice<T>) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|ArraySlice<T>| -> bool");
+}
+
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: &fn(ArraySlice<T>, ArraySlice<T>) -> ArraySlice<T>, f: &mut Formatter) {
+    f.Formatter::write_str("|ArraySlice<T>, ArraySlice<T>| -> ArraySlice<T>");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|u8| -> bool");
+}
+
+pub fn "Fn<2,u8>^Inspect::inspect"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    f.Formatter::write_str("|u8, u8| -> u8");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(char) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> bool");
+}
+
+pub fn "Fn<2,char>^Inspect::inspect"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char, char| -> char");
+}
+
+pub fn "Fn<1,char>^Inspect::inspect"(self: &fn(char) -> char, f: &mut Formatter) {
+    f.Formatter::write_str("|char| -> char");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn(String) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|String| -> bool");
+}
+
+pub fn "Fn<2,String>^Inspect::inspect"(self: &fn(String, String) -> String, f: &mut Formatter) {
+    f.Formatter::write_str("|String, String| -> String");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn([i32, char]) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|[i32, char]| -> bool");
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: &fn([i32, char], [i32, char]) -> [i32, char], f: &mut Formatter) {
+    f.Formatter::write_str("|[i32, char], [i32, char]| -> [i32, char]");
+}
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    f.Formatter::write_str("|i32| -> i32");
+}
+
+pub fn "Fn<2,I::Item>^Inspect::inspect"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    f.Formatter::write_str("|I::Item, I::Item| -> I::Item");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|[i32, I::Item]| -> bool");
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    f.Formatter::write_str("|[i32, I::Item], [i32, I::Item]| -> [i32, I::Item]");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    f.Formatter::write_str("|[I::Item, J::Item]| -> bool");
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    f.Formatter::write_str("|[I::Item, J::Item], [I::Item, J::Item]| -> [I::Item, J::Item]");
+}
+
+pub fn "IntErrorKind^InspectAlt::inspect_alt"(self: &IntErrorKind, f: &mut Formatter) {
+    self."IntErrorKind^Inspect::inspect"(f);
+}
+
+pub fn "FloatErrorKind^InspectAlt::inspect_alt"(self: &FloatErrorKind, f: &mut Formatter) {
+    self."FloatErrorKind^Inspect::inspect"(f);
+}
+
+pub fn "ParseIntError^InspectAlt::inspect_alt"(self: &ParseIntError, f: &mut Formatter) {
+    f.Formatter::open_brace("ParseIntError {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("kind: ");
+    self.kind."IntErrorKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "ParseFloatError^InspectAlt::inspect_alt"(self: &ParseFloatError, f: &mut Formatter) {
+    f.Formatter::open_brace("ParseFloatError {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str("kind: ");
+    self.kind."FloatErrorKind^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(ArraySlice<T>) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: &fn(ArraySlice<T>, ArraySlice<T>) -> ArraySlice<T>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    self."Fn<2,u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(char) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    self."Fn<2,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn(String) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: &fn(String, String) -> String, f: &mut Formatter) {
+    self."Fn<2,String>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn([i32, char]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: &fn([i32, char], [i32, char]) -> [i32, char], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    self."Fn<2,I::Item>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "IntErrorKind^Display::fmt"(self: &IntErrorKind, f: &mut Formatter) {
+    self."IntErrorKind^Inspect::inspect"(f);
+}
+
+pub fn "FloatErrorKind^Display::fmt"(self: &FloatErrorKind, f: &mut Formatter) {
+    self."FloatErrorKind^Inspect::inspect"(f);
+}
+
+pub fn "ParseIntError^Display::fmt"(self: &ParseIntError, f: &mut Formatter) {
+    self."ParseIntError^Inspect::inspect"(f);
+}
+
+pub fn "ParseFloatError^Display::fmt"(self: &ParseFloatError, f: &mut Formatter) {
+    self."ParseFloatError^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<unit,ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(ArraySlice<T>) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: &fn(ArraySlice<T>, ArraySlice<T>) -> ArraySlice<T>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,u8>^Display::fmt"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    self."Fn<2,u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(char) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,char>^Display::fmt"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    self."Fn<2,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn(String) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,String>^Display::fmt"(self: &fn(String, String) -> String, f: &mut Formatter) {
+    self."Fn<2,String>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn([i32, char]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: &fn([i32, char], [i32, char]) -> [i32, char], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,I::Item>^Display::fmt"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    self."Fn<2,I::Item>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "IntErrorKind^DisplayAlt::fmt_alt"(self: &IntErrorKind, f: &mut Formatter) {
+    self."IntErrorKind^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "FloatErrorKind^DisplayAlt::fmt_alt"(self: &FloatErrorKind, f: &mut Formatter) {
+    self."FloatErrorKind^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "ParseIntError^DisplayAlt::fmt_alt"(self: &ParseIntError, f: &mut Formatter) {
+    self."ParseIntError^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "ParseFloatError^DisplayAlt::fmt_alt"(self: &ParseFloatError, f: &mut Formatter) {
+    self."ParseFloatError^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(I::Item) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<unit,ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<unit,ErrorCode>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(&T) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> &T, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: &fn(&T, &T) -> Ordering, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(ArraySlice<T>) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: &fn(ArraySlice<T>, ArraySlice<T>) -> ArraySlice<T>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(u8) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: &fn(u8, u8) -> u8, f: &mut Formatter) {
+    self."Fn<2,u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(char) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,char>^DisplayAlt::fmt_alt"(self: &fn(char, char) -> char, f: &mut Formatter) {
+    self."Fn<2,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: &fn(char) -> char, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn(String) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: &fn(String, String) -> String, f: &mut Formatter) {
+    self."Fn<2,String>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn([i32, char]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: &fn([i32, char], [i32, char]) -> [i32, char], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: &fn(i32) -> i32, f: &mut Formatter) {
+    self."Fn<1,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: &fn(I::Item, I::Item) -> I::Item, f: &mut Formatter) {
+    self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn([i32, I::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: &fn([i32, I::Item], [i32, I::Item]) -> [i32, I::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J::Item]) -> bool, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: &fn([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item], f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+}
+
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
     __for_0: {
@@ -7136,6 +7968,21 @@ pub fn i8::to_string(self: Box<i8>) -> String {
     return buf;
 }
 
+pub fn i8::from_str(s: String) -> Result<i8, ParseIntError> {
+    return "core::prelude/primitive.wado::i8::from_str_radix"(s, 10);
+}
+
+pub fn i8::from_str_hex(s: String) -> Result<i8, ParseIntError> {
+    return "core::prelude/primitive.wado::i8::from_str_radix"(s, 16);
+}
+
+pub fn i8::from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError> {
+    return match "core::prelude/intparse.wado::parse_i64_radix"(s, radix, 127, 128) {
+        Ok(v) => Result<i8, ParseIntError>::Ok(v as i8),
+        Err(e) => Result<i8, ParseIntError>::Err(e),
+    };
+}
+
 pub fn u8::max(a: u8, b: u8) -> u8 {
     return "core::builtin::core/builtin/select<u8>"((a > b), a, b);
 }
@@ -7153,6 +8000,21 @@ pub fn u8::to_string(self: Box<u8>) -> String {
     let mut f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut buf);
     self.u8::fmt_into(&mut f);
     return buf;
+}
+
+pub fn u8::from_str(s: String) -> Result<u8, ParseIntError> {
+    return "core::prelude/primitive.wado::u8::from_str_radix"(s, 10);
+}
+
+pub fn u8::from_str_hex(s: String) -> Result<u8, ParseIntError> {
+    return "core::prelude/primitive.wado::u8::from_str_radix"(s, 16);
+}
+
+pub fn u8::from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError> {
+    return match "core::prelude/intparse.wado::parse_u64_radix"(s, radix, 255) {
+        Ok(v) => Result<u8, ParseIntError>::Ok(v as u8),
+        Err(e) => Result<u8, ParseIntError>::Err(e),
+    };
 }
 
 pub fn i16::max(a: i16, b: i16) -> i16 {
@@ -7174,6 +8036,21 @@ pub fn i16::to_string(self: Box<i16>) -> String {
     return buf;
 }
 
+pub fn i16::from_str(s: String) -> Result<i16, ParseIntError> {
+    return "core::prelude/primitive.wado::i16::from_str_radix"(s, 10);
+}
+
+pub fn i16::from_str_hex(s: String) -> Result<i16, ParseIntError> {
+    return "core::prelude/primitive.wado::i16::from_str_radix"(s, 16);
+}
+
+pub fn i16::from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError> {
+    return match "core::prelude/intparse.wado::parse_i64_radix"(s, radix, 32767, 32768) {
+        Ok(v) => Result<i16, ParseIntError>::Ok(v as i16),
+        Err(e) => Result<i16, ParseIntError>::Err(e),
+    };
+}
+
 pub fn u16::max(a: u16, b: u16) -> u16 {
     return "core::builtin::core/builtin/select<u16>"((a > b), a, b);
 }
@@ -7191,6 +8068,21 @@ pub fn u16::to_string(self: Box<u16>) -> String {
     let mut f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut buf);
     self.u16::fmt_into(&mut f);
     return buf;
+}
+
+pub fn u16::from_str(s: String) -> Result<u16, ParseIntError> {
+    return "core::prelude/primitive.wado::u16::from_str_radix"(s, 10);
+}
+
+pub fn u16::from_str_hex(s: String) -> Result<u16, ParseIntError> {
+    return "core::prelude/primitive.wado::u16::from_str_radix"(s, 16);
+}
+
+pub fn u16::from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError> {
+    return match "core::prelude/intparse.wado::parse_u64_radix"(s, radix, 65535) {
+        Ok(v) => Result<u16, ParseIntError>::Ok(v as u16),
+        Err(e) => Result<u16, ParseIntError>::Err(e),
+    };
 }
 
 pub fn i32::max(a: i32, b: i32) -> i32 {
@@ -7236,6 +8128,21 @@ pub fn i32::to_string(self: Box<i32>) -> String {
     return buf;
 }
 
+pub fn i32::from_str(s: String) -> Result<i32, ParseIntError> {
+    return "core::prelude/primitive.wado::i32::from_str_radix"(s, 10);
+}
+
+pub fn i32::from_str_hex(s: String) -> Result<i32, ParseIntError> {
+    return "core::prelude/primitive.wado::i32::from_str_radix"(s, 16);
+}
+
+pub fn i32::from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError> {
+    return match "core::prelude/intparse.wado::parse_i64_radix"(s, radix, 2147483647, 2147483648) {
+        Ok(v) => Result<i32, ParseIntError>::Ok(v as i32),
+        Err(e) => Result<i32, ParseIntError>::Err(e),
+    };
+}
+
 pub fn u32::max(a: u32, b: u32) -> u32 {
     return "core::builtin::core/builtin/select<u32>"((a > b), a, b);
 }
@@ -7265,6 +8172,21 @@ pub fn u32::to_string(self: Box<u32>) -> String {
     let mut f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut buf);
     self.u32::fmt_into(&mut f);
     return buf;
+}
+
+pub fn u32::from_str(s: String) -> Result<u32, ParseIntError> {
+    return "core::prelude/primitive.wado::u32::from_str_radix"(s, 10);
+}
+
+pub fn u32::from_str_hex(s: String) -> Result<u32, ParseIntError> {
+    return "core::prelude/primitive.wado::u32::from_str_radix"(s, 16);
+}
+
+pub fn u32::from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError> {
+    return match "core::prelude/intparse.wado::parse_u64_radix"(s, radix, 4294967295) {
+        Ok(v) => Result<u32, ParseIntError>::Ok(v as u32),
+        Err(e) => Result<u32, ParseIntError>::Err(e),
+    };
 }
 
 pub fn i64::max(a: i64, b: i64) -> i64 {
@@ -7326,6 +8248,18 @@ pub fn i64::to_string(self: Box<i64>) -> String {
     let mut f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut buf);
     self.i64::fmt_into(&mut f);
     return buf;
+}
+
+pub fn i64::from_str(s: String) -> Result<i64, ParseIntError> {
+    return "core::prelude/primitive.wado::i64::from_str_radix"(s, 10);
+}
+
+pub fn i64::from_str_hex(s: String) -> Result<i64, ParseIntError> {
+    return "core::prelude/primitive.wado::i64::from_str_radix"(s, 16);
+}
+
+pub fn i64::from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError> {
+    return "core::prelude/intparse.wado::parse_i64_radix"(s, radix, 9223372036854775807, 9223372036854775808);
 }
 
 pub fn u64::max(a: u64, b: u64) -> u64 {
@@ -7422,6 +8356,18 @@ pub fn u64::to_string(self: Box<u64>) -> String {
     let mut f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut buf);
     self.u64::fmt_into(&mut f);
     return buf;
+}
+
+pub fn u64::from_str(s: String) -> Result<u64, ParseIntError> {
+    return "core::prelude/primitive.wado::u64::from_str_radix"(s, 10);
+}
+
+pub fn u64::from_str_hex(s: String) -> Result<u64, ParseIntError> {
+    return "core::prelude/primitive.wado::u64::from_str_radix"(s, 16);
+}
+
+pub fn u64::from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError> {
+    return "core::prelude/intparse.wado::parse_u64_radix"(s, radix, 18446744073709551615);
 }
 
 fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_repr: String) {
@@ -7686,13 +8632,11 @@ pub fn f32::is_finite(self: Box<f32>) -> bool {
     return ((self.value - self.value) == 0.0);
 }
 
-pub fn f32::parse(s: String) -> Option<f32> {
-    let __pattern_temp_0: Option<f64> = "core::prelude/fpfmt.wado::parse_text"(s);
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let v: f64 = __variant_payload(__pattern_temp_0, case=0);
-        return Option<f32>::Some(v as f32);
-    }
-    return null;
+pub fn f32::from_str(s: String) -> Result<f32, ParseFloatError> {
+    return match "core::prelude/intparse.wado::parse_f64_from_str"(s) {
+        Ok(v) => Result<f32, ParseFloatError>::Ok(v as f32),
+        Err(e) => Result<f32, ParseFloatError>::Err(e),
+    };
 }
 
 pub fn f32::to_bits(self: Box<f32>) -> i32 {
@@ -8027,8 +8971,8 @@ pub fn f64::is_finite(self: Box<f64>) -> bool {
     return ((self.value - self.value) == 0.0);
 }
 
-pub fn f64::parse(s: String) -> Option<f64> {
-    return "core::prelude/fpfmt.wado::parse_text"(s);
+pub fn f64::from_str(s: String) -> Result<f64, ParseFloatError> {
+    return "core::prelude/intparse.wado::parse_f64_from_str"(s);
 }
 
 pub fn f64::to_bits(self: Box<f64>) -> i64 {
@@ -22053,6 +22997,15 @@ fn "Array<u8>^SequenceLiteralBuilder::push_literal"(self: &mut Array<u8>, value:
 
 fn "Array<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<u8> {
     return "core::prelude/array.wado::Array<u8>::with_capacity"(capacity);
+}
+
+pub fn "Result<i32,IntErrorKind>::unwrap"(self: Box<Result<i32,IntErrorKind>>) -> i32 {
+    let __pattern_temp_0: Result<i32, IntErrorKind> = self.value;
+    if __variant_test(__pattern_temp_0, case=0, name=Ok) {
+        let v: i32 = __variant_payload(__pattern_temp_0, case=0);
+        return v;
+    }
+    core::internal::panic("called Result::unwrap() on an Err value");
 }
 
 fn "Array<u64>^IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {

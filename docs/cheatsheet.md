@@ -892,7 +892,10 @@ f64::abs(x)    f64::ceil(x)   f64::floor(x)
 f64::pow(x, y) f64::ln(x)     f64::exp(x)
 
 x.is_nan()     x.is_finite()    // where x is f64 or f32
-f64::parse("3.14")              // Option<f64>
+f64::from_str("3.14")           // Result<f64, ParseFloatError>
+i32::from_str("42")             // Result<i32, ParseIntError>
+i32::from_str_hex("ff")         // Result<i32, ParseIntError> (radix 16)
+i32::from_str_radix("1010", 2)  // Result<i32, ParseIntError> (radix 2..=36)
 
 i32::min(a, b)  i32::max(a, b)
 

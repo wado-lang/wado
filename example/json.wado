@@ -446,14 +446,14 @@ impl Parser {
             }
         }
 
-        // Extract byte range and convert to string for f64::parse
+        // Extract byte range and convert to string for f64::from_str
         let end = self.pos;
         let mut num_str = String::with_capacity(end - start);
         for let mut i = start; i < end; i += 1 {
             num_str.push(char::from_u32_unchecked(self.bytes[i] as u32));
         }
 
-        if let Some(n) = f64::parse(num_str) {
+        if let Ok(n) = f64::from_str(num_str) {
             return Option::<JsonValue>::Some(JsonValue::Number(n));
         }
         self.pos = start;
