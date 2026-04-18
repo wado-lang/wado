@@ -8,6 +8,7 @@
 //! 4. Translate each use-site into a [`ReferenceLocation`].
 //! 5. Optionally prepend the defining occurrence itself.
 
+use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
 use wado_compiler::symbol::SymbolKey;
@@ -15,7 +16,7 @@ use wado_compiler::symbol::SymbolKey;
 use crate::diagnostics::{Position, Range};
 use crate::location::{module_uri, resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReferenceLocation {
     pub uri: String,
     pub range: Range,

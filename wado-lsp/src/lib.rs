@@ -12,7 +12,7 @@ use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic as CompilerDiagnos
 pub use definition::DefinitionResult;
 pub use diagnostics::{Diagnostic, Position, Range, Severity};
 pub use document_highlight::{DocumentHighlight, HighlightKind};
-pub use hover::HoverResult;
+pub use hover::{HoverResult, MarkupContent, MarkupKind};
 pub use references::ReferenceLocation;
 
 /// Protocol-agnostic language service engine.

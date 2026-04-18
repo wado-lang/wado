@@ -9,6 +9,7 @@
 //!   `=`, `+=`, etc.
 //! - `Read` for every other use-site.
 
+use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
 use wado_compiler::ast::{
@@ -20,15 +21,36 @@ use wado_compiler::name::ModuleSource;
 use crate::diagnostics::{Position, Range};
 use crate::location::{resolve_def_key, span_to_range, uri_to_filename};
 
-/// LSP `DocumentHighlightKind` values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// LSP `DocumentHighlightKind` values. Serializes as the 1..=3 integer
+/// defined by the LSP wire format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(into = "u32", try_from = "u32")]
 pub enum HighlightKind {
     Text = 1,
     Read = 2,
     Write = 3,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl From<HighlightKind> for u32 {
+    fn from(k: HighlightKind) -> Self {
+        k as Self
+    }
+}
+
+impl TryFrom<u32> for HighlightKind {
+    type Error = String;
+
+    fn try_from(n: u32) -> Result<Self, <Self as TryFrom<u32>>::Error> {
+        match n {
+            1 => Ok(Self::Text),
+            2 => Ok(Self::Read),
+            3 => Ok(Self::Write),
+            _ => Err(format!("invalid HighlightKind: {n}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentHighlight {
     pub range: Range,
     pub kind: HighlightKind,

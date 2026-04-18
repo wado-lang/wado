@@ -5,8 +5,8 @@ use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::lsp_type::{
-    self, JsonRpcError, JsonRpcErrorResponse, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse,
+use crate::lsp_rpc::{
+    JsonRpcError, JsonRpcErrorResponse, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse,
     PublishDiagnosticsParams,
 };
 
@@ -51,7 +51,10 @@ pub async fn read_message<R: tokio::io::AsyncRead + Unpin>(
         .map_err(|e| format!("invalid JSON: {e}"))
 }
 
-async fn write_serialized<W: AsyncWrite + Unpin>(writer: &mut W, body: String) -> Result<(), String> {
+async fn write_serialized<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+    body: String,
+) -> Result<(), String> {
     let header = format!("Content-Length: {}\r\n\r\n", body.len());
     writer
         .write_all(header.as_bytes())
@@ -114,29 +117,6 @@ pub async fn send_error<W: AsyncWrite + Unpin>(
     write_serialized(writer, body).await
 }
 
-/// Convert engine diagnostics to LSP diagnostics.
-pub fn diagnostics_to_lsp(diagnostics: &[wado_lsp::Diagnostic]) -> Vec<lsp_type::Diagnostic> {
-    diagnostics
-        .iter()
-        .map(|d| lsp_type::Diagnostic {
-            range: lsp_type::Range {
-                start: lsp_type::Position {
-                    line: d.range.start.line,
-                    character: d.range.start.character,
-                },
-                end: lsp_type::Position {
-                    line: d.range.end.line,
-                    character: d.range.end.character,
-                },
-            },
-            severity: Some(d.severity as u32),
-            code: Some(d.code.clone()),
-            source: Some("wado".to_string()),
-            message: d.message.clone(),
-        })
-        .collect()
-}
-
 /// Build a silent filesystem host rooted at the directory containing `uri`.
 pub fn host_for_uri(uri: &str) -> FilesystemCompilerHost {
     let filename = uri.strip_prefix("file://").unwrap_or(uri);
@@ -157,7 +137,7 @@ pub async fn publish_diagnostics<W: AsyncWrite + Unpin>(
     let diagnostics = engine.diagnostics(uri, &host).await;
     let params = PublishDiagnosticsParams {
         uri: uri.to_string(),
-        diagnostics: diagnostics_to_lsp(&diagnostics),
+        diagnostics,
     };
     send_notification(writer, "textDocument/publishDiagnostics", params).await
 }

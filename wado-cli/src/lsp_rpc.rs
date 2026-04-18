@@ -1,34 +1,16 @@
-//! LSP and JSON-RPC type definitions used by `wado lsp`.
+//! LSP JSON-RPC envelope and request/response param types used by `wado lsp`.
 //!
-//! Only what we actually emit or accept is defined here. Spec reference:
+//! Semantic LSP types (Position, Range, Diagnostic, ...) live in `wado-lsp`
+//! and are reused here. This module only defines the protocol-handling
+//! layer: JSON-RPC framing, request param shapes, server capabilities.
+//!
+//! Spec reference:
 //! <https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/>.
-//!
-//! Conventions:
-//! - All structs use `serde(rename_all = "camelCase")` to match LSP wire format.
-//! - Optional fields default-skip on serialization to keep payloads compact.
-//! - Numeric enums (severity, highlight kind, sync kind) are kept as `u32` to
-//!   avoid pulling in `serde_repr`; named constants live in submodules below.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Position {
-    pub line: u32,
-    pub character: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Range {
-    pub start: Position,
-    pub end: Position,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Location {
-    pub uri: String,
-    pub range: Range,
-}
+use wado_lsp::Position;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextDocumentIdentifier {
@@ -105,61 +87,10 @@ pub struct SemanticTokens {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Hover {
-    pub contents: MarkupContent,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub range: Option<Range>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MarkupContent {
-    pub kind: MarkupKind,
-    pub value: String,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum MarkupKind {
-    Plaintext,
-    Markdown,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DocumentHighlight {
-    pub range: Range,
-    pub kind: u32,
-}
-
-pub mod document_highlight_kind {
-    pub const TEXT: u32 = 1;
-    pub const READ: u32 = 2;
-    pub const WRITE: u32 = 3;
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishDiagnosticsParams {
     pub uri: String,
-    pub diagnostics: Vec<Diagnostic>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Diagnostic {
-    pub range: Range,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub severity: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-    pub message: String,
-}
-
-pub mod diagnostic_severity {
-    pub const ERROR: u32 = 1;
-    pub const WARNING: u32 = 2;
-    pub const INFORMATION: u32 = 3;
-    pub const HINT: u32 = 4;
+    pub diagnostics: Vec<wado_lsp::Diagnostic>,
 }
 
 #[derive(Debug, Clone, Serialize)]

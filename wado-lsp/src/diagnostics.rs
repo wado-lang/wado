@@ -1,7 +1,10 @@
+use serde::{Deserialize, Serialize};
 use wado_compiler::{Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity};
 
-/// LSP-compatible diagnostic severity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// LSP-compatible diagnostic severity. Serializes as the 1..=4 integer
+/// defined by the LSP wire format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(into = "u32", try_from = "u32")]
 pub enum Severity {
     Error = 1,
     Warning = 2,
@@ -9,26 +12,48 @@ pub enum Severity {
     Hint = 4,
 }
 
+impl From<Severity> for u32 {
+    fn from(s: Severity) -> Self {
+        s as Self
+    }
+}
+
+impl TryFrom<u32> for Severity {
+    type Error = String;
+
+    fn try_from(n: u32) -> Result<Self, <Self as TryFrom<u32>>::Error> {
+        match n {
+            1 => Ok(Self::Error),
+            2 => Ok(Self::Warning),
+            3 => Ok(Self::Information),
+            4 => Ok(Self::Hint),
+            _ => Err(format!("invalid Severity: {n}")),
+        }
+    }
+}
+
 /// Zero-based line/column position in a text document.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Position {
     pub line: u32,
     pub character: u32,
 }
 
 /// A range in a text document (start inclusive, end exclusive).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Range {
     pub start: Position,
     pub end: Position,
 }
 
 /// A diagnostic message (error, warning, etc.) for a text document.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub range: Range,
     pub severity: Severity,
     pub code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     pub message: String,
 }
 
@@ -79,6 +104,7 @@ pub fn from_compiler_diagnostic(diag: &CompilerDiagnostic, _uri: &str) -> Option
         },
         severity,
         code: format!("{}", diag.code),
+        source: Some("wado".to_string()),
         message: diag.message.clone(),
     })
 }

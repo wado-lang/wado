@@ -8,6 +8,7 @@
 //! 4. Otherwise the cursor AST id itself points at a declared symbol.
 //! 5. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`].
 
+use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::annotate;
 use wado_compiler::ast::{self, AstId, Item, Module};
@@ -16,7 +17,7 @@ use wado_compiler::token::Span;
 use crate::diagnostics::{Position, Range};
 use crate::location::{resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefinitionResult {
     pub uri: String,
     pub range: Range,
