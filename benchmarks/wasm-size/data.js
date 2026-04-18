@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776482733309,
+  "lastUpdate": 1776493337066,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13917,6 +13917,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/de630d6d5464f815fecce83bbba454040941fbfc"
         },
         "date": 1776482733000,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618093,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "391ba00517099032f4d5b2d7c3de9d19b5e1f1fa",
+          "message": "Merge pull request #868 from wado-lang/claude/implicit-dependency-support-GNcSf\n\nKiln: IDL-source `use`, supplementary inputs, unified semantics",
+          "timestamp": "2026-04-18T15:18:24+09:00",
+          "tree_id": "131c5fd614acafc5912d74ef3bd7d331f81f04a6",
+          "url": "https://github.com/wado-lang/wado/commit/391ba00517099032f4d5b2d7c3de9d19b5e1f1fa"
+        },
+        "date": 1776493336781,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
