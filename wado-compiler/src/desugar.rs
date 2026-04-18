@@ -35,7 +35,11 @@ struct DesugarContext {
     /// during desugaring inherit this id so that `Module::ast_id_count` remains
     /// parser-allocated and AstIds stay dense in `0..ast_id_count`. The desugar
     /// phase is slated for removal; after that, every AST node will be parser-owned.
-    current_parent_id: AstId,
+    ///
+    /// `None` at module top-level before descending into any item. Must be `Some`
+    /// whenever `synth_id` is called — every desugar helper that produces synthetic
+    /// nodes saves, sets this to the enclosing AST node's id, recurses, then restores.
+    current_parent_id: Option<AstId>,
 }
 
 impl DesugarContext {
@@ -44,8 +48,13 @@ impl DesugarContext {
     /// Synthetic nodes have no source origin, so they inherit the id of the AST
     /// node currently being desugared. This preserves the parse-time density of
     /// AstIds without requiring a separate id space for desugar-introduced nodes.
+    ///
+    /// Panics if called outside of any item body — callers must set
+    /// `current_parent_id` before invoking any desugaring that may allocate
+    /// synthetic nodes.
     fn synth_id(&self) -> AstId {
         self.current_parent_id
+            .expect("synth_id called without an enclosing AST node; set current_parent_id first")
     }
 }
 
@@ -73,7 +82,7 @@ pub fn desugar_module(module: &Module) -> Module {
         loop_counter: 0,
         for_loop_labels: Vec::new(),
         namespace_names,
-        current_parent_id: AstId(0),
+        current_parent_id: None,
     };
     let items: Vec<Item> = module
         .items
@@ -177,8 +186,10 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
     }
 }
 
-fn desugar_global(global: &GlobalDecl, _ctx: &mut DesugarContext) -> GlobalDecl {
-    GlobalDecl {
+fn desugar_global(global: &GlobalDecl, ctx: &mut DesugarContext) -> GlobalDecl {
+    let saved = ctx.current_parent_id;
+    ctx.current_parent_id = Some(global.id);
+    let result = GlobalDecl {
         id: global.id,
         name: global.name.clone(),
         name_span: global.name_span,
@@ -188,11 +199,15 @@ fn desugar_global(global: &GlobalDecl, _ctx: &mut DesugarContext) -> GlobalDecl 
         is_pub: global.is_pub,
         attributes: global.attributes.clone(),
         span: global.span,
-    }
+    };
+    ctx.current_parent_id = saved;
+    result
 }
 
 fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
-    Function {
+    let saved = ctx.current_parent_id;
+    ctx.current_parent_id = Some(func.id);
+    let result = Function {
         id: func.id,
         name: func.name.clone(),
         name_span: func.name_span,
@@ -207,17 +222,23 @@ fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
         stores: func.stores.clone(),
         body: func.body.as_ref().map(|b| desugar_block(b, ctx)),
         span: func.span,
-    }
+    };
+    ctx.current_parent_id = saved;
+    result
 }
 
 fn desugar_test(test: &TestDecl, ctx: &mut DesugarContext) -> TestDecl {
-    TestDecl {
+    let saved = ctx.current_parent_id;
+    ctx.current_parent_id = Some(test.id);
+    let result = TestDecl {
         id: test.id,
         attributes: test.attributes.clone(),
         name: test.name.clone(),
         body: desugar_block(&test.body, ctx),
         span: test.span,
-    }
+    };
+    ctx.current_parent_id = saved;
+    result
 }
 
 fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
@@ -282,8 +303,16 @@ fn desugar_block(block: &Block, ctx: &mut DesugarContext) -> Block {
 
 fn desugar_pattern(p: &Pattern) -> Pattern {
     match p {
-        Pattern::Ident(name) => Pattern::Ident(name.clone()),
-        Pattern::MutIdent(name) => Pattern::MutIdent(name.clone()),
+        Pattern::Ident { id, name, span } => Pattern::Ident {
+            id: *id,
+            name: name.clone(),
+            span: *span,
+        },
+        Pattern::MutIdent { id, name, span } => Pattern::MutIdent {
+            id: *id,
+            name: name.clone(),
+            span: *span,
+        },
         Pattern::Literal(lit) => Pattern::Literal(lit.clone()),
         Pattern::Wildcard => Pattern::Wildcard,
         Pattern::Tuple(patterns, has_rest) => {
@@ -545,7 +574,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
                     namespace_names: Vec::new(),
-                    current_parent_id: AstId(0),
+                    current_parent_id: Some(b.id),
                 };
                 Expr::Block(Box::new(desugar_block(b, &mut temp_ctx)))
             }
@@ -565,7 +594,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
                     namespace_names: Vec::new(),
-                    current_parent_id: AstId(0),
+                    current_parent_id: Some(i.id),
                 };
                 Expr::If(Box::new(IfExpr {
                     id: i.id,
@@ -647,7 +676,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
                     namespace_names: Vec::new(),
-                    current_parent_id: AstId(0),
+                    current_parent_id: Some(lb.id),
                 };
                 Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
                     id: lb.id,
@@ -1170,9 +1199,14 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     let mut stmts: Vec<Stmt> = Vec::new();
 
     for (var_name, _source, expr) in &intermediates {
+        let let_id = ctx.synth_id();
         stmts.push(Stmt::Let(LetStmt {
-            id: ctx.synth_id(),
-            pattern: Pattern::Ident(var_name.clone()),
+            id: let_id,
+            pattern: Pattern::Ident {
+                id: let_id,
+                name: var_name.clone(),
+                span,
+            },
             name_span: span,
             is_mut: false,
             is_reactive: false,
@@ -1188,9 +1222,14 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
 
     // Store condition in a variable (scoped to this labeled block)
     let cond_var = "__cond".to_string();
+    let cond_let_id = ctx.synth_id();
     stmts.push(Stmt::Let(LetStmt {
-        id: ctx.synth_id(),
-        pattern: Pattern::Ident(cond_var.clone()),
+        id: cond_let_id,
+        pattern: Pattern::Ident {
+            id: cond_let_id,
+            name: cond_var.clone(),
+            span,
+        },
         name_span: span,
         is_mut: false,
         is_reactive: false,
