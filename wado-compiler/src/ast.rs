@@ -2416,15 +2416,24 @@ test "addition" {
         assert_eq!(m1.ast_id_count(), m2.ast_id_count());
         assert!(m1.ast_id_count() > 0);
 
-        let ids_1: Vec<AstId> = collect_ids(&m1.items).into_iter().map(|(id, _)| id).collect();
-        let ids_2: Vec<AstId> = collect_ids(&m2.items).into_iter().map(|(id, _)| id).collect();
+        let ids_1: Vec<AstId> = collect_ids(&m1.items)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        let ids_2: Vec<AstId> = collect_ids(&m2.items)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
         assert_eq!(ids_1, ids_2);
     }
 
     #[test]
     fn ids_are_dense_and_unique() {
         let m = parse(SAMPLE);
-        let ids: Vec<AstId> = collect_ids(&m.items).into_iter().map(|(id, _)| id).collect();
+        let ids: Vec<AstId> = collect_ids(&m.items)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
         assert!(!ids.is_empty());
 
         let mut seen: IndexSet<AstId> = IndexSet::default();

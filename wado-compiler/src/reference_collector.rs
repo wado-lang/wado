@@ -13,8 +13,8 @@
 //! left alone — LSP falls back to the per-module symbol index for those.
 
 use crate::ast::{
-    self, AstId, AstVisitor, Block, Condition, ConditionElement, Expr, Function, MatchExpr,
-    Module, Pattern, Stmt, Type,
+    self, AstId, AstVisitor, Block, Condition, ConditionElement, Expr, Function, MatchExpr, Module,
+    Pattern, Stmt, Type,
 };
 use crate::hashmap::IndexMap;
 use crate::name::ModuleSource;
