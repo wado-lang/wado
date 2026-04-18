@@ -5,7 +5,7 @@ Language service engine for the Wado compiler toolchain.
 ## Rules
 
 - This crate must be IO-free. No filesystem, network, or stdio operations. All IO goes through `CompilerHost`.
-- This crate must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules.
+- This crate must compile for `wasm32-unknown-unknown`.
 - Types follow LSP semantics
 - Protocol handling (LSP JSON-RPC, MCP, CLI one-shot query) belongs in `wado-cli`
 
@@ -53,7 +53,7 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 
 ### Text Document Synchronization
 
-- [ ] `textDocument/didChange` (Incremental sync)
+- [ ] `textDocument/didChange` (incremental sync)
 - [ ] `textDocument/willSave`
 - [ ] `textDocument/willSaveWaitUntil`
 - [ ] `textDocument/didSave`
