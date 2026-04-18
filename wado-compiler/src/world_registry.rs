@@ -209,6 +209,7 @@ mod tests {
                 is_async: true,
                 params: vec![],
                 return_type: Some(Type::Generic(crate::ast::GenericType {
+                    id: crate::ast::AstId(0),
                     name: "Result".to_string(),
                     args: vec![Type::Tuple(vec![]), Type::Tuple(vec![])],
                     span: make_span(),

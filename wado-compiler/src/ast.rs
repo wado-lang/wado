@@ -218,6 +218,7 @@ fn visit_item_ids(item: &Item, f: &mut impl FnMut(AstId, Span)) {
             }
             for field in &s.fields {
                 f(field.id, field.span);
+                visit_type_ids(&field.ty, f);
             }
         }
         Item::Enum(e) => {
@@ -236,6 +237,9 @@ fn visit_item_ids(item: &Item, f: &mut impl FnMut(AstId, Span)) {
             }
             for case in &v.cases {
                 f(case.id, case.span);
+                if let Some(payload) = &case.payload {
+                    visit_type_ids(payload, f);
+                }
             }
         }
         Item::Flags(fl) => {
@@ -249,6 +253,7 @@ fn visit_item_ids(item: &Item, f: &mut impl FnMut(AstId, Span)) {
             for p in &n.type_params {
                 f(p.id, p.span);
             }
+            visit_type_ids(&n.ty, f);
         }
         Item::TupleTypeDecl(t) => f(t.id, t.span),
         Item::Impl(i) => {
@@ -256,11 +261,18 @@ fn visit_item_ids(item: &Item, f: &mut impl FnMut(AstId, Span)) {
             for p in &i.type_params {
                 f(p.id, p.span);
             }
+            if let Some(trait_ty) = &i.trait_type {
+                visit_type_ids(trait_ty, f);
+            }
+            visit_type_ids(&i.ty, f);
             for binding in &i.associated_types {
                 f(binding.id, binding.span);
+                visit_type_ids(&binding.ty, f);
             }
             for c in &i.constants {
                 f(c.id, c.span);
+                visit_type_ids(&c.ty, f);
+                visit_expr_ids(&c.value, f);
             }
             for m in &i.methods {
                 visit_function_ids(m, f);
@@ -288,8 +300,15 @@ fn visit_item_ids(item: &Item, f: &mut impl FnMut(AstId, Span)) {
             }
         }
         Item::World(w) => f(w.id, w.span),
-        Item::Test(t) => f(t.id, t.span),
-        Item::Global(g) => f(g.id, g.span),
+        Item::Test(t) => {
+            f(t.id, t.span);
+            visit_block_ids(&t.body, f);
+        }
+        Item::Global(g) => {
+            f(g.id, g.span);
+            visit_type_ids(&g.ty, f);
+            visit_expr_ids(&g.initializer, f);
+        }
     }
 }
 
@@ -300,6 +319,13 @@ fn visit_function_ids(func: &Function, f: &mut impl FnMut(AstId, Span)) {
     }
     for param in &func.params {
         f(param.id, param.span);
+        visit_type_ids(&param.ty, f);
+    }
+    if let Some(ret) = &func.return_type {
+        visit_type_ids(ret, f);
+    }
+    if let Some(body) = &func.body {
+        visit_block_ids(body, f);
     }
 }
 
@@ -307,6 +333,246 @@ fn visit_effect_method_ids(method: &EffectMethod, f: &mut impl FnMut(AstId, Span
     f(method.id, method.span);
     for param in &method.params {
         f(param.id, param.span);
+        visit_type_ids(&param.ty, f);
+    }
+    if let Some(ret) = &method.return_type {
+        visit_type_ids(ret, f);
+    }
+}
+
+fn visit_block_ids(block: &Block, f: &mut impl FnMut(AstId, Span)) {
+    f(block.id, block.span);
+    for stmt in &block.stmts {
+        visit_stmt_ids(stmt, f);
+    }
+}
+
+fn visit_stmt_ids(stmt: &Stmt, f: &mut impl FnMut(AstId, Span)) {
+    f(stmt.id(), stmt.span());
+    match stmt {
+        Stmt::Let(s) => {
+            if let Some(ty) = &s.ty {
+                visit_type_ids(ty, f);
+            }
+            if let Some(v) = &s.value {
+                visit_expr_ids(v, f);
+            }
+        }
+        Stmt::Expr(s) => visit_expr_ids(&s.expr, f),
+        Stmt::Return(s) => {
+            if let Some(v) = &s.value {
+                visit_expr_ids(v, f);
+            }
+        }
+        Stmt::TaskReturn(s) => visit_expr_ids(&s.value, f),
+        Stmt::If(s) => {
+            visit_condition_ids(&s.condition, f);
+            visit_block_ids(&s.then_block, f);
+            if let Some(e) = &s.else_block {
+                visit_block_ids(e, f);
+            }
+        }
+        Stmt::While(s) => {
+            visit_condition_ids(&s.condition, f);
+            visit_block_ids(&s.body, f);
+        }
+        Stmt::For(s) => {
+            if let Some(init) = &s.init {
+                visit_stmt_ids(init, f);
+            }
+            if let Some(cond) = &s.condition {
+                visit_condition_ids(cond, f);
+            }
+            if let Some(update) = &s.update {
+                visit_expr_ids(update, f);
+            }
+            visit_block_ids(&s.body, f);
+        }
+        Stmt::ForOf(s) => {
+            visit_expr_ids(&s.iterable, f);
+            visit_block_ids(&s.body, f);
+        }
+        Stmt::Loop(s) => visit_block_ids(&s.body, f),
+        Stmt::Match(m) => visit_match_expr_ids(m, f),
+        Stmt::Break(s) => {
+            if let Some(v) = &s.value {
+                visit_expr_ids(v, f);
+            }
+        }
+        Stmt::Continue(_) => {}
+        Stmt::Assert(s) => {
+            visit_expr_ids(&s.condition, f);
+            if let Some(msg) = &s.message {
+                visit_expr_ids(msg, f);
+            }
+        }
+        Stmt::LabeledBlock(s) => visit_block_ids(&s.block, f),
+    }
+}
+
+fn visit_condition_ids(cond: &Condition, f: &mut impl FnMut(AstId, Span)) {
+    match cond {
+        Condition::Expr(e) => visit_expr_ids(e, f),
+        Condition::LetChain { elements, .. } => {
+            for el in elements {
+                match el {
+                    ConditionElement::Let { expr, .. } => visit_expr_ids(expr, f),
+                    ConditionElement::Expr(e) => visit_expr_ids(e, f),
+                }
+            }
+        }
+    }
+}
+
+fn visit_match_expr_ids(m: &MatchExpr, f: &mut impl FnMut(AstId, Span)) {
+    f(m.id, m.span);
+    visit_expr_ids(&m.expr, f);
+    for arm in &m.arms {
+        if let Some(guard) = &arm.guard {
+            visit_expr_ids(guard, f);
+        }
+        visit_expr_ids(&arm.body, f);
+    }
+}
+
+fn visit_expr_ids(expr: &Expr, f: &mut impl FnMut(AstId, Span)) {
+    f(expr.id(), expr.span());
+    match expr {
+        Expr::Ident(_) | Expr::Literal(_) => {}
+        Expr::Binary(e) => {
+            visit_expr_ids(&e.left, f);
+            visit_expr_ids(&e.right, f);
+        }
+        Expr::Unary(e) => visit_expr_ids(&e.expr, f),
+        Expr::Assign(e) => {
+            visit_expr_ids(&e.target, f);
+            visit_expr_ids(&e.value, f);
+        }
+        Expr::CompoundAssign(e) => {
+            visit_expr_ids(&e.target, f);
+            visit_expr_ids(&e.value, f);
+        }
+        Expr::ComparisonChain(e) => {
+            visit_expr_ids(&e.first, f);
+            for c in &e.comparisons {
+                visit_expr_ids(&c.right, f);
+            }
+        }
+        Expr::Call(e) => {
+            visit_expr_ids(&e.callee, f);
+            for ty in &e.type_args {
+                visit_type_ids(ty, f);
+            }
+            for a in &e.args {
+                visit_expr_ids(a, f);
+            }
+        }
+        Expr::MethodCall(e) => {
+            visit_expr_ids(&e.receiver, f);
+            for ty in &e.type_args {
+                visit_type_ids(ty, f);
+            }
+            for a in &e.args {
+                visit_expr_ids(a, f);
+            }
+        }
+        Expr::StaticMethodCall(e) => {
+            visit_type_ids(&e.target_type, f);
+            for ty in &e.type_args {
+                visit_type_ids(ty, f);
+            }
+            for a in &e.args {
+                visit_expr_ids(a, f);
+            }
+        }
+        Expr::FieldAccess(e) => visit_expr_ids(&e.expr, f),
+        Expr::Index(e) => {
+            visit_expr_ids(&e.expr, f);
+            visit_expr_ids(&e.index, f);
+        }
+        Expr::Block(b) => visit_block_ids(b, f),
+        Expr::If(e) => {
+            visit_condition_ids(&e.condition, f);
+            visit_block_ids(&e.then_block, f);
+            if let Some(eb) = &e.else_block {
+                visit_block_ids(eb, f);
+            }
+        }
+        Expr::Match(m) => visit_match_expr_ids(m, f),
+        Expr::Matches(m) => {
+            visit_expr_ids(&m.expr, f);
+            if let Some(guard) = &m.guard {
+                visit_expr_ids(guard, f);
+            }
+        }
+        Expr::Closure(c) => {
+            for p in &c.params {
+                f(p.id, p.name_span);
+                if let Some(ty) = &p.ty {
+                    visit_type_ids(ty, f);
+                }
+            }
+            visit_expr_ids(&c.body, f);
+        }
+        Expr::TemplateString(t) => {
+            for part in &t.parts {
+                if let TemplatePart::Interpolation { expr, .. } = part {
+                    visit_expr_ids(expr, f);
+                }
+            }
+        }
+        Expr::Cast(c) => {
+            visit_expr_ids(&c.expr, f);
+            visit_type_ids(&c.target_type, f);
+        }
+        Expr::StructLiteral(s) => {
+            for field in &s.fields {
+                visit_expr_ids(&field.value, f);
+            }
+        }
+        Expr::TupleLiteral(t) => {
+            for el in &t.elements {
+                visit_expr_ids(el, f);
+            }
+        }
+        Expr::LabeledBlock(lb) => visit_block_ids(&lb.block, f),
+        Expr::TryOp(t) => visit_expr_ids(&t.expr, f),
+        Expr::Spread(inner, _) => visit_expr_ids(inner, f),
+        Expr::Range(r) => {
+            visit_expr_ids(&r.start, f);
+            visit_expr_ids(&r.end, f);
+        }
+    }
+}
+
+fn visit_type_ids(ty: &Type, f: &mut impl FnMut(AstId, Span)) {
+    match ty {
+        Type::Named(t) => f(t.id, t.span),
+        Type::Generic(t) => {
+            f(t.id, t.span);
+            for a in &t.args {
+                visit_type_ids(a, f);
+            }
+        }
+        Type::NamespacedGeneric(t) => {
+            f(t.id, t.span);
+            for a in &t.args {
+                visit_type_ids(a, f);
+            }
+        }
+        Type::Function(ft) => {
+            for p in &ft.params {
+                visit_type_ids(p, f);
+            }
+            visit_type_ids(&ft.return_type, f);
+        }
+        Type::Tuple(ts) => {
+            for t in ts {
+                visit_type_ids(t, f);
+            }
+        }
+        Type::Reference(t) | Type::MutReference(t) => visit_type_ids(t, f),
+        Type::TypePackSpread(_, _) => {}
     }
 }
 

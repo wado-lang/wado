@@ -2492,8 +2492,10 @@ mod tests {
 
     fn make_stream_u8_type() -> Type {
         Type::Generic(crate::ast::GenericType {
+            id: crate::ast::AstId(0),
             name: "Stream".to_string(),
             args: vec![Type::Named(crate::ast::NamedType {
+                id: crate::ast::AstId(0),
                 name: "u8".to_string(),
                 span: make_span(),
             })],
@@ -2503,10 +2505,12 @@ mod tests {
 
     fn make_result_type() -> Type {
         Type::Generic(crate::ast::GenericType {
+            id: crate::ast::AstId(0),
             name: "Result".to_string(),
             args: vec![
                 Type::Tuple(vec![]), // ()
                 Type::Named(crate::ast::NamedType {
+                    id: crate::ast::AstId(0),
                     name: "ErrorCode".to_string(),
                     span: make_span(),
                 }),
@@ -2660,8 +2664,10 @@ mod tests {
 
         // Array<String> should be supported
         let array_string = Type::Generic(GenericType {
+            id: crate::ast::AstId(0),
             name: "Array".to_string(),
             args: vec![Type::Named(NamedType {
+                id: crate::ast::AstId(0),
                 name: "String".to_string(),
                 span: make_span(),
             })],
@@ -2674,13 +2680,16 @@ mod tests {
 
         // Array<Tuple<String, String>> should be supported
         let tuple_ss = Type::Generic(GenericType {
+            id: crate::ast::AstId(0),
             name: "Tuple".to_string(),
             args: vec![
                 Type::Named(NamedType {
+                    id: crate::ast::AstId(0),
                     name: "String".to_string(),
                     span: make_span(),
                 }),
                 Type::Named(NamedType {
+                    id: crate::ast::AstId(0),
                     name: "String".to_string(),
                     span: make_span(),
                 }),
@@ -2688,6 +2697,7 @@ mod tests {
             span: make_span(),
         });
         let array_tuple = Type::Generic(GenericType {
+            id: crate::ast::AstId(0),
             name: "Array".to_string(),
             args: vec![tuple_ss],
             span: make_span(),
@@ -2699,8 +2709,10 @@ mod tests {
 
         // Option<String> should be supported
         let option_string = Type::Generic(GenericType {
+            id: crate::ast::AstId(0),
             name: "Option".to_string(),
             args: vec![Type::Named(NamedType {
+                id: crate::ast::AstId(0),
                 name: "String".to_string(),
                 span: make_span(),
             })],

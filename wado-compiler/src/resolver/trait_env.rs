@@ -541,6 +541,7 @@ mod tests {
 
     fn named(name: &str) -> Type {
         Type::Named(NamedType {
+            id: crate::ast::AstId(0),
             name: name.to_string(),
             span: dummy_span(),
         })
@@ -548,6 +549,7 @@ mod tests {
 
     fn generic(name: &str, args: Vec<Type>) -> Type {
         Type::Generic(GenericType {
+            id: crate::ast::AstId(0),
             name: name.to_string(),
             args,
             span: dummy_span(),

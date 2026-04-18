@@ -8439,6 +8439,7 @@ mod tests {
 
     fn named_type(name: &str) -> Type {
         Type::Named(NamedType {
+            id: crate::ast::AstId(0),
             name: name.to_string(),
             span: synth_span(),
         })
