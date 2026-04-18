@@ -109,7 +109,7 @@ fn print_help() with Stdout {
 
 fn collect_entries(dir: &Descriptor, opts: &Options) -> Array<DirectoryEntry> {
     let mut out: Array<DirectoryEntry> = [];
-    let [stream, _done] = dir.read_directory();
+    let [stream, done] = dir.read_directory();
     loop {
         let chunk = stream.read(64);
         if chunk.len() == 0 {
@@ -126,7 +126,7 @@ fn collect_entries(dir: &Descriptor, opts: &Options) -> Array<DirectoryEntry> {
         }
     }
     stream.drop();
-    _done.drop();
+    done.drop();
     out.sort_by(|a: &DirectoryEntry, b: &DirectoryEntry| a.name.cmp(&b.name));
     return out;
 }
