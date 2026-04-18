@@ -63,24 +63,17 @@ For everything else (target-specific runtimes, IDE integration, building ANTLR i
 ## Debugging Grammars with `gale dump`
 
 `gale dump` pretty-prints the parsed `Grammar` IR so you can inspect what the
-g4 frontend actually produced, without going through code generation.
+g4 frontend actually produced, without going through code generation. Use it
+to check whether a construct was parsed into the IR as expected before
+blaming the code generator.
 
 ```sh
-# Dump the full IR of one or more grammars (multiple files are merged,
-# same as `gale gen`).
+# Dump the full IR (multiple files are merged, same as `gale gen`).
 cargo run --bin wado -- run package-gale -- dump path/to/Grammar.g4
 
-# Dump a single rule only — searches parser rules first, then lexer rules.
+# Dump a single rule — searches parser rules first, then lexer rules.
 cargo run --bin wado -- run package-gale -- dump --rule expr path/to/Grammar.g4
-
-# `--ir` is the default mode and is accepted as a no-op for explicitness.
-cargo run --bin wado -- run package-gale -- dump --ir --rule IDENT path/to/Grammar.g4
 ```
-
-Output uses Wado's `{:#?}` pretty-inspect format, so every field of
-`Grammar` / `ParserRule` / `LexerRule` is visible verbatim. Use this when
-diagnosing whether a construct was parsed into the IR as expected before
-blaming the code generator.
 
 ## Running Tests
 
