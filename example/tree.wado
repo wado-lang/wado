@@ -1,0 +1,238 @@
+#!/usr/bin/env wado
+// A minimal tree(1) clone in Wado.
+//
+// Prints a directory listing as an indented tree, much like the POSIX
+// `tree` utility. Paths are resolved under the first preopened directory
+// (by default `.`, the cwd of `wado run`).
+//
+// Usage:
+//   wado run example/tree.wado [options] [path]
+//
+// Options:
+//   -L N    descend at most N levels deep (N >= 0)
+//   -a      include hidden entries (names starting with `.`)
+//   -d      list directories only
+//   -h      show this help
+//
+// Examples:
+//   wado run example/tree.wado
+//   wado run example/tree.wado example
+//   wado run example/tree.wado -L 2 -a .
+
+use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use {
+    Preopens,
+    Descriptor,
+    DescriptorType,
+    DescriptorFlags,
+    PathFlags,
+    OpenFlags,
+    DirectoryEntry,
+} from "wasi:filesystem";
+
+struct Options {
+    max_depth: i32,  // -1 = unlimited
+    show_hidden: bool,
+    dirs_only: bool,
+    path: String,  // "" means "use the preopened root directly"
+}
+
+struct Stats {
+    dirs: i32,
+    files: i32,
+}
+
+fn parse_nonneg_int(s: String) -> Option<i32> {
+    if s.is_empty() {
+        return null;
+    }
+    let mut n: i32 = 0;
+    for let c of s.chars() {
+        if c < '0' || c > '9' {
+            return null;
+        }
+        n = n * 10 + (c as i32 - '0' as i32);
+    }
+    return Option::Some(n);
+}
+
+fn parse_args(arguments: Array<String>) -> Result<Options, String> {
+    let mut opts = Options {
+        max_depth: -1,
+        show_hidden: false,
+        dirs_only: false,
+        path: "",
+    };
+
+    for let mut i = 0; i < arguments.len(); i += 1 {
+        let a = arguments[i];
+        if a == "-L" {
+            if i + 1 >= arguments.len() {
+                return Result::Err("tree: option -L requires a numeric argument");
+            }
+            match parse_nonneg_int(arguments[i + 1]) {
+                Some(n) => {
+                    opts.max_depth = n;
+                },
+                None => {
+                    return Result::Err(`tree: invalid depth: {arguments[i + 1]}`);
+                },
+            }
+            i += 1;  // consume the value; the loop step skips the flag
+        } else if a == "-a" {
+            opts.show_hidden = true;
+        } else if a == "-d" {
+            opts.dirs_only = true;
+        } else if a == "-h" || a == "--help" {
+            return Result::Err("__help__");
+        } else if a.starts_with("-") {
+            return Result::Err(`tree: unknown option: {a}`);
+        } else {
+            if !opts.path.is_empty() {
+                return Result::Err("tree: only one starting path is supported");
+            }
+            opts.path = a;
+        }
+    }
+    return Result::Ok(opts);
+}
+
+fn print_help() with Stdout {
+    println("Usage: tree [options] [path]");
+    println("");
+    println("Options:");
+    println("  -L N    descend at most N levels deep");
+    println("  -a      include hidden entries");
+    println("  -d      list directories only");
+    println("  -h      show this help");
+}
+
+fn collect_entries(dir: &Descriptor, opts: &Options) -> Array<DirectoryEntry> {
+    let mut out: Array<DirectoryEntry> = [];
+    let [stream, done] = dir.read_directory();
+    loop {
+        let chunk = stream.read(64);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let e of chunk {
+            if !opts.show_hidden && e.name.starts_with(".") {
+                continue;
+            }
+            if opts.dirs_only && !e.type matches { Directory } {
+                continue;
+            }
+            out.push(e);
+        }
+    }
+    stream.drop();
+    done.drop();
+    out.sort_by(|a: &DirectoryEntry, b: &DirectoryEntry| a.name.cmp(&b.name));
+    return out;
+}
+
+fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mut Stats) with Stdout, Stderr {
+    let entries = collect_entries(dir, opts);
+    let n = entries.len();
+    for let mut i = 0; i < n; i += 1 {
+        let entry = &entries[i];
+        let is_last = i == n - 1;
+        let connector = if is_last { "└── " } else { "├── " };
+        let next_prefix_fragment = if is_last { "    " } else { "│   " };
+
+        let is_dir = entry.type matches { Directory };
+        let suffix = if is_dir { "/" } else { "" };
+
+        println(`{prefix}{connector}{entry.name}{suffix}`);
+
+        if is_dir {
+            stats.dirs += 1;
+            let can_recurse = opts.max_depth < 0 || depth < opts.max_depth;
+            if can_recurse {
+                let sub = dir.open_at(
+                    PathFlags::none(),
+                    entry.name,
+                    OpenFlags::Directory,
+                    DescriptorFlags::Read,
+                );
+                match sub {
+                    Ok(d) => {
+                        let mut child_prefix = String::with_capacity(prefix.len() + 4);
+                        child_prefix.push_str(prefix);
+                        child_prefix.push_str(next_prefix_fragment);
+                        walk(&d, depth + 1, child_prefix, opts, stats);
+                    },
+                    Err(_) => {
+                        let mut child_prefix = String::with_capacity(prefix.len() + 4);
+                        child_prefix.push_str(prefix);
+                        child_prefix.push_str(next_prefix_fragment);
+                        println(`{child_prefix}[error opening dir]`);
+                    },
+                }
+            }
+        } else {
+            stats.files += 1;
+        }
+    }
+}
+
+export fn run() with Stdout, Stderr, Environment, Preopens {
+    let opts = match parse_args(args()) {
+        Ok(o) => o,
+        Err(msg) => {
+            if msg == "__help__" {
+                print_help();
+                return;
+            }
+            eprintln(msg);
+            return;
+        },
+    };
+
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("tree: no preopened directories available");
+        return;
+    }
+    let root = dirs[0].0;
+
+    // Figure out the starting descriptor and the label to print on the first line.
+    let label = if opts.path.is_empty() { "." } else { opts.path };
+
+    let mut stats = Stats { dirs: 0, files: 0 };
+
+    if opts.path.is_empty() || opts.path == "." {
+        println(label);
+        if opts.max_depth != 0 {
+            walk(&root, 1, "", &opts, &mut stats);
+        }
+    } else {
+        let opened = root.open_at(
+            PathFlags::none(),
+            opts.path,
+            OpenFlags::Directory,
+            DescriptorFlags::Read,
+        );
+        match opened {
+            Ok(start) => {
+                println(label);
+                if opts.max_depth != 0 {
+                    walk(&start, 1, "", &opts, &mut stats);
+                }
+            },
+            Err(_) => {
+                eprintln(`tree: cannot open '{opts.path}'`);
+                return;
+            },
+        }
+    }
+
+    println("");
+    let dir_word = if stats.dirs == 1 { "directory" } else { "directories" };
+    let file_word = if stats.files == 1 { "file" } else { "files" };
+    if opts.dirs_only {
+        println(`{stats.dirs} {dir_word}`);
+    } else {
+        println(`{stats.dirs} {dir_word}, {stats.files} {file_word}`);
+    }
+}
