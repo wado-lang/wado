@@ -6,16 +6,16 @@ Gale is a Wado-native parser generator. See [README.md](./README.md) and [WEP: G
 
 ## Compatibility Principle
 
-**Gale aims for full compatibility with the ANTLR4 `.g4` grammar syntax.** The g4 parser must accept any well-formed grammar that the upstream `antlr4` tool accepts. Treat this as a hard contract: if you find a real-world `.g4` file that ANTLR4 accepts but Gale rejects, that is a bug in Gale.
+Gale aims for full compatibility with the ANTLR4 `.g4` grammar syntax. The g4 parser must accept any well-formed grammar that the upstream `antlr4` tool accepts. Treat this as a hard contract: if you find a real-world `.g4` file that ANTLR4 accepts but Gale rejects, that is a bug in Gale.
 
-The single intentional exception is **action bodies**, whose contents are skipped:
+The single intentional exception is action bodies, whose contents are skipped:
 
 - `{ ... }` action blocks (rule-level, element-level, named actions like `@header`/`@members`/`@parser::name`)
 - `{ ... }?` semantic predicates
 - `catch [ ... ] { ... }` and `finally { ... }` exception handlers
 - `@init { ... }` / `@after { ... }` rule prequel actions
 
-The parser must still **recognize** these constructs (so files containing them parse without error) and preserve their _presence_ and _position_ in the surrounding IR — only the host-language code inside the braces is discarded. Everything else (`import`, `options`, `channels`, `tokens`, `mode`, `returns`/`throws`/`locals`, rule arguments, list labels `+=`, parser-side `~`/`.`, element options `<...>`, qualified IDs, `mode(X)` lexer command, integer channel arguments, etc.) is first-class.
+The parser must still recognize these constructs (so files containing them parse without error) and preserve their presence and position in the surrounding IR — only the host-language code inside the braces is discarded. Everything else is first-class.
 
 When fixing or extending the g4 frontend:
 
@@ -58,7 +58,7 @@ These are the upstream pages that matter most when working on the g4 parser, the
 | [`vendor/antlr4/doc/predicates.md`](../vendor/antlr4/doc/predicates.md)                             | Semantic predicate syntax. Same story as actions: must be recognized and skipped.                      |
 | [`vendor/antlr4/doc/target-agnostic-grammars.md`](../vendor/antlr4/doc/target-agnostic-grammars.md) | Best practices for writing host-language-free grammars — exactly the subset Gale targets.              |
 
-For everything else (target-specific runtimes, IDE integration, building ANTLR itself, etc.), browse `vendor/antlr4/doc/` directly.
+For everything else, browse `vendor/antlr4/doc/` directly.
 
 ## Debugging Grammars with `gale dump`
 
@@ -67,25 +67,24 @@ g4 frontend actually produced, without going through code generation. Use it
 to check whether a construct was parsed into the IR as expected before
 blaming the code generator.
 
+(note: each `wado` command is actually `cargo run --bin wado`)
+
 ```sh
 # Dump the full IR (multiple files are merged, same as `gale gen`).
-cargo run --bin wado -- run package-gale -- dump path/to/Grammar.g4
+wado run package-gale -- dump path/to/Grammar.g4
 
 # Dump a single rule — searches parser rules first, then lexer rules.
-cargo run --bin wado -- run package-gale -- dump --rule expr path/to/Grammar.g4
+wado run package-gale -- dump --rule expr path/to/Grammar.g4
 ```
 
 ## Running Tests
 
 ```sh
 # Run all Wado tests for this package
-wado test package-gale/src
+wado test package-gale/**/*.wado
 
 # Run a specific file
 wado test package-gale/src/generator_test.wado
-
-# Run tests from project root (included in on-task-done)
-mise run test-wado
 ```
 
 ## E2E Test Architecture
@@ -175,9 +174,9 @@ mise run update-gale-golden
 | `TypeScriptLexer.g4`  | TypeScript   | Split lexer. Has semantic predicates and `superClass`.       |
 | `TypeScriptParser.g4` | TypeScript   | Split parser. Has many semantic predicates and `superClass`. |
 
-**Clean** grammars (JSON, sexpression, calculator, SQLite, CSS3, HTML) contain no target-language-dependent elements and should be fully parseable and code-generatable.
+Clean grammars (JSON, sexpression, calculator, SQLite, CSS3, HTML) contain no target-language-dependent elements and should be fully parseable and code-generatable.
 
-**Grammars with actions/predicates** (ANTLR4, Rust, TypeScript) contain `{...}` action blocks and/or `{...}?` semantic predicates. These must be warned and skipped during parsing (see WEP). They serve as e2e tests for Gale's ability to consume real-world grammars without manual cleanup.
+Grammars with actions/predicates (ANTLR4, Rust, TypeScript) contain `{...}` action blocks and/or `{...}?` semantic predicates. These must be warned and skipped during parsing. They serve as e2e tests for Gale's ability to consume real-world grammars without manual cleanup.
 
 ### Adding a New E2E Test Grammar
 
@@ -248,13 +247,3 @@ Commit the updated golden files.
 - `bt_try` is not strictly worse than scan-dispatch: ordered-lazy first-success-wins beats exhaustive tournament whenever alts are not mutually-exclusive-by-first-token and the cost of the wrong scan is large.
 - Faithful scan semantics (correctness) and cheap Stage C dispatch (performance) are **independent concerns**. Solving one does not unlock the other.
 - Before removing the LR gate, Stage C needs one of: (a) k=2/3 lookahead partitioning to shrink the candidate set before the tournament, (b) first-success-wins mode when alt first-sets are disjoint within a group, or (c) ATN-style adaptive prediction. See `TODO.md` for the plan.
-
-## On-Task-Done
-
-When completing a task, run from the project root:
-
-```sh
-mise run on-task-done
-```
-
-This runs format, clippy-fix, regenerates all golden fixtures (`update-gale-golden`), and runs all tests. Commit the results.

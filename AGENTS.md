@@ -2,7 +2,7 @@
 
 This document describes how to develop the Wado compiler toolchain.
 
-Wado is a Rust-like programming language targeting Wasm/WASI.
+Wado is a Rust-like programming language minus lifetime management, targeting Wasm/WASI.
 
 ## The Language
 
@@ -102,6 +102,12 @@ wado dump --tir-lowered file.wado    # show TIR after lowering
 
 Optimization levels: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip symbols).
 
+## The LSP
+
+The LSP engine is implemented in `wado-lsp` as a protocol-agnostic language service engine.
+
+The LSP interface is provided by `wado-cli/`.
+
 ## The Formatter
 
 There's `wado format` command to format Wado source code.
@@ -122,7 +128,7 @@ mise run update-wado-vscode-grammar
 
 which depends on `wado-compiler/src/syntax.rs`. If syntax is updated, keep it up-to-date.
 
-Similarly, if syntax is updated, update the formatter fixtures in `wado-compiler/tests/format.fixtures/` (e.g. `all.dirty.wado`, `all.clean.wado`, `mess.dirty.wado`, `mess.clean.wado`).
+Similarly, if syntax is updated, update the formatter fixtures in `wado-compiler/tests/format.fixtures/`.
 
 See also `wado-vscode/README.md` for more details.
 
@@ -157,18 +163,16 @@ To initialize: `git submodule update --init --recommend-shallow`
 
 - Documents and comments must be written in English.
 - If you find a compiler bug, always write a minimum reproducible e2e fixture as a P0 task. If the bug blocks the current task, fix it immediately before continuing.
-- Use sub-agents only for research tasks. Never use sub-agents for editing files.
 - `CLAUDE.md` is a symlink to `AGENTS.md`.
 
 ## Rules for Rust
 
 - Avoid ad-hoc fixes. Write correct code with the correct design.
 - Manage dependencies in the workspace `Cargo.toml`.
-- Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!` macro for things that are not yet implemented or not supported.
 - Use `IndexMap` and `IndexSet` from the `indexmap` crate in order to ensure deterministic behaviors.
 - Do not use any comment sections to separate or organize code.
-- Follow TDD: write a failing test case first, then implement the concern.
+- Perform red/green TDD.
 
 ## Wado Evolution Proposals (WEP)
 
@@ -186,9 +190,6 @@ Install mise first if you don't have it:
 
 ```sh
 curl -fsSL https://mise.run | sh
-# Then add to your shell profile:
-#   eval "$(~/.local/bin/mise activate bash)"  # for bash
-#   eval "$(~/.local/bin/mise activate zsh)"   # for zsh
 ```
 
 Then run `mise run on-task-started` to install the development tools.
