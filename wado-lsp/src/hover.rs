@@ -434,16 +434,16 @@ fn uri_to_filename(uri: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use indexmap::IndexMap;
     use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
 
     struct TestHost {
-        sources: HashMap<String, Vec<u8>>,
+        sources: IndexMap<String, Vec<u8>>,
     }
 
     impl TestHost {
         fn new(path: &str, source: &str) -> Self {
-            let mut sources = HashMap::new();
+            let mut sources = IndexMap::new();
             sources.insert(path.to_string(), source.as_bytes().to_vec());
             Self { sources }
         }
