@@ -37,7 +37,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let outer_index = local.index;
                 let ref_type = self.type_table.borrow_mut().make_mut_ref(inner_type);
                 let ref_name = format!("__ref_{var_name}");
-                let ref_index = ctx.add_local(ref_name.clone(), ref_type, false);
+                let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
 
                 // Emit: let __ref_name = &mut var_name
@@ -86,7 +86,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     p.ty.as_ref()
                         .map(|t| self.resolve_type(t))
                         .unwrap_or(TypeTable::UNKNOWN);
-                closure_ctx.add_local(p.name.clone(), type_id, p.is_mut);
+                closure_ctx.add_local(p.name.clone(), type_id, p.is_mut, Some(p.id));
+                self.record_local_symbol(p.id, &p.name, p.name_span, p.is_mut);
                 (p.name.clone(), type_id)
             })
             .collect();
@@ -179,7 +180,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     p.ty.as_ref()
                         .map(|t| self.resolve_type(t))
                         .unwrap_or(TypeTable::UNKNOWN);
-                closure_ctx.add_local(p.name.clone(), type_id, p.is_mut);
+                closure_ctx.add_local(p.name.clone(), type_id, p.is_mut, Some(p.id));
+                self.record_local_symbol(p.id, &p.name, p.name_span, p.is_mut);
                 (p.name.clone(), type_id)
             })
             .collect();

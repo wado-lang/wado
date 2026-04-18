@@ -318,10 +318,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Handle different pattern types
         match &let_stmt.pattern {
-            ast::Pattern::Ident(name) | ast::Pattern::MutIdent(name) => {
+            ast::Pattern::Ident {
+                id,
+                name,
+                span: name_span,
+            }
+            | ast::Pattern::MutIdent {
+                id,
+                name,
+                span: name_span,
+            } => {
                 let is_mut =
-                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent(_));
-                let local_index = ctx.add_local(name.clone(), type_id, is_mut);
+                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
+                let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
+                self.record_local_symbol(*id, name, *name_span, is_mut);
                 TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
@@ -398,10 +408,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
 
         match &let_stmt.pattern {
-            ast::Pattern::Ident(name) | ast::Pattern::MutIdent(name) => {
+            ast::Pattern::Ident {
+                id,
+                name,
+                span: name_span,
+            }
+            | ast::Pattern::MutIdent {
+                id,
+                name,
+                span: name_span,
+            } => {
                 let is_mut =
-                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent(_));
-                let local_index = ctx.add_local(name.clone(), type_id, is_mut);
+                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
+                let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
+                self.record_local_symbol(*id, name, *name_span, is_mut);
                 // Unit placeholder: WIR builder sees unit type → skips LocalSet.
                 // The local is pre-declared and Wasm zero-initializes it.
                 let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
@@ -441,7 +461,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Emits a compile error and returns `false` if the pattern is refutable.
     fn check_irrefutable_pattern(&mut self, pattern: &ast::Pattern, span: Span) -> bool {
         match pattern {
-            Pattern::Ident(_) | Pattern::MutIdent(_) | Pattern::Wildcard => true,
+            Pattern::Ident { .. } | Pattern::MutIdent { .. } | Pattern::Wildcard => true,
             Pattern::Tuple(patterns, _) => patterns
                 .iter()
                 .all(|p| self.check_irrefutable_pattern(p, span)),
@@ -549,8 +569,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ref_binding: RefBinding,
     ) -> TirPattern {
         match pattern {
-            ast::Pattern::Ident(name) | ast::Pattern::MutIdent(name) => {
-                let pat_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent(_));
+            ast::Pattern::Ident {
+                id,
+                name,
+                span: name_span,
+            }
+            | ast::Pattern::MutIdent {
+                id,
+                name,
+                span: name_span,
+            } => {
+                let pat_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent { .. });
                 let binding_type = match ref_binding {
                     RefBinding::Ref => self
                         .type_table
@@ -562,7 +591,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .intern(ResolvedType::MutRef(type_id)),
                     RefBinding::None => type_id,
                 };
-                let local_index = ctx.add_local(name.clone(), binding_type, pat_mut);
+                let local_index = ctx.add_local(name.clone(), binding_type, pat_mut, Some(*id));
+                self.record_local_symbol(*id, name, *name_span, pat_mut);
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index,
@@ -1000,12 +1030,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> TirPattern {
         match pattern {
             Pattern::Wildcard => TirPattern::Wildcard,
-            Pattern::Ident(name) | Pattern::MutIdent(name) => {
+            Pattern::Ident {
+                id,
+                name,
+                span: name_span,
+            }
+            | Pattern::MutIdent {
+                id,
+                name,
+                span: name_span,
+            } => {
                 // A bare identifier in a pattern context could be a variant/enum case
                 // (e.g., `None`, `Red`) or a variable binding (e.g., `x`, `val`).
                 // The parser does not use case to disambiguate; instead, we check
                 // whether the name is a known case of the scrutinee type.
-                if !matches!(pattern, Pattern::MutIdent(_))
+                if !matches!(pattern, Pattern::MutIdent { .. })
                     && self.is_known_case_of_type(scrutinee_type, name)
                 {
                     // Delegate to the Variant branch with empty bindings
@@ -1022,7 +1061,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     );
                 }
                 // Check if the identifier refers to an immutable global constant
-                if !matches!(pattern, Pattern::MutIdent(_)) {
+                if !matches!(pattern, Pattern::MutIdent { .. }) {
                     if let Some(&(ty, mutable)) = self.current_module_globals.get(name)
                         && !mutable
                     {
@@ -1053,7 +1092,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         };
                     }
                 }
-                let is_mut = matches!(pattern, Pattern::MutIdent(_));
+                let is_mut = matches!(pattern, Pattern::MutIdent { .. });
                 let binding_type = match ref_binding {
                     RefBinding::Ref => self
                         .type_table
@@ -1065,7 +1104,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .intern(ResolvedType::MutRef(scrutinee_type)),
                     RefBinding::None => scrutinee_type,
                 };
-                let index = ctx.add_local(name.clone(), binding_type, is_mut);
+                let index = ctx.add_local(name.clone(), binding_type, is_mut, Some(*id));
+                self.record_local_symbol(*id, name, *name_span, is_mut);
                 TirPattern::Binding {
                     name: name.clone(),
                     local_index: index,
@@ -1224,7 +1264,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .intern(ResolvedType::MutRef(scrutinee_type)),
                         RefBinding::None => scrutinee_type,
                     };
-                    let index = ctx.add_local(variant_name.clone(), binding_type, false);
+                    let index = ctx.add_local(variant_name.clone(), binding_type, false, None);
                     return TirPattern::Binding {
                         name: variant_name.clone(),
                         local_index: index,
@@ -1823,12 +1863,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Resolve the body with the binding having the element type
-        let binding_name = match &for_of.binding {
-            crate::ast::Pattern::Ident(name) => name.clone(),
+        let (binding_name, binding_id, binding_name_span) = match &for_of.binding {
+            crate::ast::Pattern::Ident { id, name, span } => (name.clone(), Some(*id), Some(*span)),
             crate::ast::Pattern::Tuple(..) => {
                 // For destructuring patterns like [a, b], use a synthetic name
                 // and resolve the destructuring in the body
-                format!("__pattern_temp_{unique_id}")
+                (format!("__pattern_temp_{unique_id}"), None, None)
             }
             _ => {
                 panic!("variadic for-of does not support this binding pattern")
@@ -1839,7 +1879,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let is_destructured = matches!(&for_of.binding, crate::ast::Pattern::Tuple(..));
 
         ctx.enter_scope();
-        let binding_local = ctx.add_local(binding_name.clone(), binding_type, is_mut);
+        let binding_local = ctx.add_local(binding_name.clone(), binding_type, is_mut, binding_id);
+        if let (Some(id), Some(name_span)) = (binding_id, binding_name_span) {
+            self.record_local_symbol(id, &binding_name, name_span, is_mut);
+        }
 
         // For destructured bindings (e.g., [a, b]), add the sub-bindings and
         // prepend destructuring assignments to the body.
@@ -1851,10 +1894,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .as_tuple(binding_type)
                 .unwrap_or_else(|| vec![binding_type]);
             for (i, pat_elem) in tp.iter().enumerate() {
-                if let crate::ast::Pattern::Ident(name) = pat_elem {
+                if let crate::ast::Pattern::Ident {
+                    id,
+                    name,
+                    span: name_span,
+                } = pat_elem
+                {
                     let elem_type: TypeId =
                         inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                    let local_idx = ctx.add_local(name.clone(), elem_type, is_mut);
+                    let local_idx = ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
+                    self.record_local_symbol(*id, name, *name_span, is_mut);
                     let field_access = TirExpr::new(
                         TirExprKind::FieldAccess {
                             expr: Box::new(TirExpr::new(
@@ -1934,7 +1983,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Store iterable in a temp variable to avoid re-evaluation
         let tuple_type_id = iterable.type_id;
         let temp_name = format!("__tuple_{unique_id}");
-        let temp_local = ctx.add_local(temp_name.clone(), tuple_type_id, false);
+        let temp_local = ctx.add_local(temp_name.clone(), tuple_type_id, false, None);
         let temp_let = TirStmt::new(
             TirStmtKind::Let {
                 name: temp_name.clone(),
@@ -2017,10 +2066,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
             } else {
                 // Simple case: bind element to the pattern
                 match &for_of.binding {
-                    Pattern::Ident(name) | Pattern::MutIdent(name) => {
+                    Pattern::Ident {
+                        id,
+                        name,
+                        span: name_span,
+                    }
+                    | Pattern::MutIdent {
+                        id,
+                        name,
+                        span: name_span,
+                    } => {
                         let is_mut =
-                            for_of.is_mut || matches!(&for_of.binding, Pattern::MutIdent(_));
-                        let local_index = ctx.add_local(name.clone(), elem_type, is_mut);
+                            for_of.is_mut || matches!(&for_of.binding, Pattern::MutIdent { .. });
+                        let local_index = ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
+                        self.record_local_symbol(*id, name, *name_span, is_mut);
                         block_stmts.push(TirStmt::new(
                             TirStmtKind::Let {
                                 name: name.clone(),
@@ -2123,6 +2182,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let into_iter_receiver = if is_enumerate {
             // iterable.enumerate().into_iter() — construct enumerate() call AST
             Expr::MethodCall(Box::new(MethodCallExpr {
+                id: for_of.id,
                 receiver: for_of.iterable.clone(),
                 method: "enumerate".to_string(),
                 type_args: vec![],
@@ -2136,12 +2196,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // let mut __iter_N = receiver.into_iter();
         let into_iter_let = LetStmt {
-            pattern: Pattern::Ident(iter_var.clone()),
+            id: for_of.id,
+            pattern: Pattern::Ident {
+                id: for_of.id,
+                name: iter_var.clone(),
+                span,
+            },
             name_span: span,
             is_mut: true,
             is_reactive: false,
             ty: None,
             value: Some(Expr::MethodCall(Box::new(MethodCallExpr {
+                id: for_of.id,
                 receiver: into_iter_receiver,
                 method: "into_iter".to_string(),
                 type_args: vec![],
@@ -2173,7 +2239,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // __iter_N.next()
         let next_call = Expr::MethodCall(Box::new(MethodCallExpr {
+            id: for_of.id,
             receiver: Expr::Ident(IdentExpr {
+                id: for_of.id,
                 name: iter_var,
                 span,
             }),
@@ -2199,9 +2267,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let elem_var = format!("__elem_{unique_id}");
             // For &mut mode, the temp variable must be mutable
             let elem_pattern = if ref_mode == RefBinding::MutRef {
-                Pattern::MutIdent(elem_var.clone())
+                Pattern::MutIdent {
+                    id: for_of.id,
+                    name: elem_var.clone(),
+                    span,
+                }
             } else {
-                Pattern::Ident(elem_var.clone())
+                Pattern::Ident {
+                    id: for_of.id,
+                    name: elem_var.clone(),
+                    span,
+                }
             };
             let pattern = Pattern::Variant {
                 variant_name: "Some".to_string(),
@@ -2213,14 +2289,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 _ => UnaryOp::Ref,
             };
             let ref_let = Stmt::Let(LetStmt {
+                id: for_of.id,
                 pattern: for_of.binding.clone(),
                 name_span: span,
                 is_mut: for_of.is_mut,
                 is_reactive: false,
                 ty: None,
                 value: Some(Expr::Unary(Box::new(UnaryExpr {
+                    id: for_of.id,
                     op: ref_op,
                     expr: Expr::Ident(IdentExpr {
+                        id: for_of.id,
                         name: elem_var,
                         span,
                     }),
@@ -2231,6 +2310,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let mut body_stmts = vec![ref_let];
             body_stmts.extend(for_of.body.stmts.clone());
             let body = Block {
+                id: for_of.body.id,
                 stmts: body_stmts,
                 span: for_of.body.span,
             };
@@ -2239,6 +2319,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // if let Some(v) = __iter_N.next() { body } else { break; }
         let if_let = IfStmt {
+            id: for_of.id,
             condition: Condition::LetChain {
                 elements: vec![ConditionElement::Let {
                     pattern: some_pattern,
@@ -2249,7 +2330,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
             },
             then_block,
             else_block: Some(Block {
+                id: for_of.body.id,
                 stmts: vec![Stmt::Break(BreakStmt {
+                    id: for_of.id,
                     label: None,
                     value: None,
                     span,

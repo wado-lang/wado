@@ -541,6 +541,7 @@ mod tests {
 
     fn named(name: &str) -> Type {
         Type::Named(NamedType {
+            id: crate::ast::AstId::fresh(),
             name: name.to_string(),
             span: dummy_span(),
         })
@@ -548,6 +549,7 @@ mod tests {
 
     fn generic(name: &str, args: Vec<Type>) -> Type {
         Type::Generic(GenericType {
+            id: crate::ast::AstId::fresh(),
             name: name.to_string(),
             args,
             span: dummy_span(),
@@ -564,7 +566,7 @@ mod tests {
 
     fn type_param(name: &str) -> GenericParam {
         GenericParam {
-            id: crate::ast::AstId(0),
+            id: crate::ast::AstId::fresh(),
             name: name.to_string(),
             name_span: dummy_span(),
             is_effect: false,
@@ -590,7 +592,7 @@ mod tests {
 
     fn impl_block(type_params: Vec<GenericParam>, trait_type: Type, self_type: Type) -> ImplBlock {
         ImplBlock {
-            id: crate::ast::AstId(0),
+            id: crate::ast::AstId::fresh(),
             type_params,
             trait_type: Some(trait_type),
             ty: self_type,

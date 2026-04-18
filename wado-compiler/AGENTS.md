@@ -127,8 +127,9 @@ parse → bind → desugar → load → analyze → annotate → lower_tir → m
 
 - `annotate` is AST-preserving type resolution; returns `Annotated` (see `src/annotate.rs`). Used by both LSP and batch compilation.
 - `lower_tir` emits TIR from `&Annotated`; used only by batch compilation.
-- `(ModuleSource, AstId)` (`SymbolKey`) is the canonical identity for every semantic entity that originates in source. There is no `AstId::SYNTHETIC`; builtins live in `ModuleSource::Builtin` with their own dense ID range.
+- `(ModuleSource, AstId)` (`SymbolKey`) is the canonical identity for every semantic entity that originates in source. `AstId` is dense over `Block` / `Stmt` / `Expr` / `Pattern` / `Type` / `Item` / `Decl`, so every source position resolves to a key via `Module::ast_id_at`. There is no `AstId::SYNTHETIC`; builtins live in `ModuleSource::Builtin` with their own dense ID range.
 - AST is the source of truth: `annotate` attaches facts, never mutates or moves AST nodes. Decl-backed `ResolvedType` variants and `Symbol` both carry `defined_at: SymbolKey`.
+- Use→def edges are recorded by the real resolver as it performs name resolution (`resolve_ident`, `resolve_call`, …). `Annotated::referenced_symbol` is the single source of truth; there is no separate lexical re-scan. `annotate_loaded` always drives `lower_tir` so the edges exist for both LSP and batch compilation.
 - The `codegen.rs` principle still holds: codegen consumes `Package` without knowledge of earlier phases.
 
 Entry points:
@@ -136,12 +137,11 @@ Entry points:
 - `wado_compiler::annotate(source, host, filename) -> Annotated` — LSP path; skips `monomorphize` / `lower` / `optimize` / `codegen`.
 - `wado_compiler::compile_with_options(...)` — batch path; calls `annotate_loaded` + `lower_tir` + `Package::new`, so registries build once.
 
-`wado-lsp` caches `Annotated` per document and invalidates on `didChange` / `didClose`. `Engine::{definition, hover, diagnostics}` all go through `annotate` — cross-file navigation falls out for free because `Annotated` already contains every transitively-loaded module.
+`Engine::{definition, hover, diagnostics}` all go through `annotate` — cross-file navigation falls out for free because `Annotated` already contains every transitively-loaded module.
 
 ### Next
 
-1. **Extend `AstId` coverage to `Expr` / `Stmt` / `Type` nodes.** Required for expression-level hover — today hover only answers for symbol-bearing items.
-2. **Build out LSP features on the query API:** completion, rename, references, call-hierarchy. The infrastructure is in place; these are additive.
-3. **(Deferred)** Salsa / demand-driven incrementalization, only if per-file reanalysis becomes a bottleneck. The architecture is designed to be wrappable in salsa queries with minimal restructuring; not planned.
+1. **Build out LSP features on the query API:** completion, rename, references, call-hierarchy. The infrastructure is in place; these are additive.
+2. **(Deferred)** Salsa / demand-driven incrementalization, only if per-file reanalysis becomes a bottleneck. The architecture is designed to be wrappable in salsa queries with minimal restructuring; not planned.
 
 Out of scope for this track: language changes, `Package` format changes, codegen output changes.

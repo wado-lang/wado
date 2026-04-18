@@ -40,7 +40,7 @@ use crate::compiler_host::CompilerHost;
 use crate::component_model::WasiRegistry;
 use crate::logger::{Bail, Logger};
 use crate::name::{self as name, MethodName, ModuleSource};
-use crate::symbol::SymbolTable;
+use crate::symbol::{Symbol, SymbolKey, SymbolTable};
 use crate::tir::{
     self as tir, TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TirNewtype, TypeId,
     TypeTable,
@@ -166,6 +166,14 @@ pub struct Resolver<'a, H: CompilerHost> {
     current_module_func_index: IndexMap<String, usize>,
     /// Per-module index from function name → position in module.items for O(1) lookup.
     loaded_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>>,
+    /// Use→def map for local variables. Shared via `Rc<RefCell<…>>` with
+    /// [`crate::resolver::orchestration::AnnotateState`] so LSP queries see
+    /// references as soon as the resolver has walked the body.
+    references: Rc<RefCell<IndexMap<SymbolKey, SymbolKey>>>,
+    /// Local binding [`Symbol`]s emitted alongside `references`. Populated at
+    /// every `ctx.add_local(...)` call that carries a user-visible defining
+    /// `AstId`. Shared via `Rc<RefCell<…>>` with `AnnotateState`.
+    local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -227,7 +235,58 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             pending_anonymous_structs: Vec::new(),
             current_module_func_index: IndexMap::default(),
             loaded_module_func_indices: IndexMap::default(),
+            references: Rc::new(RefCell::new(IndexMap::default())),
+            local_symbols: Rc::new(RefCell::new(IndexMap::default())),
         }
+    }
+
+    /// Record that an identifier resolved to a local binding in the current
+    /// module. Both `use_id` and `def_id` live in `current_module_source`.
+    pub(super) fn record_reference(&self, use_id: crate::ast::AstId, def_id: crate::ast::AstId) {
+        let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
+        let def_key = SymbolKey::new(self.current_module_source.clone(), def_id);
+        self.references.borrow_mut().insert(use_key, def_key);
+    }
+
+    /// Record that an identifier resolved to a declared symbol reachable from
+    /// the current module under `name` (local item, imported item, imported
+    /// namespace member, etc.). Looks up the defining [`SymbolKey`] through
+    /// the symbol table; no-op if the name is not declared.
+    pub(super) fn record_item_reference_by_name(&self, use_id: crate::ast::AstId, name: &str) {
+        let Some(sym) = self
+            .symbols
+            .lookup_in_module(&self.current_module_source, name)
+            .or_else(|| self.symbols.lookup(name))
+        else {
+            return;
+        };
+        let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
+        self.references
+            .borrow_mut()
+            .insert(use_key, sym.defined_at.clone());
+    }
+
+    /// Record a local binding's [`Symbol`] so that LSP hover on a use site can
+    /// retrieve the defining name / mutability. Called at each site where a
+    /// user-visible local is introduced.
+    pub(super) fn record_local_symbol(
+        &self,
+        def_id: crate::ast::AstId,
+        name: &str,
+        span: crate::token::Span,
+        is_mut: bool,
+    ) {
+        let key = SymbolKey::new(self.current_module_source.clone(), def_id);
+        let symbol = Symbol {
+            name: name.to_string(),
+            kind: crate::symbol::SymbolKind::Variable(crate::symbol::VariableSymbol {
+                is_mut,
+                is_reactive: false,
+            }),
+            defined_at: key.clone(),
+            span: Some(span),
+        };
+        self.local_symbols.borrow_mut().insert(key, symbol);
     }
 
     /// Build a function-name → index map for a module's items.

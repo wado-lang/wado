@@ -1007,6 +1007,7 @@ impl Parser {
                 let self_span = self.peek().span;
                 self.advance();
                 let self_type = Type::Named(NamedType {
+                    id: self.alloc_ast_id(),
                     name: "Self".to_string(),
                     span: start_span,
                 });
@@ -1182,6 +1183,7 @@ impl Parser {
     }
 
     fn parse_block(&mut self) -> ParseResult<Block> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::LBrace)?;
 
@@ -1196,6 +1198,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(Block {
+            id,
             stmts,
             span: start_span.merge(&end_span),
         })
@@ -1265,6 +1268,7 @@ impl Parser {
         };
 
         Ok(Stmt::Expr(ExprStmt {
+            id: self.alloc_ast_id(),
             expr,
             span: start_span.merge(&end_span),
         }))
@@ -1287,6 +1291,7 @@ impl Parser {
         let end_span = block.span;
 
         Ok(Stmt::LabeledBlock(LabeledBlockStmt {
+            id: self.alloc_ast_id(),
             label,
             block,
             span: start_span.merge(&end_span),
@@ -1310,6 +1315,7 @@ impl Parser {
         let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Assert(AssertStmt {
+            id: self.alloc_ast_id(),
             condition,
             message,
             span: start_span.merge(&semi_span),
@@ -1379,6 +1385,7 @@ impl Parser {
         };
 
         Ok(Stmt::Let(LetStmt {
+            id: self.alloc_ast_id(),
             pattern,
             name_span,
             is_mut,
@@ -1402,6 +1409,7 @@ impl Parser {
         let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Return(ReturnStmt {
+            id: self.alloc_ast_id(),
             value,
             span: start_span.merge(&semi_span),
         }))
@@ -1419,6 +1427,7 @@ impl Parser {
         let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::TaskReturn(TaskReturnStmt {
+            id: self.alloc_ast_id(),
             value,
             span: start_span.merge(&semi_span),
         }))
@@ -1441,12 +1450,14 @@ impl Parser {
             self.advance();
             if self.check(&TokenKind::If) {
                 // `else if` - parse as nested if statement wrapped in a block
+                let block_id = self.alloc_ast_id();
                 let if_stmt = self.parse_if_stmt()?;
                 let span = match &if_stmt {
                     Stmt::If(s) => s.span,
                     _ => unreachable!("parse_if_stmt must return Stmt::If"),
                 };
                 Some(Block {
+                    id: block_id,
                     stmts: vec![if_stmt],
                     span,
                 })
@@ -1461,6 +1472,7 @@ impl Parser {
         let span = start_span.merge(end_span);
 
         Ok(Stmt::If(IfStmt {
+            id: self.alloc_ast_id(),
             condition,
             then_block,
             else_block,
@@ -1615,6 +1627,7 @@ impl Parser {
             let right = self.parse_comparison_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
+                id: self.alloc_ast_id(),
                 left,
                 op: BinaryOp::Or,
                 right,
@@ -1641,6 +1654,7 @@ impl Parser {
         let span = start_span.merge(&body.span);
 
         Ok(Stmt::While(WhileStmt {
+            id: self.alloc_ast_id(),
             condition,
             body,
             span,
@@ -1679,6 +1693,7 @@ impl Parser {
                 let span = start_span.merge(&body.span);
 
                 return Ok(Stmt::ForOf(ForOfStmt {
+                    id: self.alloc_ast_id(),
                     binding,
                     is_mut,
                     iterable,
@@ -1705,6 +1720,7 @@ impl Parser {
         } else {
             let expr = self.parse_expr()?;
             Some(Box::new(Stmt::Expr(ExprStmt {
+                id: self.alloc_ast_id(),
                 expr,
                 span: start_span,
             })))
@@ -1745,6 +1761,7 @@ impl Parser {
         let span = start_span.merge(&body.span);
 
         Ok(Stmt::For(ForStmt {
+            id: self.alloc_ast_id(),
             init,
             condition,
             update,
@@ -1761,7 +1778,8 @@ impl Parser {
         let body = self.parse_block()?;
         let span = start_span.merge(&body.span);
 
-        Ok(Stmt::Loop(LoopStmt { body, span }))
+        let id = self.alloc_ast_id();
+        Ok(Stmt::Loop(LoopStmt { id, body, span }))
     }
 
     /// Parse break statement: `break;`, `break label;`, or `break label: expr;`
@@ -1789,6 +1807,7 @@ impl Parser {
         let semi_span = self.expect(&TokenKind::Semicolon)?.span;
 
         Ok(Stmt::Break(BreakStmt {
+            id: self.alloc_ast_id(),
             label,
             value,
             span: start_span.merge(&semi_span),
@@ -1801,7 +1820,8 @@ impl Parser {
         self.expect(&TokenKind::Continue)?;
         self.expect(&TokenKind::Semicolon)?;
 
-        Ok(Stmt::Continue(ContinueStmt { span }))
+        let id = self.alloc_ast_id();
+        Ok(Stmt::Continue(ContinueStmt { id, span }))
     }
 
     fn parse_pattern(&mut self) -> ParseResult<Pattern> {
@@ -1841,9 +1861,15 @@ impl Parser {
 
     fn parse_pattern_atom(&mut self) -> ParseResult<Pattern> {
         if self.check(&TokenKind::Mut) {
+            let mut_span = self.peek().span;
             self.advance();
+            let ident_span = self.peek().span;
             let name = self.consume_ident()?;
-            return Ok(Pattern::MutIdent(name));
+            return Ok(Pattern::MutIdent {
+                id: self.alloc_ast_id(),
+                name,
+                span: mut_span.merge(&ident_span),
+            });
         }
         if self.check(&TokenKind::LParen) {
             // Tuple pattern with parentheses: (a, b, c)
@@ -1920,7 +1946,11 @@ impl Parser {
             } else {
                 // Bare identifier: could be a variable binding or a variant/enum case
                 // without payload. The resolver disambiguates using type information.
-                Ok(Pattern::Ident(name))
+                Ok(Pattern::Ident {
+                    id: self.alloc_ast_id(),
+                    name,
+                    span: start_span,
+                })
             }
         } else if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
             // Literal pattern: 42 or 3.14
@@ -2023,7 +2053,11 @@ impl Parser {
                         Pattern::Wildcard
                     } else {
                         // Shorthand: `{ x }` means `{ x: x }`
-                        Pattern::Ident(field_name.clone())
+                        Pattern::Ident {
+                            id: self.alloc_ast_id(),
+                            name: field_name.clone(),
+                            span: field_span,
+                        }
                     };
 
                     fields.push(StructPatternField {
@@ -2072,6 +2106,7 @@ impl Parser {
             self.advance();
             let value = self.parse_assignment_expr()?; // Right-associative
             return Ok(Expr::Assign(Box::new(AssignExpr {
+                id: self.alloc_ast_id(),
                 target: expr,
                 value,
                 span: start_span,
@@ -2099,6 +2134,7 @@ impl Parser {
             let value_span = value.span();
 
             return Ok(Expr::CompoundAssign(Box::new(CompoundAssignExpr {
+                id: self.alloc_ast_id(),
                 target: expr,
                 op,
                 value,
@@ -2135,6 +2171,7 @@ impl Parser {
 
             let span = left_span.merge(&right.span());
             return Ok(Expr::Range(Box::new(RangeExpr {
+                id: self.alloc_ast_id(),
                 start: left,
                 end: right,
                 kind,
@@ -2154,6 +2191,7 @@ impl Parser {
             let right = self.parse_and_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
+                id: self.alloc_ast_id(),
                 left,
                 op: BinaryOp::Or,
                 right,
@@ -2173,6 +2211,7 @@ impl Parser {
             let right = self.parse_comparison_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
+                id: self.alloc_ast_id(),
                 left,
                 op: BinaryOp::And,
                 right,
@@ -2291,6 +2330,7 @@ impl Parser {
             let cmp = comparisons.pop().unwrap();
             let merged_span = first_span.merge(&cmp.right.span());
             return Ok(Expr::Binary(Box::new(BinaryExpr {
+                id: self.alloc_ast_id(),
                 left: first,
                 op: cmp.op,
                 right: cmp.right,
@@ -2301,6 +2341,7 @@ impl Parser {
         // Multiple comparisons: return a ComparisonChainExpr
         let full_span = first_span.merge(&current.span());
         Ok(Expr::ComparisonChain(Box::new(ComparisonChainExpr {
+            id: self.alloc_ast_id(),
             first,
             comparisons,
             span: full_span,
@@ -2327,6 +2368,7 @@ impl Parser {
             let right = self.parse_bitxor_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
+                id: self.alloc_ast_id(),
                 left,
                 op: BinaryOp::BitOr,
                 right,
@@ -2346,6 +2388,7 @@ impl Parser {
             let right = self.parse_bitand_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
+                id: self.alloc_ast_id(),
                 left,
                 op: BinaryOp::BitXor,
                 right,
@@ -2365,6 +2408,7 @@ impl Parser {
             let right = self.parse_shift_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
+                id: self.alloc_ast_id(),
                 left,
                 op: BinaryOp::BitAnd,
                 right,
@@ -2389,6 +2433,7 @@ impl Parser {
             let right = self.parse_additive_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
+                id: self.alloc_ast_id(),
                 left,
                 op,
                 right,
@@ -2413,6 +2458,7 @@ impl Parser {
             let right = self.parse_multiplicative_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
+                id: self.alloc_ast_id(),
                 left,
                 op,
                 right,
@@ -2430,6 +2476,7 @@ impl Parser {
             self.advance();
             let target_type = self.parse_type()?;
             expr = Expr::Cast(Box::new(CastExpr {
+                id: self.alloc_ast_id(),
                 expr,
                 target_type,
                 span: start_span,
@@ -2453,6 +2500,7 @@ impl Parser {
             let right = self.parse_cast_expr()?;
             let merged_span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
+                id: self.alloc_ast_id(),
                 left,
                 op,
                 right,
@@ -2477,7 +2525,8 @@ impl Parser {
             let expr = self.parse_unary_expr()?;
             // Span covers from operator to end of inner expression
             let span = start_span.merge(&expr.span());
-            return Ok(Expr::Unary(Box::new(UnaryExpr { op, expr, span })));
+            let id = self.alloc_ast_id();
+            return Ok(Expr::Unary(Box::new(UnaryExpr { id, op, expr, span })));
         }
 
         let op = match self.peek_kind() {
@@ -2494,7 +2543,8 @@ impl Parser {
             let expr = self.parse_unary_expr()?;
             // Span covers from operator to end of inner expression
             let span = start_span.merge(&expr.span());
-            return Ok(Expr::Unary(Box::new(UnaryExpr { op, expr, span })));
+            let id = self.alloc_ast_id();
+            return Ok(Expr::Unary(Box::new(UnaryExpr { id, op, expr, span })));
         }
 
         self.parse_postfix_expr()
@@ -2517,6 +2567,7 @@ impl Parser {
                     self.expect(&TokenKind::RParen)?;
                     let merged_span = callee_span.merge(&rparen_span);
                     expr = Expr::Call(Box::new(CallExpr {
+                        id: self.alloc_ast_id(),
                         callee: expr,
                         type_args: vec![],
                         args,
@@ -2543,6 +2594,7 @@ impl Parser {
                         self.expect(&TokenKind::RParen)?;
                         let merged_span = callee_span.merge(&rparen_span);
                         expr = Expr::Call(Box::new(CallExpr {
+                            id: self.alloc_ast_id(),
                             callee: expr,
                             type_args,
                             args,
@@ -2606,6 +2658,7 @@ impl Parser {
                             self.expect(&TokenKind::RParen)?;
                             let merged_span = receiver_span.merge(&rparen_span);
                             expr = Expr::MethodCall(Box::new(MethodCallExpr {
+                                id: self.alloc_ast_id(),
                                 receiver: expr,
                                 method: field,
                                 type_args,
@@ -2627,6 +2680,7 @@ impl Parser {
                         self.expect(&TokenKind::RParen)?;
                         let merged_span = receiver_span.merge(&rparen_span);
                         expr = Expr::MethodCall(Box::new(MethodCallExpr {
+                            id: self.alloc_ast_id(),
                             receiver: expr,
                             method: field,
                             type_args: vec![],
@@ -2637,6 +2691,7 @@ impl Parser {
                     } else {
                         let merged_span = receiver_span.merge(&field_span);
                         expr = Expr::FieldAccess(Box::new(FieldAccessExpr {
+                            id: self.alloc_ast_id(),
                             expr,
                             field,
                             span: merged_span,
@@ -2647,6 +2702,7 @@ impl Parser {
                         if let Some(second) = second_field {
                             let second_span = expr.span();
                             expr = Expr::FieldAccess(Box::new(FieldAccessExpr {
+                                id: self.alloc_ast_id(),
                                 expr,
                                 field: second,
                                 span: second_span,
@@ -2662,6 +2718,7 @@ impl Parser {
                     self.expect(&TokenKind::RBracket)?;
                     let merged_span = expr_span.merge(&rbracket_span);
                     expr = Expr::Index(Box::new(IndexExpr {
+                        id: self.alloc_ast_id(),
                         expr,
                         index,
                         span: merged_span,
@@ -2674,7 +2731,8 @@ impl Parser {
                     let start_span = expr.span();
                     let question_token = self.advance();
                     let span = start_span.merge(&question_token.span);
-                    expr = Expr::TryOp(Box::new(TryOpExpr { expr, span }));
+                    let id = self.alloc_ast_id();
+                    expr = Expr::TryOp(Box::new(TryOpExpr { id, expr, span }));
                 }
                 _ => break,
             }
@@ -2738,7 +2796,9 @@ impl Parser {
                         let end_span = self.expect(&TokenKind::RParen)?.span;
 
                         return Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+                            id: self.alloc_ast_id(),
                             target_type: Type::Generic(GenericType {
+                                id: self.alloc_ast_id(),
                                 name,
                                 args: type_args,
                                 span: start_span,
@@ -2755,6 +2815,7 @@ impl Parser {
                     self.pos = checkpoint;
                     self.pending_gt = saved_pending_gt;
                     return Ok(Expr::Ident(IdentExpr {
+                        id: self.alloc_ast_id(),
                         name,
                         span: start_span,
                     }));
@@ -2769,6 +2830,7 @@ impl Parser {
                     qualified_name = format!("{qualified_name}::{}", self.consume_ident()?);
                 }
                 return Ok(Expr::Ident(IdentExpr {
+                    id: self.alloc_ast_id(),
                     name: qualified_name,
                     span: start_span,
                 }));
@@ -2778,6 +2840,7 @@ impl Parser {
                 let block = self.parse_block()?;
                 let end_span = block.span;
                 return Ok(Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
+                    id: self.alloc_ast_id(),
                     label: name,
                     block,
                     span: start_span.merge(&end_span),
@@ -2793,6 +2856,7 @@ impl Parser {
                 return self.parse_struct_literal(Some(name), start_span);
             }
             return Ok(Expr::Ident(IdentExpr {
+                id: self.alloc_ast_id(),
                 name,
                 span: start_span,
             }));
@@ -2802,6 +2866,7 @@ impl Parser {
             TokenKind::NumberLit(repr) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
+                    id: self.alloc_ast_id(),
                     value: Literal::Number(repr),
                     span: start_span,
                 }))
@@ -2809,6 +2874,7 @@ impl Parser {
             TokenKind::StringLit(raw) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
+                    id: self.alloc_ast_id(),
                     value: Literal::String(raw),
                     span: start_span,
                 }))
@@ -2820,6 +2886,7 @@ impl Parser {
             TokenKind::True => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
+                    id: self.alloc_ast_id(),
                     value: Literal::Bool(true),
                     span: start_span,
                 }))
@@ -2827,6 +2894,7 @@ impl Parser {
             TokenKind::False => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
+                    id: self.alloc_ast_id(),
                     value: Literal::Bool(false),
                     span: start_span,
                 }))
@@ -2834,6 +2902,7 @@ impl Parser {
             TokenKind::Null => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
+                    id: self.alloc_ast_id(),
                     value: Literal::Null,
                     span: start_span,
                 }))
@@ -2841,6 +2910,7 @@ impl Parser {
             TokenKind::CharLit(raw) => {
                 self.advance();
                 Ok(Expr::Literal(LiteralExpr {
+                    id: self.alloc_ast_id(),
                     value: Literal::Char(raw),
                     span: start_span,
                 }))
@@ -2851,6 +2921,7 @@ impl Parser {
                 if self.check(&TokenKind::RParen) {
                     self.advance();
                     return Ok(Expr::Literal(LiteralExpr {
+                        id: self.alloc_ast_id(),
                         value: Literal::Unit,
                         span: start_span,
                     }));
@@ -2886,6 +2957,7 @@ impl Parser {
                 };
                 let body_span = body.span();
                 Ok(Expr::Closure(Box::new(ClosureExpr {
+                    id: self.alloc_ast_id(),
                     params: vec![],
                     body,
                     source_text: None,
@@ -2980,6 +3052,7 @@ impl Parser {
                                     Literal::IncludeBytes(path)
                                 };
                                 return Ok(Expr::Literal(LiteralExpr {
+                                    id: self.alloc_ast_id(),
                                     value: lit,
                                     span: start_span.merge(&close_span),
                                 }));
@@ -2994,6 +3067,7 @@ impl Parser {
                             }
                         };
                         Ok(Expr::Literal(LiteralExpr {
+                            id: self.alloc_ast_id(),
                             value: literal,
                             span: start_span.merge(&end_span),
                         }))
@@ -3029,10 +3103,13 @@ impl Parser {
             self.advance();
             if self.check(&TokenKind::If) {
                 // `else if` - parse as nested if expression wrapped in a block
+                let block_id = self.alloc_ast_id();
                 let if_expr = self.parse_if_expr()?;
                 let span = if_expr.span();
                 Some(Block {
+                    id: block_id,
                     stmts: vec![Stmt::Expr(ExprStmt {
+                        id: self.alloc_ast_id(),
                         expr: if_expr,
                         span,
                     })],
@@ -3049,6 +3126,7 @@ impl Parser {
         let span = start_span.merge(end_span);
 
         Ok(Expr::If(Box::new(IfExpr {
+            id: self.alloc_ast_id(),
             condition,
             then_block,
             else_block,
@@ -3082,6 +3160,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(Expr::Match(Box::new(MatchExpr {
+            id: self.alloc_ast_id(),
             expr: scrutinee,
             arms,
             span: start_span.merge(&end_span),
@@ -3124,10 +3203,13 @@ impl Parser {
             let ret_end = value.as_ref().map_or(ret_start, super::ast::Expr::span);
             let ret_span = ret_start.merge(&ret_end);
             let ret_stmt = Stmt::Return(ReturnStmt {
+                id: self.alloc_ast_id(),
                 value,
                 span: ret_span,
             });
+            let block_id = self.alloc_ast_id();
             Expr::Block(Box::new(Block {
+                id: block_id,
                 stmts: vec![ret_stmt],
                 span: ret_span,
             }))
@@ -3169,6 +3251,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(Expr::Matches(Box::new(MatchesExpr {
+            id: self.alloc_ast_id(),
             expr,
             pattern,
             guard,
@@ -3185,6 +3268,7 @@ impl Parser {
         let end_span = end_token.span;
 
         Ok(Expr::TupleLiteral(Box::new(TupleLiteralExpr {
+            id: self.alloc_ast_id(),
             elements,
             span: start_span.merge(&end_span),
         })))
@@ -3230,6 +3314,7 @@ impl Parser {
 
         let body_span = body.span();
         Ok(Expr::Closure(Box::new(ClosureExpr {
+            id: self.alloc_ast_id(),
             params,
             body,
             source_text: None,
@@ -3238,6 +3323,7 @@ impl Parser {
     }
 
     fn parse_closure_param(&mut self) -> ParseResult<ClosureParam> {
+        let id = self.alloc_ast_id();
         let is_mut = if self.check(&TokenKind::Mut) {
             self.advance();
             true
@@ -3252,6 +3338,7 @@ impl Parser {
             None
         };
         Ok(ClosureParam {
+            id,
             name,
             name_span,
             ty,
@@ -3275,7 +3362,9 @@ impl Parser {
         // Never type: !
         if self.check(&TokenKind::Not) {
             self.advance();
+            let id = self.alloc_ast_id();
             return Ok(Type::Named(NamedType {
+                id,
                 name: "!".to_string(),
                 span: start_span,
             }));
@@ -3296,6 +3385,7 @@ impl Parser {
                 self.parse_type()?
             } else {
                 Type::Named(NamedType {
+                    id: self.alloc_ast_id(),
                     name: "()".to_string(),
                     span: start_span,
                 })
@@ -3336,7 +3426,9 @@ impl Parser {
             if self.check(&TokenKind::RParen) {
                 self.advance();
                 // Unit type () - distinct from empty tuple []
+                let id = self.alloc_ast_id();
                 return Ok(Type::Named(NamedType {
+                    id,
                     name: "()".to_string(),
                     span: start_span,
                 }));
@@ -3369,6 +3461,7 @@ impl Parser {
                 let args = self.parse_type_args()?;
 
                 return Ok(Type::NamespacedGeneric(NamespacedGenericType {
+                    id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
                     args,
@@ -3377,6 +3470,7 @@ impl Parser {
             } else {
                 // Namespaced type without generics: namespace::type
                 return Ok(Type::NamespacedGeneric(NamespacedGenericType {
+                    id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
                     args: Vec::new(),
@@ -3390,12 +3484,14 @@ impl Parser {
             let args = self.parse_type_args()?;
 
             Ok(Type::Generic(GenericType {
+                id: self.alloc_ast_id(),
                 name,
                 args,
                 span: start_span,
             }))
         } else {
             Ok(Type::Named(NamedType {
+                id: self.alloc_ast_id(),
                 name,
                 span: start_span,
             }))
@@ -4062,6 +4158,7 @@ impl Parser {
                     });
                 }
                 args.push(Type::Named(crate::ast::NamedType {
+                    id: self.alloc_ast_id(),
                     name: param_name,
                     span: param_span,
                 }));
@@ -4081,6 +4178,7 @@ impl Parser {
         let end_span = self.tokens[self.pos - 1].span; // span of >
 
         Ok(Type::Generic(crate::ast::GenericType {
+            id: self.alloc_ast_id(),
             name,
             args,
             span: start_span.merge(&end_span),
@@ -4314,6 +4412,7 @@ impl Parser {
         }
 
         Ok(Expr::TemplateString(Box::new(TemplateStringExpr {
+            id: self.alloc_ast_id(),
             parts,
             span,
         })))
@@ -4446,6 +4545,7 @@ impl Parser {
                     // Shorthand: `{ x }` is equivalent to `{ x: x }`
                     (
                         Expr::Ident(IdentExpr {
+                            id: self.alloc_ast_id(),
                             name: field_name.clone(),
                             span: field_span,
                         }),
@@ -4475,6 +4575,7 @@ impl Parser {
         self.expect(&TokenKind::RBrace)?;
 
         Ok(Expr::StructLiteral(Box::new(StructLiteralExpr {
+            id: self.alloc_ast_id(),
             name,
             fields,
             has_trailing_comma,
@@ -4946,7 +5047,7 @@ mod tests {
                 // Check init
                 assert!(for_stmt.init.is_some());
                 if let Stmt::Let(let_stmt) = for_stmt.init.as_ref().unwrap().as_ref() {
-                    if let Pattern::Ident(name) = &let_stmt.pattern {
+                    if let Pattern::Ident { name, .. } = &let_stmt.pattern {
                         assert_eq!(name, "i");
                     } else {
                         panic!("expected ident pattern");
@@ -5254,8 +5355,8 @@ line 2
         // regardless of case — the resolver disambiguates
         let upper = parse_pattern_from("None");
         let lower = parse_pattern_from("none");
-        assert!(matches!(&upper, Pattern::Ident(name) if name == "None"));
-        assert!(matches!(&lower, Pattern::Ident(name) if name == "none"));
+        assert!(matches!(&upper, Pattern::Ident { name, .. } if name == "None"));
+        assert!(matches!(&lower, Pattern::Ident { name, .. } if name == "none"));
     }
 
     #[test]

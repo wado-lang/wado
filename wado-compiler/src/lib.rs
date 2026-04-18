@@ -258,21 +258,19 @@ fn compile_after_load<H: CompilerHost>(
 ) -> Result<(Vec<u8>, ast::Module, Option<wir::WirPackage>), Bail> {
     let module_name = filename.unwrap_or_else(|| "module".to_string());
     let implicit_modules = load_result.implicit_modules.clone();
-    let included_files = load_result.included_files.clone();
     let entry_ast = load_result.entry_ast.clone();
 
-    // === Phases 2 + 6a: Analyze + Annotate ===
-    // `annotate` performs analyze and the type-resolution half of the old
-    // `resolve` phase, producing a reusable `Annotated` value.
+    // === Phases 2 + 6a + 6b: Analyze + Annotate + Lower TIR ===
+    // `annotate` performs analyze, type resolution, and body-level TIR
+    // lowering. The resulting `Annotated` carries the `TirModule`s the batch
+    // compiler needs plus the use→def reference map LSP queries need.
     let annotated = annotate::annotate_loaded(load_result, logger)?;
-
-    // === Phase 6b: Lower AST to TIR ===
-    let tir_modules = annotate::lower_tir(&annotated, logger, &included_files)?;
 
     let annotate::Annotated {
         entry_module_source,
         symbols,
         state,
+        tir_modules,
         ..
     } = annotated;
 

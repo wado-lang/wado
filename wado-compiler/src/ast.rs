@@ -14,6 +14,30 @@ use crate::token::Span;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AstId(pub u32);
 
+impl AstId {
+    /// Allocate a fresh `AstId` for a transient AST node that is never owned
+    /// by a parsed [`Module`].
+    ///
+    /// Use cases:
+    /// - Synthesized `Type::Named` / `Type::Generic` operands passed to type
+    ///   query functions (`cm_size_with_registry`, `synthesize_lift_*`), which
+    ///   only read the type's `name` and structural fields.
+    /// - Unit test fixtures that fabricate AST nodes to exercise registries.
+    ///
+    /// The returned id is globally unique within a process. It is *not* a
+    /// sentinel: there is no reserved "synthetic" value. Because transient
+    /// nodes never enter a `Module.items` tree and never become
+    /// [`SymbolKey`](crate::symbol::SymbolKey) lookup targets, they cannot
+    /// collide with parser-allocated ids — those live in per-module dense
+    /// ranges indexed by `(ModuleSource, AstId)`.
+    #[must_use]
+    pub fn fresh() -> Self {
+        use core::sync::atomic::{AtomicU32, Ordering};
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
 /// Discriminator for the kind of AST node an [`AstPtr`] points to.
 ///
 /// Mirrors the shape of `Item` and the named members reachable from items
@@ -159,27 +183,65 @@ impl Module {
         self.ast_id_count
     }
 
+    /// Return the [`Span`] of the AST node bearing the given [`AstId`].
+    /// Returns `None` if no id-bearing node in this module has that id.
+    pub fn span_of_ast_id(&self, target: AstId) -> Option<Span> {
+        struct SpanFinder {
+            target: AstId,
+            result: Option<Span>,
+        }
+        impl AstVisitor for SpanFinder {
+            fn visit_id(&mut self, id: AstId, span: Span) {
+                if self.result.is_none() && id == self.target {
+                    self.result = Some(span);
+                }
+            }
+        }
+        let mut finder = SpanFinder {
+            target,
+            result: None,
+        };
+        for item in &self.items {
+            finder.visit_item(item);
+            if finder.result.is_some() {
+                break;
+            }
+        }
+        finder.result
+    }
+
     /// Find the [`AstId`] of the smallest id-bearing AST node whose span
     /// contains the given 1-based `(line, column)` position. Returns `None`
     /// if no id-bearing node contains the position.
     pub fn ast_id_at(&self, line: usize, column: usize) -> Option<AstId> {
-        let mut best: Option<(AstId, Span)> = None;
-        let mut visitor = |id: AstId, span: Span| {
-            if !span_contains(span, line, column) {
-                return;
-            }
-            match best {
-                None => best = Some((id, span)),
-                Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
-                    best = Some((id, span));
+        struct Finder {
+            line: usize,
+            column: usize,
+            best: Option<(AstId, Span)>,
+        }
+        impl AstVisitor for Finder {
+            fn visit_id(&mut self, id: AstId, span: Span) {
+                if !span_contains(span, self.line, self.column) {
+                    return;
                 }
-                _ => {}
+                match self.best {
+                    None => self.best = Some((id, span)),
+                    Some((_, current)) if span_byte_len(span) <= span_byte_len(current) => {
+                        self.best = Some((id, span));
+                    }
+                    _ => {}
+                }
             }
+        }
+        let mut finder = Finder {
+            line,
+            column,
+            best: None,
         };
         for item in &self.items {
-            visit_item_ids(item, &mut visitor);
+            finder.visit_item(item);
         }
-        best.map(|(id, _)| id)
+        finder.best.map(|(id, _)| id)
     }
 }
 
@@ -201,112 +263,471 @@ fn span_byte_len(span: Span) -> usize {
     span.end.saturating_sub(span.start)
 }
 
-fn visit_item_ids(item: &Item, f: &mut impl FnMut(AstId, Span)) {
+/// Structural AST visitor used for id-based queries (LSP position lookup,
+/// density checks) and scope-aware analyses (reference collection).
+///
+/// Every `visit_*` method defaults to its corresponding free `walk_*`
+/// function, which recurses into children through the visitor's own
+/// methods. Implementers override only the nodes where their behavior
+/// differs from plain structural traversal.
+///
+/// `visit_id` receives every [`AstId`] / [`Span`] pair encountered during a
+/// walk — including container ids (items, statements, expressions, blocks)
+/// and leaf id-bearing nodes that have no dedicated `visit_*` method (struct
+/// fields, enum cases, generic/closure parameters, etc.).
+pub trait AstVisitor: Sized {
+    /// Invoked for every [`AstId`] emitted during traversal.
+    ///
+    /// Default is a no-op; an id-emitter overrides this to collect all ids,
+    /// a scope-aware visitor leaves it as no-op and overrides the relevant
+    /// `visit_*` methods instead.
+    fn visit_id(&mut self, _id: AstId, _span: Span) {}
+
+    fn visit_item(&mut self, item: &Item) {
+        walk_item(self, item);
+    }
+
+    fn visit_function(&mut self, func: &Function) {
+        walk_function(self, func);
+    }
+
+    fn visit_effect_method(&mut self, method: &EffectMethod) {
+        walk_effect_method(self, method);
+    }
+
+    fn visit_block(&mut self, block: &Block) {
+        walk_block(self, block);
+    }
+
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        walk_stmt(self, stmt);
+    }
+
+    fn visit_condition(&mut self, cond: &Condition) {
+        walk_condition(self, cond);
+    }
+
+    fn visit_match_expr(&mut self, m: &MatchExpr) {
+        walk_match_expr(self, m);
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        walk_expr(self, expr);
+    }
+
+    fn visit_pattern(&mut self, pat: &Pattern) {
+        walk_pattern(self, pat);
+    }
+
+    fn visit_type(&mut self, ty: &Type) {
+        walk_type(self, ty);
+    }
+}
+
+pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
     match item {
-        Item::Use(u) => f(u.id, u.span),
-        Item::Function(func) => visit_function_ids(func, f),
+        Item::Use(u) => v.visit_id(u.id, u.span),
+        Item::Function(func) => v.visit_function(func),
         Item::Effect(e) => {
-            f(e.id, e.span);
+            v.visit_id(e.id, e.span);
             for m in &e.methods {
-                visit_effect_method_ids(m, f);
+                v.visit_effect_method(m);
             }
         }
         Item::Struct(s) => {
-            f(s.id, s.span);
+            v.visit_id(s.id, s.span);
             for p in &s.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
             for field in &s.fields {
-                f(field.id, field.span);
+                v.visit_id(field.id, field.span);
+                v.visit_type(&field.ty);
             }
         }
         Item::Enum(e) => {
-            f(e.id, e.span);
+            v.visit_id(e.id, e.span);
             for p in &e.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
             for case in &e.cases {
-                f(case.id, case.span);
+                v.visit_id(case.id, case.span);
             }
         }
-        Item::Variant(v) => {
-            f(v.id, v.span);
-            for p in &v.type_params {
-                f(p.id, p.span);
+        Item::Variant(vr) => {
+            v.visit_id(vr.id, vr.span);
+            for p in &vr.type_params {
+                v.visit_id(p.id, p.span);
             }
-            for case in &v.cases {
-                f(case.id, case.span);
+            for case in &vr.cases {
+                v.visit_id(case.id, case.span);
+                if let Some(payload) = &case.payload {
+                    v.visit_type(payload);
+                }
             }
         }
         Item::Flags(fl) => {
-            f(fl.id, fl.span);
-            for v in &fl.flags {
-                f(v.id, v.span);
+            v.visit_id(fl.id, fl.span);
+            for va in &fl.flags {
+                v.visit_id(va.id, va.span);
             }
         }
         Item::Newtype(n) => {
-            f(n.id, n.span);
+            v.visit_id(n.id, n.span);
             for p in &n.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
+            v.visit_type(&n.ty);
         }
-        Item::TupleTypeDecl(t) => f(t.id, t.span),
+        Item::TupleTypeDecl(t) => v.visit_id(t.id, t.span),
         Item::Impl(i) => {
-            f(i.id, i.span);
+            v.visit_id(i.id, i.span);
             for p in &i.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
+            if let Some(trait_ty) = &i.trait_type {
+                v.visit_type(trait_ty);
+            }
+            v.visit_type(&i.ty);
             for binding in &i.associated_types {
-                f(binding.id, binding.span);
+                v.visit_id(binding.id, binding.span);
+                v.visit_type(&binding.ty);
             }
             for c in &i.constants {
-                f(c.id, c.span);
+                v.visit_id(c.id, c.span);
+                v.visit_type(&c.ty);
+                v.visit_expr(&c.value);
             }
             for m in &i.methods {
-                visit_function_ids(m, f);
+                v.visit_function(m);
             }
         }
         Item::Trait(t) => {
-            f(t.id, t.span);
+            v.visit_id(t.id, t.span);
             for p in &t.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
             for assoc in &t.associated_types {
-                f(assoc.id, assoc.span);
+                v.visit_id(assoc.id, assoc.span);
             }
             for m in &t.methods {
-                visit_function_ids(m, f);
+                v.visit_function(m);
             }
         }
         Item::Resource(r) => {
-            f(r.id, r.span);
+            v.visit_id(r.id, r.span);
             for p in &r.type_params {
-                f(p.id, p.span);
+                v.visit_id(p.id, p.span);
             }
             for m in &r.methods {
-                visit_effect_method_ids(m, f);
+                v.visit_effect_method(m);
             }
         }
-        Item::World(w) => f(w.id, w.span),
-        Item::Test(t) => f(t.id, t.span),
-        Item::Global(g) => f(g.id, g.span),
+        Item::World(w) => v.visit_id(w.id, w.span),
+        Item::Test(t) => {
+            v.visit_id(t.id, t.span);
+            v.visit_block(&t.body);
+        }
+        Item::Global(g) => {
+            v.visit_id(g.id, g.span);
+            v.visit_type(&g.ty);
+            v.visit_expr(&g.initializer);
+        }
     }
 }
 
-fn visit_function_ids(func: &Function, f: &mut impl FnMut(AstId, Span)) {
-    f(func.id, func.span);
+pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
+    v.visit_id(func.id, func.span);
     for p in &func.type_params {
-        f(p.id, p.span);
+        v.visit_id(p.id, p.span);
     }
     for param in &func.params {
-        f(param.id, param.span);
+        v.visit_id(param.id, param.span);
+        v.visit_type(&param.ty);
+    }
+    if let Some(ret) = &func.return_type {
+        v.visit_type(ret);
+    }
+    if let Some(body) = &func.body {
+        v.visit_block(body);
     }
 }
 
-fn visit_effect_method_ids(method: &EffectMethod, f: &mut impl FnMut(AstId, Span)) {
-    f(method.id, method.span);
+pub fn walk_effect_method<V: AstVisitor>(v: &mut V, method: &EffectMethod) {
+    v.visit_id(method.id, method.span);
     for param in &method.params {
-        f(param.id, param.span);
+        v.visit_id(param.id, param.span);
+        v.visit_type(&param.ty);
+    }
+    if let Some(ret) = &method.return_type {
+        v.visit_type(ret);
+    }
+}
+
+pub fn walk_block<V: AstVisitor>(v: &mut V, block: &Block) {
+    v.visit_id(block.id, block.span);
+    for stmt in &block.stmts {
+        v.visit_stmt(stmt);
+    }
+}
+
+pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
+    v.visit_id(stmt.id(), stmt.span());
+    match stmt {
+        Stmt::Let(s) => {
+            v.visit_pattern(&s.pattern);
+            if let Some(ty) = &s.ty {
+                v.visit_type(ty);
+            }
+            if let Some(val) = &s.value {
+                v.visit_expr(val);
+            }
+        }
+        Stmt::Expr(s) => v.visit_expr(&s.expr),
+        Stmt::Return(s) => {
+            if let Some(val) = &s.value {
+                v.visit_expr(val);
+            }
+        }
+        Stmt::TaskReturn(s) => v.visit_expr(&s.value),
+        Stmt::If(s) => {
+            v.visit_condition(&s.condition);
+            v.visit_block(&s.then_block);
+            if let Some(eb) = &s.else_block {
+                v.visit_block(eb);
+            }
+        }
+        Stmt::While(s) => {
+            v.visit_condition(&s.condition);
+            v.visit_block(&s.body);
+        }
+        Stmt::For(s) => {
+            if let Some(init) = &s.init {
+                v.visit_stmt(init);
+            }
+            if let Some(cond) = &s.condition {
+                v.visit_condition(cond);
+            }
+            if let Some(update) = &s.update {
+                v.visit_expr(update);
+            }
+            v.visit_block(&s.body);
+        }
+        Stmt::ForOf(s) => {
+            v.visit_pattern(&s.binding);
+            v.visit_expr(&s.iterable);
+            v.visit_block(&s.body);
+        }
+        Stmt::Loop(s) => v.visit_block(&s.body),
+        Stmt::Match(m) => v.visit_match_expr(m),
+        Stmt::Break(s) => {
+            if let Some(val) = &s.value {
+                v.visit_expr(val);
+            }
+        }
+        Stmt::Continue(_) => {}
+        Stmt::Assert(s) => {
+            v.visit_expr(&s.condition);
+            if let Some(msg) = &s.message {
+                v.visit_expr(msg);
+            }
+        }
+        Stmt::LabeledBlock(s) => v.visit_block(&s.block),
+    }
+}
+
+pub fn walk_condition<V: AstVisitor>(v: &mut V, cond: &Condition) {
+    match cond {
+        Condition::Expr(e) => v.visit_expr(e),
+        Condition::LetChain { elements, .. } => {
+            for el in elements {
+                match el {
+                    ConditionElement::Let { pattern, expr, .. } => {
+                        v.visit_pattern(pattern);
+                        v.visit_expr(expr);
+                    }
+                    ConditionElement::Expr(e) => v.visit_expr(e),
+                }
+            }
+        }
+    }
+}
+
+pub fn walk_match_expr<V: AstVisitor>(v: &mut V, m: &MatchExpr) {
+    // NOTE: `m.id` is emitted by the caller (`walk_expr` for `Expr::Match` or
+    // `walk_stmt` for `Stmt::Match`), since both share the same `MatchExpr::id`.
+    v.visit_expr(&m.expr);
+    for arm in &m.arms {
+        v.visit_pattern(&arm.pattern);
+        if let Some(guard) = &arm.guard {
+            v.visit_expr(guard);
+        }
+        v.visit_expr(&arm.body);
+    }
+}
+
+pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
+    v.visit_id(expr.id(), expr.span());
+    match expr {
+        Expr::Ident(_) | Expr::Literal(_) => {}
+        Expr::Binary(e) => {
+            v.visit_expr(&e.left);
+            v.visit_expr(&e.right);
+        }
+        Expr::Unary(e) => v.visit_expr(&e.expr),
+        Expr::Assign(e) => {
+            v.visit_expr(&e.target);
+            v.visit_expr(&e.value);
+        }
+        Expr::CompoundAssign(e) => {
+            v.visit_expr(&e.target);
+            v.visit_expr(&e.value);
+        }
+        Expr::ComparisonChain(e) => {
+            v.visit_expr(&e.first);
+            for c in &e.comparisons {
+                v.visit_expr(&c.right);
+            }
+        }
+        Expr::Call(e) => {
+            v.visit_expr(&e.callee);
+            for ty in &e.type_args {
+                v.visit_type(ty);
+            }
+            for a in &e.args {
+                v.visit_expr(a);
+            }
+        }
+        Expr::MethodCall(e) => {
+            v.visit_expr(&e.receiver);
+            for ty in &e.type_args {
+                v.visit_type(ty);
+            }
+            for a in &e.args {
+                v.visit_expr(a);
+            }
+        }
+        Expr::StaticMethodCall(e) => {
+            v.visit_type(&e.target_type);
+            for ty in &e.type_args {
+                v.visit_type(ty);
+            }
+            for a in &e.args {
+                v.visit_expr(a);
+            }
+        }
+        Expr::FieldAccess(e) => v.visit_expr(&e.expr),
+        Expr::Index(e) => {
+            v.visit_expr(&e.expr);
+            v.visit_expr(&e.index);
+        }
+        Expr::Block(b) => v.visit_block(b),
+        Expr::If(e) => {
+            v.visit_condition(&e.condition);
+            v.visit_block(&e.then_block);
+            if let Some(eb) = &e.else_block {
+                v.visit_block(eb);
+            }
+        }
+        Expr::Match(m) => v.visit_match_expr(m),
+        Expr::Matches(m) => {
+            v.visit_expr(&m.expr);
+            v.visit_pattern(&m.pattern);
+            if let Some(guard) = &m.guard {
+                v.visit_expr(guard);
+            }
+        }
+        Expr::Closure(c) => {
+            for p in &c.params {
+                v.visit_id(p.id, p.name_span);
+                if let Some(ty) = &p.ty {
+                    v.visit_type(ty);
+                }
+            }
+            v.visit_expr(&c.body);
+        }
+        Expr::TemplateString(t) => {
+            for part in &t.parts {
+                if let TemplatePart::Interpolation { expr, .. } = part {
+                    v.visit_expr(expr);
+                }
+            }
+        }
+        Expr::Cast(c) => {
+            v.visit_expr(&c.expr);
+            v.visit_type(&c.target_type);
+        }
+        Expr::StructLiteral(s) => {
+            for field in &s.fields {
+                v.visit_expr(&field.value);
+            }
+        }
+        Expr::TupleLiteral(t) => {
+            for el in &t.elements {
+                v.visit_expr(el);
+            }
+        }
+        Expr::LabeledBlock(lb) => v.visit_block(&lb.block),
+        Expr::TryOp(t) => v.visit_expr(&t.expr),
+        Expr::Spread(inner, _) => v.visit_expr(inner),
+        Expr::Range(r) => {
+            v.visit_expr(&r.start);
+            v.visit_expr(&r.end);
+        }
+    }
+}
+
+pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
+    match pat {
+        Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } => {
+            v.visit_id(*id, *span);
+        }
+        Pattern::Tuple(ps, _) | Pattern::Or(ps) => {
+            for p in ps {
+                v.visit_pattern(p);
+            }
+        }
+        Pattern::Struct { fields, .. } => {
+            for field in fields {
+                v.visit_pattern(&field.pattern);
+            }
+        }
+        Pattern::Variant { bindings, .. } => {
+            for p in bindings {
+                v.visit_pattern(p);
+            }
+        }
+        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } => {}
+    }
+}
+
+pub fn walk_type<V: AstVisitor>(v: &mut V, ty: &Type) {
+    match ty {
+        Type::Named(t) => v.visit_id(t.id, t.span),
+        Type::Generic(t) => {
+            v.visit_id(t.id, t.span);
+            for a in &t.args {
+                v.visit_type(a);
+            }
+        }
+        Type::NamespacedGeneric(t) => {
+            v.visit_id(t.id, t.span);
+            for a in &t.args {
+                v.visit_type(a);
+            }
+        }
+        Type::Function(ft) => {
+            for p in &ft.params {
+                v.visit_type(p);
+            }
+            v.visit_type(&ft.return_type);
+        }
+        Type::Tuple(ts) => {
+            for t in ts {
+                v.visit_type(t);
+            }
+        }
+        Type::Reference(t) | Type::MutReference(t) => v.visit_type(t),
+        Type::TypePackSpread(_, _) => {}
     }
 }
 
@@ -735,6 +1156,7 @@ pub struct Param {
 
 #[derive(Debug, Clone)]
 pub struct Block {
+    pub id: AstId,
     pub stmts: Vec<Stmt>,
     pub span: Span,
 }
@@ -763,6 +1185,7 @@ pub enum Stmt {
 /// Creates a new scope with local bindings. The label is required to reduce syntactic ambiguity.
 #[derive(Debug, Clone)]
 pub struct LabeledBlockStmt {
+    pub id: AstId,
     pub label: String,
     pub block: Block,
     pub span: Span,
@@ -772,6 +1195,7 @@ pub struct LabeledBlockStmt {
 /// If the expression is false, prints a power-assert style error message and calls unreachable
 #[derive(Debug, Clone)]
 pub struct AssertStmt {
+    pub id: AstId,
     pub condition: Expr,
     /// Optional message expression (typically a String literal or template string)
     pub message: Option<Expr>,
@@ -780,6 +1204,7 @@ pub struct AssertStmt {
 
 #[derive(Debug, Clone)]
 pub struct LetStmt {
+    pub id: AstId,
     pub pattern: Pattern,
     /// Span of the pattern's leading token: exactly the identifier for
     /// `Ident`/`MutIdent` patterns, or the opening delimiter/constructor for
@@ -797,12 +1222,14 @@ pub struct LetStmt {
 
 #[derive(Debug, Clone)]
 pub struct ExprStmt {
+    pub id: AstId,
     pub expr: Expr,
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct ReturnStmt {
+    pub id: AstId,
     pub value: Option<Expr>,
     pub span: Span,
 }
@@ -811,6 +1238,7 @@ pub struct ReturnStmt {
 /// Only valid inside `export async fn` bodies.
 #[derive(Debug, Clone)]
 pub struct TaskReturnStmt {
+    pub id: AstId,
     pub value: Expr,
     pub span: Span,
 }
@@ -844,6 +1272,7 @@ pub enum Condition {
 
 #[derive(Debug, Clone)]
 pub struct IfStmt {
+    pub id: AstId,
     pub condition: Condition,
     pub then_block: Block,
     pub else_block: Option<Block>,
@@ -852,6 +1281,7 @@ pub struct IfStmt {
 
 #[derive(Debug, Clone)]
 pub struct WhileStmt {
+    pub id: AstId,
     pub condition: Condition,
     pub body: Block,
     pub span: Span,
@@ -861,6 +1291,7 @@ pub struct WhileStmt {
 /// Also supports pattern conditions: `for init; let Some(x) = iter.next(); update { body }`
 #[derive(Debug, Clone)]
 pub struct ForStmt {
+    pub id: AstId,
     /// Initialization statement (e.g., `let i = 0`)
     pub init: Option<Box<Stmt>>,
     /// Loop condition (e.g., `i < 10` or `let Some(x) = iter.next()`)
@@ -875,6 +1306,7 @@ pub struct ForStmt {
 /// Iterates over elements of an Array<T>
 #[derive(Debug, Clone)]
 pub struct ForOfStmt {
+    pub id: AstId,
     /// Pattern to bind each element (Ident for simple, Struct/Tuple for destructuring)
     pub binding: Pattern,
     /// Whether the binding is mutable
@@ -888,6 +1320,7 @@ pub struct ForOfStmt {
 /// Infinite loop: `loop { body }`
 #[derive(Debug, Clone)]
 pub struct LoopStmt {
+    pub id: AstId,
     pub body: Block,
     pub span: Span,
 }
@@ -895,6 +1328,7 @@ pub struct LoopStmt {
 /// Break statement: `break;`, `break label;`, or `break label: expr;`
 #[derive(Debug, Clone)]
 pub struct BreakStmt {
+    pub id: AstId,
     /// Optional label to break to (for labeled blocks)
     pub label: Option<String>,
     /// Optional value to return from the labeled block
@@ -905,7 +1339,50 @@ pub struct BreakStmt {
 /// Continue statement: `continue;`
 #[derive(Debug, Clone)]
 pub struct ContinueStmt {
+    pub id: AstId,
     pub span: Span,
+}
+
+impl Stmt {
+    /// Returns the parse-stable [`AstId`] for this statement.
+    pub fn id(&self) -> AstId {
+        match self {
+            Stmt::Let(s) => s.id,
+            Stmt::Expr(s) => s.id,
+            Stmt::Return(s) => s.id,
+            Stmt::TaskReturn(s) => s.id,
+            Stmt::If(s) => s.id,
+            Stmt::While(s) => s.id,
+            Stmt::For(s) => s.id,
+            Stmt::ForOf(s) => s.id,
+            Stmt::Loop(s) => s.id,
+            Stmt::Match(s) => s.id,
+            Stmt::Break(s) => s.id,
+            Stmt::Continue(s) => s.id,
+            Stmt::Assert(s) => s.id,
+            Stmt::LabeledBlock(s) => s.id,
+        }
+    }
+
+    /// Returns the source [`Span`] for this statement.
+    pub fn span(&self) -> Span {
+        match self {
+            Stmt::Let(s) => s.span,
+            Stmt::Expr(s) => s.span,
+            Stmt::Return(s) => s.span,
+            Stmt::TaskReturn(s) => s.span,
+            Stmt::If(s) => s.span,
+            Stmt::While(s) => s.span,
+            Stmt::For(s) => s.span,
+            Stmt::ForOf(s) => s.span,
+            Stmt::Loop(s) => s.span,
+            Stmt::Match(s) => s.span,
+            Stmt::Break(s) => s.span,
+            Stmt::Continue(s) => s.span,
+            Stmt::Assert(s) => s.span,
+            Stmt::LabeledBlock(s) => s.span,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -946,6 +1423,7 @@ pub enum Expr {
 /// The value is the last expression in the block (if any).
 #[derive(Debug, Clone)]
 pub struct LabeledBlockExpr {
+    pub id: AstId,
     pub label: String,
     pub block: Block,
     pub span: Span,
@@ -954,6 +1432,7 @@ pub struct LabeledBlockExpr {
 /// Postfix `?` operator: `expr?`
 #[derive(Debug, Clone)]
 pub struct TryOpExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub span: Span,
 }
@@ -968,6 +1447,7 @@ pub enum RangeKind {
 /// Range expression: `start..<end` or `start..=end`
 #[derive(Debug, Clone)]
 pub struct RangeExpr {
+    pub id: AstId,
     pub start: Expr,
     pub end: Expr,
     pub kind: RangeKind,
@@ -975,6 +1455,40 @@ pub struct RangeExpr {
 }
 
 impl Expr {
+    /// Returns the parse-stable [`AstId`] for this expression.
+    ///
+    /// For `Expr::Spread(inner, _)` the id of the inner expression is returned,
+    /// since spread is a compile-time splice operation without its own identity.
+    pub fn id(&self) -> AstId {
+        match self {
+            Expr::Ident(e) => e.id,
+            Expr::Literal(e) => e.id,
+            Expr::Binary(e) => e.id,
+            Expr::Unary(e) => e.id,
+            Expr::Assign(e) => e.id,
+            Expr::CompoundAssign(e) => e.id,
+            Expr::ComparisonChain(e) => e.id,
+            Expr::Call(e) => e.id,
+            Expr::MethodCall(e) => e.id,
+            Expr::StaticMethodCall(e) => e.id,
+            Expr::FieldAccess(e) => e.id,
+            Expr::Index(e) => e.id,
+            Expr::Block(e) => e.id,
+            Expr::If(e) => e.id,
+            Expr::Match(e) => e.id,
+            Expr::Matches(e) => e.id,
+            Expr::Closure(e) => e.id,
+            Expr::TemplateString(e) => e.id,
+            Expr::Cast(e) => e.id,
+            Expr::StructLiteral(e) => e.id,
+            Expr::TupleLiteral(e) => e.id,
+            Expr::LabeledBlock(e) => e.id,
+            Expr::TryOp(e) => e.id,
+            Expr::Spread(inner, _) => inner.id(),
+            Expr::Range(e) => e.id,
+        }
+    }
+
     /// Get the source span for this expression
     pub fn span(&self) -> Span {
         match self {
@@ -1114,6 +1628,7 @@ impl Expr {
 /// Type cast expression: `expr as Type`
 #[derive(Debug, Clone)]
 pub struct CastExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub target_type: Type,
     pub span: Span,
@@ -1122,6 +1637,7 @@ pub struct CastExpr {
 /// Struct literal expression: `Point { x: 10, y: 20 }` or implicit `{ x: 10, y: 20 }`
 #[derive(Debug, Clone)]
 pub struct StructLiteralExpr {
+    pub id: AstId,
     /// The struct type name. None for implicit struct literals like `{ x: 1, y: 2 }`
     /// which require type context (e.g., `let p: Point = { x: 1, y: 2 }`).
     pub name: Option<String>,
@@ -1147,6 +1663,7 @@ pub struct StructLiteralField {
 /// Can be coerced to Array<T> when all elements have the same type.
 #[derive(Debug, Clone)]
 pub struct TupleLiteralExpr {
+    pub id: AstId,
     pub elements: Vec<Expr>,
     pub span: Span,
 }
@@ -1154,6 +1671,7 @@ pub struct TupleLiteralExpr {
 /// Assignment expression: `x = value` or `x.field = value`
 #[derive(Debug, Clone)]
 pub struct AssignExpr {
+    pub id: AstId,
     pub target: Expr,
     pub value: Expr,
     pub span: Span,
@@ -1177,6 +1695,7 @@ pub enum CompoundAssignOp {
 /// Compound assignment expression: `x += value`
 #[derive(Debug, Clone)]
 pub struct CompoundAssignExpr {
+    pub id: AstId,
     pub target: Expr,
     pub op: CompoundAssignOp,
     pub value: Expr,
@@ -1185,12 +1704,14 @@ pub struct CompoundAssignExpr {
 
 #[derive(Debug, Clone)]
 pub struct IdentExpr {
+    pub id: AstId,
     pub name: String,
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct LiteralExpr {
+    pub id: AstId,
     pub value: Literal,
     pub span: Span,
 }
@@ -1222,6 +1743,7 @@ pub enum Literal {
 
 #[derive(Debug, Clone)]
 pub struct BinaryExpr {
+    pub id: AstId,
     pub left: Expr,
     pub op: BinaryOp,
     pub right: Expr,
@@ -1261,6 +1783,7 @@ pub struct ChainedComparison {
 /// Comparison chain expression: `a < b < c` or `0 <= x <= 100`
 #[derive(Debug, Clone)]
 pub struct ComparisonChainExpr {
+    pub id: AstId,
     pub first: Expr,
     pub comparisons: Vec<ChainedComparison>,
     pub span: Span,
@@ -1268,6 +1791,7 @@ pub struct ComparisonChainExpr {
 
 #[derive(Debug, Clone)]
 pub struct UnaryExpr {
+    pub id: AstId,
     pub op: UnaryOp,
     pub expr: Expr,
     pub span: Span,
@@ -1285,6 +1809,7 @@ pub enum UnaryOp {
 
 #[derive(Debug, Clone)]
 pub struct CallExpr {
+    pub id: AstId,
     pub callee: Expr,
     /// Explicit type arguments for generic functions: `foo::<i32>(x)`
     pub type_args: Vec<Type>,
@@ -1296,6 +1821,7 @@ pub struct CallExpr {
 
 #[derive(Debug, Clone)]
 pub struct MethodCallExpr {
+    pub id: AstId,
     pub receiver: Expr,
     pub method: String,
     /// Explicit type arguments for generic methods: `obj.foo::<i32>(x)`
@@ -1309,6 +1835,7 @@ pub struct MethodCallExpr {
 /// Static method call expression: `Array::<i32>::with_capacity(100)` or `Point::origin()`
 #[derive(Debug, Clone)]
 pub struct StaticMethodCallExpr {
+    pub id: AstId,
     /// The target type (e.g., `Array<i32>` or `Point`)
     pub target_type: Type,
     /// The method name (e.g., `with_capacity` or `origin`)
@@ -1324,6 +1851,7 @@ pub struct StaticMethodCallExpr {
 
 #[derive(Debug, Clone)]
 pub struct FieldAccessExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub field: String,
     pub span: Span,
@@ -1331,6 +1859,7 @@ pub struct FieldAccessExpr {
 
 #[derive(Debug, Clone)]
 pub struct IndexExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub index: Expr,
     pub span: Span,
@@ -1338,6 +1867,7 @@ pub struct IndexExpr {
 
 #[derive(Debug, Clone)]
 pub struct IfExpr {
+    pub id: AstId,
     pub condition: Condition,
     pub then_block: Block,
     pub else_block: Option<Block>,
@@ -1346,6 +1876,7 @@ pub struct IfExpr {
 
 #[derive(Debug, Clone)]
 pub struct MatchExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub arms: Vec<MatchArm>,
     pub span: Span,
@@ -1364,6 +1895,7 @@ pub struct MatchArm {
 /// Returns true if the pattern matches and the optional guard is true.
 #[derive(Debug, Clone)]
 pub struct MatchesExpr {
+    pub id: AstId,
     pub expr: Expr,
     pub pattern: Pattern,
     /// Optional guard expression (the condition after `&&`)
@@ -1373,8 +1905,18 @@ pub struct MatchesExpr {
 
 #[derive(Debug, Clone)]
 pub enum Pattern {
-    Ident(String),
-    MutIdent(String),
+    /// Plain identifier binding: `x`.
+    Ident {
+        id: AstId,
+        name: String,
+        span: Span,
+    },
+    /// Mutable identifier binding: `mut x`.
+    MutIdent {
+        id: AstId,
+        name: String,
+        span: Span,
+    },
     Literal(Literal),
     Wildcard,
     Tuple(Vec<Pattern>, /* has_rest */ bool),
@@ -1411,6 +1953,7 @@ pub struct StructPatternField {
 
 #[derive(Debug, Clone)]
 pub struct ClosureExpr {
+    pub id: AstId,
     pub params: Vec<ClosureParam>,
     pub body: Expr,
     /// Pre-desugar source text, set by the desugar phase before transforming the body.
@@ -1420,6 +1963,7 @@ pub struct ClosureExpr {
 
 #[derive(Debug, Clone)]
 pub struct ClosureParam {
+    pub id: AstId,
     pub name: String,
     /// Span of the closure parameter name identifier.
     pub name_span: Span,
@@ -1430,6 +1974,7 @@ pub struct ClosureParam {
 /// Template string expression: `Hello, {name}!`
 #[derive(Debug, Clone)]
 pub struct TemplateStringExpr {
+    pub id: AstId,
     pub parts: Vec<TemplatePart>,
     pub span: Span,
 }
@@ -1467,14 +2012,34 @@ pub enum Type {
     TypePackSpread(String, Span),
 }
 
+impl Type {
+    /// Returns the [`AstId`] for types that carry one (named types and
+    /// generics). Structural types (tuple, reference, function) aggregate
+    /// children that each carry their own ids.
+    pub fn id(&self) -> Option<AstId> {
+        match self {
+            Type::Named(t) => Some(t.id),
+            Type::Generic(t) => Some(t.id),
+            Type::NamespacedGeneric(t) => Some(t.id),
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::TypePackSpread(_, _) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct NamedType {
+    pub id: AstId,
     pub name: String,
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct GenericType {
+    pub id: AstId,
     pub name: String,
     pub args: Vec<Type>,
     pub span: Span,
@@ -1483,6 +2048,7 @@ pub struct GenericType {
 /// Namespaced generic type like `builtin::array<T>`
 #[derive(Debug, Clone)]
 pub struct NamespacedGenericType {
+    pub id: AstId,
     /// Namespace (e.g., "builtin")
     pub namespace: String,
     /// Type name (e.g., "array")
@@ -1816,6 +2382,22 @@ mod ast_id_tests {
         parser.parse().expect("parse")
     }
 
+    /// Collect every `(AstId, Span)` emitted while walking `items` using the
+    /// default [`AstVisitor`] traversal.
+    fn collect_ids(items: &[Item]) -> Vec<(AstId, Span)> {
+        struct Collector(Vec<(AstId, Span)>);
+        impl AstVisitor for Collector {
+            fn visit_id(&mut self, id: AstId, span: Span) {
+                self.0.push((id, span));
+            }
+        }
+        let mut c = Collector(Vec::new());
+        for item in items {
+            c.visit_item(item);
+        }
+        c.0
+    }
+
     const SAMPLE: &str = r#"
 use { println } from "core:cli";
 
@@ -1861,24 +2443,24 @@ test "addition" {
         assert_eq!(m1.ast_id_count(), m2.ast_id_count());
         assert!(m1.ast_id_count() > 0);
 
-        let mut ids_1 = Vec::new();
-        for item in &m1.items {
-            visit_item_ids(item, &mut |id, _| ids_1.push(id));
-        }
-        let mut ids_2 = Vec::new();
-        for item in &m2.items {
-            visit_item_ids(item, &mut |id, _| ids_2.push(id));
-        }
+        let ids_1: Vec<AstId> = collect_ids(&m1.items)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        let ids_2: Vec<AstId> = collect_ids(&m2.items)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
         assert_eq!(ids_1, ids_2);
     }
 
     #[test]
     fn ids_are_dense_and_unique() {
         let m = parse(SAMPLE);
-        let mut ids: Vec<AstId> = Vec::new();
-        for item in &m.items {
-            visit_item_ids(item, &mut |id, _| ids.push(id));
-        }
+        let ids: Vec<AstId> = collect_ids(&m.items)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
         assert!(!ids.is_empty());
 
         let mut seen: IndexSet<AstId> = IndexSet::default();
@@ -1927,5 +2509,74 @@ test "addition" {
     fn ast_id_at_outside_returns_none() {
         let m = parse("fn add(a: i32, b: i32) -> i32 { return a + b; }\n");
         assert_eq!(m.ast_id_at(42, 1), None);
+    }
+
+    const SAMPLE_WITH_BODIES: &str = r"
+fn add(a: i32, b: i32) -> i32 {
+    let c = a + b;
+    let mut d: i32 = c;
+    if let Some(v) = Option::<i32>::Some(d) {
+        return v;
+    }
+    for let i of 0..<c {
+        d = d + i;
+    }
+    let { x, y } = Point { x: 1, y: 2 };
+    return match d {
+        0 => x,
+        n => n + y,
+    };
+}
+
+struct Point { x: i32, y: i32 }
+";
+
+    #[test]
+    fn ids_dense_with_function_bodies_and_patterns() {
+        let m = parse(SAMPLE_WITH_BODIES);
+        let ids: Vec<(AstId, Span)> = collect_ids(&m.items);
+        assert!(
+            ids.len() > 20,
+            "expected rich id coverage, got {}",
+            ids.len()
+        );
+
+        let mut seen: IndexSet<AstId> = IndexSet::default();
+        for (id, sp) in &ids {
+            assert!(seen.insert(*id), "duplicate id: {id:?} at span {sp:?}");
+            assert!(
+                id.0 < m.ast_id_count(),
+                "id {} out of range (count={})",
+                id.0,
+                m.ast_id_count()
+            );
+        }
+        for i in 0..m.ast_id_count() {
+            assert!(seen.contains(&AstId(i)), "missing id {i} in dense range");
+        }
+    }
+
+    #[test]
+    fn pattern_leaf_ids_resolve_at_position() {
+        let src = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
+        let m = parse(src);
+        let pat_id = m
+            .items
+            .iter()
+            .find_map(|it| match it {
+                Item::Function(f) => f.body.as_ref().and_then(|b| {
+                    b.stmts.iter().find_map(|s| match s {
+                        Stmt::Let(l) => match &l.pattern {
+                            Pattern::Ident { id, .. } => Some(*id),
+                            _ => None,
+                        },
+                        _ => None,
+                    })
+                }),
+                _ => None,
+            })
+            .expect("let x pattern id");
+        let at_pat = m.ast_id_at(2, 9);
+        assert_eq!(at_pat, Some(pat_id));
     }
 }

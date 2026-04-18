@@ -87,7 +87,13 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
-cargo test
+# Cap the harness thread count. Each e2e test compiles a Wado program and
+# runs it under wasmtime; at full nproc on constrained sandboxes we have
+# seen SIGSEGV from resource exhaustion. Use nproc/3 (min 1) which matches
+# the wado-dev-tools default.
+test_threads=$(( $(nproc) / 3 ))
+[ "$test_threads" -lt 1 ] && test_threads=1
+cargo test -- --test-threads="$test_threads"
 """
 
 [tasks.test-wado]

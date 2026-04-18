@@ -55,6 +55,22 @@ fn normalize_ast_debug(debug: &str) -> String {
             continue;
         }
 
+        // Normalize any `AstId(N)` occurrence — AstIds are parse-order
+        // allocations and must not affect AST equivalence. Whitespace changes
+        // by the formatter can cause legitimately different id counts when
+        // the parser's token consumption changes slightly.
+        if bytes[i..].starts_with(b"AstId(") {
+            result.extend_from_slice(b"AID");
+            i += b"AstId(".len();
+            while i < bytes.len() && bytes[i] != b')' {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
+            continue;
+        }
+
         // Note: type_params are NOT normalized — the formatter now always emits
         // explicit `impl<T>` (matching Rust), so type_params must round-trip exactly.
 

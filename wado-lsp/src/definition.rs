@@ -1,20 +1,19 @@
 //! Go-to-definition, powered by `wado_compiler::annotate`.
 //!
 //! Resolution flow:
-//! 1. Lex the source to find the identifier at the cursor.
-//! 2. Run `annotate` to produce a fully-resolved [`Annotated`] snapshot.
-//! 3. Look up the identifier in the entry module's scope — this traverses
-//!    `use` imports, so a name defined in another file resolves to that
-//!    file's definition.
-//! 4. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`]
-//!    (module URI + identifier span).
+//! 1. Run `annotate` to produce a fully-resolved [`Annotated`] snapshot.
+//! 2. Use `Annotated::ast_id_at` to find the innermost AST node at the cursor.
+//! 3. If that node is a use-site (Ident of a local), follow
+//!    `Annotated::referenced_symbol` to the binding [`SymbolKey`].
+//! 4. Otherwise the cursor AST id itself points at a declared symbol.
+//! 5. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`].
 
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
-use wado_compiler::lexer::Lexer;
+use wado_compiler::ast::{self, AstId, Item, Module};
 use wado_compiler::name::ModuleSource;
-use wado_compiler::symbol::Symbol;
-use wado_compiler::token::{Span, TokenKind};
+use wado_compiler::symbol::{Symbol, SymbolKey};
+use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
 
@@ -34,13 +33,20 @@ pub async fn find_definition<H: CompilerHost>(
     uri: &str,
     host: &H,
 ) -> Option<DefinitionResult> {
-    let ident = find_ident_at_position(source, position)?;
-
     let filename = uri_to_filename(uri);
     let annotated = annotate(source, host, Some(&filename)).await.ok()?;
 
-    let symbol = resolve_ident(&annotated, &filename, &ident)?;
-    let span = annotated.name_span_of(&symbol.defined_at).or(symbol.span)?;
+    let module = annotated.entry_module_source.clone();
+    let line = position.line as usize + 1;
+    let col = position.character as usize + 1;
+
+    let def_key = resolve_def_key(&annotated, &module, line, col)?;
+
+    let symbol = annotated.symbol_at(&def_key)?;
+    let span = annotated
+        .name_span_of(&def_key)
+        .or(symbol.span)
+        .or_else(|| span_of_ast_id(annotated.modules.get(&def_key.module)?, def_key.ast_id))?;
     let def_uri = symbol_uri(&annotated, symbol, uri)?;
     Some(DefinitionResult {
         uri: def_uri,
@@ -48,69 +54,57 @@ pub async fn find_definition<H: CompilerHost>(
     })
 }
 
-/// Scan `tokens` for an identifier whose span covers `position`.
-fn find_ident_at_position(source: &str, position: Position) -> Option<String> {
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().ok()?;
-    let target_line = position.line as usize + 1;
-    let target_col = position.character as usize + 1;
+/// Resolve the defining [`SymbolKey`] for the identifier at the cursor.
+///
+/// Tries in order:
+/// 1. `ast_id_at` → `referenced_symbol` (use-site → definition: local, param,
+///    imported item, etc.)
+/// 2. `ast_id_at` → key points directly to a declared symbol (cursor on the
+///    defining occurrence itself).
+fn resolve_def_key(
+    annotated: &Annotated,
+    module: &ModuleSource,
+    line: usize,
+    col: usize,
+) -> Option<SymbolKey> {
+    let ast_id = annotated.ast_id_at(module, line, col)?;
+    let cursor_key = SymbolKey::new(module.clone(), ast_id);
+    if let Some(def) = annotated.referenced_symbol(&cursor_key) {
+        return Some(def);
+    }
+    if annotated.symbol_at(&cursor_key).is_some() {
+        return Some(cursor_key);
+    }
+    None
+}
 
-    for token in &tokens {
-        if !token_contains(&token.span, target_line, target_col) {
-            continue;
-        }
-        if let TokenKind::Ident(name) = &token.kind {
-            return Some(name.clone());
-        }
-        if let Some(name) = token.kind.as_ident_name() {
-            // Contextual keywords-as-identifiers (`flags`, `type`, `of`, `from`).
-            if matches!(
-                token.kind,
-                TokenKind::Flags | TokenKind::Type | TokenKind::Of | TokenKind::From
-            ) {
-                return Some(name.to_string());
-            }
+/// Best-effort span for an arbitrary [`AstId`] — walks module items looking for
+/// a matching id. Used only when `name_span_of` has no name-span and the
+/// symbol has no declared span (rare).
+fn span_of_ast_id(module: &Module, target: AstId) -> Option<Span> {
+    for item in &module.items {
+        if let Some(span) = item_span_if_match(item, target) {
+            return Some(span);
         }
     }
     None
 }
 
-fn token_contains(span: &Span, target_line: usize, target_col: usize) -> bool {
-    if target_line < span.line || target_line > span.end_line {
-        return false;
+fn item_span_if_match(item: &Item, target: AstId) -> Option<Span> {
+    match item {
+        Item::Function(f) if f.id == target => Some(f.span),
+        Item::Struct(s) if s.id == target => Some(s.span),
+        Item::Enum(e) if e.id == target => Some(e.span),
+        Item::Variant(v) if v.id == target => Some(v.span),
+        Item::Flags(fl) if fl.id == target => Some(fl.span),
+        Item::Trait(t) if t.id == target => Some(t.span),
+        Item::Newtype(n) if n.id == target => Some(n.span),
+        Item::Global(g) if g.id == target => Some(g.span),
+        _ => None,
     }
-    if target_line == span.line && target_col < span.column {
-        return false;
-    }
-    if target_line == span.end_line && target_col >= span.end_column {
-        return false;
-    }
-    true
-}
-
-fn resolve_ident<'a>(annotated: &'a Annotated, filename: &str, ident: &str) -> Option<&'a Symbol> {
-    let entry = &annotated.entry_module_source;
-    if let Some(sym) = annotated.symbols.lookup_in_module(entry, ident) {
-        return Some(sym);
-    }
-    // Fall back to searching every module: catches definitions hovered while
-    // editing a non-entry file.
-    let _ = filename;
-    annotated
-        .modules
-        .keys()
-        .find_map(|ms| annotated.symbols.lookup_in_module(ms, ident))
 }
 
 /// Derive the URI for a symbol's defining module.
-///
-/// Prefers the URI the request was made against when the symbol lives in the
-/// entry module (keeps the `file://` scheme the client expects); otherwise
-/// synthesises a `file://` URI from the module's on-disk path.
-///
-/// `ModuleSource::Local` paths are stored relative to the entry module's
-/// directory (see `loader::resolve_module_path`), so they are resolved against
-/// the request URI's parent to produce an absolute `file://` URI.
 fn symbol_uri(annotated: &Annotated, symbol: &Symbol, request_uri: &str) -> Option<String> {
     let module = &symbol.defined_at.module;
     if module == &annotated.entry_module_source {
@@ -119,7 +113,6 @@ fn symbol_uri(annotated: &Annotated, symbol: &Symbol, request_uri: &str) -> Opti
     match module {
         ModuleSource::EntryPoint { filename } => Some(filename_to_uri(filename)),
         ModuleSource::Local { path } => Some(resolve_local_uri(path, request_uri)),
-        // Core / WASI / Remote modules have no navigable URI.
         _ => None,
     }
 }
@@ -169,5 +162,184 @@ fn span_to_range(span: &Span) -> Range {
             line: span.end_line.saturating_sub(1) as u32,
             character: span.end_column.saturating_sub(1) as u32,
         },
+    }
+}
+
+#[allow(dead_code)]
+fn _touch_ast_module_import(module: &ast::Module) {
+    let _ = module;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use indexmap::IndexMap;
+    use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
+
+    struct TestHost {
+        sources: IndexMap<String, Vec<u8>>,
+    }
+
+    impl TestHost {
+        fn new(path: &str, source: &str) -> Self {
+            let mut sources = IndexMap::new();
+            sources.insert(path.to_string(), source.as_bytes().to_vec());
+            Self { sources }
+        }
+    }
+
+    impl CompilerHost for TestHost {
+        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+            self.sources
+                .get(path)
+                .cloned()
+                .ok_or_else(|| SourceError::NotFound {
+                    path: path.to_string(),
+                })
+        }
+
+        fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
+    }
+
+    async fn def_at(source: &str, line: u32, character: u32) -> Option<DefinitionResult> {
+        let path = "/test.wado";
+        let uri = format!("file://{path}");
+        let host = TestHost::new(path, source);
+        find_definition(source, Position { line, character }, &uri, &host).await
+    }
+
+    #[tokio::test]
+    async fn param_definition() {
+        let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
+        let result = def_at(source, 1, 11)
+            .await
+            .expect("definition of a in body");
+        assert_eq!(result.range.start.line, 0);
+        assert_eq!(result.range.start.character, 7);
+        assert_eq!(result.range.end.character, 8);
+    }
+
+    #[tokio::test]
+    async fn local_var_definition() {
+        let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
+        let result = def_at(source, 2, 11)
+            .await
+            .expect("definition of x in return");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 8);
+        assert_eq!(result.range.end.character, 9);
+    }
+
+    #[tokio::test]
+    async fn shadow_resolution() {
+        let source = "fn f() -> i32 {\n    let x = 1;\n    let x = x + 1;\n    return x;\n}\n";
+        let result = def_at(source, 2, 12)
+            .await
+            .expect("RHS x resolves to outer let");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 8);
+        assert_eq!(result.range.end.character, 9);
+    }
+
+    #[tokio::test]
+    async fn item_definition() {
+        let source =
+            "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    return helper();\n}\n";
+        let result = def_at(source, 4, 11)
+            .await
+            .expect("call-site resolves to fn helper");
+        assert_eq!(result.range.start.line, 0);
+        assert_eq!(result.range.start.character, 3);
+        assert_eq!(result.range.end.character, 9);
+    }
+
+    #[tokio::test]
+    async fn struct_destructuring_binding_definition() {
+        let source = concat!(
+            "struct Point { x: i32, y: i32 }\n",
+            "fn f(p: Point) -> i32 {\n",
+            "    let { x, y } = p;\n",
+            "    return x + y;\n",
+            "}\n",
+        );
+        let result = def_at(source, 3, 11).await.expect("use of destructured x");
+        assert_eq!(result.range.start.line, 2);
+        assert_eq!(result.range.start.character, 10);
+        assert_eq!(result.range.end.character, 11);
+    }
+
+    #[tokio::test]
+    async fn tuple_destructuring_binding_definition() {
+        let source = concat!(
+            "fn f() -> i32 {\n",
+            "    let [a, b] = [1, 2];\n",
+            "    return a + b;\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 11).await.expect("use of a");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 9);
+        assert_eq!(result.range.end.character, 10);
+    }
+
+    #[tokio::test]
+    async fn closure_param_definition() {
+        let source = concat!(
+            "fn f() -> i32 {\n",
+            "    let g = |x: i32| x + 1;\n",
+            "    return g(1);\n",
+            "}\n",
+        );
+        let result = def_at(source, 1, 21).await.expect("use of x in body");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 13);
+        assert_eq!(result.range.end.character, 14);
+    }
+
+    #[tokio::test]
+    async fn closure_capture_definition() {
+        let source = concat!(
+            "fn f() -> i32 {\n",
+            "    let outer = 10;\n",
+            "    let g = |x: i32| x + outer;\n",
+            "    return g(1);\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 25).await.expect("capture of outer");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 8);
+        assert_eq!(result.range.end.character, 13);
+    }
+
+    #[tokio::test]
+    async fn if_let_binding_definition() {
+        let source = concat!(
+            "fn f(opt: Option<i32>) -> i32 {\n",
+            "    if let Some(v) = opt {\n",
+            "        return v;\n",
+            "    }\n",
+            "    return 0;\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 15).await.expect("use of v");
+        assert_eq!(result.range.start.line, 1);
+        assert_eq!(result.range.start.character, 16);
+        assert_eq!(result.range.end.character, 17);
+    }
+
+    #[tokio::test]
+    async fn match_arm_binding_definition() {
+        let source = concat!(
+            "fn f(opt: Option<i32>) -> i32 {\n",
+            "    return match opt {\n",
+            "        Some(v) => v,\n",
+            "        None => 0,\n",
+            "    };\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 19).await.expect("use of v in arm");
+        assert_eq!(result.range.start.line, 2);
+        assert_eq!(result.range.start.character, 13);
+        assert_eq!(result.range.end.character, 14);
     }
 }

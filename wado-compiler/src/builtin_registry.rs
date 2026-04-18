@@ -268,7 +268,7 @@ mod tests {
         let mut registry = BuiltinRegistry::new();
 
         let func = Function {
-            id: crate::ast::AstId(0),
+            id: crate::ast::AstId::fresh(),
             name: "stream_new".to_string(),
             name_span: make_span(),
             is_pub: false,
@@ -278,6 +278,7 @@ mod tests {
             attrs: vec![],
             params: vec![],
             return_type: Some(Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
                 name: "i64".to_string(),
                 span: make_span(),
             })),
@@ -304,7 +305,7 @@ mod tests {
         let mut registry = BuiltinRegistry::new();
 
         let func = Function {
-            id: crate::ast::AstId(0),
+            id: crate::ast::AstId::fresh(),
             name: "unreachable".to_string(),
             name_span: make_span(),
             is_pub: false,
@@ -314,6 +315,7 @@ mod tests {
             attrs: vec![],
             params: vec![],
             return_type: Some(Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
                 name: "!".to_string(),
                 span: make_span(),
             })),
@@ -335,7 +337,7 @@ mod tests {
         let mut registry = BuiltinRegistry::new();
 
         let func = Function {
-            id: crate::ast::AstId(0),
+            id: crate::ast::AstId::fresh(),
             name: "stream_write".to_string(),
             name_span: make_span(),
             is_pub: false,
@@ -349,6 +351,7 @@ mod tests {
                     name: "tx".to_string(),
                     name_span: make_span(),
                     ty: Type::Named(NamedType {
+                        id: crate::ast::AstId::fresh(),
                         name: "i32".to_string(),
                         span: make_span(),
                     }),
@@ -361,6 +364,7 @@ mod tests {
                     name: "ptr".to_string(),
                     name_span: make_span(),
                     ty: Type::Named(NamedType {
+                        id: crate::ast::AstId::fresh(),
                         name: "i32".to_string(),
                         span: make_span(),
                     }),
@@ -373,6 +377,7 @@ mod tests {
                     name: "len".to_string(),
                     name_span: make_span(),
                     ty: Type::Named(NamedType {
+                        id: crate::ast::AstId::fresh(),
                         name: "i32".to_string(),
                         span: make_span(),
                     }),
@@ -382,6 +387,7 @@ mod tests {
                 },
             ],
             return_type: Some(Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
                 name: "i32".to_string(),
                 span: make_span(),
             })),

@@ -1165,6 +1165,7 @@ impl WasiRegistry {
                     .map(|arg| self.resolve_type(arg))
                     .collect();
                 Type::Generic(GenericType {
+                    id: generic.id,
                     name: generic.name.clone(),
                     args: resolved_args,
                     span: generic.span,
@@ -1196,6 +1197,7 @@ impl WasiRegistry {
                 let resolved_args: Vec<Type> =
                     ng.args.iter().map(|arg| self.resolve_type(arg)).collect();
                 Type::NamespacedGeneric(crate::ast::NamespacedGenericType {
+                    id: ng.id,
                     namespace: ng.namespace.clone(),
                     name: ng.name.clone(),
                     args: resolved_args,
@@ -2490,8 +2492,10 @@ mod tests {
 
     fn make_stream_u8_type() -> Type {
         Type::Generic(crate::ast::GenericType {
+            id: crate::ast::AstId::fresh(),
             name: "Stream".to_string(),
             args: vec![Type::Named(crate::ast::NamedType {
+                id: crate::ast::AstId::fresh(),
                 name: "u8".to_string(),
                 span: make_span(),
             })],
@@ -2501,10 +2505,12 @@ mod tests {
 
     fn make_result_type() -> Type {
         Type::Generic(crate::ast::GenericType {
+            id: crate::ast::AstId::fresh(),
             name: "Result".to_string(),
             args: vec![
                 Type::Tuple(vec![]), // ()
                 Type::Named(crate::ast::NamedType {
+                    id: crate::ast::AstId::fresh(),
                     name: "ErrorCode".to_string(),
                     span: make_span(),
                 }),
@@ -2658,8 +2664,10 @@ mod tests {
 
         // Array<String> should be supported
         let array_string = Type::Generic(GenericType {
+            id: crate::ast::AstId::fresh(),
             name: "Array".to_string(),
             args: vec![Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
                 name: "String".to_string(),
                 span: make_span(),
             })],
@@ -2672,13 +2680,16 @@ mod tests {
 
         // Array<Tuple<String, String>> should be supported
         let tuple_ss = Type::Generic(GenericType {
+            id: crate::ast::AstId::fresh(),
             name: "Tuple".to_string(),
             args: vec![
                 Type::Named(NamedType {
+                    id: crate::ast::AstId::fresh(),
                     name: "String".to_string(),
                     span: make_span(),
                 }),
                 Type::Named(NamedType {
+                    id: crate::ast::AstId::fresh(),
                     name: "String".to_string(),
                     span: make_span(),
                 }),
@@ -2686,6 +2697,7 @@ mod tests {
             span: make_span(),
         });
         let array_tuple = Type::Generic(GenericType {
+            id: crate::ast::AstId::fresh(),
             name: "Array".to_string(),
             args: vec![tuple_ss],
             span: make_span(),
@@ -2697,8 +2709,10 @@ mod tests {
 
         // Option<String> should be supported
         let option_string = Type::Generic(GenericType {
+            id: crate::ast::AstId::fresh(),
             name: "Option".to_string(),
             args: vec![Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
                 name: "String".to_string(),
                 span: make_span(),
             })],

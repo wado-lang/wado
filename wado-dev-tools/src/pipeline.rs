@@ -12,14 +12,16 @@ use crate::template::Template;
 
 const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
-/// Default worker count: half of the logical CPUs (min 1). Each worker owns a
-/// 16 MB stack and runs the full compiler, so saturating every core is wasteful
-/// and starves the supervising shell on constrained sandboxes.
+/// Default worker count: one third of the logical CPUs (min 1). Each worker
+/// owns a 16 MB stack and runs the full compiler plus wasmtime, so saturating
+/// every core is wasteful and, on constrained sandboxes, has empirically led
+/// to SIGSEGV from resource exhaustion during golden-dump. Halving the CPU
+/// count still segfaulted in practice, so we go to one third.
 fn default_num_workers() -> usize {
     let logical = std::thread::available_parallelism()
         .map(std::num::NonZero::get)
         .unwrap_or(4);
-    (logical / 2).max(1)
+    (logical / 3).max(1)
 }
 
 /// Per-worker slot tracking which file is currently being compiled.

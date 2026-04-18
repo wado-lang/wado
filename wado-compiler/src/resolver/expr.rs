@@ -304,7 +304,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Check local variables, including captures from outer scope
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             match var_ref {
-                VarRef::Local { index, type_id } => {
+                VarRef::Local {
+                    index,
+                    type_id,
+                    defining_ast_id,
+                } => {
+                    if let Some(def_id) = defining_ast_id {
+                        self.record_reference(ident.id, def_id);
+                    }
                     return TirExpr::new(
                         TirExprKind::Local {
                             index,
@@ -314,7 +321,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         ident.span,
                     );
                 }
-                VarRef::Capture { index, type_id } => {
+                VarRef::Capture {
+                    index,
+                    type_id,
+                    defining_ast_id,
+                } => {
+                    if let Some(def_id) = defining_ast_id {
+                        self.record_reference(ident.id, def_id);
+                    }
                     return TirExpr::new(
                         TirExprKind::Capture {
                             index,
@@ -328,7 +342,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     index,
                     ref_type_id,
                     inner_type_id,
+                    defining_ast_id,
                 } => {
+                    if let Some(def_id) = defining_ast_id {
+                        self.record_reference(ident.id, def_id);
+                    }
                     // Deref capture: `*self.__capture_N` where the field holds `&mut T`
                     let capture_expr = TirExpr::new(
                         TirExprKind::Capture {
@@ -596,6 +614,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|s| s.module_source().clone())
                     .unwrap_or_else(|| self.current_module_source.clone())
             };
+            self.record_item_reference_by_name(ident.id, &ident.name);
             return TirExpr::new(
                 TirExprKind::FuncRef {
                     module_source,
@@ -2606,7 +2625,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     } else {
                         let spread_type_id = spread_expr.type_id;
                         let tmp_name = format!("__spread_{}", ctx.next_local);
-                        let tmp_idx = ctx.add_local(tmp_name.clone(), spread_type_id, false);
+                        let tmp_idx = ctx.add_local(tmp_name.clone(), spread_type_id, false, None);
                         spread_bindings.push((tmp_idx, tmp_name.clone(), spread_expr, elem.span()));
                         TirExpr::new(
                             TirExprKind::Local {
@@ -2773,7 +2792,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Allocate a local for the Some payload binding
         ctx.enter_scope();
-        let v_local = ctx.add_local("__qm_v".to_string(), some_type, false);
+        let v_local = ctx.add_local("__qm_v".to_string(), some_type, false, None);
 
         // Arm 0: Some(v) => v
         let some_arm = TirMatchArm {
@@ -2861,8 +2880,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         drop(tt);
 
         ctx.enter_scope();
-        let v_local = ctx.add_local("__qm_v".to_string(), ok_type, false);
-        let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false);
+        let v_local = ctx.add_local("__qm_v".to_string(), ok_type, false, None);
+        let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
 
         // Arm 0: Ok(v) => v
         let ok_arm = TirMatchArm {

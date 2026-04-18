@@ -194,7 +194,7 @@ mod tests {
         let mut registry = WorldRegistry::new();
 
         let world = WorldDecl {
-            id: crate::ast::AstId(0),
+            id: crate::ast::AstId::fresh(),
             name: "Command".to_string(),
             is_pub: false,
             attrs: vec![Attribute {
@@ -209,6 +209,7 @@ mod tests {
                 is_async: true,
                 params: vec![],
                 return_type: Some(Type::Generic(crate::ast::GenericType {
+                    id: crate::ast::AstId::fresh(),
                     name: "Result".to_string(),
                     args: vec![Type::Tuple(vec![]), Type::Tuple(vec![])],
                     span: make_span(),

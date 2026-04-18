@@ -2269,8 +2269,8 @@ impl<'a> Unparser<'a> {
 
     fn unparse_pattern(&mut self, pattern: &Pattern) {
         match pattern {
-            Pattern::Ident(name) => self.output.push_str(name),
-            Pattern::MutIdent(name) => {
+            Pattern::Ident { name, .. } => self.output.push_str(name),
+            Pattern::MutIdent { name, .. } => {
                 self.output.push_str("mut ");
                 self.output.push_str(name);
             }
@@ -2327,7 +2327,7 @@ impl<'a> Unparser<'a> {
                     let bare_name = is_bare_field_name(&field.field_name);
                     self.output.push_str(&format_field_name(&field.field_name));
                     let is_shorthand = bare_name
-                        && matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name);
+                        && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);
                     if !is_shorthand {
                         self.output.push_str(": ");
                         self.unparse_pattern(&field.pattern);
@@ -2365,8 +2365,8 @@ impl<'a> Unparser<'a> {
     /// Unparse a pattern for let statements (uses brackets for tuples)
     fn unparse_let_pattern(&mut self, pattern: &Pattern) {
         match pattern {
-            Pattern::Ident(name) => self.output.push_str(name),
-            Pattern::MutIdent(name) => {
+            Pattern::Ident { name, .. } => self.output.push_str(name),
+            Pattern::MutIdent { name, .. } => {
                 self.output.push_str("mut ");
                 self.output.push_str(name);
             }
@@ -2423,7 +2423,7 @@ impl<'a> Unparser<'a> {
                     let bare_name = is_bare_field_name(&field.field_name);
                     self.output.push_str(&format_field_name(&field.field_name));
                     let is_shorthand = bare_name
-                        && matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name);
+                        && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);
                     if !is_shorthand {
                         self.output.push_str(": ");
                         self.unparse_let_pattern(&field.pattern);
@@ -3377,8 +3377,8 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
 
 fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
     match pattern {
-        Pattern::Ident(name) => output.push_str(name),
-        Pattern::MutIdent(name) => {
+        Pattern::Ident { name, .. } => output.push_str(name),
+        Pattern::MutIdent { name, .. } => {
             output.push_str("mut ");
             output.push_str(name);
         }
@@ -3435,7 +3435,7 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
                 let bare_name = is_bare_field_name(&field.field_name);
                 output.push_str(&format_field_name(&field.field_name));
                 let is_shorthand = bare_name
-                    && matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name);
+                    && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);
                 if !is_shorthand {
                     output.push_str(": ");
                     unparse_pattern_into(&field.pattern, output);
