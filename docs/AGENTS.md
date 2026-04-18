@@ -98,4 +98,4 @@ It may include TODOs on WIP.
 - [URL Standard Library (`core:url`)](./wep-2026-04-10-url-stdlib.md)
 - [Default Arguments](./wep-2026-04-11-default-arguments.md)
 - [Effect Handler](./wep-2026-04-11-effect-handler.md)
-- [Kiln — Code Generation Framework](./wep-2026-04-12-kiln.md)
+- [Kiln — Keyed IDL Lowering Notation](./wep-2026-04-12-kiln.md)
