@@ -1,0 +1,234 @@
+// Integer and float parsing from strings.
+//
+// Provides shared `ParseIntError` / `ParseFloatError` error types and the
+// core digit-parsing routines used by the `from_str_radix`, `from_str`, and
+// `from_str_hex` methods on primitive numeric types (see `primitive.wado`
+// and `int128.wado`).
+
+use { parse_text } from "core:prelude/fpfmt.wado";
+
+/// Kind of failure returned by integer parsing.
+pub enum IntErrorKind {
+    /// The input string was empty.
+    Empty,
+    /// The input contained a character that is not a valid digit in the radix.
+    InvalidDigit,
+    /// The value was greater than the maximum representable in the target type.
+    PosOverflow,
+    /// The value was less than the minimum representable in the target type.
+    NegOverflow,
+}
+
+/// Error returned by integer parsing.
+pub struct ParseIntError {
+    pub kind: IntErrorKind,
+}
+
+impl ParseIntError {
+    pub fn new(kind: IntErrorKind) -> ParseIntError {
+        return ParseIntError { kind };
+    }
+
+    /// Returns the kind of this error.
+    pub fn kind(&self) -> IntErrorKind {
+        return self.kind;
+    }
+}
+
+/// Kind of failure returned by float parsing.
+pub enum FloatErrorKind {
+    /// The input string was empty.
+    Empty,
+    /// The input was malformed.
+    Invalid,
+}
+
+/// Error returned by float parsing.
+pub struct ParseFloatError {
+    pub kind: FloatErrorKind,
+}
+
+impl ParseFloatError {
+    pub fn new(kind: FloatErrorKind) -> ParseFloatError {
+        return ParseFloatError { kind };
+    }
+
+    /// Returns the kind of this error.
+    pub fn kind(&self) -> FloatErrorKind {
+        return self.kind;
+    }
+}
+
+/// Translate an ASCII byte into a digit value in the range [0, 36).
+/// Returns -1 if the byte is not a valid alphanumeric digit.
+fn digit_value(b: u8) -> i32 {
+    let c = b as i32;
+    if c >= '0' as i32 && c <= '9' as i32 {
+        return c - '0' as i32;
+    }
+    if c >= 'a' as i32 && c <= 'z' as i32 {
+        return c - 'a' as i32 + 10;
+    }
+    if c >= 'A' as i32 && c <= 'Z' as i32 {
+        return c - 'A' as i32 + 10;
+    }
+    return -1;
+}
+
+/// Parse the bytes `s[start..end]` as an unsigned integer in the given radix.
+/// Caller is responsible for stripping any sign. `radix` must be in 2..=36.
+///
+/// Returns `Err(Empty)` if the range is empty, `Err(InvalidDigit)` on bad
+/// characters, or `Err(PosOverflow)` if the accumulator exceeds `u64::MAX`.
+pub fn parse_u64_digits(s: String, start: i32, end: i32, radix: u32) -> Result<u64, IntErrorKind> {
+    if start >= end {
+        return Result::Err(IntErrorKind::Empty);
+    }
+    let r = radix as u64;
+    let max_before_mul: u64 = u64::MAX / r;
+    let max_digit_for_overflow: u64 = u64::MAX - max_before_mul * r;
+    let bytes = s.internal_raw_bytes();
+    let mut acc: u64 = 0;
+    for let mut i = start; i < end; i += 1 {
+        let d = digit_value(builtin::array_get_u8(bytes, i));
+        if d < 0 || d >= radix as i32 {
+            return Result::Err(IntErrorKind::InvalidDigit);
+        }
+        let d64 = d as u64;
+        if acc > max_before_mul || acc == max_before_mul && d64 > max_digit_for_overflow {
+            return Result::Err(IntErrorKind::PosOverflow);
+        }
+        acc = acc * r + d64;
+    }
+    return Result::Ok(acc);
+}
+
+/// Parse the bytes `s[start..end]` as an unsigned integer in the given radix,
+/// accumulating into a `u128`. Caller strips any sign.
+pub fn parse_u128_digits(s: String, start: i32, end: i32, radix: u32) -> Result<u128, IntErrorKind> {
+    if start >= end {
+        return Result::Err(IntErrorKind::Empty);
+    }
+    let r: u128 = radix as u128;
+    let max128 = u128::from_pair(u64::MAX, u64::MAX);
+    let divmod = max128.div_rem(&r);
+    let max_before_mul: u128 = divmod[0];
+    let max_digit_for_overflow: u128 = divmod[1];
+    let bytes = s.internal_raw_bytes();
+    let mut acc: u128 = 0;
+    for let mut i = start; i < end; i += 1 {
+        let d = digit_value(builtin::array_get_u8(bytes, i));
+        if d < 0 || d >= radix as i32 {
+            return Result::Err(IntErrorKind::InvalidDigit);
+        }
+        let d128: u128 = d as u128;
+        if acc > max_before_mul || acc == max_before_mul && d128 > max_digit_for_overflow {
+            return Result::Err(IntErrorKind::PosOverflow);
+        }
+        acc = acc * r + d128;
+    }
+    return Result::Ok(acc);
+}
+
+/// Strip the leading sign and return `[is_negative, value_start]` for a signed integer parse.
+/// Rejects lone `"+"`, `"-"` and empty input as `Empty`; reserves per-type bound checks for the caller.
+pub fn parse_signed_prefix(s: String) -> Result<[bool, i32], IntErrorKind> {
+    let len = s.len();
+    if len == 0 {
+        return Result::Err(IntErrorKind::Empty);
+    }
+    let first = s.get_byte(0);
+    let is_negative = first == '-' as u8;
+    let has_sign = is_negative || first == '+' as u8;
+    if has_sign && len == 1 {
+        return Result::Err(IntErrorKind::InvalidDigit);
+    }
+    let start = if has_sign { 1 } else { 0 };
+    return Result::Ok([is_negative, start]);
+}
+
+/// Strip the leading `+` (if any) for an unsigned integer parse.
+/// Rejects `-`-prefixed input as `InvalidDigit` per Rust's behaviour.
+pub fn parse_unsigned_prefix(s: String) -> Result<i32, IntErrorKind> {
+    let len = s.len();
+    if len == 0 {
+        return Result::Err(IntErrorKind::Empty);
+    }
+    let first = s.get_byte(0);
+    if first == '+' as u8 {
+        if len == 1 {
+            return Result::Err(IntErrorKind::InvalidDigit);
+        }
+        return Result::Ok(1);
+    }
+    return Result::Ok(0);
+}
+
+/// Check that the radix is supported (2..=36); panic otherwise.
+pub fn assert_radix(radix: u32) {
+    if radix < 2 || radix > 36 {
+        panic("from_str_radix: radix must be in 2..=36");
+    }
+}
+
+/// Parse a signed integer in the given radix, clamped to `[-min_abs, max]`.
+/// `max` is the largest positive value; `min_abs` is the absolute value of the
+/// most negative representable value (e.g. for i32, `max = 2147483647`,
+/// `min_abs = 2147483648`). Handles the optional leading `+`/`-` sign.
+pub fn parse_i64_radix(s: String, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
+    assert_radix(radix);
+    let [is_negative, start] = match parse_signed_prefix(s) {
+        Ok(p) => p,
+        Err(k) => return Result::Err(ParseIntError::new(k)),
+    };
+    return match parse_u64_digits(s, start, s.len(), radix) {
+        Ok(v) => if is_negative {
+            if v > min_abs {
+                Result::Err(ParseIntError::new(IntErrorKind::NegOverflow))
+            } else {
+                // (0 - v) as i64 wraps correctly, including at i64::MIN.
+                Result::Ok((0 - v) as i64)
+            }
+        } else if v > max as u64 {
+            Result::Err(ParseIntError::new(IntErrorKind::PosOverflow))
+        } else {
+            Result::Ok(v as i64)
+        },
+        Err(k) => {
+            let kind = if is_negative && k == IntErrorKind::PosOverflow {
+                IntErrorKind::NegOverflow
+            } else {
+                k
+            };
+            Result::Err(ParseIntError::new(kind))
+        },
+    };
+}
+
+/// Parse an unsigned integer in the given radix, clamped to `[0, max]`.
+pub fn parse_u64_radix(s: String, radix: u32, max: u64) -> Result<u64, ParseIntError> {
+    assert_radix(radix);
+    let start = match parse_unsigned_prefix(s) {
+        Ok(i) => i,
+        Err(k) => return Result::Err(ParseIntError::new(k)),
+    };
+    return match parse_u64_digits(s, start, s.len(), radix) {
+        Ok(v) => if v > max {
+            Result::Err(ParseIntError::new(IntErrorKind::PosOverflow))
+        } else {
+            Result::Ok(v)
+        },
+        Err(k) => Result::Err(ParseIntError::new(k)),
+    };
+}
+
+/// Wrap a float-parsing failure into a `ParseFloatError`.
+pub fn parse_f64_from_str(s: String) -> Result<f64, ParseFloatError> {
+    if s.len() == 0 {
+        return Result::Err(ParseFloatError::new(FloatErrorKind::Empty));
+    }
+    return match parse_text(s) {
+        Some(v) => Result::Ok(v),
+        None => Result::Err(ParseFloatError::new(FloatErrorKind::Invalid)),
+    };
+}

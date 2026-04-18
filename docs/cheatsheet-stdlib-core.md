@@ -26,6 +26,22 @@ pub enum Alignment {
 ```
 
 ```wado
+pub enum IntErrorKind {
+    Empty,
+    InvalidDigit,
+    PosOverflow,
+    NegOverflow,
+}
+```
+
+```wado
+pub enum FloatErrorKind {
+    Empty,
+    Invalid,
+}
+```
+
+```wado
 pub enum Ordering {
     Less,
     Equal,
@@ -559,6 +575,9 @@ impl u128 {
     pub fn from_u64(value: u64) -> u128;
     pub fn from_pair(low: u64, high: u64) -> u128;
     pub fn from_string(s: String) -> u128;
+    pub fn from_str(s: String) -> Result<u128, ParseIntError>;
+    pub fn from_str_hex(s: String) -> Result<u128, ParseIntError>;
+    pub fn from_str_radix(s: String, radix: u32) -> Result<u128, ParseIntError>;
     pub fn zero() -> u128;
     pub fn one() -> u128;
     pub fn low(&self) -> u64;
@@ -701,6 +720,9 @@ impl i128 {
     pub fn from_i64(value: i64) -> i128;
     pub fn from_pair(low: u64, high: i64) -> i128;
     pub fn from_string(s: String) -> i128;
+    pub fn from_str(s: String) -> Result<i128, ParseIntError>;
+    pub fn from_str_hex(s: String) -> Result<i128, ParseIntError>;
+    pub fn from_str_radix(s: String, radix: u32) -> Result<i128, ParseIntError>;
     pub fn zero() -> i128;
     pub fn one() -> i128;
     pub fn low(&self) -> u64;
@@ -845,6 +867,28 @@ pub struct WaitEvent {
     code: i32,
     handle: Waitable,
     payload: u32,
+}
+```
+
+```wado
+pub struct ParseIntError {
+    kind: IntErrorKind,
+}
+
+impl ParseIntError {
+    pub fn new(kind: IntErrorKind) -> ParseIntError;
+    pub fn kind(&self) -> IntErrorKind;
+}
+```
+
+```wado
+pub struct ParseFloatError {
+    kind: FloatErrorKind,
+}
+
+impl ParseFloatError {
+    pub fn new(kind: FloatErrorKind) -> ParseFloatError;
+    pub fn kind(&self) -> FloatErrorKind;
 }
 ```
 
@@ -1316,6 +1360,9 @@ impl i8 {
     pub fn max(a: i8, b: i8) -> i8;
     pub fn min(a: i8, b: i8) -> i8;
     pub fn to_string(&self) -> String;
+    pub fn from_str(s: String) -> Result<i8, ParseIntError>;
+    pub fn from_str_hex(s: String) -> Result<i8, ParseIntError>;
+    pub fn from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError>;
 }
 
 impl Display for i8 {
@@ -1398,6 +1445,9 @@ impl u8 {
     pub fn max(a: u8, b: u8) -> u8;
     pub fn min(a: u8, b: u8) -> u8;
     pub fn to_string(&self) -> String;
+    pub fn from_str(s: String) -> Result<u8, ParseIntError>;
+    pub fn from_str_hex(s: String) -> Result<u8, ParseIntError>;
+    pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError>;
 }
 
 impl Display for u8 {
@@ -1476,6 +1526,9 @@ impl i16 {
     pub fn max(a: i16, b: i16) -> i16;
     pub fn min(a: i16, b: i16) -> i16;
     pub fn to_string(&self) -> String;
+    pub fn from_str(s: String) -> Result<i16, ParseIntError>;
+    pub fn from_str_hex(s: String) -> Result<i16, ParseIntError>;
+    pub fn from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError>;
 }
 
 impl Display for i16 {
@@ -1562,6 +1615,9 @@ impl u16 {
     pub fn max(a: u16, b: u16) -> u16;
     pub fn min(a: u16, b: u16) -> u16;
     pub fn to_string(&self) -> String;
+    pub fn from_str(s: String) -> Result<u16, ParseIntError>;
+    pub fn from_str_hex(s: String) -> Result<u16, ParseIntError>;
+    pub fn from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError>;
 }
 
 impl Display for u16 {
@@ -1643,6 +1699,9 @@ impl i32 {
     pub fn ctz(x: i32) -> i32;
     pub fn popcnt(x: i32) -> i32;
     pub fn to_string(&self) -> String;
+    pub fn from_str(s: String) -> Result<i32, ParseIntError>;
+    pub fn from_str_hex(s: String) -> Result<i32, ParseIntError>;
+    pub fn from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError>;
 }
 
 impl Display for i32 {
@@ -1737,6 +1796,9 @@ impl u32 {
     pub fn max(a: u32, b: u32) -> u32;
     pub fn min(a: u32, b: u32) -> u32;
     pub fn to_string(&self) -> String;
+    pub fn from_str(s: String) -> Result<u32, ParseIntError>;
+    pub fn from_str_hex(s: String) -> Result<u32, ParseIntError>;
+    pub fn from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError>;
 }
 
 impl Display for u32 {
@@ -1830,6 +1892,9 @@ impl i64 {
     pub fn ctz(x: i64) -> i64;
     pub fn popcnt(x: i64) -> i64;
     pub fn to_string(&self) -> String;
+    pub fn from_str(s: String) -> Result<i64, ParseIntError>;
+    pub fn from_str_hex(s: String) -> Result<i64, ParseIntError>;
+    pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError>;
 }
 
 impl Display for i64 {
@@ -1932,6 +1997,9 @@ impl u64 {
     pub fn max(a: u64, b: u64) -> u64;
     pub fn min(a: u64, b: u64) -> u64;
     pub fn to_string(&self) -> String;
+    pub fn from_str(s: String) -> Result<u64, ParseIntError>;
+    pub fn from_str_hex(s: String) -> Result<u64, ParseIntError>;
+    pub fn from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError>;
 }
 
 impl Display for u64 {
@@ -2067,7 +2135,7 @@ impl f32 {
     pub fn fmod(x: f32, y: f32) -> f32;
     pub fn is_nan(&self) -> bool;
     pub fn is_finite(&self) -> bool;
-    pub fn parse(s: String) -> Option<f32>;
+    pub fn from_str(s: String) -> Result<f32, ParseFloatError>;
     pub fn to_bits(&self) -> i32;
     pub fn from_bits(bits: i32) -> f32;
 }
@@ -2173,7 +2241,7 @@ impl f64 {
     pub fn fmod(x: f64, y: f64) -> f64;
     pub fn is_nan(&self) -> bool;
     pub fn is_finite(&self) -> bool;
-    pub fn parse(s: String) -> Option<f64>;
+    pub fn from_str(s: String) -> Result<f64, ParseFloatError>;
     pub fn to_bits(&self) -> i64;
     pub fn from_bits(bits: i64) -> f64;
 }

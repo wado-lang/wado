@@ -706,3 +706,53 @@ test "i128 binary format" {
     let a: i128 = 5;
     assert `{a:b}` == "101";
 }
+
+test "u128::from_str basic" {
+    let expected: u128 = 42;
+    assert u128::from_str("0") matches { Ok(v) && v == 0 as u128 };
+    assert u128::from_str("42") matches { Ok(v) && v == expected };
+    assert u128::from_str("+42") matches { Ok(v) && v == expected };
+}
+
+test "u128::from_str max" {
+    let max = u128::from_pair(u64::MAX, u64::MAX);
+    assert u128::from_str("340282366920938463463374607431768211455") matches { Ok(v) && v == max };
+    assert u128::from_str("340282366920938463463374607431768211456") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+}
+
+test "u128::from_str errors" {
+    assert u128::from_str("") matches { Err(e) && e.kind() == IntErrorKind::Empty };
+    assert u128::from_str("-1") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert u128::from_str("12x") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+}
+
+test "u128::from_str_hex" {
+    let max = u128::from_pair(u64::MAX, u64::MAX);
+    assert u128::from_str_hex("ffffffffffffffffffffffffffffffff") matches { Ok(v) && v == max };
+    assert u128::from_str_hex("100000000000000000000000000000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert u128::from_str_hex("DeadBeef") matches { Ok(v) && v == 3735928559 as u128 };
+}
+
+test "i128::from_str basic" {
+    let expected_pos: i128 = 42;
+    let expected_neg: i128 = -42;
+    assert i128::from_str("42") matches { Ok(v) && v == expected_pos };
+    assert i128::from_str("+42") matches { Ok(v) && v == expected_pos };
+    assert i128::from_str("-42") matches { Ok(v) && v == expected_neg };
+}
+
+test "i128::from_str max min" {
+    let max = i128::from_pair(u64::MAX, i64::MAX);
+    let min = i128::from_pair(0, i64::MIN);
+    assert i128::from_str("170141183460469231731687303715884105727") matches { Ok(v) && v == max };
+    assert i128::from_str("-170141183460469231731687303715884105728") matches { Ok(v) && v == min };
+    assert i128::from_str("170141183460469231731687303715884105728") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i128::from_str("-170141183460469231731687303715884105729") matches { Err(e) && e.kind() == IntErrorKind::NegOverflow };
+}
+
+test "i128::from_str_hex" {
+    let max = i128::from_pair(u64::MAX, i64::MAX);
+    assert i128::from_str_hex("7fffffffffffffffffffffffffffffff") matches { Ok(v) && v == max };
+    assert i128::from_str_hex("80000000000000000000000000000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i128::from_str_hex("-80000000000000000000000000000000") matches { Ok(v) };
+}

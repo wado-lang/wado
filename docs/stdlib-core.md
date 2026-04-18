@@ -41,6 +41,38 @@ Center-aligned: `{x:^5}` -> " 42 "
 
 Right-aligned (default for numbers): `{x:>5}` -> " 42"
 
+#### `pub enum IntErrorKind`
+
+Kind of failure returned by integer parsing.
+
+##### `Empty`
+
+The input string was empty.
+
+##### `InvalidDigit`
+
+The input contained a character that is not a valid digit in the radix.
+
+##### `PosOverflow`
+
+The value was greater than the maximum representable in the target type.
+
+##### `NegOverflow`
+
+The value was less than the minimum representable in the target type.
+
+#### `pub enum FloatErrorKind`
+
+Kind of failure returned by float parsing.
+
+##### `Empty`
+
+The input string was empty.
+
+##### `Invalid`
+
+The input was malformed.
+
 #### `pub enum Ordering`
 
 Result of a comparison between two values.
@@ -1172,6 +1204,19 @@ Used by the compiler for efficient large literal construction
 Create a u128 from a string (decimal representation)
 Used for literal coercion: `let x: u128 = "12345678901234567890"`
 
+##### `pub fn from_str(s: String) -> Result<u128, ParseIntError>`
+
+Parse a decimal `u128` from a string, returning an error on overflow,
+empty input, or invalid characters.
+
+##### `pub fn from_str_hex(s: String) -> Result<u128, ParseIntError>`
+
+Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
+
+##### `pub fn from_str_radix(s: String, radix: u32) -> Result<u128, ParseIntError>`
+
+Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
+
 ##### `pub fn zero() -> u128`
 
 Creates a zero u128
@@ -1354,6 +1399,19 @@ Used by the compiler for efficient large literal construction
 
 Create an i128 from a string (decimal representation, optionally prefixed with '-')
 Used for literal coercion: `let x: i128 = "-12345678901234567890"`
+
+##### `pub fn from_str(s: String) -> Result<i128, ParseIntError>`
+
+Parse a decimal `i128` from a string, returning an error on overflow,
+empty input, or invalid characters.
+
+##### `pub fn from_str_hex(s: String) -> Result<i128, ParseIntError>`
+
+Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`).
+
+##### `pub fn from_str_radix(s: String, radix: u32) -> Result<i128, ParseIntError>`
+
+Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
 
 ##### `pub fn zero() -> i128`
 
@@ -1548,6 +1606,30 @@ Which waitable handle triggered the event.
 ##### `payload: u32`
 
 Event-specific data (e.g. count|status for streams).
+
+#### `pub struct ParseIntError`
+
+Error returned by integer parsing.
+
+##### `kind: IntErrorKind`
+
+##### `pub fn new(kind: IntErrorKind) -> ParseIntError`
+
+##### `pub fn kind(&self) -> IntErrorKind`
+
+Returns the kind of this error.
+
+#### `pub struct ParseFloatError`
+
+Error returned by float parsing.
+
+##### `kind: FloatErrorKind`
+
+##### `pub fn new(kind: FloatErrorKind) -> ParseFloatError`
+
+##### `pub fn kind(&self) -> FloatErrorKind`
+
+Returns the kind of this error.
 
 #### `pub struct String`
 
@@ -2377,6 +2459,12 @@ Encodes this character as UTF-8, returning the bytes.
 
 ##### `pub fn to_string(&self) -> String`
 
+##### `pub fn from_str(s: String) -> Result<i8, ParseIntError>`
+
+##### `pub fn from_str_hex(s: String) -> Result<i8, ParseIntError>`
+
+##### `pub fn from_str_radix(s: String, radix: u32) -> Result<i8, ParseIntError>`
+
 ##### `impl Display for i8`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -2461,6 +2549,12 @@ Encodes this character as UTF-8, returning the bytes.
 
 ##### `pub fn to_string(&self) -> String`
 
+##### `pub fn from_str(s: String) -> Result<u8, ParseIntError>`
+
+##### `pub fn from_str_hex(s: String) -> Result<u8, ParseIntError>`
+
+##### `pub fn from_str_radix(s: String, radix: u32) -> Result<u8, ParseIntError>`
+
 ##### `impl Display for u8`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -2540,6 +2634,12 @@ Encodes this character as UTF-8, returning the bytes.
 ##### `pub fn min(a: i16, b: i16) -> i16`
 
 ##### `pub fn to_string(&self) -> String`
+
+##### `pub fn from_str(s: String) -> Result<i16, ParseIntError>`
+
+##### `pub fn from_str_hex(s: String) -> Result<i16, ParseIntError>`
+
+##### `pub fn from_str_radix(s: String, radix: u32) -> Result<i16, ParseIntError>`
 
 ##### `impl Display for i16`
 
@@ -2628,6 +2728,12 @@ Encodes this character as UTF-8, returning the bytes.
 ##### `pub fn min(a: u16, b: u16) -> u16`
 
 ##### `pub fn to_string(&self) -> String`
+
+##### `pub fn from_str(s: String) -> Result<u16, ParseIntError>`
+
+##### `pub fn from_str_hex(s: String) -> Result<u16, ParseIntError>`
+
+##### `pub fn from_str_radix(s: String, radix: u32) -> Result<u16, ParseIntError>`
 
 ##### `impl Display for u16`
 
@@ -2720,6 +2826,12 @@ Counts the trailing zeros in this integer.
 Counts the number of set bits (population count).
 
 ##### `pub fn to_string(&self) -> String`
+
+##### `pub fn from_str(s: String) -> Result<i32, ParseIntError>`
+
+##### `pub fn from_str_hex(s: String) -> Result<i32, ParseIntError>`
+
+##### `pub fn from_str_radix(s: String, radix: u32) -> Result<i32, ParseIntError>`
 
 ##### `impl Display for i32`
 
@@ -2816,6 +2928,12 @@ Counts the number of set bits (population count).
 ##### `pub fn min(a: u32, b: u32) -> u32`
 
 ##### `pub fn to_string(&self) -> String`
+
+##### `pub fn from_str(s: String) -> Result<u32, ParseIntError>`
+
+##### `pub fn from_str_hex(s: String) -> Result<u32, ParseIntError>`
+
+##### `pub fn from_str_radix(s: String, radix: u32) -> Result<u32, ParseIntError>`
 
 ##### `impl Display for u32`
 
@@ -2921,6 +3039,12 @@ Counts the number of set bits (population count).
 
 ##### `pub fn to_string(&self) -> String`
 
+##### `pub fn from_str(s: String) -> Result<i64, ParseIntError>`
+
+##### `pub fn from_str_hex(s: String) -> Result<i64, ParseIntError>`
+
+##### `pub fn from_str_radix(s: String, radix: u32) -> Result<i64, ParseIntError>`
+
 ##### `impl Display for i64`
 
 ###### `pub fn fmt(&self, f: &mut Formatter)`
@@ -3024,6 +3148,12 @@ Counts the number of set bits (population count).
 ##### `pub fn min(a: u64, b: u64) -> u64`
 
 ##### `pub fn to_string(&self) -> String`
+
+##### `pub fn from_str(s: String) -> Result<u64, ParseIntError>`
+
+##### `pub fn from_str_hex(s: String) -> Result<u64, ParseIntError>`
+
+##### `pub fn from_str_radix(s: String, radix: u32) -> Result<u64, ParseIntError>`
 
 ##### `impl Display for u64`
 
@@ -3273,7 +3403,7 @@ Floating-point remainder of x/y
 
 ##### `pub fn is_finite(&self) -> bool`
 
-##### `pub fn parse(s: String) -> Option<f32>`
+##### `pub fn from_str(s: String) -> Result<f32, ParseFloatError>`
 
 ##### `pub fn to_bits(&self) -> i32`
 
@@ -3499,7 +3629,7 @@ Floating-point remainder of x/y
 
 ##### `pub fn is_finite(&self) -> bool`
 
-##### `pub fn parse(s: String) -> Option<f64>`
+##### `pub fn from_str(s: String) -> Result<f64, ParseFloatError>`
 
 ##### `pub fn to_bits(&self) -> i64`
 

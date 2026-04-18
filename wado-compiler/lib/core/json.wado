@@ -888,8 +888,8 @@ impl JsonDeserializer {
         let has_exp = self.has_exp_or_dot(raw);
         if has_exp {
             // Parse via f64 for scientific notation (e.g. 1e2 → 100)
-            match f64::parse(*raw) {
-                Some(v) => {
+            match f64::from_str(*raw) {
+                Ok(v) => {
                     if v != f64::floor(v) {
                         return Result::Err(DeserializeError::unexpected_type(
                             "expected integer, got float",
@@ -904,7 +904,7 @@ impl JsonDeserializer {
                     }
                     return Result::Ok(v as i32);
                 },
-                None => return Result::Err(DeserializeError::invalid_value(
+                Err(_) => return Result::Err(DeserializeError::invalid_value(
                     "invalid number",
                     start,
                 )),
@@ -939,8 +939,8 @@ impl JsonDeserializer {
     pub fn parse_i64_from(&self, raw: &String, start: i64) -> Result<i64, DeserializeError> {
         let has_exp = self.has_exp_or_dot(raw);
         if has_exp {
-            match f64::parse(*raw) {
-                Some(v) => {
+            match f64::from_str(*raw) {
+                Ok(v) => {
                     if v != f64::floor(v) {
                         return Result::Err(DeserializeError::unexpected_type(
                             "expected integer, got float",
@@ -950,7 +950,7 @@ impl JsonDeserializer {
                     // f64 can represent integers exactly up to 2^53
                     return Result::Ok(v as i64);
                 },
-                None => return Result::Err(DeserializeError::invalid_value(
+                Err(_) => return Result::Err(DeserializeError::invalid_value(
                     "invalid number",
                     start,
                 )),
@@ -988,8 +988,8 @@ impl JsonDeserializer {
         }
         let has_exp = self.has_exp_or_dot(raw);
         if has_exp {
-            match f64::parse(*raw) {
-                Some(v) => {
+            match f64::from_str(*raw) {
+                Ok(v) => {
                     if v < 0.0 {
                         return Result::Err(DeserializeError::overflow(
                             "negative value for u64",
@@ -1004,7 +1004,7 @@ impl JsonDeserializer {
                     }
                     return Result::Ok(v as u64);
                 },
-                None => return Result::Err(
+                Err(_) => return Result::Err(
                     DeserializeError::invalid_value("invalid number", start),
                 ),
             }

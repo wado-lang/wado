@@ -1,6 +1,15 @@
 // 128-bit Integer Types
 // Implemented as structs wrapping two 64-bit values, using Wasm Wide Arithmetic instructions.
 
+use {
+    IntErrorKind,
+    ParseIntError,
+    parse_u128_digits,
+    parse_signed_prefix,
+    parse_unsigned_prefix,
+    assert_radix,
+} from "core:prelude/intparse.wado";
+
 /// Unsigned 128-bit integer
 /// Stored as two 64-bit parts: low (bits 0-63) and high (bits 64-127)
 pub struct u128 {
@@ -37,6 +46,31 @@ impl u128 {
             i += 1;
         }
         return result;
+    }
+
+    /// Parse a decimal `u128` from a string, returning an error on overflow,
+    /// empty input, or invalid characters.
+    pub fn from_str(s: String) -> Result<u128, ParseIntError> {
+        return u128::from_str_radix(s, 10);
+    }
+
+    /// Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
+    pub fn from_str_hex(s: String) -> Result<u128, ParseIntError> {
+        return u128::from_str_radix(s, 16);
+    }
+
+    /// Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
+    pub fn from_str_radix(s: String, radix: u32) -> Result<u128, ParseIntError> {
+        assert_radix(radix);
+        let prefix = parse_unsigned_prefix(s);
+        if let Err(k) = prefix {
+            return Result::Err(ParseIntError::new(k));
+        }
+        let start = prefix.unwrap();
+        return match parse_u128_digits(s, start, s.len(), radix) {
+            Ok(v) => Result::Ok(v),
+            Err(k) => Result::Err(ParseIntError::new(k)),
+        };
     }
 
     /// Creates a zero u128
@@ -617,6 +651,52 @@ impl i128 {
             return result.neg();
         }
         return result;
+    }
+
+    /// Parse a decimal `i128` from a string, returning an error on overflow,
+    /// empty input, or invalid characters.
+    pub fn from_str(s: String) -> Result<i128, ParseIntError> {
+        return i128::from_str_radix(s, 10);
+    }
+
+    /// Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`).
+    pub fn from_str_hex(s: String) -> Result<i128, ParseIntError> {
+        return i128::from_str_radix(s, 16);
+    }
+
+    /// Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
+    pub fn from_str_radix(s: String, radix: u32) -> Result<i128, ParseIntError> {
+        assert_radix(radix);
+        let [is_negative, start] = match parse_signed_prefix(s) {
+            Ok(p) => p,
+            Err(k) => return Result::Err(ParseIntError::new(k)),
+        };
+        // i128::MAX = (u64::MAX, i64::MAX as u64) in (low, high).
+        // |i128::MIN| = 2^127 = (0, 1 << 63).
+        let max_pos = u128::from_pair(u64::MAX, i64::MAX as u64);
+        let max_neg_abs = u128::from_pair(0, 9223372036854775808);
+        return match parse_u128_digits(s, start, s.len(), radix) {
+            Ok(v) => if is_negative {
+                if v > max_neg_abs {
+                    Result::Err(ParseIntError::new(IntErrorKind::NegOverflow))
+                } else {
+                    let pos = i128 { low: v.low(), high: v.high() as i64 };
+                    Result::Ok(pos.neg())
+                }
+            } else if v > max_pos {
+                Result::Err(ParseIntError::new(IntErrorKind::PosOverflow))
+            } else {
+                Result::Ok(i128 { low: v.low(), high: v.high() as i64 })
+            },
+            Err(k) => {
+                let kind = if is_negative && k == IntErrorKind::PosOverflow {
+                    IntErrorKind::NegOverflow
+                } else {
+                    k
+                };
+                Result::Err(ParseIntError::new(kind))
+            },
+        };
     }
 
     /// Creates a zero i128
