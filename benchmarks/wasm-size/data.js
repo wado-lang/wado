@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776493337066,
+  "lastUpdate": 1776496407294,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13961,6 +13961,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/391ba00517099032f4d5b2d7c3de9d19b5e1f1fa"
         },
         "date": 1776493336781,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618093,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0bd040a57c71ba337fd601caaba6176e438986ce",
+          "message": "Merge pull request #869 from wado-lang/claude/complete-wado-lsp-foundation-Q6cbW\n\nComplete wado-lsp foundation: dense AstIds + resolver-driven use-to-def",
+          "timestamp": "2026-04-18T16:09:58+09:00",
+          "tree_id": "188223aac1008a8a9bfb4afa4773826d2236a306",
+          "url": "https://github.com/wado-lang/wado/commit/0bd040a57c71ba337fd601caaba6176e438986ce"
+        },
+        "date": 1776496407056,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
