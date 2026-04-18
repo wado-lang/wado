@@ -735,6 +735,7 @@ pub struct Param {
 
 #[derive(Debug, Clone)]
 pub struct Block {
+    pub id: AstId,
     pub stmts: Vec<Stmt>,
     pub span: Span,
 }
@@ -1420,6 +1421,7 @@ pub struct ClosureExpr {
 
 #[derive(Debug, Clone)]
 pub struct ClosureParam {
+    pub id: AstId,
     pub name: String,
     /// Span of the closure parameter name identifier.
     pub name_span: Span,

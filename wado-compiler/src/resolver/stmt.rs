@@ -2231,6 +2231,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let mut body_stmts = vec![ref_let];
             body_stmts.extend(for_of.body.stmts.clone());
             let body = Block {
+                id: for_of.body.id,
                 stmts: body_stmts,
                 span: for_of.body.span,
             };
@@ -2249,6 +2250,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             },
             then_block,
             else_block: Some(Block {
+                id: for_of.body.id,
                 stmts: vec![Stmt::Break(BreakStmt {
                     label: None,
                     value: None,

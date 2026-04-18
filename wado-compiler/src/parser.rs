@@ -1182,6 +1182,7 @@ impl Parser {
     }
 
     fn parse_block(&mut self) -> ParseResult<Block> {
+        let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::LBrace)?;
 
@@ -1196,6 +1197,7 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBrace)?.span;
 
         Ok(Block {
+            id,
             stmts,
             span: start_span.merge(&end_span),
         })
@@ -1441,12 +1443,14 @@ impl Parser {
             self.advance();
             if self.check(&TokenKind::If) {
                 // `else if` - parse as nested if statement wrapped in a block
+                let block_id = self.alloc_ast_id();
                 let if_stmt = self.parse_if_stmt()?;
                 let span = match &if_stmt {
                     Stmt::If(s) => s.span,
                     _ => unreachable!("parse_if_stmt must return Stmt::If"),
                 };
                 Some(Block {
+                    id: block_id,
                     stmts: vec![if_stmt],
                     span,
                 })
@@ -3029,9 +3033,11 @@ impl Parser {
             self.advance();
             if self.check(&TokenKind::If) {
                 // `else if` - parse as nested if expression wrapped in a block
+                let block_id = self.alloc_ast_id();
                 let if_expr = self.parse_if_expr()?;
                 let span = if_expr.span();
                 Some(Block {
+                    id: block_id,
                     stmts: vec![Stmt::Expr(ExprStmt {
                         expr: if_expr,
                         span,
@@ -3127,7 +3133,9 @@ impl Parser {
                 value,
                 span: ret_span,
             });
+            let block_id = self.alloc_ast_id();
             Expr::Block(Box::new(Block {
+                id: block_id,
                 stmts: vec![ret_stmt],
                 span: ret_span,
             }))
@@ -3238,6 +3246,7 @@ impl Parser {
     }
 
     fn parse_closure_param(&mut self) -> ParseResult<ClosureParam> {
+        let id = self.alloc_ast_id();
         let is_mut = if self.check(&TokenKind::Mut) {
             self.advance();
             true
@@ -3252,6 +3261,7 @@ impl Parser {
             None
         };
         Ok(ClosureParam {
+            id,
             name,
             name_span,
             ty,

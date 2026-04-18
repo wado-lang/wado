@@ -6,7 +6,7 @@
 // - Assert (assert cond, msg) → LabeledBlock with intermediates, if, and panic
 
 use crate::ast::{
-    AssertStmt, AssignExpr, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
+    AssertStmt, AssignExpr, AstId, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ConditionElement, ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr,
     ForOfStmt, ForStmt, FormatSpec, Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock,
@@ -31,6 +31,22 @@ struct DesugarContext {
     for_loop_labels: Vec<(String, String)>,
     /// Namespace import names (e.g., "shapes" from `use shapes from "..."`)
     namespace_names: Vec<String>,
+    /// `AstId` of the AST node currently being desugared. Synthetic nodes produced
+    /// during desugaring inherit this id so that `Module::ast_id_count` remains
+    /// parser-allocated and AstIds stay dense in `0..ast_id_count`. The desugar
+    /// phase is slated for removal; after that, every AST node will be parser-owned.
+    current_parent_id: AstId,
+}
+
+impl DesugarContext {
+    /// Returns the `AstId` to use for a synthetic node created during desugaring.
+    ///
+    /// Synthetic nodes have no source origin, so they inherit the id of the AST
+    /// node currently being desugared. This preserves the parse-time density of
+    /// AstIds without requiring a separate id space for desugar-introduced nodes.
+    fn synth_id(&self) -> AstId {
+        self.current_parent_id
+    }
 }
 
 /// Desugar a module, transforming high-level constructs to simpler forms.
@@ -57,6 +73,7 @@ pub fn desugar_module(module: &Module) -> Module {
         loop_counter: 0,
         for_loop_labels: Vec::new(),
         namespace_names,
+        current_parent_id: AstId(0),
     };
     let items: Vec<Item> = module
         .items
@@ -255,6 +272,7 @@ fn desugar_effect(e: &EffectDecl) -> EffectDecl {
 
 fn desugar_block(block: &Block, ctx: &mut DesugarContext) -> Block {
     Block {
+        id: block.id,
         stmts: block.stmts.iter().map(|s| desugar_stmt(s, ctx)).collect(),
         span: block.span,
     }
@@ -507,6 +525,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
                     namespace_names: Vec::new(),
+                    current_parent_id: AstId(0),
                 };
                 Expr::Block(Box::new(desugar_block(b, &mut temp_ctx)))
             }
@@ -525,6 +544,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
                     namespace_names: Vec::new(),
+                    current_parent_id: AstId(0),
                 };
                 Expr::If(Box::new(IfExpr {
                     condition: desugar_condition(&i.condition),
@@ -599,6 +619,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                     loop_counter: 0,
                     for_loop_labels: Vec::new(),
                     namespace_names: Vec::new(),
+                    current_parent_id: AstId(0),
                 };
                 Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
                     label: lb.label.clone(),
@@ -801,6 +822,7 @@ fn desugar_while(w: &WhileStmt, ctx: &mut DesugarContext) -> Stmt {
             let if_break = Stmt::If(IfStmt {
                 condition: Condition::Expr(negated_cond),
                 then_block: Block {
+                    id: ctx.synth_id(),
                     stmts: vec![break_stmt],
                     span,
                 },
@@ -813,6 +835,7 @@ fn desugar_while(w: &WhileStmt, ctx: &mut DesugarContext) -> Stmt {
 
             Stmt::Loop(LoopStmt {
                 body: Block {
+                    id: ctx.synth_id(),
                     stmts: loop_stmts,
                     span,
                 },
@@ -831,6 +854,7 @@ fn desugar_while(w: &WhileStmt, ctx: &mut DesugarContext) -> Stmt {
                 condition: desugar_condition(&w.condition),
                 then_block: desugar_block(&w.body, ctx),
                 else_block: Some(Block {
+                    id: ctx.synth_id(),
                     stmts: vec![break_stmt],
                     span,
                 }),
@@ -839,6 +863,7 @@ fn desugar_while(w: &WhileStmt, ctx: &mut DesugarContext) -> Stmt {
 
             Stmt::Loop(LoopStmt {
                 body: Block {
+                    id: ctx.synth_id(),
                     stmts: vec![if_chain],
                     span,
                 },
@@ -925,6 +950,7 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
             let if_break = Stmt::If(IfStmt {
                 condition: Condition::Expr(negated_cond),
                 then_block: Block {
+                    id: ctx.synth_id(),
                     stmts: vec![break_outer],
                     span,
                 },
@@ -939,7 +965,11 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
                     span,
                 }));
             }
-            Block { stmts, span }
+            Block {
+                id: ctx.synth_id(),
+                stmts,
+                span,
+            }
         }
         Some(Condition::LetChain { .. }) => {
             // Let chain condition: if let ... { body; update; } else { break __for_N; }
@@ -960,10 +990,12 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
             let if_chain = Stmt::If(IfStmt {
                 condition: desugar_condition(f.condition.as_ref().unwrap()),
                 then_block: Block {
+                    id: ctx.synth_id(),
                     stmts: then_stmts,
                     span,
                 },
                 else_block: Some(Block {
+                    id: ctx.synth_id(),
                     stmts: vec![break_outer],
                     span,
                 }),
@@ -971,6 +1003,7 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
             });
 
             Block {
+                id: ctx.synth_id(),
                 stmts: vec![if_chain],
                 span,
             }
@@ -984,7 +1017,11 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
                     span,
                 }));
             }
-            Block { stmts, span }
+            Block {
+                id: ctx.synth_id(),
+                stmts,
+                span,
+            }
         }
     };
 
@@ -1003,6 +1040,7 @@ fn desugar_for(f: &ForStmt, ctx: &mut DesugarContext) -> Stmt {
     Stmt::LabeledBlock(LabeledBlockStmt {
         label: outer_label,
         block: Block {
+            id: ctx.synth_id(),
             stmts: outer_stmts,
             span,
         },
@@ -1191,6 +1229,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
             span,
         }))),
         then_block: Block {
+            id: ctx.synth_id(),
             stmts: vec![Stmt::Expr(ExprStmt {
                 expr: panic_call,
                 span,
@@ -1205,7 +1244,11 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
     // Wrap everything in a labeled block
     Stmt::LabeledBlock(LabeledBlockStmt {
         label: format!("__assert_{assert_id}"),
-        block: Block { stmts, span },
+        block: Block {
+            id: ctx.synth_id(),
+            stmts,
+            span,
+        },
         span,
     })
 }
