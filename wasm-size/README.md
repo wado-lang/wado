@@ -56,10 +56,10 @@ Reads gzip data from stdin and decompresses it.
 
 Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
-| Language | Size (bytes) | Notes                                          |
-| -------- | -----------: | ---------------------------------------------- |
-| wado     |      664,108 | Gale-generated highlighter from `SQLite.g4`    |
-| rust     |    3,481,212 | tree-sitter + tree-sitter-sequel               |
+| Language | Size (bytes) | Notes                                       |
+| -------- | -----------: | ------------------------------------------- |
+| wado     |      664,108 | Gale-generated highlighter from `SQLite.g4` |
+| rust     |    3,481,212 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage
 
