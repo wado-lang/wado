@@ -1,7 +1,14 @@
-use serde_json::{Value, json};
-use tokio::io::BufReader;
+use serde_json::Value;
+use tokio::io::{AsyncWrite, BufReader};
 
 use crate::lsp_adapter;
+use crate::lsp_rpc::{
+    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+    InitializeResult, JsonRpcRequest, PublishDiagnosticsParams, ReferenceParams, SemanticTokens,
+    SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, ServerCapabilities,
+    ServerInfo, TextDocumentPositionParams, TextDocumentSyncOptions, error_codes,
+    text_document_sync_kind,
+};
 
 /// Run the LSP server over stdio.
 pub async fn run() {
@@ -11,7 +18,7 @@ pub async fn run() {
     let mut shutdown_requested = false;
 
     loop {
-        let msg = match lsp_adapter::read_message(&mut reader).await {
+        let request = match lsp_adapter::read_message(&mut reader).await {
             Ok(Some(msg)) => msg,
             Ok(None) => break, // EOF
             Err(e) => {
@@ -20,233 +27,182 @@ pub async fn run() {
             }
         };
 
-        let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
-        let id = msg.get("id");
-        let params = msg.get("params").cloned().unwrap_or(Value::Null);
+        if let Err(e) = dispatch(&mut engine, &mut writer, &mut shutdown_requested, request).await {
+            eprintln!("wado-lsp: {e}");
+            break;
+        }
+    }
+}
 
-        match method {
-            "initialize" => {
-                if let Some(id) = id {
-                    let result = json!({
-                        "capabilities": {
-                            "textDocumentSync": {
-                                "openClose": true,
-                                "change": 1, // Full sync
-                            },
-                            "definitionProvider": true,
-                            "hoverProvider": true,
-                            "semanticTokensProvider": {
-                                "legend": {
-                                    "tokenTypes": wado_lsp::semantic_tokens::TOKEN_TYPES,
-                                    "tokenModifiers": wado_lsp::semantic_tokens::TOKEN_MODIFIERS,
-                                },
-                                "full": true,
-                            },
-                        },
-                        "serverInfo": {
-                            "name": "wado-lsp",
-                            "version": env!("CARGO_PKG_VERSION"),
-                        },
-                    });
-                    if let Err(e) = lsp_adapter::send_response(&mut writer, id, result).await {
-                        eprintln!("wado-lsp: {e}");
-                        break;
-                    }
-                }
-            }
-            "initialized" => {} // no-op
-            "shutdown" => {
-                shutdown_requested = true;
-                if let Some(id) = id
-                    && let Err(e) = lsp_adapter::send_response(&mut writer, id, Value::Null).await
-                {
-                    eprintln!("wado-lsp: {e}");
-                    break;
-                }
-            }
-            "exit" => {
-                std::process::exit(i32::from(!shutdown_requested));
-            }
-            "textDocument/didOpen" => {
-                if let (Some(uri), Some(text)) = (
-                    params
-                        .get("textDocument")
-                        .and_then(|td| td.get("uri"))
-                        .and_then(Value::as_str),
-                    params
-                        .get("textDocument")
-                        .and_then(|td| td.get("text"))
-                        .and_then(Value::as_str),
-                ) {
-                    engine.open_document(uri, text.to_string());
-                    if let Err(e) =
-                        lsp_adapter::publish_diagnostics(&engine, uri, &mut writer).await
-                    {
-                        eprintln!("wado-lsp: {e}");
-                    }
-                }
-            }
-            "textDocument/didChange" => {
-                if let Some(uri) = params
-                    .get("textDocument")
-                    .and_then(|td| td.get("uri"))
-                    .and_then(Value::as_str)
-                {
-                    // Full sync: take the last content change
-                    if let Some(text) = params
-                        .get("contentChanges")
-                        .and_then(Value::as_array)
-                        .and_then(|changes| changes.last())
-                        .and_then(|change| change.get("text"))
-                        .and_then(Value::as_str)
-                    {
-                        engine.update_document(uri, text.to_string());
-                        if let Err(e) =
-                            lsp_adapter::publish_diagnostics(&engine, uri, &mut writer).await
-                        {
-                            eprintln!("wado-lsp: {e}");
-                        }
-                    }
-                }
-            }
-            "textDocument/definition" => {
-                if let Some(id) = id {
-                    let uri = params
-                        .get("textDocument")
-                        .and_then(|td| td.get("uri"))
-                        .and_then(Value::as_str)
-                        .unwrap_or("");
-                    let line = params
-                        .get("position")
-                        .and_then(|p| p.get("line"))
-                        .and_then(Value::as_u64)
-                        .unwrap_or(0) as u32;
-                    let character = params
-                        .get("position")
-                        .and_then(|p| p.get("character"))
-                        .and_then(Value::as_u64)
-                        .unwrap_or(0) as u32;
-                    let position = wado_lsp::Position { line, character };
-                    let host = lsp_adapter::host_for_uri(uri);
-                    let result = match engine.definition(uri, position, &host).await {
-                        Some(def) => json!({
-                            "uri": def.uri,
-                            "range": {
-                                "start": {
-                                    "line": def.range.start.line,
-                                    "character": def.range.start.character,
-                                },
-                                "end": {
-                                    "line": def.range.end.line,
-                                    "character": def.range.end.character,
-                                },
-                            },
+async fn dispatch<W: AsyncWrite + Unpin>(
+    engine: &mut wado_lsp::Engine,
+    writer: &mut W,
+    shutdown_requested: &mut bool,
+    request: JsonRpcRequest,
+) -> Result<(), String> {
+    let method = request.method.as_str();
+    let id = request.id.as_ref();
+    let params = request.params;
+
+    match method {
+        "initialize" => {
+            if let Some(id) = id {
+                let result = InitializeResult {
+                    capabilities: ServerCapabilities {
+                        text_document_sync: Some(TextDocumentSyncOptions {
+                            open_close: true,
+                            change: text_document_sync_kind::FULL,
                         }),
-                        None => Value::Null,
-                    };
-                    if let Err(e) = lsp_adapter::send_response(&mut writer, id, result).await {
-                        eprintln!("wado-lsp: {e}");
-                        break;
-                    }
-                }
-            }
-            "textDocument/hover" => {
-                if let Some(id) = id {
-                    let uri = params
-                        .get("textDocument")
-                        .and_then(|td| td.get("uri"))
-                        .and_then(Value::as_str)
-                        .unwrap_or("");
-                    let line = params
-                        .get("position")
-                        .and_then(|p| p.get("line"))
-                        .and_then(Value::as_u64)
-                        .unwrap_or(0) as u32;
-                    let character = params
-                        .get("position")
-                        .and_then(|p| p.get("character"))
-                        .and_then(Value::as_u64)
-                        .unwrap_or(0) as u32;
-                    let position = wado_lsp::Position { line, character };
-                    let host = lsp_adapter::host_for_uri(uri);
-                    let result = match engine.hover(uri, position, &host).await {
-                        Some(hover) => json!({
-                            "contents": {
-                                "kind": "markdown",
-                                "value": hover.contents,
+                        definition_provider: Some(true),
+                        hover_provider: Some(true),
+                        references_provider: Some(true),
+                        document_highlight_provider: Some(true),
+                        semantic_tokens_provider: Some(SemanticTokensOptions {
+                            legend: SemanticTokensLegend {
+                                token_types: wado_lsp::semantic_tokens::TOKEN_TYPES,
+                                token_modifiers: wado_lsp::semantic_tokens::TOKEN_MODIFIERS,
                             },
-                            "range": {
-                                "start": {
-                                    "line": hover.range.start.line,
-                                    "character": hover.range.start.character,
-                                },
-                                "end": {
-                                    "line": hover.range.end.line,
-                                    "character": hover.range.end.character,
-                                },
-                            },
+                            full: true,
                         }),
-                        None => Value::Null,
-                    };
-                    if let Err(e) = lsp_adapter::send_response(&mut writer, id, result).await {
-                        eprintln!("wado-lsp: {e}");
-                        break;
-                    }
-                }
+                    },
+                    server_info: Some(ServerInfo {
+                        name: "wado-lsp",
+                        version: Some(env!("CARGO_PKG_VERSION")),
+                    }),
+                };
+                lsp_adapter::send_response(writer, id, result).await?;
             }
-            "textDocument/semanticTokens/full" => {
-                if let Some(id) = id {
-                    let uri = params
-                        .get("textDocument")
-                        .and_then(|td| td.get("uri"))
-                        .and_then(Value::as_str)
-                        .unwrap_or("");
-                    let data = engine.semantic_tokens(uri);
-                    let result = json!({ "data": data });
-                    if let Err(e) = lsp_adapter::send_response(&mut writer, id, result).await {
-                        eprintln!("wado-lsp: {e}");
-                        break;
-                    }
-                }
+        }
+        "initialized" => {} // no-op
+        "shutdown" => {
+            *shutdown_requested = true;
+            if let Some(id) = id {
+                lsp_adapter::send_response(writer, id, Value::Null).await?;
             }
-            "textDocument/didClose" => {
-                if let Some(uri) = params
-                    .get("textDocument")
-                    .and_then(|td| td.get("uri"))
-                    .and_then(Value::as_str)
-                {
-                    engine.close_document(uri);
-                    // Clear diagnostics for closed document
-                    if let Err(e) = lsp_adapter::send_notification(
-                        &mut writer,
-                        "textDocument/publishDiagnostics",
-                        json!({
-                            "uri": uri,
-                            "diagnostics": [],
-                        }),
+        }
+        "exit" => {
+            std::process::exit(i32::from(!*shutdown_requested));
+        }
+        "textDocument/didOpen" => {
+            let Ok(p) = serde_json::from_value::<DidOpenTextDocumentParams>(params) else {
+                return Ok(());
+            };
+            let uri = &p.text_document.uri;
+            engine.open_document(uri, p.text_document.text);
+            lsp_adapter::publish_diagnostics(engine, uri, writer).await?;
+        }
+        "textDocument/didChange" => {
+            let Ok(p) = serde_json::from_value::<DidChangeTextDocumentParams>(params) else {
+                return Ok(());
+            };
+            let uri = &p.text_document.uri;
+            if let Some(change) = p.content_changes.into_iter().last() {
+                engine.update_document(uri, change.text);
+                lsp_adapter::publish_diagnostics(engine, uri, writer).await?;
+            }
+        }
+        "textDocument/definition" => {
+            if let Some(id) = id {
+                let Some(p) = lsp_adapter::decode_or_error::<TextDocumentPositionParams, _>(
+                    writer, id, params,
+                )
+                .await?
+                else {
+                    return Ok(());
+                };
+                let host = lsp_adapter::host_for_uri(&p.text_document.uri);
+                let result = engine
+                    .definition(&p.text_document.uri, p.position, &host)
+                    .await;
+                lsp_adapter::send_response(writer, id, result).await?;
+            }
+        }
+        "textDocument/hover" => {
+            if let Some(id) = id {
+                let Some(p) = lsp_adapter::decode_or_error::<TextDocumentPositionParams, _>(
+                    writer, id, params,
+                )
+                .await?
+                else {
+                    return Ok(());
+                };
+                let host = lsp_adapter::host_for_uri(&p.text_document.uri);
+                let result = engine.hover(&p.text_document.uri, p.position, &host).await;
+                lsp_adapter::send_response(writer, id, result).await?;
+            }
+        }
+        "textDocument/references" => {
+            if let Some(id) = id {
+                let Some(p) =
+                    lsp_adapter::decode_or_error::<ReferenceParams, _>(writer, id, params).await?
+                else {
+                    return Ok(());
+                };
+                let host = lsp_adapter::host_for_uri(&p.text_document.uri);
+                let refs = engine
+                    .references(
+                        &p.text_document.uri,
+                        p.position,
+                        p.context.include_declaration,
+                        &host,
                     )
-                    .await
-                    {
-                        eprintln!("wado-lsp: {e}");
-                    }
-                }
+                    .await;
+                lsp_adapter::send_response(writer, id, refs).await?;
             }
-            _ => {
-                // Unknown method — send MethodNotFound error for requests (with id)
-                if let Some(id) = id
-                    && let Err(e) = lsp_adapter::send_error(
-                        &mut writer,
-                        id,
-                        -32601,
-                        format!("method not found: {method}"),
-                    )
-                    .await
-                {
-                    eprintln!("wado-lsp: {e}");
-                    break;
-                }
-                // Notifications for unknown methods are silently ignored
+        }
+        "textDocument/documentHighlight" => {
+            if let Some(id) = id {
+                let Some(p) = lsp_adapter::decode_or_error::<TextDocumentPositionParams, _>(
+                    writer, id, params,
+                )
+                .await?
+                else {
+                    return Ok(());
+                };
+                let host = lsp_adapter::host_for_uri(&p.text_document.uri);
+                let highlights = engine
+                    .document_highlight(&p.text_document.uri, p.position, &host)
+                    .await;
+                lsp_adapter::send_response(writer, id, highlights).await?;
+            }
+        }
+        "textDocument/semanticTokens/full" => {
+            if let Some(id) = id {
+                let Some(p) =
+                    lsp_adapter::decode_or_error::<SemanticTokensParams, _>(writer, id, params)
+                        .await?
+                else {
+                    return Ok(());
+                };
+                let data = engine.semantic_tokens(&p.text_document.uri);
+                let result = SemanticTokens { data };
+                lsp_adapter::send_response(writer, id, result).await?;
+            }
+        }
+        "textDocument/didClose" => {
+            let Ok(p) = serde_json::from_value::<DidCloseTextDocumentParams>(params) else {
+                return Ok(());
+            };
+            let uri = &p.text_document.uri;
+            engine.close_document(uri);
+            let params = PublishDiagnosticsParams {
+                uri: uri.clone(),
+                diagnostics: Vec::new(),
+            };
+            lsp_adapter::send_notification(writer, "textDocument/publishDiagnostics", params)
+                .await?;
+        }
+        _ => {
+            if let Some(id) = id {
+                lsp_adapter::send_error(
+                    writer,
+                    id,
+                    error_codes::METHOD_NOT_FOUND,
+                    format!("method not found: {method}"),
+                )
+                .await?;
             }
         }
     }
+    Ok(())
 }

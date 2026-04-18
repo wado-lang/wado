@@ -93,6 +93,30 @@ impl Annotated {
         self.references.get(key).cloned()
     }
 
+    /// Iterate every recorded use-site `(use_key, def_key)` edge.
+    ///
+    /// Each `use_key` is typically an [`IdentExpr`] id; `def_key` is the
+    /// binding's defining [`SymbolKey`]. Use sites of locals, parameters,
+    /// item-level definitions (functions, types, globals) and imported items
+    /// are all recorded here.
+    pub fn iter_references(&self) -> impl Iterator<Item = (&SymbolKey, &SymbolKey)> {
+        self.references.iter()
+    }
+
+    /// Find every use-site `SymbolKey` whose definition is `def_key`.
+    ///
+    /// Walks [`Self::iter_references`] and collects matches. The returned keys
+    /// can be passed to [`Self::span_of_key`] for source ranges. The defining
+    /// occurrence itself is **not** included — callers that want it should add
+    /// it via [`Self::name_span_of`] / [`Self::span_of_key`].
+    #[must_use]
+    pub fn references_to(&self, def_key: &SymbolKey) -> Vec<SymbolKey> {
+        self.iter_references()
+            .filter(|&(_use_key, target)| target == def_key)
+            .map(|(use_key, _target)| use_key.clone())
+            .collect()
+    }
+
     /// Resolved type for the declaring symbol at `key`, if `key` refers to a
     /// type-declaring AST node (struct, enum, variant, flags, newtype,
     /// resource).

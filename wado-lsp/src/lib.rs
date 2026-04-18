@@ -1,6 +1,9 @@
 mod definition;
 mod diagnostics;
+mod document_highlight;
 mod hover;
+mod location;
+mod references;
 pub mod semantic_tokens;
 
 use indexmap::IndexMap;
@@ -8,7 +11,9 @@ use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic as CompilerDiagnos
 
 pub use definition::DefinitionResult;
 pub use diagnostics::{Diagnostic, Position, Range, Severity};
-pub use hover::HoverResult;
+pub use document_highlight::{DocumentHighlight, HighlightKind};
+pub use hover::{HoverResult, MarkupContent, MarkupKind};
+pub use references::ReferenceLocation;
 
 /// Protocol-agnostic language service engine.
 ///
@@ -72,6 +77,39 @@ impl Engine {
     ) -> Option<HoverResult> {
         let source = self.documents.get(uri)?;
         hover::find_hover(source, position, uri, host).await
+    }
+
+    /// Find every reference to the symbol named at the given position.
+    ///
+    /// When `include_declaration` is true, the defining occurrence is included
+    /// in the result. Returns an empty vector when the cursor is not on a
+    /// known symbol or when the document is not open.
+    pub async fn references<H: CompilerHost>(
+        &self,
+        uri: &str,
+        position: Position,
+        include_declaration: bool,
+        host: &H,
+    ) -> Vec<ReferenceLocation> {
+        let Some(source) = self.documents.get(uri) else {
+            return Vec::new();
+        };
+        references::find_references(source, position, uri, include_declaration, host).await
+    }
+
+    /// Find every occurrence of the symbol named at the given position
+    /// **inside the requested document**. References from other files are
+    /// filtered out — see [`Engine::references`] for the cross-file lookup.
+    pub async fn document_highlight<H: CompilerHost>(
+        &self,
+        uri: &str,
+        position: Position,
+        host: &H,
+    ) -> Vec<DocumentHighlight> {
+        let Some(source) = self.documents.get(uri) else {
+            return Vec::new();
+        };
+        document_highlight::document_highlight(source, position, uri, host).await
     }
 
     /// Compute semantic tokens for the given document.

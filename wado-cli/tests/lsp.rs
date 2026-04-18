@@ -464,6 +464,100 @@ fn lsp_hover_function_signature() {
 }
 
 #[test]
+fn lsp_references_includes_call_sites() {
+    let mut session = LspSession::start();
+
+    session.send_request("initialize", json!({ "capabilities": {} }));
+    let _init_resp = session.read_message();
+    session.send_notification("initialized", json!({}));
+
+    let source = "fn helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {\n    let _ = helper();\n    let _ = helper();\n}\n";
+    session.send_notification(
+        "textDocument/didOpen",
+        json!({
+            "textDocument": {
+                "uri": "file:///tmp/lsp_refs.wado",
+                "languageId": "wado",
+                "version": 1,
+                "text": source,
+            }
+        }),
+    );
+    let _diag = session.read_message();
+
+    let id = session.send_request(
+        "textDocument/references",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_refs.wado" },
+            "position": { "line": 0, "character": 4 },
+            "context": { "includeDeclaration": true }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+
+    let arr = resp["result"].as_array().unwrap();
+    assert_eq!(arr.len(), 3, "decl + 2 calls, got: {arr:?}");
+    for r in arr {
+        assert_eq!(r["uri"], "file:///tmp/lsp_refs.wado");
+    }
+    // Declaration at line 0, character 3..9 (helper)
+    assert_eq!(arr[0]["range"]["start"]["line"], 0);
+    assert_eq!(arr[0]["range"]["start"]["character"], 3);
+    // Call sites at lines 5 and 6
+    assert_eq!(arr[1]["range"]["start"]["line"], 5);
+    assert_eq!(arr[2]["range"]["start"]["line"], 6);
+
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_document_highlight_classifies_read_write() {
+    let mut session = LspSession::start();
+
+    session.send_request("initialize", json!({ "capabilities": {} }));
+    let _init_resp = session.read_message();
+    session.send_notification("initialized", json!({}));
+
+    let source = "fn f() -> i32 {\n    let mut x = 0;\n    x = 1;\n    return x;\n}\n";
+    session.send_notification(
+        "textDocument/didOpen",
+        json!({
+            "textDocument": {
+                "uri": "file:///tmp/lsp_highlight.wado",
+                "languageId": "wado",
+                "version": 1,
+                "text": source,
+            }
+        }),
+    );
+    let _diag = session.read_message();
+
+    let id = session.send_request(
+        "textDocument/documentHighlight",
+        json!({
+            "textDocument": { "uri": "file:///tmp/lsp_highlight.wado" },
+            "position": { "line": 1, "character": 12 }
+        }),
+    );
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+
+    let arr = resp["result"].as_array().unwrap();
+    assert_eq!(arr.len(), 3, "decl + write + read, got: {arr:?}");
+    // Declaration: write
+    assert_eq!(arr[0]["kind"], 3);
+    // x = 1: write
+    assert_eq!(arr[1]["range"]["start"]["line"], 2);
+    assert_eq!(arr[1]["kind"], 3);
+    // return x: read
+    assert_eq!(arr[2]["range"]["start"]["line"], 3);
+    assert_eq!(arr[2]["kind"], 2);
+
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
 fn lsp_unknown_method_returns_error() {
     let mut session = LspSession::start();
 
@@ -481,6 +575,23 @@ fn lsp_unknown_method_returns_error() {
     let resp = session.read_message();
     assert_eq!(resp["id"], id);
     assert_eq!(resp["error"]["code"], -32601); // MethodNotFound
+
+    assert_eq!(session.shutdown_and_exit(), 0);
+}
+
+#[test]
+fn lsp_invalid_params_returns_error() {
+    let mut session = LspSession::start();
+
+    session.send_request("initialize", json!({ "capabilities": {} }));
+    let _init_resp = session.read_message();
+
+    // Send a well-formed request with malformed params (missing required fields).
+    let id = session.send_request("textDocument/hover", json!({ "bogus": true }));
+
+    let resp = session.read_message();
+    assert_eq!(resp["id"], id);
+    assert_eq!(resp["error"]["code"], -32602); // InvalidParams
 
     assert_eq!(session.shutdown_and_exit(), 0);
 }
@@ -658,5 +769,186 @@ fn query_help() {
         .assert()
         .success()
         .stderr(predicate::str::contains("diagnostics"))
-        .stderr(predicate::str::contains("--json"));
+        .stderr(predicate::str::contains("references"))
+        .stderr(predicate::str::contains("document-highlight"))
+        .stderr(predicate::str::contains("--json"))
+        .stderr(predicate::str::contains("--line"))
+        .stderr(predicate::str::contains("--column"))
+        .stderr(predicate::str::contains("--include-declaration"));
+}
+
+#[test]
+fn query_references_text_output() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "fn helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {\n    let _ = helper();\n    let _ = helper();\n}\n",
+    )
+    .unwrap();
+
+    let path_str = tmp.path().to_str().unwrap();
+    let output = wado()
+        .args([
+            "query",
+            "references",
+            "--line",
+            "1",
+            "--column",
+            "4",
+            path_str,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8(output).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "expected 2 call sites, got: {text}");
+    assert!(lines[0].ends_with(":6:13"), "got: {}", lines[0]);
+    assert!(lines[1].ends_with(":7:13"), "got: {}", lines[1]);
+}
+
+#[test]
+fn query_references_include_declaration() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "fn helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {\n    let _ = helper();\n}\n",
+    )
+    .unwrap();
+
+    let output = wado()
+        .args([
+            "query",
+            "references",
+            "--include-declaration",
+            "--line",
+            "1",
+            "--column",
+            "4",
+            tmp.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8(output).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "expected decl + 1 call, got: {text}");
+    assert!(lines[0].ends_with(":1:4"), "decl, got: {}", lines[0]);
+    assert!(lines[1].ends_with(":6:13"), "call, got: {}", lines[1]);
+}
+
+#[test]
+fn query_references_json_output() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "fn helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {\n    let _ = helper();\n}\n",
+    )
+    .unwrap();
+
+    let output = wado()
+        .args([
+            "query",
+            "references",
+            "--json",
+            "--line",
+            "1",
+            "--column",
+            "4",
+            tmp.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let parsed: Vec<Value> = serde_json::from_slice(&output).unwrap();
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0]["range"]["start"]["line"], 5);
+    assert_eq!(parsed[0]["range"]["start"]["character"], 12);
+    assert!(parsed[0]["uri"].as_str().unwrap().starts_with("file://"));
+}
+
+#[test]
+fn query_document_highlight_text_output() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "fn f() -> i32 {\n    let mut x = 0;\n    x = 1;\n    return x;\n}\n",
+    )
+    .unwrap();
+
+    let output = wado()
+        .args([
+            "query",
+            "document-highlight",
+            "--line",
+            "2",
+            "--column",
+            "13",
+            tmp.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8(output).unwrap();
+    assert!(text.contains(":2:13: write"), "decl write, got: {text}");
+    assert!(text.contains(":3:5: write"), "x = 1, got: {text}");
+    assert!(text.contains(":4:12: read"), "return x, got: {text}");
+}
+
+#[test]
+fn query_document_highlight_json_output() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "fn f() -> i32 {\n    let x = 1;\n    return x;\n}\n",
+    )
+    .unwrap();
+
+    let output = wado()
+        .args([
+            "query",
+            "document-highlight",
+            "--json",
+            "--line",
+            "2",
+            "--column",
+            "9",
+            tmp.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let parsed: Vec<Value> = serde_json::from_slice(&output).unwrap();
+    assert_eq!(parsed.len(), 2);
+    assert_eq!(parsed[0]["kind"], "write");
+    assert_eq!(parsed[1]["kind"], "read");
+}
+
+#[test]
+fn query_references_requires_line_and_column() {
+    wado()
+        .args(["query", "references", "example/hello.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--line is required"));
+}
+
+#[test]
+fn query_unknown_kind_lists_new_kinds() {
+    wado()
+        .args(["query", "hover"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("references"))
+        .stderr(predicate::str::contains("document-highlight"));
 }

@@ -7,19 +7,34 @@
 //! symbol. Locals render as `let`/param signatures (computed from the
 //! defining AST node); items delegate to `wado_compiler::unparse`.
 
+use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
 use wado_compiler::ast::{self, AstId, Expr, Item, Module, Stmt};
 use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
-use wado_compiler::token::Span;
 use wado_compiler::unparse;
 
 use crate::diagnostics::{Position, Range};
+use crate::location::{span_to_range, uri_to_filename};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HoverResult {
-    pub contents: String,
-    pub range: Range,
+    pub contents: MarkupContent,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range: Option<Range>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MarkupContent {
+    pub kind: MarkupKind,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MarkupKind {
+    Plaintext,
+    Markdown,
 }
 
 pub async fn find_hover<H: CompilerHost>(
@@ -49,22 +64,12 @@ pub async fn find_hover<H: CompilerHost>(
 
     let cursor_span = annotated.span_of_key(&cursor_key)?;
     Some(HoverResult {
-        contents: format!("```wado\n{signature}\n```"),
-        range: span_to_range(&cursor_span),
+        contents: MarkupContent {
+            kind: MarkupKind::Markdown,
+            value: format!("```wado\n{signature}\n```"),
+        },
+        range: Some(span_to_range(&cursor_span)),
     })
-}
-
-fn span_to_range(span: &Span) -> Range {
-    Range {
-        start: Position {
-            line: span.line.saturating_sub(1) as u32,
-            character: span.column.saturating_sub(1) as u32,
-        },
-        end: Position {
-            line: span.end_line.saturating_sub(1) as u32,
-            character: span.end_column.saturating_sub(1) as u32,
-        },
-    }
 }
 
 /// Render a signature for the given item-level symbol.
@@ -368,14 +373,6 @@ fn item_info(item: &Item, name: &str) -> Option<String> {
     }
 }
 
-fn uri_to_filename(uri: &str) -> String {
-    if let Some(path) = uri.strip_prefix("file://") {
-        path.to_string()
-    } else {
-        uri.to_string()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,14 +415,14 @@ mod tests {
     async fn local_var_hover() {
         let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
         let result = hover_at(source, 2, 11).await.expect("hover on x");
-        assert_eq!(result.contents, "```wado\nlet x: i32\n```");
+        assert_eq!(result.contents.value, "```wado\nlet x: i32\n```");
     }
 
     #[tokio::test]
     async fn param_hover() {
         let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
         let result = hover_at(source, 1, 11).await.expect("hover on a");
-        assert_eq!(result.contents, "```wado\na: i32\n```");
+        assert_eq!(result.contents.value, "```wado\na: i32\n```");
     }
 
     #[tokio::test]
@@ -433,9 +430,12 @@ mod tests {
         let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\nfn run() -> i32 {\n    return add(1, 2);\n}\n";
         let result = hover_at(source, 4, 12).await.expect("hover on add call");
         assert!(
-            result.contents.contains("fn add(a: i32, b: i32) -> i32"),
+            result
+                .contents
+                .value
+                .contains("fn add(a: i32, b: i32) -> i32"),
             "got: {}",
-            result.contents
+            result.contents.value
         );
     }
 
@@ -443,7 +443,7 @@ mod tests {
     async fn let_mut_hover() {
         let source = "fn f() -> i32 {\n    let mut x: i32 = 1;\n    return x;\n}\n";
         let result = hover_at(source, 2, 11).await.expect("hover on x");
-        assert_eq!(result.contents, "```wado\nlet mut x: i32\n```");
+        assert_eq!(result.contents.value, "```wado\nlet mut x: i32\n```");
     }
 
     #[tokio::test]
@@ -456,7 +456,7 @@ mod tests {
             "}\n",
         );
         let result = hover_at(source, 3, 11).await.expect("hover on x");
-        assert_eq!(result.contents, "```wado\nlet x\n```");
+        assert_eq!(result.contents.value, "```wado\nlet x\n```");
     }
 
     #[tokio::test]
@@ -468,7 +468,7 @@ mod tests {
             "}\n",
         );
         let result = hover_at(source, 1, 21).await.expect("hover on x");
-        assert_eq!(result.contents, "```wado\n|x: i32|\n```");
+        assert_eq!(result.contents.value, "```wado\n|x: i32|\n```");
     }
 
     #[tokio::test]
@@ -482,7 +482,7 @@ mod tests {
             "}\n",
         );
         let result = hover_at(source, 2, 15).await.expect("hover on v");
-        assert_eq!(result.contents, "```wado\nlet v\n```");
+        assert_eq!(result.contents.value, "```wado\nlet v\n```");
     }
 
     #[tokio::test]
@@ -496,6 +496,6 @@ mod tests {
             "}\n",
         );
         let result = hover_at(source, 2, 19).await.expect("hover on v");
-        assert_eq!(result.contents, "```wado\nlet v\n```");
+        assert_eq!(result.contents.value, "```wado\nlet v\n```");
     }
 }

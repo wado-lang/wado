@@ -8,16 +8,16 @@
 //! 4. Otherwise the cursor AST id itself points at a declared symbol.
 //! 5. Translate the resulting [`SymbolKey`] into a [`DefinitionResult`].
 
+use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
-use wado_compiler::annotate::{Annotated, annotate};
+use wado_compiler::annotate::annotate;
 use wado_compiler::ast::{self, AstId, Item, Module};
-use wado_compiler::name::ModuleSource;
-use wado_compiler::symbol::{Symbol, SymbolKey};
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
+use crate::location::{resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefinitionResult {
     pub uri: String,
     pub range: Range,
@@ -54,30 +54,6 @@ pub async fn find_definition<H: CompilerHost>(
     })
 }
 
-/// Resolve the defining [`SymbolKey`] for the identifier at the cursor.
-///
-/// Tries in order:
-/// 1. `ast_id_at` → `referenced_symbol` (use-site → definition: local, param,
-///    imported item, etc.)
-/// 2. `ast_id_at` → key points directly to a declared symbol (cursor on the
-///    defining occurrence itself).
-fn resolve_def_key(
-    annotated: &Annotated,
-    module: &ModuleSource,
-    line: usize,
-    col: usize,
-) -> Option<SymbolKey> {
-    let ast_id = annotated.ast_id_at(module, line, col)?;
-    let cursor_key = SymbolKey::new(module.clone(), ast_id);
-    if let Some(def) = annotated.referenced_symbol(&cursor_key) {
-        return Some(def);
-    }
-    if annotated.symbol_at(&cursor_key).is_some() {
-        return Some(cursor_key);
-    }
-    None
-}
-
 /// Best-effort span for an arbitrary [`AstId`] — walks module items looking for
 /// a matching id. Used only when `name_span_of` has no name-span and the
 /// symbol has no declared span (rare).
@@ -101,67 +77,6 @@ fn item_span_if_match(item: &Item, target: AstId) -> Option<Span> {
         Item::Newtype(n) if n.id == target => Some(n.span),
         Item::Global(g) if g.id == target => Some(g.span),
         _ => None,
-    }
-}
-
-/// Derive the URI for a symbol's defining module.
-fn symbol_uri(annotated: &Annotated, symbol: &Symbol, request_uri: &str) -> Option<String> {
-    let module = &symbol.defined_at.module;
-    if module == &annotated.entry_module_source {
-        return Some(request_uri.to_string());
-    }
-    match module {
-        ModuleSource::EntryPoint { filename } => Some(filename_to_uri(filename)),
-        ModuleSource::Local { path } => Some(resolve_local_uri(path, request_uri)),
-        _ => None,
-    }
-}
-
-fn uri_to_filename(uri: &str) -> String {
-    if let Some(path) = uri.strip_prefix("file://") {
-        path.to_string()
-    } else {
-        uri.to_string()
-    }
-}
-
-fn filename_to_uri(filename: &str) -> String {
-    if filename.starts_with("file://") {
-        filename.to_string()
-    } else if filename.starts_with('/') {
-        format!("file://{filename}")
-    } else {
-        filename.to_string()
-    }
-}
-
-fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
-    if module_path.starts_with('/') || module_path.starts_with("file://") {
-        return filename_to_uri(module_path);
-    }
-    let request_path = uri_to_filename(request_uri);
-    let base_dir = request_path
-        .rsplit_once('/')
-        .map(|(dir, _)| dir)
-        .unwrap_or("");
-    let normalized = module_path.strip_prefix("./").unwrap_or(module_path);
-    if base_dir.is_empty() {
-        filename_to_uri(normalized)
-    } else {
-        filename_to_uri(&format!("{base_dir}/{normalized}"))
-    }
-}
-
-fn span_to_range(span: &Span) -> Range {
-    Range {
-        start: Position {
-            line: span.line.saturating_sub(1) as u32,
-            character: span.column.saturating_sub(1) as u32,
-        },
-        end: Position {
-            line: span.end_line.saturating_sub(1) as u32,
-            character: span.end_column.saturating_sub(1) as u32,
-        },
     }
 }
 
