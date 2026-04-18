@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776472046392,
+  "lastUpdate": 1776474304492,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -13829,6 +13829,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/166b37057ed76dd1518051b49df794c5e39aaf5b"
         },
         "date": 1776472046108,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 664108,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bbc2ae972fd5200ae19f1cfc370c602f6e2f0ead",
+          "message": "Merge pull request #866 from wado-lang/claude/add-example-programs-4wNnl\n\nAdd tree(1) clone example",
+          "timestamp": "2026-04-18T10:01:31+09:00",
+          "tree_id": "2823ba78a3286991c4fc3570641ad8cdf1c0bbdc",
+          "url": "https://github.com/wado-lang/wado/commit/bbc2ae972fd5200ae19f1cfc370c602f6e2f0ead"
+        },
+        "date": 1776474304281,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
