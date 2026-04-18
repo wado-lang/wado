@@ -21,7 +21,32 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         return;
     }
 
+    if arguments.len() >= 2 && arguments[0] == "dump" {
+        let mut paths: Array<String> = [];
+        let mut rule_filter: Option<String> = null;
+        let mut i = 1;
+        while i < arguments.len() {
+            let arg = arguments[i];
+            if arg == "--ir" {
+                // Default mode; accepted as a no-op for explicitness.
+            } else if arg == "--rule" {
+                i += 1;
+                if i >= arguments.len() {
+                    eprintln("gale dump: --rule requires a rule name");
+                    return;
+                }
+                rule_filter = Option::<String>::Some(arguments[i]);
+            } else {
+                paths.push(arg);
+            }
+            i += 1;
+        }
+        cmd_dump(paths, &rule_filter);
+        return;
+    }
+
     eprintln("Usage: gale gen [--highlight] <grammar.g4> [grammar2.g4 ...]");
+    eprintln("       gale dump [--ir] [--rule NAME] <grammar.g4> [grammar2.g4 ...]");
 }
 
 fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens {
@@ -65,6 +90,66 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
 
     let merged = merge_grammars(grammars);
     print(generate(&merged, options));
+}
+
+fn cmd_dump(paths: Array<String>, rule_filter: &Option<String>) with Stdout, Stderr, Preopens {
+    if paths.len() == 0 {
+        eprintln("gale dump: no grammar files given");
+        return;
+    }
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("gale: no preopened directories available (try without --no-dir)");
+        return;
+    }
+    let root = dirs[0].0;
+
+    let mut grammars: Array<Grammar> = [];
+    for let path of paths {
+        let open_result = root.open_at(
+            PathFlags::none(),
+            path,
+            OpenFlags::none(),
+            DescriptorFlags::Read,
+        );
+        if let Err(_) = open_result {
+            eprintln(`gale: {path}: cannot open file`);
+            return;
+        }
+        let file = open_result.unwrap();
+        let bytes = read_all(&file);
+        let content = String::from_utf8_unchecked(bytes);
+        let mut grammar = match parse(content) {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln(`gale: {path}: parse error: {e.message}`);
+                return;
+            },
+        };
+        grammar.source_files.push(path);
+        grammars.push(grammar);
+    }
+
+    let merged = merge_grammars(grammars);
+
+    if let Some(name) = rule_filter {
+        for let rule of &merged.parser_rules {
+            if rule.name == *name {
+                print(`{*rule:#?}\n`);
+                return;
+            }
+        }
+        for let rule of &merged.lexer_rules {
+            if rule.name == *name {
+                print(`{*rule:#?}\n`);
+                return;
+            }
+        }
+        eprintln(`gale dump: rule not found: {*name}`);
+        return;
+    }
+
+    print(`{merged:#?}\n`);
 }
 
 fn read_all(file: &Descriptor) -> Array<u8> {
