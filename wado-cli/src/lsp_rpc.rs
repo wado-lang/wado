@@ -189,6 +189,11 @@ pub struct JsonRpcNotification<T: Serialize> {
 }
 
 pub mod error_codes {
+    pub const PARSE_ERROR: i32 = -32700;
+    pub const INVALID_REQUEST: i32 = -32600;
     pub const METHOD_NOT_FOUND: i32 = -32601;
     pub const INVALID_PARAMS: i32 = -32602;
+    /// Server received a request/notification before `initialize`.
+    /// LSP 3.18 §initialize.
+    pub const SERVER_NOT_INITIALIZED: i32 = -32002;
 }

@@ -12,17 +12,31 @@ use crate::lsp_rpc::{
 
 const JSONRPC_VERSION: &str = "2.0";
 
+/// Failure mode of [`read_message`].
+///
+/// `Parse` errors are recoverable: per LSP 3.18 (JSON-RPC 2.0 §5.1), the
+/// server should respond with `-32700 ParseError` and keep processing. `Io`
+/// errors are unrecoverable — the transport is broken.
+#[derive(Debug)]
+pub enum ReadError {
+    Parse(String),
+    Io(String),
+}
+
 /// Read one JSON-RPC message (Content-Length framed).
+///
+/// Returns `Ok(None)` on clean EOF, `Err(ReadError::Parse)` for malformed
+/// framing or JSON bodies, and `Err(ReadError::Io)` for transport failures.
 pub async fn read_message<R: tokio::io::AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
-) -> Result<Option<JsonRpcRequest>, String> {
+) -> Result<Option<JsonRpcRequest>, ReadError> {
     let mut content_length: Option<usize> = None;
     loop {
         let mut header = String::new();
         let n: usize = reader
             .read_line(&mut header)
             .await
-            .map_err(|e| format!("read error: {e}"))?;
+            .map_err(|e| ReadError::Io(format!("read error: {e}")))?;
         if n == 0 {
             return Ok(None); // EOF
         }
@@ -34,21 +48,22 @@ pub async fn read_message<R: tokio::io::AsyncRead + Unpin>(
             content_length = Some(
                 len_str
                     .parse()
-                    .map_err(|_| format!("invalid Content-Length: {len_str}"))?,
+                    .map_err(|_| ReadError::Parse(format!("invalid Content-Length: {len_str}")))?,
             );
         }
     }
 
-    let length = content_length.ok_or("missing Content-Length header")?;
+    let length = content_length
+        .ok_or_else(|| ReadError::Parse("missing Content-Length header".to_string()))?;
     let mut body = vec![0u8; length];
     reader
         .read_exact(&mut body)
         .await
-        .map_err(|e| format!("read body error: {e}"))?;
+        .map_err(|e| ReadError::Io(format!("read body error: {e}")))?;
 
     serde_json::from_slice(&body)
         .map(Some)
-        .map_err(|e| format!("invalid JSON: {e}"))
+        .map_err(|e| ReadError::Parse(format!("invalid JSON: {e}")))
 }
 
 async fn write_serialized<W: AsyncWrite + Unpin>(

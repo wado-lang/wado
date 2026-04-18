@@ -4182,9 +4182,9 @@ fn generate_struct_ord_fn(
 
     let mut stmts = Vec::new();
     let mut local_types = vec![ref_struct_type, ref_struct_type];
-    let mut next_local: u32 = 2;
 
-    for (field_name, field_type, field_index) in fields {
+    // Local indices start at 2 (0 = self, 1 = other).
+    for (local_idx, (field_name, field_type, field_index)) in (2_u32..).zip(fields.iter()) {
         let self_field = TirExpr::new(
             TirExprKind::FieldAccess {
                 expr: Box::new(self_ref(span)),
@@ -4213,8 +4213,6 @@ fn generate_struct_ord_fn(
             span,
         );
 
-        let local_idx = next_local;
-        next_local += 1;
         local_types.push(ordering_type);
 
         // let c = self.field.cmp(&other.field);
@@ -4855,9 +4853,9 @@ fn generate_generic_struct_ord_fn(
 
     let mut stmts = Vec::new();
     let mut local_types = vec![ref_struct_type, ref_struct_type];
-    let mut next_local: u32 = 2;
 
-    for (field_name, field_type, field_index) in fields {
+    // Local indices start at 2 (0 = self, 1 = other).
+    for (local_idx, (field_name, field_type, field_index)) in (2_u32..).zip(fields.iter()) {
         let self_field = TirExpr::new(
             TirExprKind::FieldAccess {
                 expr: Box::new(self_ref(span)),
@@ -4886,8 +4884,6 @@ fn generate_generic_struct_ord_fn(
             span,
         );
 
-        let local_idx = next_local;
-        next_local += 1;
         local_types.push(ordering_type);
 
         stmts.push(TirStmt::new(

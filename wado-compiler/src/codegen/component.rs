@@ -2171,8 +2171,8 @@ fn import_http_client(
         // Emit each function from registry metadata.
         // Client functions use the same param/result types as the HTTP handler
         // (own<request> → result<own<response>, error-code>).
-        let mut local_type_idx: u32 = 2; // 0=request alias, 1=result alias
-        for func in &client_funcs {
+        // local_type_idx starts at 2: 0=request alias, 1=result alias
+        for (func_type_idx, func) in (2_u32..).zip(client_funcs.iter()) {
             let mut func_encoder = instance_type.ty().function();
             if func.is_async {
                 func_encoder
@@ -2184,8 +2184,6 @@ fn import_http_client(
                     .params([("request", ComponentValType::Type(0))])
                     .result(Some(ComponentValType::Type(1)));
             }
-            let func_type_idx = local_type_idx;
-            local_type_idx += 1;
 
             instance_type.export(
                 &func.wasi_func_name,

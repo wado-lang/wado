@@ -4,10 +4,8 @@ Language service engine for the Wado compiler toolchain.
 
 ## Rules
 
-- This crate must be IO-free. No filesystem, network, or stdio operations. All IO goes through `CompilerHost`.
-- This crate must compile for `wasm32-unknown-unknown`.
-- Types follow LSP semantics
-- Protocol handling (LSP JSON-RPC, MCP, CLI one-shot query) belongs in `wado-cli`
+- Types follow LSP semantics (0-based positions, standard severity levels).
+- See [LSP Architecture WEP](../docs/wep-2026-04-18-lsp-architecture.md) for crate scope and build targets. The WEP supersedes earlier rules about this crate being IO-free, `wasm32-unknown-unknown`-only, or protocol-agnostic.
 
 ## Architecture
 

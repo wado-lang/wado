@@ -3,6 +3,11 @@ use {
     ParserRule,
     Alternative,
     Element,
+    RuleRefElement,
+    TokenRefElement,
+    LiteralElement,
+    WildcardElement,
+    GroupElement,
     RepeatElement,
     LabelElement,
     NotElement,
@@ -92,7 +97,8 @@ test "generate single-alt struct" {
                 alternatives: [
                     Alternative {
                         label: null,
-                        elements: [Element::RuleRef("value"), Element::TokenRef("EOF")],
+                        options: [],
+                        elements: [Element::RuleRef(RuleRefElement::new("value")), Element::TokenRef(TokenRefElement::new("EOF"))],
                     },
                 ],
             },
@@ -122,11 +128,13 @@ test "generate multi-alt variant with labels" {
                 alternatives: [
                     Alternative {
                         label: Option::<String>::Some("BinOp"),
-                        elements: [Element::RuleRef("expr"), Element::TokenRef("PLUS"), Element::RuleRef("term")],
+                        options: [],
+                        elements: [Element::RuleRef(RuleRefElement::new("expr")), Element::TokenRef(TokenRefElement::new("PLUS")), Element::RuleRef(RuleRefElement::new("term"))],
                     },
                     Alternative {
                         label: Option::<String>::Some("Pass"),
-                        elements: [Element::RuleRef("term")],
+                        options: [],
+                        elements: [Element::RuleRef(RuleRefElement::new("term"))],
                     },
                 ],
             },
@@ -160,11 +168,13 @@ test "generate multi-alt variant without labels" {
                 alternatives: [
                     Alternative {
                         label: null,
-                        elements: [Element::RuleRef("atom")],
+                        options: [],
+                        elements: [Element::RuleRef(RuleRefElement::new("atom"))],
                     },
                     Alternative {
                         label: null,
-                        elements: [Element::RuleRef("list")],
+                        options: [],
+                        elements: [Element::RuleRef(RuleRefElement::new("list"))],
                     },
                 ],
             },
@@ -195,15 +205,16 @@ test "generate repeat fields" {
                 alternatives: [
                     Alternative {
                         label: null,
+                        options: [],
                         elements: [
                             Element::Repeat(RepeatElement {
                                 kind: RepeatKind::Star,
-                                element: Element::RuleRef("item"),
+                                element: Element::RuleRef(RuleRefElement::new("item")),
                                 non_greedy: false,
                             }),
                             Element::Repeat(RepeatElement {
                                 kind: RepeatKind::Optional,
-                                element: Element::TokenRef("COMMA"),
+                                element: Element::TokenRef(TokenRefElement::new("COMMA")),
                                 non_greedy: false,
                             }),
                         ],
@@ -234,7 +245,8 @@ test "generate duplicate field names" {
                 alternatives: [
                     Alternative {
                         label: null,
-                        elements: [Element::RuleRef("item"), Element::Literal(","), Element::RuleRef("item")],
+                        options: [],
+                        elements: [Element::RuleRef(RuleRefElement::new("item")), Element::Literal(LiteralElement::new(",")), Element::RuleRef(RuleRefElement::new("item"))],
                     },
                 ],
             },
@@ -262,16 +274,17 @@ test "generate group variant type for repeated group" {
                 alternatives: [
                     Alternative {
                         label: null,
+                        options: [],
                         elements: [
                             Element::Repeat(RepeatElement {
                                 kind: RepeatKind::Star,
-                                element: Element::Group([
-                                    Alternative { label: null, elements: [Element::RuleRef("stmt")] },
-                                    Alternative { label: null, elements: [Element::RuleRef("error")] },
-                                ]),
+                                element: Element::Group(GroupElement::new([
+                                    Alternative { label: null, options: [], elements: [Element::RuleRef(RuleRefElement::new("stmt"))] },
+                                    Alternative { label: null, options: [], elements: [Element::RuleRef(RuleRefElement::new("error"))] },
+                                ])),
                                 non_greedy: false,
                             }),
-                            Element::TokenRef("EOF"),
+                            Element::TokenRef(TokenRefElement::new("EOF")),
                         ],
                     },
                 ],
@@ -302,7 +315,8 @@ test "generate wildcard element" {
                 alternatives: [
                     Alternative {
                         label: null,
-                        elements: [Element::Wildcard, Element::TokenRef("EOF")],
+                        options: [],
+                        elements: [Element::Wildcard(WildcardElement::new()), Element::TokenRef(TokenRefElement::new("EOF"))],
                     },
                 ],
             },
@@ -331,9 +345,10 @@ test "generate parser not element" {
                 alternatives: [
                     Alternative {
                         label: null,
+                        options: [],
                         elements: [
-                            Element::Not(NotElement { element: Element::TokenRef("COMMA") }),
-                            Element::TokenRef("EOF"),
+                            Element::Not(NotElement { element: Element::TokenRef(TokenRefElement::new("COMMA")) }),
+                            Element::TokenRef(TokenRefElement::new("EOF")),
                         ],
                     },
                 ],
@@ -363,17 +378,18 @@ test "generate list label field" {
                 alternatives: [
                     Alternative {
                         label: null,
+                        options: [],
                         elements: [
                             Element::Repeat(RepeatElement {
                                 kind: RepeatKind::Star,
                                 element: Element::Label(LabelElement {
                                     name: "items",
                                     list: true,
-                                    element: Element::RuleRef("item"),
+                                    element: Element::RuleRef(RuleRefElement::new("item")),
                                 }),
                                 non_greedy: false,
                             }),
-                            Element::TokenRef("EOF"),
+                            Element::TokenRef(TokenRefElement::new("EOF")),
                         ],
                     },
                 ],
@@ -401,12 +417,13 @@ test "generate standalone group as optional field" {
                 alternatives: [
                     Alternative {
                         label: null,
+                        options: [],
                         elements: [
-                            Element::Group([
-                                Alternative { label: null, elements: [Element::RuleRef("foo")] },
-                                Alternative { label: null, elements: [Element::RuleRef("bar")] },
-                            ]),
-                            Element::TokenRef("EOF"),
+                            Element::Group(GroupElement::new([
+                                Alternative { label: null, options: [], elements: [Element::RuleRef(RuleRefElement::new("foo"))] },
+                                Alternative { label: null, options: [], elements: [Element::RuleRef(RuleRefElement::new("bar"))] },
+                            ])),
+                            Element::TokenRef(TokenRefElement::new("EOF")),
                         ],
                     },
                 ],
@@ -620,6 +637,38 @@ ID : [a-z]+ ;";
     let output = generate(&grammar, &DEFAULT_OPTIONS);
     assert str_contains(&output, "else if best_channel != 0");
     assert str_contains(&output, "trivia.push(Token::with_channel(");
+}
+
+test "generate left-associative LR alt passes own_prec+1 on right operand" {
+    // Baseline without `<assoc=right>`: the recursive right operand runs at
+    // `own_prec + 1` so same-precedence operators are left-associative
+    // (handled by the outer `_prec` loop, not by nested recursion).
+    let input = "grammar Test;
+expr : expr '**' expr | NUMBER ;
+NUMBER : [0-9]+ ;
+WS : [ \\t\\r\\n]+ -> skip ;
+";
+    let grammar = parse_grammar(input, "test.g4");
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "parse_expr_prec(p, 2)"),
+        "left-assoc '**' alt should recurse with own_prec+1 (=2)";
+}
+
+test "generate right-associative LR alt passes own_prec on right operand" {
+    // `<assoc=right>` lowers the inner threshold so same-precedence `**`
+    // nests rightward: `2 ** 3 ** 4` parses as `2 ** (3 ** 4)`.
+    let input = "grammar Test;
+expr : <assoc=right> expr '**' expr | NUMBER ;
+NUMBER : [0-9]+ ;
+WS : [ \\t\\r\\n]+ -> skip ;
+";
+    let grammar = parse_grammar(input, "test.g4");
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "parse_expr_prec(p, 1)"),
+        "right-assoc '**' alt should recurse with own_prec (=1)";
+    // And the scan-side mirror must be kept in sync.
+    assert str_contains(&output, "scan_expr_prec(tokens, pos, 1)"),
+        "scan-side must mirror the right-assoc precedence";
 }
 
 fn parse_grammar(input: String, path: String) -> Grammar {

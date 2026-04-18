@@ -204,11 +204,11 @@ fn char_hex_name(c: char) -> String {
 /// is typically a terminal (TokenRef / Literal) or a simple terminal set; we
 /// derive a readable name from it so multi-element alternatives can dedup.
 pub fn not_element_field_name(inner: &Element) -> String {
-    if let TokenRef(name) = inner {
-        return `not_{to_lower(name)}`;
+    if let TokenRef(t) = inner {
+        return `not_{to_lower(&t.name)}`;
     }
-    if let Literal(text) = inner {
-        return `not_{literal_field_name(text)}`;
+    if let Literal(l) = inner {
+        return `not_{literal_field_name(&l.text)}`;
     }
     return "not_set";
 }
@@ -278,8 +278,8 @@ pub fn group_variant_type_name(alts: &Array<Alternative>) -> String {
         if i > 0 {
             result.push_str("Or");
         }
-        if let RuleRef(name) = &alts[i].elements[0] {
-            result.push_str(to_pascal_case(name));
+        if let RuleRef(r) = &alts[i].elements[0] {
+            result.push_str(to_pascal_case(&r.name));
         }
     }
     result.push_str("Group");
@@ -292,16 +292,16 @@ pub fn group_field_base_name(alts: &Array<Alternative>) -> String {
         if i > 0 {
             result.push_str("_or_");
         }
-        if let RuleRef(name) = &alts[i].elements[0] {
-            result.push_str(to_snake_case(name));
+        if let RuleRef(r) = &alts[i].elements[0] {
+            result.push_str(to_snake_case(&r.name));
         }
     }
     return result;
 }
 
 pub fn group_case_name(alt: &Alternative) -> String {
-    if let RuleRef(name) = &alt.elements[0] {
-        return to_pascal_case(name);
+    if let RuleRef(r) = &alt.elements[0] {
+        return to_pascal_case(&r.name);
     }
     return "Unknown";
 }
@@ -360,11 +360,11 @@ pub fn count_general_groups(elements: &Array<Element>) -> i32 {
 }
 
 pub fn count_element_groups(elem: &Element) -> i32 {
-    if let Group(alts) = elem {
-        if is_general_group(alts) {
+    if let Group(g) = elem {
+        if is_general_group(&g.alternatives) {
             // 1 for the group itself + max nested count across alts
             let mut max_nested: i32 = 0;
-            for let alt of alts {
+            for let alt of &g.alternatives {
                 let nested = count_general_groups(&alt.elements);
                 if nested > max_nested {
                     max_nested = nested;
@@ -374,7 +374,7 @@ pub fn count_element_groups(elem: &Element) -> i32 {
         }
         // Non-matching group: recurse into alts to find nested general groups
         let mut max_nested: i32 = 0;
-        for let alt of alts {
+        for let alt of &g.alternatives {
             let nested = count_general_groups(&alt.elements);
             if nested > max_nested {
                 max_nested = nested;
@@ -383,10 +383,10 @@ pub fn count_element_groups(elem: &Element) -> i32 {
         return max_nested;
     }
     if let Repeat(rep) = elem {
-        if let Group(alts) = &rep.element {
-            if is_general_group(alts) {
+        if let Group(g) = &rep.element {
+            if is_general_group(&g.alternatives) {
                 let mut max_nested: i32 = 0;
-                for let alt of alts {
+                for let alt of &g.alternatives {
                     let nested = count_general_groups(&alt.elements);
                     if nested > max_nested {
                         max_nested = nested;
@@ -396,7 +396,7 @@ pub fn count_element_groups(elem: &Element) -> i32 {
             }
             // Non-matching group inside Repeat: recurse into alts
             let mut max_nested: i32 = 0;
-            for let alt of alts {
+            for let alt of &g.alternatives {
                 let nested = count_general_groups(&alt.elements);
                 if nested > max_nested {
                     max_nested = nested;
@@ -433,9 +433,9 @@ pub fn general_group_alt_struct_name(rule_name: &String, group_index: i32, alt_i
 /// Get a field name for the elements in a single-alt group's element.
 fn element_base_name(elem: &Element) -> String {
     return match elem {
-        RuleRef(name) => escape_ident(&to_snake_case(name)),
-        TokenRef(name) => escape_ident(&to_lower(name)),
-        Literal(text) => literal_field_name(text),
+        RuleRef(r) => escape_ident(&to_snake_case(&r.name)),
+        TokenRef(t) => escape_ident(&to_lower(&t.name)),
+        Literal(l) => literal_field_name(&l.text),
         Repeat(rep) => element_base_name(&rep.element),
         Label(lab) => escape_ident(&to_snake_case(&lab.name)),
         _ => "item",
