@@ -10,44 +10,8 @@ exception). The remaining work is mostly about **propagating** parsed
 information into the IR and **using** it in the code generator so that
 generated parsers are semantically correct, not just syntactically accepted.
 
-## A. Remaining IR gaps (partial from the previous sweep)
+## A. IR → pipeline wiring
 
-The previous TODO cleanup wired grammar-level and rule-level options into
-the IR, but two sub-kinds of the same feature were left unhandled:
-
-- **Element-level options** (`ID<assoc=right, fail='msg'>`, `'lit'<p=3>`).
-  Currently consumed and dropped by `skip_angle_block`. `assoc=right`
-  affects left-recursion handling semantically, so this cannot stay
-  invisible. Needs a field on `Element` / `LabelElement` / `TokenRef` or a
-  wrapper variant.
-- **Block-level options** (`( options { assoc = right; } : a | b )`).
-  Currently consumed by `skip_block_prequel`. Same story as above —
-  need a dedicated slot on `Element::Group` (or a wrapping struct).
-
-## B. IR → pipeline wiring (preserve what's stored)
-
-The previous sweep populated the IR but the code generator still ignores
-most of the new fields. "Parsed and stored" is not "used":
-
-- ~~`Grammar.options.caseInsensitive = true` — generated lexer is still
-  case-sensitive.~~ **Done** (this branch). Grammar-level and rule-level
-  `caseInsensitive` now fold ASCII letters: literals emit
-  `chars[pos] != 'x' && chars[pos] != 'X'`, char ranges fold `[a-z]` to
-  include `[A-Z]` (and vice versa), keyword classifier honors
-  `char_ci[i]`. Rule-level `caseInsensitive = false` overrides a
-  grammar-level `true`. Driver coverage lives in
-  `tests/grammars/ci_sql.g4` + `tests/driver_ci_sql_test.wado`.
-- ~~`Alternative.options.assoc = right` on a left-recursive alt had no
-  effect on generated parser behaviour.~~ **Done** (this branch). The
-  LR precedence-climbing code now consults
-  `is_right_associative(alt)` in `compute_lr_conflict_min_prec`:
-  left-assoc alts recurse on the right operand at `own_prec + 1`
-  (same-level rejected, outer loop handles left-association);
-  right-assoc alts recurse at `own_prec` so same-level operators nest
-  rightward. Conflict widening only applies to strictly higher-prec
-  conflicting alts to avoid defeating right-assoc via self-conflict.
-  Scan-side mirror updated in lockstep. Driver coverage: `2 ** 3 ** 4`
-  CST assertion in `driver_typescript_test.wado`.
 - `Grammar.options.superClass` / `tokenVocab` / `language` — completely
   ignored. `tokenVocab` in particular is non-trivial: it implies loading
   another grammar's token ids.
@@ -59,42 +23,7 @@ most of the new fields. "Parsed and stored" is not "used":
   is fine, but a lint or doc comment in the generated output would make
   the information observable.
 
-## C. Representation quality of stored options
-
-- ~~`GrammarOption.value` is a lossy raw String.~~ **Done** (this
-  branch). `GrammarOption.value` is now the typed variant
-  `OptionValue { Ident(String), Qualified(Array<String>), Str(String),
-  Int(i64), Action(String) }`. `Str` drops the surrounding single
-  quotes, `Qualified` keeps the dotted components separate, and
-  `Action` round-trips the raw host-language body between braces —
-  previously collapsed to the placeholder `"{}"`. Both production
-  consumers (`parser_gen.is_right_associative`,
-  `lexer_gen.lookup_ci_option`) pattern-match on the variant.
-
-## D. Driver-level verification (remaining gaps)
-
-The previous sweep added unit tests, golden tests, and driver tests for
-the most critical semantic changes. The following driver coverage was
-added in this branch:
-
-- **HIDDEN channel routing** — `driver_html_test.wado` tokenizes
-  `<p class="x">`, asserts TAG_WHITESPACE is absent from the main token
-  stream, and asserts it appears as leading trivia on the next TAG_NAME
-  with `channel == 1`. An additional end-to-end assertion confirms the
-  parser successfully accepts whitespace-separated attributes.
-- **HIDDEN channel (TypeScript)** — `driver_typescript_test.wado`
-  verifies `WhiteSpaces` routes to trivia with `channel == 1` around
-  `let x`.
-- **User-defined channel routing** — `driver_antlr4_test.wado` exercises
-  `channel(COMMENT)` (the second user channel beyond DEFAULT/HIDDEN),
-  asserting both `//` LINE_COMMENT and `/* */` BLOCK_COMMENT appear as
-  trivia with `channel == 3`.
-- **`type(X)` override** — `driver_typescript_test.wado` tokenizes
-  `` `hi` `` and asserts both backticks emit as `TK_BackTick`, never
-  `TK_BackTickInside`, confirming the type-override rewrite.
-
-Still missing driver-level coverage (deferred because no existing test
-grammar exercises the feature end-to-end):
+## B. Driver-level verification (remaining gaps)
 
 - **Parser-side `~TOK` / `~(block)`.** No driver-test grammar currently
   uses a parser-level complement. Either add a minimal new grammar, or
@@ -114,7 +43,7 @@ grammar exercises the feature end-to-end):
 - **Wildcard `.` at parser level.** Only lexer-level `.` is exercised
   today. A parser rule like `any : . ;` has no driver-level test.
 
-## E. Negative tests
+## C. Negative tests
 
 The parser test suite is overwhelmingly positive — it verifies that
 well-formed input parses. There are almost no negative tests that pin
