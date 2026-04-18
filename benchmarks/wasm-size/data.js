@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776503856830,
+  "lastUpdate": 1776504239243,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14137,6 +14137,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ce7de1950d23bb8e6fa89722d3c98fd5e2005088"
         },
         "date": 1776503856542,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f2db7bdcac7c14f5e2403bd31decda143a3a0dd3",
+          "message": "Merge pull request #873 from wado-lang/gfx/wado-run-package\n\nwado run: accept a package directory as the input",
+          "timestamp": "2026-04-18T18:20:06+09:00",
+          "tree_id": "36c3183a59fe265660df33db955f8440517282b7",
+          "url": "https://github.com/wado-lang/wado/commit/f2db7bdcac7c14f5e2403bd31decda143a3a0dd3"
+        },
+        "date": 1776504239149,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
