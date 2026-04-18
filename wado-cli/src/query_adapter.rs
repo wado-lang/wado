@@ -3,11 +3,17 @@ use std::path::Path;
 use std::process;
 
 use serde_json::json;
+use wado_lsp::{DocumentHighlight, HighlightKind, Position, ReferenceLocation};
 
 use crate::compiler_host::FilesystemCompilerHost;
 
-/// Run diagnostics query and print results.
-pub async fn run_diagnostics(filename: &str, json_output: bool) {
+struct PreparedQuery {
+    uri: String,
+    engine: wado_lsp::Engine,
+    host: FilesystemCompilerHost,
+}
+
+fn prepare_query(filename: &str) -> PreparedQuery {
     let path = Path::new(filename);
     let source = match fs::read_to_string(path) {
         Ok(s) => s,
@@ -32,7 +38,20 @@ pub async fn run_diagnostics(filename: &str, json_output: bool) {
     let mut engine = wado_lsp::Engine::new();
     engine.open_document(&uri, source);
 
-    let diagnostics = engine.diagnostics(&uri, &host).await;
+    PreparedQuery { uri, engine, host }
+}
+
+fn position_from_one_based(line: u32, column: u32) -> Position {
+    Position {
+        line: line.saturating_sub(1),
+        character: column.saturating_sub(1),
+    }
+}
+
+/// Run diagnostics query and print results.
+pub async fn run_diagnostics(filename: &str, json_output: bool) {
+    let prepared = prepare_query(filename);
+    let diagnostics = prepared.engine.diagnostics(&prepared.uri, &prepared.host).await;
 
     if json_output {
         print_diagnostics_json(filename, &diagnostics);
@@ -45,6 +64,44 @@ pub async fn run_diagnostics(filename: &str, json_output: bool) {
         .any(|d| matches!(d.severity, wado_lsp::Severity::Error))
     {
         process::exit(1);
+    }
+}
+
+/// Run references query and print results.
+pub async fn run_references(
+    filename: &str,
+    line: u32,
+    column: u32,
+    include_declaration: bool,
+    json_output: bool,
+) {
+    let prepared = prepare_query(filename);
+    let position = position_from_one_based(line, column);
+    let refs = prepared
+        .engine
+        .references(&prepared.uri, position, include_declaration, &prepared.host)
+        .await;
+
+    if json_output {
+        print_references_json(&refs);
+    } else {
+        print_references_text(&refs);
+    }
+}
+
+/// Run document-highlight query and print results.
+pub async fn run_document_highlight(filename: &str, line: u32, column: u32, json_output: bool) {
+    let prepared = prepare_query(filename);
+    let position = position_from_one_based(line, column);
+    let highlights = prepared
+        .engine
+        .document_highlight(&prepared.uri, position, &prepared.host)
+        .await;
+
+    if json_output {
+        print_highlights_json(&highlights);
+    } else {
+        print_highlights_text(filename, &highlights);
     }
 }
 
@@ -88,7 +145,6 @@ fn print_diagnostics_text(filename: &str, diagnostics: &[wado_lsp::Diagnostic]) 
             wado_lsp::Severity::Information => "info",
             wado_lsp::Severity::Hint => "hint",
         };
-        // Display as 1-based line/column for human readability
         println!(
             "{}:{}:{}: {}: {} [{}]",
             filename,
@@ -97,6 +153,81 @@ fn print_diagnostics_text(filename: &str, diagnostics: &[wado_lsp::Diagnostic]) 
             severity,
             d.message,
             d.code,
+        );
+    }
+}
+
+fn uri_to_display(uri: &str) -> &str {
+    uri.strip_prefix("file://").unwrap_or(uri)
+}
+
+fn print_references_json(refs: &[ReferenceLocation]) {
+    let json_refs: Vec<serde_json::Value> = refs
+        .iter()
+        .map(|r| {
+            json!({
+                "uri": r.uri,
+                "range": {
+                    "start": { "line": r.range.start.line, "character": r.range.start.character },
+                    "end": { "line": r.range.end.line, "character": r.range.end.character },
+                },
+            })
+        })
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&json_refs).unwrap());
+}
+
+fn print_references_text(refs: &[ReferenceLocation]) {
+    if refs.is_empty() {
+        println!("No references.");
+        return;
+    }
+    for r in refs {
+        println!(
+            "{}:{}:{}",
+            uri_to_display(&r.uri),
+            r.range.start.line + 1,
+            r.range.start.character + 1,
+        );
+    }
+}
+
+fn highlight_kind_str(kind: HighlightKind) -> &'static str {
+    match kind {
+        HighlightKind::Text => "text",
+        HighlightKind::Read => "read",
+        HighlightKind::Write => "write",
+    }
+}
+
+fn print_highlights_json(highlights: &[DocumentHighlight]) {
+    let json_hl: Vec<serde_json::Value> = highlights
+        .iter()
+        .map(|h| {
+            json!({
+                "range": {
+                    "start": { "line": h.range.start.line, "character": h.range.start.character },
+                    "end": { "line": h.range.end.line, "character": h.range.end.character },
+                },
+                "kind": highlight_kind_str(h.kind),
+            })
+        })
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&json_hl).unwrap());
+}
+
+fn print_highlights_text(filename: &str, highlights: &[DocumentHighlight]) {
+    if highlights.is_empty() {
+        println!("No highlights.");
+        return;
+    }
+    for h in highlights {
+        println!(
+            "{}:{}:{}: {}",
+            filename,
+            h.range.start.line + 1,
+            h.range.start.character + 1,
+            highlight_kind_str(h.kind),
         );
     }
 }

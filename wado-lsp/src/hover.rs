@@ -11,10 +11,10 @@ use wado_compiler::CompilerHost;
 use wado_compiler::annotate::{Annotated, annotate};
 use wado_compiler::ast::{self, AstId, Expr, Item, Module, Stmt};
 use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
-use wado_compiler::token::Span;
 use wado_compiler::unparse;
 
 use crate::diagnostics::{Position, Range};
+use crate::location::{span_to_range, uri_to_filename};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HoverResult {
@@ -52,19 +52,6 @@ pub async fn find_hover<H: CompilerHost>(
         contents: format!("```wado\n{signature}\n```"),
         range: span_to_range(&cursor_span),
     })
-}
-
-fn span_to_range(span: &Span) -> Range {
-    Range {
-        start: Position {
-            line: span.line.saturating_sub(1) as u32,
-            character: span.column.saturating_sub(1) as u32,
-        },
-        end: Position {
-            line: span.end_line.saturating_sub(1) as u32,
-            character: span.end_column.saturating_sub(1) as u32,
-        },
-    }
 }
 
 /// Render a signature for the given item-level symbol.
@@ -365,14 +352,6 @@ fn item_info(item: &Item, name: &str) -> Option<String> {
             None
         }
         _ => None,
-    }
-}
-
-fn uri_to_filename(uri: &str) -> String {
-    if let Some(path) = uri.strip_prefix("file://") {
-        path.to_string()
-    } else {
-        uri.to_string()
     }
 }
 

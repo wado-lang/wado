@@ -35,6 +35,8 @@ pub async fn run() {
                             },
                             "definitionProvider": true,
                             "hoverProvider": true,
+                            "referencesProvider": true,
+                            "documentHighlightProvider": true,
                             "semanticTokensProvider": {
                                 "legend": {
                                     "tokenTypes": wado_lsp::semantic_tokens::TOKEN_TYPES,
@@ -188,6 +190,104 @@ pub async fn run() {
                         }),
                         None => Value::Null,
                     };
+                    if let Err(e) = lsp_adapter::send_response(&mut writer, id, result).await {
+                        eprintln!("wado-lsp: {e}");
+                        break;
+                    }
+                }
+            }
+            "textDocument/references" => {
+                if let Some(id) = id {
+                    let uri = params
+                        .get("textDocument")
+                        .and_then(|td| td.get("uri"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    let line = params
+                        .get("position")
+                        .and_then(|p| p.get("line"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u32;
+                    let character = params
+                        .get("position")
+                        .and_then(|p| p.get("character"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u32;
+                    let include_declaration = params
+                        .get("context")
+                        .and_then(|c| c.get("includeDeclaration"))
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    let position = wado_lsp::Position { line, character };
+                    let host = lsp_adapter::host_for_uri(uri);
+                    let refs = engine
+                        .references(uri, position, include_declaration, &host)
+                        .await;
+                    let result = Value::Array(
+                        refs.into_iter()
+                            .map(|r| {
+                                json!({
+                                    "uri": r.uri,
+                                    "range": {
+                                        "start": {
+                                            "line": r.range.start.line,
+                                            "character": r.range.start.character,
+                                        },
+                                        "end": {
+                                            "line": r.range.end.line,
+                                            "character": r.range.end.character,
+                                        },
+                                    },
+                                })
+                            })
+                            .collect(),
+                    );
+                    if let Err(e) = lsp_adapter::send_response(&mut writer, id, result).await {
+                        eprintln!("wado-lsp: {e}");
+                        break;
+                    }
+                }
+            }
+            "textDocument/documentHighlight" => {
+                if let Some(id) = id {
+                    let uri = params
+                        .get("textDocument")
+                        .and_then(|td| td.get("uri"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    let line = params
+                        .get("position")
+                        .and_then(|p| p.get("line"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u32;
+                    let character = params
+                        .get("position")
+                        .and_then(|p| p.get("character"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u32;
+                    let position = wado_lsp::Position { line, character };
+                    let host = lsp_adapter::host_for_uri(uri);
+                    let highlights = engine.document_highlight(uri, position, &host).await;
+                    let result = Value::Array(
+                        highlights
+                            .into_iter()
+                            .map(|h| {
+                                json!({
+                                    "range": {
+                                        "start": {
+                                            "line": h.range.start.line,
+                                            "character": h.range.start.character,
+                                        },
+                                        "end": {
+                                            "line": h.range.end.line,
+                                            "character": h.range.end.character,
+                                        },
+                                    },
+                                    "kind": h.kind as u32,
+                                })
+                            })
+                            .collect(),
+                    );
                     if let Err(e) = lsp_adapter::send_response(&mut writer, id, result).await {
                         eprintln!("wado-lsp: {e}");
                         break;

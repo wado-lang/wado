@@ -18,6 +18,9 @@ Language service engine for the Wado compiler toolchain.
 | `src/semantic_tokens.rs` | Semantic token computation (lexer + AST classification)                                          |
 | `src/definition.rs`      | Go-to-definition via `Annotated::{ast_id_at, referenced_symbol, symbol_at}`                      |
 | `src/hover.rs`           | Hover info; locals render from the resolved AST node, items delegate to `wado_compiler::unparse` |
+| `src/references.rs`      | Find-references, walks `Annotated::iter_references` and collects matching use-sites              |
+| `src/document_highlight.rs` | Document highlight; classifies each occurrence as Read or Write via AST walk                  |
+| `src/location.rs`        | Shared cursor→`SymbolKey` resolution and span/URI helpers                                        |
 
 ### Engine
 
@@ -69,14 +72,12 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 - [ ] `textDocument/declaration`
 - [ ] `textDocument/typeDefinition`
 - [ ] `textDocument/implementation`
-- [ ] `textDocument/references`
 - [ ] `textDocument/callHierarchy` (prepare / incomingCalls / outgoingCalls)
 - [ ] `textDocument/typeHierarchy` (prepare / supertypes / subtypes)
 
 ### Language Features — Comprehension
 
 - [ ] `textDocument/signatureHelp`
-- [ ] `textDocument/documentHighlight`
 - [ ] `textDocument/documentLink`
 - [ ] `textDocument/codeLens`
 - [ ] `textDocument/inlayHint`
