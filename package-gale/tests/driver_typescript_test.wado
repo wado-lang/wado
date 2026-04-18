@@ -353,6 +353,46 @@ test "tree: simple ternary" {
     ");
 }
 
+// --- Right-associative power operator ---
+//
+// TypeScriptParser.g4 marks the `**` alternative of `singleExpression` with
+// `<assoc=right>`. `2 ** 3 ** 4` must parse as `2 ** (3 ** 4)`, which in the
+// CST means the nested `**` appears on the RHS of the outer one (the right
+// operand's singleExpression contains another `**` alternative).
+//
+// End-to-end gate: this fails if ANY link between element-option parsing,
+// `Alternative.options`, `is_right_associative`, and the inner-min-prec
+// formula in `compute_lr_conflict_min_prec` regresses.
+
+test "tree: power operator is right-associative" {
+    assert_tree(&"= 2 ** 3 ** 4", &"
+        (initializer =
+          (singleExpression
+            (singleExpression (literal (numericLiteral 2)))
+            **
+            (singleExpression
+              (singleExpression (literal (numericLiteral 3)))
+              **
+              (singleExpression (literal (numericLiteral 4))))))
+    ");
+}
+
+test "tree: power operator over addition binds tighter on the right" {
+    // `2 ** 3 + 4` — `+` has lower precedence than `**`, so this is
+    // `(2 ** 3) + 4`. Left-deep for the `+` itself, with the `**` grouping
+    // nested as its left operand.
+    assert_tree(&"= 2 ** 3 + 4", &"
+        (initializer =
+          (singleExpression
+            (singleExpression
+              (singleExpression (literal (numericLiteral 2)))
+              **
+              (singleExpression (literal (numericLiteral 3))))
+            +
+            (singleExpression (literal (numericLiteral 4)))))
+    ");
+}
+
 // --- Lexer command regression tests ---
 //
 // These exercise code paths that used to be silently dropped by the IR and

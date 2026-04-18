@@ -91,12 +91,12 @@ impl GenContext {
 
     pub fn first_of_element(&mut self, elem: &Element, visiting: &mut Array<String>) -> Array<String> {
         return match elem {
-            TokenRef(name) => [`TK_{name}`],
-            Literal(text) => [literal_const_name(text)],
-            RuleRef(name) => self.first_of_rule(name, visiting),
-            Group(alts) => {
+            TokenRef(t) => [`TK_{t.name}`],
+            Literal(l) => [literal_const_name(&l.text)],
+            RuleRef(r) => self.first_of_rule(&r.name, visiting),
+            Group(g) => {
                 let mut result: Array<String> = [];
-                for let alt of alts {
+                for let alt of &g.alternatives {
                     let af = self.first_of_alt(alt, visiting);
                     extend_dedup(&mut result, &af);
                 }
@@ -109,7 +109,7 @@ impl GenContext {
             // for alternatives starting with them — such alternatives must either
             // be in a single-alt rule, used as a fallback, or be distinguished
             // from their siblings by later elements.
-            Wildcard => [],
+            Wildcard(_) => [],
             Not(_) => [],
         };
     }
@@ -215,17 +215,17 @@ impl GenContext {
         return match elem {
             TokenRef(_) => false,
             Literal(_) => false,
-            Wildcard => false,
+            Wildcard(_) => false,
             Not(_) => false,
-            RuleRef(name) => self.rule_is_nullable(name, visiting),
+            RuleRef(r) => self.rule_is_nullable(&r.name, visiting),
             Label(lab) => self.element_is_nullable_deep(&lab.element, visiting),
             Repeat(rep) => match rep.kind {
                 Star | Optional => true,
                 _ => self.element_is_nullable_deep(&rep.element, visiting),
             },
-            Group(alts) => {
+            Group(g) => {
                 let mut any_nullable = false;
-                for let alt of alts {
+                for let alt of &g.alternatives {
                     let mut all_null = true;
                     for let e of &alt.elements {
                         if !self.element_is_nullable_deep(e, visiting) {
@@ -290,9 +290,9 @@ impl GenContext {
         return match elem {
             TokenRef(_) => true,
             Literal(_) => true,
-            Wildcard => true,
+            Wildcard(_) => true,
             Not(_) => true,
-            RuleRef(name) => self.rule_is_single_token(name, visiting),
+            RuleRef(r) => self.rule_is_single_token(&r.name, visiting),
             Label(lab) => self.element_is_single_token(&lab.element, visiting),
             Group(_) => false,
             Repeat(_) => false,
@@ -331,7 +331,7 @@ impl GenContext {
                     if let TokenRef(_) | Literal(_) = elem {
                         single_ok = true;
                     } else if let RuleRef(r) = elem {
-                        single_ok = self.rule_is_single_token(r, visiting);
+                        single_ok = self.rule_is_single_token(&r.name, visiting);
                     }
                 }
                 if non_nullable_count != 1 || !single_ok {
@@ -381,8 +381,8 @@ impl GenContext {
             let mut has_lr = false;
             for let alt of &rule.alternatives {
                 if alt.elements.len() > 0 {
-                    if let RuleRef(first_name) = &alt.elements[0] {
-                        if *first_name == *name {
+                    if let RuleRef(r) = &alt.elements[0] {
+                        if r.name == *name {
                             has_lr = true;
                             break;
                         }
@@ -426,11 +426,11 @@ impl GenContext {
     fn is_element_scannable(&mut self, elem: &Element, visiting: &mut Array<String>) -> bool {
         return match elem {
             TokenRef(_) | Literal(_) => true,
-            RuleRef(name) => self.is_rule_scannable(name, visiting),
+            RuleRef(r) => self.is_rule_scannable(&r.name, visiting),
             Label(lab) => self.is_element_scannable(&lab.element, visiting),
             Repeat(rep) => self.is_element_scannable(&rep.element, visiting),
-            Group(alts) => {
-                for let alt of alts {
+            Group(g) => {
+                for let alt of &g.alternatives {
                     if !self.is_alt_scannable(&alt.elements, visiting) {
                         return false;
                     }
@@ -438,7 +438,7 @@ impl GenContext {
                 return true;
             },
             // Wildcard advances by exactly one token (unless at EOF).
-            Wildcard => true,
+            Wildcard(_) => true,
             // `~ X` advances by one token when the current token is not in
             // the complement set. The inner element is required to be a
             // terminal or a simple terminal set, both of which are scannable.
@@ -502,12 +502,12 @@ fn scan_element_for_single_alt_groups(elem: &Element, rule_name: &String, map: &
 }
 
 fn extract_group_alts_for_scan(elem: &Element) -> Option<&Array<Alternative>> {
-    if let Group(alts) = elem {
-        return Option::Some(alts);
+    if let Group(g) = elem {
+        return Option::Some(&g.alternatives);
     }
     if let Repeat(rep) = elem {
-        if let Group(alts) = &rep.element {
-            return Option::Some(alts);
+        if let Group(g) = &rep.element {
+            return Option::Some(&g.alternatives);
         }
     }
     return null;

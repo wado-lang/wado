@@ -1,5 +1,7 @@
 use {
     Grammar,
+    GrammarOption,
+    OptionValue,
     ParserRule,
     Alternative,
     Element,
@@ -270,6 +272,29 @@ test "parse TypeScriptParser.g4" {
     assert g.name == "TypeScriptParser";
     assert g.lexer_rules.is_empty();
     assert g.parser_rules.len() > 20;
+
+    // singleExpression has a PowerExpression alternative carrying
+    // `<assoc=right>` — the alt-prefix option that drives right-associative
+    // code generation for `**`. See vendor/antlr4/doc/left-recursion.md.
+    let mut found_power = false;
+    for let rule of &g.parser_rules {
+        if rule.name != "singleExpression" { continue; }
+        for let alt of &rule.alternatives {
+            if let Some(label) = &alt.label {
+                if *label != "PowerExpression" { continue; }
+                found_power = true;
+                assert alt.options.len() == 1,
+                    `expected 1 option on PowerExpression, got {alt.options.len()}`;
+                assert alt.options[0].name == "assoc";
+                if let Ident(v) = &alt.options[0].value {
+                    assert *v == "right", `expected assoc=right, got assoc={*v}`;
+                } else {
+                    panic("expected Ident for assoc value");
+                }
+            }
+        }
+    }
+    assert found_power, "TypeScriptParser singleExpression missing PowerExpression alt";
 }
 
 test "merge ANTLR4 grammars" {

@@ -2,10 +2,16 @@ use { Span, Token, ParseError } from "../runtime.wado";
 use {
     Grammar,
     GrammarOption,
+    OptionValue,
     NamedAction,
     ParserRule,
     Alternative,
     Element,
+    RuleRefElement,
+    TokenRefElement,
+    LiteralElement,
+    WildcardElement,
+    GroupElement,
     RepeatElement,
     LabelElement,
     NotElement,
@@ -367,13 +373,11 @@ impl G4Parser {
     }
 
     /// Parse `options { name = value ; ... }` and return the entries.
-    /// Each option value is stored as the raw source text with no further
-    /// interpretation: bare identifiers, qualified `a.b.c` names, quoted
-    /// string literals (re-quoted with single quotes), integer literals,
-    /// and action-style `{ ... }` bodies (kept as `{ ... }` placeholder so
-    /// that downstream stages can tell an action value apart from an
-    /// identifier). Malformed entries are silently tolerated to match the
-    /// rest of the parser's recovery posture.
+    /// Each value is categorised into a typed `OptionValue` variant so
+    /// downstream stages don't need to re-parse the raw text; see
+    /// `parse_option_value` for the supported shapes. Malformed entries
+    /// are silently tolerated to match the rest of the parser's recovery
+    /// posture.
     fn parse_options_block(&mut self) -> Array<GrammarOption> {
         let mut out: Array<GrammarOption> = [];
         if !self.is_kind(G4Token::LBrace) {
@@ -413,42 +417,45 @@ impl G4Parser {
         return out;
     }
 
-    /// Parse a single option value. See `parse_options_block` for the
-    /// accepted value shapes.
-    fn parse_option_value(&mut self) -> String {
+    /// Parse a single ANTLR4 option value into its typed form:
+    /// - `'...'`                  → `Str(<body without quotes>)`
+    /// - `42`                     → `Int(42)`
+    /// - `{ ... }`                → `Action(<body without braces>)`
+    /// - `id`                     → `Ident("id")`
+    /// - `pkg.sub.Name`           → `Qualified(["pkg", "sub", "Name"])`
+    /// - anything else            → `Ident("")` (permissive recovery)
+    fn parse_option_value(&mut self) -> OptionValue {
         if self.is_kind(G4Token::StringLit) {
-            let mut out = String::with_capacity(2);
-            out.push('\'');
-            out.push_str(self.peek().text.to_string());
-            out.push('\'');
+            let body = self.peek().text.to_string();
             self.advance();
-            return out;
+            return OptionValue::Str(body);
         }
         if self.is_kind(G4Token::IntLit) {
-            let out = self.peek().text.to_string();
+            let text = self.peek().text.to_string();
             self.advance();
-            return out;
+            return OptionValue::Int(parse_int_literal(&text) as i64);
         }
         if self.is_kind(G4Token::LBrace) {
-            // Action value: discard body but preserve a textual marker so
-            // downstream tooling can distinguish it from an identifier.
-            self.skip_braced_block();
-            return "{}";
+            let body = self.extract_braced_body();
+            return OptionValue::Action(body);
         }
         if self.is_kind(G4Token::Identifier) {
-            let mut out = self.peek().text.to_string();
+            let head = self.peek().text.to_string();
             self.advance();
-            // Dotted qualified id: `java.util.List`.
+            if !(self.is_kind(G4Token::Dot)
+                && self.peek_kind_at(1) == G4Token::Identifier as i32) {
+                return OptionValue::Ident(head);
+            }
+            let mut parts: Array<String> = [head];
             while self.is_kind(G4Token::Dot)
                 && self.peek_kind_at(1) == G4Token::Identifier as i32 {
                 self.advance();
-                out.push('.');
-                out.push_str(self.peek().text.to_string());
+                parts.push(self.peek().text.to_string());
                 self.advance();
             }
-            return out;
+            return OptionValue::Qualified(parts);
         }
-        return "";
+        return OptionValue::Ident("");
     }
 
     /// Parse `@ id ('::' id)? '{' ... '}'`. The action body is discarded —
@@ -536,6 +543,30 @@ impl G4Parser {
         }
     }
 
+    /// Same traversal as `skip_braced_block`, but return the body text —
+    /// the source characters strictly between the outer `{` and `}`. Used
+    /// to preserve action-value bodies on `OptionValue::Action`.
+    fn extract_braced_body(&mut self) -> String {
+        let tok = self.peek();
+        let start = tok.span.start;
+        let end = rescan_balanced(&self.chars, start, '{', '}');
+        self.advance();
+        while !self.at_eof() && self.tokens[self.pos].span.start < end {
+            self.pos += 1;
+        }
+        // `end` is the position just after the closing `}`; body excludes
+        // the opening `{` at `start` and the closing `}` at `end - 1`.
+        let body_start = start + 1;
+        let body_end = if end > start + 1 { end - 1 } else { start + 1 };
+        let mut body = String::with_capacity(body_end - body_start);
+        let mut i = body_start;
+        while i < body_end {
+            body.push(self.chars[i]);
+            i += 1;
+        }
+        return body;
+    }
+
     /// Skip an ARG_ACTION (`[ ... ]`) of host-language code. Same rationale
     /// as `skip_braced_block`: nested `[` / `]` plus host-language strings
     /// and comments mean the byte-level lexer can't determine the right
@@ -550,6 +581,11 @@ impl G4Parser {
         }
     }
 
+    /// Skip a `<...>` angle-bracket block without interpreting its contents.
+    ///
+    /// Only retained for the lexer-alternative call site, where ANTLR4 does
+    /// not define element options. Parser-side element options are parsed by
+    /// `parse_angle_options()` and stored on the IR.
     fn skip_angle_block(&mut self) {
         self.expect(G4Token::LAngle).unwrap();
         let mut depth = 1;
@@ -561,6 +597,58 @@ impl G4Parser {
             }
             self.advance();
         }
+    }
+
+    /// Parse an ANTLR4 element-option angle block:
+    /// `< id '=' value (',' id '=' value)* >`. Returns the parsed options, or
+    /// an empty array if malformed. Value parsing reuses `parse_option_value`
+    /// so identifiers, qualified ids, integers, strings, and action-block
+    /// placeholders round-trip through the same code path as `options { ... }`.
+    /// Malformed entries are tolerated (best-effort resync to the closing `>`)
+    /// to match the rest of the parser's recovery posture.
+    fn parse_angle_options(&mut self) -> Array<GrammarOption> {
+        let mut out: Array<GrammarOption> = [];
+        if !self.is_kind(G4Token::LAngle) {
+            return out;
+        }
+        self.advance();
+        let mut depth = 1;
+        while !self.at_eof() && depth > 0 {
+            if self.is_kind(G4Token::RAngle) {
+                depth -= 1;
+                self.advance();
+                continue;
+            }
+            if self.is_kind(G4Token::LAngle) {
+                depth += 1;
+                self.advance();
+                continue;
+            }
+            if !self.is_kind(G4Token::Identifier) {
+                self.advance();
+                continue;
+            }
+            let name = self.peek().text.to_string();
+            self.advance();
+            if !self.is_kind(G4Token::Assign) {
+                while !self.at_eof()
+                    && !self.is_kind(G4Token::Comma)
+                    && !self.is_kind(G4Token::RAngle) {
+                    self.advance();
+                }
+                if self.is_kind(G4Token::Comma) {
+                    self.advance();
+                }
+                continue;
+            }
+            self.advance();
+            let value = self.parse_option_value();
+            out.push(GrammarOption { name, value });
+            if self.is_kind(G4Token::Comma) {
+                self.advance();
+            }
+        }
+        return out;
     }
 
     fn parse_parser_rule(&mut self, name: String) -> Result<ParserRule, ParseError> {
@@ -689,6 +777,7 @@ impl G4Parser {
 
     fn parse_alternative(&mut self) -> Result<Alternative, ParseError> {
         let mut elements: Array<Element> = [];
+        let mut options: Array<GrammarOption> = [];
         let mut label: Option<String> = null;
 
         loop {
@@ -708,9 +797,17 @@ impl G4Parser {
                 }
                 continue;
             }
-            // Skip element options <...> (e.g. <assoc=right>)
-            if self.is_kind(G4Token::LAngle) {
-                self.skip_angle_block();
+            // Element options `<key=value, ...>` appearing before any element
+            // of the alternative attach to the alternative as a whole
+            // (e.g. `<assoc=right>` on a left-recursive alt). Any `<...>`
+            // encountered later in the loop can only be a post-atom suffix
+            // that `parse_atom` already consumed, so it is safe to treat every
+            // in-alt angle block at this position as alt-prefix.
+            if self.is_kind(G4Token::LAngle) && elements.is_empty() {
+                let mut opts = self.parse_angle_options();
+                for let o of opts {
+                    options.push(o);
+                }
                 continue;
             }
             let elem = self.parse_element()?;
@@ -723,7 +820,7 @@ impl G4Parser {
             label = Option::<String>::Some(label_tok.text.to_string());
         }
 
-        return Result::<Alternative, ParseError>::Ok(Alternative { label, elements });
+        return Result::<Alternative, ParseError>::Ok(Alternative { label, options, elements });
     }
 
     fn parse_element(&mut self) -> Result<Element, ParseError> {
@@ -750,40 +847,56 @@ impl G4Parser {
                 self.skip_arg_action();
             }
             // Optional element options: `ID<assoc=right>`.
+            let mut options: Array<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
-                self.skip_angle_block();
+                options = self.parse_angle_options();
             }
             if is_lexer_rule_name(&name) || name == "EOF" {
-                return Result::<Element, ParseError>::Ok(Element::TokenRef(name));
+                return Result::<Element, ParseError>::Ok(
+                    Element::TokenRef(TokenRefElement { name, options }),
+                );
             }
-            return Result::<Element, ParseError>::Ok(Element::RuleRef(name));
+            return Result::<Element, ParseError>::Ok(
+                Element::RuleRef(RuleRefElement { name, options }),
+            );
         }
         if self.is_kind(G4Token::StringLit) {
             let tok = self.advance();
             let text = tok.text.to_string();
-            // Optional element options: `'foo'<...>`.
+            // Optional element options: `'foo'<p=3>`.
+            let mut options: Array<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
-                self.skip_angle_block();
+                options = self.parse_angle_options();
             }
-            return Result::<Element, ParseError>::Ok(Element::Literal(text));
+            return Result::<Element, ParseError>::Ok(
+                Element::Literal(LiteralElement { text, options }),
+            );
         }
         if self.is_kind(G4Token::LParen) {
             self.advance();
-            // Optional block-level options/actions:
+            // Optional block-level prequel:
             //   ( options { ... } : alt | alt )
             //   ( @init { ... } : alt | alt )
-            self.skip_block_prequel();
-            let alts = self.parse_alternatives()?;
+            // Option bodies are parsed onto the GroupElement; action bodies
+            // (`@id { ... }`) are still discarded — they are host-language
+            // code Gale cannot transpile.
+            let options = self.parse_block_prequel();
+            let alternatives = self.parse_alternatives()?;
             self.expect(G4Token::RParen)?;
-            return Result::<Element, ParseError>::Ok(Element::Group(alts));
+            return Result::<Element, ParseError>::Ok(
+                Element::Group(GroupElement { alternatives, options }),
+            );
         }
         if self.is_kind(G4Token::Dot) {
             self.advance();
             // Optional element options on wildcard: `.<...>`
+            let mut options: Array<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
-                self.skip_angle_block();
+                options = self.parse_angle_options();
             }
-            return Result::<Element, ParseError>::Ok(Element::Wildcard);
+            return Result::<Element, ParseError>::Ok(
+                Element::Wildcard(WildcardElement { options }),
+            );
         }
         if self.is_kind(G4Token::Tilde) {
             self.advance();
@@ -801,14 +914,18 @@ impl G4Parser {
 
     /// Inside a `( ... )` group, ANTLR4 allows an optional `options { ... }`
     /// block followed by `:`, or `@id { ... }` actions, before the actual
-    /// alternative list. We discard the option/action bodies.
-    fn skip_block_prequel(&mut self) {
+    /// alternative list. Returns the accumulated block-level options (empty
+    /// if none appeared). Action bodies are still discarded — they are
+    /// host-language code Gale cannot transpile.
+    fn parse_block_prequel(&mut self) -> Array<GrammarOption> {
+        let mut options: Array<GrammarOption> = [];
         let mut consumed = false;
         loop {
             if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str(&"options", &self.peek().text) {
                 self.advance();
-                if self.is_kind(G4Token::LBrace) {
-                    self.skip_braced_block();
+                let opts = self.parse_options_block();
+                for let o of opts {
+                    options.push(o);
                 }
                 consumed = true;
                 continue;
@@ -825,6 +942,7 @@ impl G4Parser {
         if consumed && self.is_kind(G4Token::Colon) {
             self.advance();
         }
+        return options;
     }
 
     fn parse_postfix(&mut self, elem: Element) -> Result<Element, ParseError> {
