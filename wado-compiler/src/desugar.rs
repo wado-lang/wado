@@ -33,7 +33,7 @@ struct DesugarContext {
     namespace_names: Vec<String>,
     /// `AstId` of the AST node currently being desugared. Synthetic nodes produced
     /// during desugaring inherit this id so that `Module::ast_id_count` remains
-    /// parser-allocated and AstIds stay dense in `0..ast_id_count`. The desugar
+    /// parser-allocated and `AstIds` stay dense in `0..ast_id_count`. The desugar
     /// phase is slated for removal; after that, every AST node will be parser-owned.
     ///
     /// `None` at module top-level before descending into any item. Must be `Some`
@@ -47,7 +47,7 @@ impl DesugarContext {
     ///
     /// Synthetic nodes have no source origin, so they inherit the id of the AST
     /// node currently being desugared. This preserves the parse-time density of
-    /// AstIds without requiring a separate id space for desugar-introduced nodes.
+    /// `AstIds` without requiring a separate id space for desugar-introduced nodes.
     ///
     /// Panics if called outside of any item body — callers must set
     /// `current_parent_id` before invoking any desugaring that may allocate

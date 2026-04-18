@@ -2370,7 +2370,7 @@ test "addition" {
         assert_eq!(m.ast_id_at(42, 1), None);
     }
 
-    const SAMPLE_WITH_BODIES: &str = r#"
+    const SAMPLE_WITH_BODIES: &str = r"
 fn add(a: i32, b: i32) -> i32 {
     let c = a + b;
     let mut d: i32 = c;
@@ -2388,7 +2388,7 @@ fn add(a: i32, b: i32) -> i32 {
 }
 
 struct Point { x: i32, y: i32 }
-"#;
+";
 
     #[test]
     fn ids_dense_with_function_bodies_and_patterns() {
