@@ -1,4 +1,5 @@
 use { TreeMap } from "core:collections";
+use { to_string, from_string } from "core:json";
 
 test "empty map" {
     let map: TreeMap<String, i32> = TreeMap::new();
@@ -494,3 +495,13 @@ test "i32 key remove" {
     assert map.len() == 2;
     assert map.get(2) matches { None };
 }
+
+// test "serde Serializer" {
+//     let mut map: TreeMap<String, String> = {
+//         "foo": "1",
+//         "bar": "2",
+//         "baz": "3",
+//     };
+
+//     assert to_string(&map) == "";
+// }
