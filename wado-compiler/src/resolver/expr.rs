@@ -575,6 +575,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check for global variables in current module
         if let Some(&(ty, _mutable)) = self.current_module_globals.get(&ident.name) {
+            self.record_item_reference_by_name(ident.id, &ident.name);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: self.current_module_source.clone(),
@@ -589,6 +590,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Some((source_module, original_name, ty, _mutable)) =
             self.imported_globals.get(&ident.name)
         {
+            self.record_item_reference_by_name(ident.id, &ident.name);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: source_module.clone(),
