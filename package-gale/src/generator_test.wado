@@ -1,5 +1,8 @@
 use {
     Grammar,
+    GrammarOption,
+    OptionValue,
+    NamedAction,
     ParserRule,
     Alternative,
     Element,
@@ -856,6 +859,163 @@ SEMI : ';' ;";
     // Non-letter literal must not be duplicated — plain mismatch form.
     assert str_contains(&output, "chars[pos] != ';'");
     assert !str_contains(&output, "chars[pos].eq_ignore_ascii_case(");
+}
+
+test "metadata comment lists grammar-level options" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [
+            GrammarOption { name: "language", value: OptionValue::Ident("Python") },
+            GrammarOption { name: "superClass", value: OptionValue::Qualified(["my", "pkg", "BaseParser"]) },
+            GrammarOption { name: "tokenVocab", value: OptionValue::Ident("TestLexer") },
+            GrammarOption { name: "caseInsensitive", value: OptionValue::Ident("true") },
+        ],
+        named_actions: [],
+        source_files: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "// Grammar metadata from source .g4 prequels:"),
+        `missing metadata header:\n{output}`;
+    assert str_contains(&output, "//   option language = Python"),
+        `missing language option:\n{output}`;
+    assert str_contains(&output, "//   option superClass = my.pkg.BaseParser"),
+        `missing superClass option:\n{output}`;
+    assert str_contains(&output, "//   option tokenVocab = TestLexer"),
+        `missing tokenVocab option:\n{output}`;
+    assert str_contains(&output, "//   option caseInsensitive = true"),
+        `missing caseInsensitive option:\n{output}`;
+}
+
+test "metadata comment formats string and int option values" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [
+            GrammarOption { name: "tokenVocab", value: OptionValue::Str("foo.g4") },
+            GrammarOption { name: "k", value: OptionValue::Int(3) },
+            GrammarOption { name: "init", value: OptionValue::Action("some code;") },
+        ],
+        named_actions: [],
+        source_files: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "//   option tokenVocab = \"foo.g4\""),
+        `missing quoted string option:\n{output}`;
+    assert str_contains(&output, "//   option k = 3"),
+        `missing int option:\n{output}`;
+    assert str_contains(&output, "//   option init = { ... }"),
+        `action body should be elided:\n{output}`;
+}
+
+test "metadata comment lists named actions" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [
+            NamedAction { scope: null, name: "header" },
+            NamedAction { scope: Option::<String>::Some("parser"), name: "members" },
+            NamedAction { scope: Option::<String>::Some("lexer"), name: "members" },
+        ],
+        source_files: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "// Grammar metadata from source .g4 prequels:"),
+        `missing metadata header:\n{output}`;
+    assert str_contains(&output, "//   @header"),
+        `missing @header action marker:\n{output}`;
+    assert str_contains(&output, "//   @parser::members"),
+        `missing @parser::members action marker:\n{output}`;
+    assert str_contains(&output, "//   @lexer::members"),
+        `missing @lexer::members action marker:\n{output}`;
+}
+
+test "metadata block omitted when no options and no named actions" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+        source_files: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert !str_contains(&output, "// Grammar metadata from source .g4 prequels:"),
+        `metadata header should be omitted when empty:\n{output}`;
+}
+
+test "visibility comment emitted on non-default parser rule" {
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [
+            ParserRule {
+                name: "expr",
+                visibility: Visibility::Public,
+                options: [],
+                alternatives: [
+                    Alternative {
+                        label: null,
+                        options: [],
+                        elements: [Element::TokenRef(TokenRefElement::new("ID"))],
+                    },
+                ],
+            },
+            ParserRule {
+                name: "plain",
+                visibility: Visibility::Default,
+                options: [],
+                alternatives: [
+                    Alternative {
+                        label: null,
+                        options: [],
+                        elements: [Element::TokenRef(TokenRefElement::new("ID"))],
+                    },
+                ],
+            },
+        ],
+        lexer_rules: [LexerRule::new("ID", false, false, [])],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+        source_files: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "// rule visibility: public (ignored by codegen, matches ANTLR4)"),
+        `expected visibility comment for Public rule:\n{output}`;
+    // Default visibility must not add any comment.
+    assert !str_contains(&output, "// rule visibility: default"),
+        `Default visibility must not emit a comment:\n{output}`;
+}
+
+test "visibility comment emitted on non-default lexer rule" {
+    let mut id_rule = LexerRule::new("ID", false, false, []);
+    id_rule.visibility = Visibility::Protected;
+    let grammar = Grammar {
+        name: "Test",
+        parser_rules: [],
+        lexer_rules: [id_rule],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+        source_files: [],
+    };
+    let output = generate(&grammar, &DEFAULT_OPTIONS);
+    assert str_contains(&output, "// rule visibility: protected (ignored by codegen, matches ANTLR4)"),
+        `expected visibility comment for Protected lexer rule:\n{output}`;
 }
 
 fn str_contains(haystack: &String, needle: &String) -> bool {

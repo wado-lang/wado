@@ -29,6 +29,7 @@ use {
     str_set_from,
     str_set_insert_all,
     case_names_for_rule,
+    gen_visibility_comment,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
@@ -2261,6 +2262,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
     ctx.group_counter = 0;
     let type_name = rule_type_name(&rule.name);
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
+    gen_visibility_comment(w, &rule.visibility);
 
     // Precompute the starting group counter for each alternative.
     // This matches the type gen which processes alts in index order.

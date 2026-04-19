@@ -16,7 +16,7 @@ use {
     RepeatElement,
     LabelElement,
 } from "./ir.wado";
-use { to_lower, escape_char, literal_const_name } from "./gen_util.wado";
+use { to_lower, escape_char, literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec } from "./wadopoet.wado";
 
 pub struct LitToken {
@@ -282,6 +282,7 @@ fn gen_lexer_match_fn(
 ) {
     let fn_name = `try_{to_lower(&rule.name)}`;
     let ci = resolve_ci(grammar_opts, &rule.options);
+    gen_visibility_comment(w, &rule.visibility);
     let mut f = FnSpec::new(&fn_name);
     f.add_param("chars", "&Array<char>");
     f.add_param("start", "i32");
