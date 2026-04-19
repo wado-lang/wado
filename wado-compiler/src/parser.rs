@@ -2,8 +2,8 @@
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AttrArg,
-    Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison,
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
+    AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison,
     ClosureExpr, ClosureParam, CmImport, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
     Condition, ConditionElement, ContinueStmt, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr,
     ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
@@ -340,13 +340,25 @@ impl Parser {
 
     /// Parse variant pattern bindings: `Name(pat1, pat2, ...)`
     /// Assumes the name has been consumed and current token is `(`.
-    fn parse_variant_pattern(&mut self, name: String, start_span: Span) -> ParseResult<Pattern> {
+    ///
+    /// `name_id` / `name_span` identify the case-name identifier (the `Some`
+    /// in `Some(x)`, or the `Some` part of `Option::Some(x)`). They are used
+    /// by the resolver to record use→def references for LSP navigation.
+    fn parse_variant_pattern(
+        &mut self,
+        name: String,
+        start_span: Span,
+        name_id: Option<AstId>,
+        name_span: Span,
+    ) -> ParseResult<Pattern> {
         self.advance(); // consume (
         let bindings = self.parse_comma_separated(&TokenKind::RParen, Self::parse_pattern)?;
         let end_span = self.peek().span;
         self.expect(&TokenKind::RParen)?;
         Ok(Pattern::Variant {
             variant_name: name,
+            name_id,
+            name_span,
             bindings,
             span: start_span.merge(&end_span),
         })
@@ -1923,23 +1935,28 @@ impl Parser {
             } else if self.check(&TokenKind::ColonColon) {
                 // Qualified name: Type::Case, Type::CONST, etc.
                 self.advance();
+                let suffix_span = self.peek().span;
                 let suffix = self.consume_ident()?;
+                let suffix_id = self.alloc_ast_id();
                 let qualified = format!("{name}::{suffix}");
                 let end_span = self.peek().span;
                 if self.check(&TokenKind::LParen) {
                     // Qualified variant with bindings: Option::Some(x)
-                    self.parse_variant_pattern(qualified, start_span)
+                    self.parse_variant_pattern(qualified, start_span, Some(suffix_id), suffix_span)
                 } else {
                     // Qualified name without bindings: Color::Red, i32::MAX
                     Ok(Pattern::Variant {
                         variant_name: qualified,
+                        name_id: Some(suffix_id),
+                        name_span: suffix_span,
                         bindings: vec![],
                         span: start_span.merge(&end_span),
                     })
                 }
             } else if self.check(&TokenKind::LParen) {
                 // Variant with bindings: Some(x), just(n), etc.
-                self.parse_variant_pattern(name, start_span)
+                let name_id = self.alloc_ast_id();
+                self.parse_variant_pattern(name, start_span, Some(name_id), start_span)
             } else if self.check(&TokenKind::LBrace) {
                 // Named struct pattern: Point { x, y }
                 self.parse_struct_pattern_fields(Some(name))

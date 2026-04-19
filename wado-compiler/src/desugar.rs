@@ -320,10 +320,14 @@ fn desugar_pattern(p: &Pattern) -> Pattern {
         }
         Pattern::Variant {
             variant_name,
+            name_id,
+            name_span,
             bindings,
             span,
         } => Pattern::Variant {
             variant_name: variant_name.clone(),
+            name_id: *name_id,
+            name_span: *name_span,
             bindings: bindings.iter().map(desugar_pattern).collect(),
             span: *span,
         },
@@ -1637,6 +1641,8 @@ fn strip_ns_from_pattern(pattern: Pattern, ctx: &DesugarContext) -> Pattern {
     match pattern {
         Pattern::Variant {
             variant_name,
+            name_id,
+            name_span,
             bindings,
             span,
         } => {
@@ -1647,6 +1653,8 @@ fn strip_ns_from_pattern(pattern: Pattern, ctx: &DesugarContext) -> Pattern {
                 } else {
                     stripped.to_string()
                 },
+                name_id,
+                name_span,
                 bindings: bindings
                     .into_iter()
                     .map(|p| strip_ns_from_pattern(p, ctx))

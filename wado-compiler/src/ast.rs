@@ -703,7 +703,15 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
                 v.visit_pattern(&field.pattern);
             }
         }
-        Pattern::Variant { bindings, .. } => {
+        Pattern::Variant {
+            name_id,
+            name_span,
+            bindings,
+            ..
+        } => {
+            if let Some(id) = name_id {
+                v.visit_id(*id, *name_span);
+            }
             for p in bindings {
                 v.visit_pattern(p);
             }
@@ -1962,6 +1970,14 @@ pub enum Pattern {
     /// Variant pattern: `Some(x)` or `None`
     Variant {
         variant_name: String,
+        /// `AstId` of the variant-name identifier in the pattern. Used to
+        /// record use→def references for LSP navigation (cursor on `Some`
+        /// inside a match arm jumps to the case's declaration site).
+        /// `None` for resolver-synthesized patterns that do not originate in
+        /// source (e.g., None-coercion from `null`).
+        name_id: Option<AstId>,
+        /// Span of the variant-name identifier (not the whole pattern).
+        name_span: Span,
         bindings: Vec<Pattern>,
         span: Span,
     },
