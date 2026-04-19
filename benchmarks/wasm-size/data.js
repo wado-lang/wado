@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776555200968,
+  "lastUpdate": 1776558615546,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14533,6 +14533,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eee57fac1cfc827656e9c02e58bb2e875154b354"
         },
         "date": 1776555200677,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e0f81d84f9e19e906cae148f60dc415738486f0",
+          "message": "Merge pull request #882 from wado-lang/claude/fix-duplicate-merge-logic-76eIX\n\nrefactor(gale): consolidate duplicated merge logic and if-let chains",
+          "timestamp": "2026-04-19T09:26:33+09:00",
+          "tree_id": "3245adf430c5682c8235fc8ff38c0f0a2d43d6ca",
+          "url": "https://github.com/wado-lang/wado/commit/5e0f81d84f9e19e906cae148f60dc415738486f0"
+        },
+        "date": 1776558615308,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
