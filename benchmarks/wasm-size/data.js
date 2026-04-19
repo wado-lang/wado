@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776585824944,
+  "lastUpdate": 1776599925304,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14841,6 +14841,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/24abd76efc363007c4a90e399dd6d8203b918929"
         },
         "date": 1776585824644,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a05f283aa9587b98d0397ce054d8ddee29208b7c",
+          "message": "Merge pull request #889 from wado-lang/claude/add-jump-to-def-tests-1Wqtu\n\nwado-lsp: broaden jump-to-definition coverage",
+          "timestamp": "2026-04-19T20:54:34+09:00",
+          "tree_id": "472cdb62780f027601b3d1a901e6df1fb4e1afb5",
+          "url": "https://github.com/wado-lang/wado/commit/a05f283aa9587b98d0397ce054d8ddee29208b7c"
+        },
+        "date": 1776599924998,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
