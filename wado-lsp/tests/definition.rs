@@ -28,36 +28,8 @@ impl TestHost {
 
 impl CompilerHost for TestHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        // Try the path as-is, then try the "./foo" ↔ "/foo" variations so
-        // tests can register files under absolute keys ("/lib.wado") while the
-        // compiler resolves local imports as "./lib.wado". A bare "foo" form
-        // falls through to both the "/foo" and "./foo" variations — used by
-        // `#include_str` / `#include_bytes` which normalize the leading `./`
-        // away before asking the host.
         if let Some(b) = self.sources.get(path) {
             return Ok(b.clone());
-        }
-        if let Some(rest) = path.strip_prefix("./") {
-            let alt = format!("/{rest}");
-            if let Some(b) = self.sources.get(&alt) {
-                return Ok(b.clone());
-            }
-        }
-        if let Some(rest) = path.strip_prefix('/') {
-            let alt = format!("./{rest}");
-            if let Some(b) = self.sources.get(&alt) {
-                return Ok(b.clone());
-            }
-        }
-        if !path.starts_with('/') && !path.starts_with("./") {
-            let alt = format!("/{path}");
-            if let Some(b) = self.sources.get(&alt) {
-                return Ok(b.clone());
-            }
-            let alt = format!("./{path}");
-            if let Some(b) = self.sources.get(&alt) {
-                return Ok(b.clone());
-            }
         }
         Err(SourceError::NotFound {
             path: path.to_string(),
@@ -620,7 +592,7 @@ fn imported_item_use_definition() {
             "}\n",
         );
         let result = def_at_in(
-            &[("/lib.wado", lib), ("/test.wado", entry)],
+            &[("./lib.wado", lib), ("/test.wado", entry)],
             "/test.wado",
             2,
             14,
@@ -643,7 +615,7 @@ fn use_specifier_definition() {
             "}\n",
         );
         let result = def_at_in(
-            &[("/lib.wado", lib), ("/test.wado", entry)],
+            &[("./lib.wado", lib), ("/test.wado", entry)],
             "/test.wado",
             0,
             9,
@@ -666,7 +638,7 @@ fn aliased_import_use_definition() {
             "}\n",
         );
         let result = def_at_in(
-            &[("/lib.wado", lib), ("/test.wado", entry)],
+            &[("./lib.wado", lib), ("/test.wado", entry)],
             "/test.wado",
             2,
             11,
@@ -731,6 +703,33 @@ fn include_str_path_definition() {
     });
 }
 
+// The cursor on the `#include_str` macro name (not the path literal) currently
+// falls into `file_path_definition` because `Literal::IncludeStr` stores only
+// the path string and the matcher keys off the entire literal span. This test
+// pins the behaviour so narrowing the match to the path literal (see TODO in
+// wado-lsp/CLAUDE.md) is a deliberate change.
+#[test]
+fn include_str_macro_name_currently_jumps_to_file() {
+    futures::executor::block_on(async {
+        let runtime = "// helper\n";
+        let entry = concat!(
+            "fn f() {\n",
+            "    let x = #include_str(\"./runtime.wado\");\n",
+            "}\n",
+        );
+        // Cursor on the `#` of `#include_str` (column 13, 1-based).
+        let result = def_at_in(
+            &[("/runtime.wado", runtime), ("/test.wado", entry)],
+            "/test.wado",
+            1,
+            12,
+        )
+        .await
+        .expect("cursor on `#include_str` macro name");
+        assert_eq!(result.uri, "file:///runtime.wado");
+    });
+}
+
 #[test]
 fn include_bytes_path_definition() {
     futures::executor::block_on(async {
@@ -765,7 +764,7 @@ fn use_from_filename_definition() {
             "}\n",
         );
         let result = def_at_in(
-            &[("/lib.wado", lib), ("/test.wado", entry)],
+            &[("./lib.wado", lib), ("/test.wado", entry)],
             "/test.wado",
             0,
             25,

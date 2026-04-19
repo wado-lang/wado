@@ -693,7 +693,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// joins the result with `base_path`. Three cases:
     ///
     /// - Absolute path (`/…`): prepend `dir` so the result is absolute; `join`
-    ///   with `base_path` returns just the absolute path unchanged.
+    ///   with `base_path` returns just the absolute path unchanged. When the
+    ///   entry sits at the filesystem root (`/foo.wado`), `dir` collapses to the
+    ///   empty string but the path is still absolute, so we preserve the leading
+    ///   `/` rather than falling into the CWD-relative branch.
     /// - Module-import relative (`./…` or `../…`): `dir` is already
     ///   base_path-relative (all imported modules are normalized to `./`), so
     ///   prepending it produces the correct base_path-relative result.
@@ -707,7 +710,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         {
             let dir = &module_source_str[..dir_end];
             let stripped = raw_path.strip_prefix("./").unwrap_or(raw_path);
-            if dir.starts_with('/') || dir.starts_with("./") || dir.starts_with("../") {
+            if module_source_str.starts_with('/')
+                || dir.starts_with("./")
+                || dir.starts_with("../")
+            {
                 return format!("{dir}/{stripped}");
             }
             return stripped.to_string();
