@@ -1,0 +1,72 @@
+name: wado-vscode
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  test-wado-vscode:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
+
+      - uses: jdx/mise-action@v3
+        with:
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          MISE_VERBOSE: ${{ runner.debug }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: wado-vscode/package-lock.json
+
+      # Build the bundled Wasm language server that the extension loads on
+      # activation. See docs/wep-2026-04-18-lsp-architecture.md for rationale.
+      - name: Build wado-lsp.wasm (wasm32-wasip1)
+        run: mise run build-wado-lsp-wasm
+
+      - name: Install npm dependencies
+        working-directory: wado-vscode
+        run: npm ci
+
+      - name: Compile TypeScript
+        working-directory: wado-vscode
+        run: npm run compile
+
+      - name: Run unit tests
+        working-directory: wado-vscode
+        run: npm run test:unit
+
+      # VS Code E2E tests require a display; xvfb is only available on Linux.
+      - name: Run E2E tests (Linux)
+        if: runner.os == 'Linux'
+        working-directory: wado-vscode
+        run: xvfb-run -a npm test
+        env:
+          ELECTRON_DISABLE_SANDBOX: "1"
+
+      - name: Run E2E tests (macOS / Windows)
+        if: runner.os != 'Linux'
+        working-directory: wado-vscode
+        run: npm test

@@ -24,6 +24,9 @@
   "activationEvents": [
     "onLanguage:wado"
   ],
+  "extensionDependencies": [
+    "ms-vscode.wasm-wasi-core"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
@@ -45,7 +48,42 @@
         "scopeName": "source.wado",
         "path": "./syntaxes/wado.tmLanguage.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "wado.restartLanguageServer",
+        "title": "Wado: Restart Language Server"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "wado.restartLanguageServer",
+        "key": "ctrl+shift+f5",
+        "mac": "cmd+shift+f5",
+        "when": "editorLangId == wado"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Wado",
+      "properties": {
+        "wado.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to a native `wado-lsp` binary. When set, the extension launches this binary as a subprocess instead of the bundled Wasm server. Compiler developers set this to `${workspaceFolder}/target/debug/wado-lsp`."
+        },
+        "wado.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the Wado language server."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -53,13 +91,18 @@
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha 'out/test/unit/**/*.test.js'"
+    "test:unit": "npm run compile && mocha \"out/test/unit/**/*.test.js\""
+  },
+  "dependencies": {
+    "@vscode/wasm-wasi": "1.0.2",
+    "@vscode/wasm-wasi-lsp": "0.1.0-pre.9",
+    "vscode-languageclient": "10.0.0-next.21"
   },
   "devDependencies": {
     "@types/glob": "latest",
     "@types/mocha": "latest",
     "@types/node": "latest",
-    "@types/vscode": "latest",
+    "@types/vscode": "^1.85.0",
     "@vscode/test-cli": "latest",
     "@vscode/test-electron": "latest",
     "@vscode/vsce": "latest",

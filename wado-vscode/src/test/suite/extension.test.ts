@@ -17,15 +17,17 @@ suite('Extension Test Suite', () => {
         assert.ok(languages.includes('wado'), 'Wado language should be registered');
     });
 
-    test('wado.version command should be registered', async () => {
-        // Ensure extension is activated first
+    test('wado.restartLanguageServer command should be registered', async () => {
         const extension = vscode.extensions.getExtension('wado-lang.wado');
         if (extension && !extension.isActive) {
             await extension.activate();
         }
 
         const commands = await vscode.commands.getCommands(true);
-        assert.ok(commands.includes('wado.version'), 'wado.version command should be registered');
+        assert.ok(
+            commands.includes('wado.restartLanguageServer'),
+            'wado.restartLanguageServer command should be registered',
+        );
     });
 
     test('.wado file extension should be associated with wado language', async () => {

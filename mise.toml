@@ -291,17 +291,20 @@ description = "Run wado-vscode tests"
 run = "cd wado-vscode && npm install && npm run test:unit && npm run test"
 
 [tasks.build-wado-lsp-wasm]
-description = "Build wado-lsp for wasm32-wasip2 and copy into wado-vscode/out/"
+description = "Build wado-lsp for wasm32-wasip1 and copy into wado-vscode/out/"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo build -p wado-lsp --bin wado-lsp --target wasm32-wasip2 --release
+# @vscode/wasm-wasi-lsp hosts wasm32-wasip1 modules only; the p2 component
+# target is not yet consumable by the VS Code Wasm host. See
+# docs/wep-2026-04-18-lsp-architecture.md (fallback noted in Prerequisites).
+cargo build -p wado-lsp --bin wado-lsp --target wasm32-wasip1 --release
 mkdir -p wado-vscode/out
-cp target/wasm32-wasip2/release/wado-lsp.wasm wado-vscode/out/wado_lsp.wasm
+cp target/wasm32-wasip1/release/wado-lsp.wasm wado-vscode/out/wado_lsp.wasm
 """
 
 [tasks.watch-wado-lsp-wasm]
-description = "Watch wado-lsp and rebuild the wasm32-wasip2 artifact on change"
+description = "Watch wado-lsp and rebuild the wasm32-wasip1 artifact on change"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
