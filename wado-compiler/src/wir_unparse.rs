@@ -1820,6 +1820,17 @@ impl<'a> WirUnparser<'a> {
             } => {
                 self.write_mem_store("builtin::store_i64", *offset, addr, value);
             }
+            WirInstr::V128Load { offset, addr, .. } => {
+                self.write_mem_load("builtin::load_v128", *offset, addr);
+            }
+            WirInstr::V128Store {
+                offset,
+                addr,
+                value,
+                ..
+            } => {
+                self.write_mem_store("builtin::store_v128", *offset, addr, value);
+            }
 
             // Table
             WirInstr::TableGet { table, index } => {
