@@ -1183,6 +1183,26 @@ pub fn remove_unreachable_functions(
     project: &mut FlatPackage,
     reachable_functions: &IndexSet<FunctionId>,
 ) {
+    // Pre-index the reachable set by monomorphization metadata so the
+    // "keep a generic template if any of its instantiations is reachable"
+    // check is O(1) per function instead of O(|reachable|).
+    //
+    // Every monomorphized `FreeFunctionName` carries `base_name` that is
+    // exactly the generic template's `func.name` (e.g. "Array::with_capacity"
+    // for "Array<i32>::with_capacity"), so we index by (module_source, base_name)
+    // and compare it to (func.module_source, func.name) directly — no string
+    // parsing required.
+    let reachable_monomorph_bases: IndexSet<(ModuleSource, String)> = reachable_functions
+        .iter()
+        .filter_map(|id| match id {
+            FunctionId::Free(name) if name.is_monomorphized => name
+                .base_name
+                .as_ref()
+                .map(|base| (name.module_source.clone(), base.clone())),
+            _ => None,
+        })
+        .collect();
+
     project.functions.retain(|func_rc| {
         let func = func_rc.borrow();
         let module_source = &func.module_source;
@@ -1213,10 +1233,10 @@ pub fn remove_unreachable_functions(
                 return true;
             }
 
-            // For generic methods/static methods, check if any monomorphized version is reachable
-            // Generic functions are named "Array::with_capacity" but calls use "Array<i32>::with_capacity"
-            // Check if any function ID in reachable_functions matches this base name
-            is_generic_func_reachable(reachable_functions, module_source, &func.name)
+            // Generic template: keep it if any monomorphized instance is reachable.
+            // The instance carries `base_name == func.name`, so this is a direct
+            // metadata comparison — no string search.
+            reachable_monomorph_bases.contains(&(module_source.clone(), func.name.clone()))
         } else {
             // Regular function
             let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
@@ -1226,62 +1246,6 @@ pub fn remove_unreachable_functions(
             reachable_functions.contains(&func_id)
         }
     });
-}
-
-/// Check if a generic function has any monomorphized version that is reachable.
-/// For example, "`Array::with_capacity`" should be kept if "Array<i32>`::with_capacity`" is reachable.
-fn is_generic_func_reachable(
-    reachable: &IndexSet<FunctionId>,
-    module_source: &ModuleSource,
-    func_name: &str,
-) -> bool {
-    // func_name is like "Array::with_capacity"
-    // We need to find any "Array<..>::with_capacity" in reachable set
-    let Some(sep_pos) = func_name.find("::") else {
-        return false;
-    };
-    let base_struct = &func_name[..sep_pos];
-    let method_name = &func_name[sep_pos + 2..];
-
-    for id in reachable {
-        if let FunctionId::Free(free_name) = id {
-            if free_name.module_source != *module_source {
-                continue;
-            }
-
-            // Check if name matches pattern "BaseStruct<..>::method_name"
-            if let Some(call_sep_pos) = free_name.name.find("::") {
-                let call_method = &free_name.name[call_sep_pos + 2..];
-
-                // Check if method name matches
-                if call_method != method_name {
-                    continue;
-                }
-
-                // Check if struct name matches using base_name metadata
-                // For monomorphized: "Array<i32>::len" has base_name "Array::len" -> extract "Array"
-                if free_name.is_monomorphized {
-                    if let Some(ref base_name) = free_name.base_name {
-                        // base_name is the generic name like "Array::len" - extract struct part
-                        let base_struct_from_meta = base_name
-                            .find("::")
-                            .map(|pos| &base_name[..pos])
-                            .unwrap_or(base_name);
-                        if base_struct_from_meta == base_struct {
-                            return true;
-                        }
-                    }
-                } else {
-                    // Non-monomorphized: direct struct name match
-                    let call_struct = &free_name.name[..call_sep_pos];
-                    if call_struct == base_struct {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    false
 }
 
 /// Compute the set of reachable types from reachable functions.
@@ -1857,92 +1821,83 @@ pub fn remove_unreachable_types(project: &mut FlatPackage) {
     {
         let type_table = project.type_table.borrow();
 
+        // Single pass over reachable_types to build lookup indices keyed by the
+        // metadata already carried on each ResolvedType. This replaces the
+        // earlier O(|structs| × |reachable_types|) repeated linear scans.
+        let mut reachable_struct_exact: IndexSet<(String, ModuleSource)> = IndexSet::default();
+        let mut reachable_struct_monomorph_names: IndexSet<String> = IndexSet::default();
+        let mut reachable_struct_monomorph_bases: IndexSet<String> = IndexSet::default();
+        let mut reachable_generic_instance_names: IndexSet<String> = IndexSet::default();
+        let mut reachable_variant_exact: IndexSet<(String, ModuleSource)> = IndexSet::default();
+        let mut reachable_enum_exact: IndexSet<(String, ModuleSource)> = IndexSet::default();
+
+        for &id in &reachable_types {
+            match type_table.get(id) {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    is_monomorphized,
+                    base_name,
+                } => {
+                    if *is_monomorphized {
+                        reachable_struct_monomorph_names.insert(name.clone());
+                        if let Some(base) = base_name {
+                            reachable_struct_monomorph_bases.insert(base.clone());
+                        }
+                    } else {
+                        reachable_struct_exact.insert((name.clone(), module_source.clone()));
+                    }
+                }
+                ResolvedType::GenericInstance { name, .. } => {
+                    reachable_generic_instance_names.insert(name.clone());
+                }
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                } => {
+                    reachable_variant_exact.insert((name.clone(), module_source.clone()));
+                }
+                ResolvedType::Enum {
+                    name,
+                    module_source,
+                } => {
+                    reachable_enum_exact.insert((name.clone(), module_source.clone()));
+                }
+                _ => {}
+            }
+        }
+
         let keep_structs: IndexSet<(String, ModuleSource)> = project
             .structs
             .iter()
             .filter(|s| {
-                // For non-monomorphized structs
                 if s.monomorph_info.is_none() {
-                    // Check if the struct type itself is reachable
-                    let struct_reachable = type_table
-                        .find_struct_type(&s.name, &s.module_source)
-                        .map(|id| reachable_types.contains(&id))
-                        .unwrap_or(false);
-
-                    // Check if any GenericInstance with this struct name is reachable
-                    let instance_reachable = reachable_types.iter().any(|&id| {
-                        matches!(
-                            type_table.get(id),
-                            ResolvedType::GenericInstance { name, .. } if name == &s.name
-                        )
-                    });
-
-                    // Check if any monomorphized version is reachable
-                    let monomorph_reachable = reachable_types.iter().any(|&id| {
-                        matches!(
-                            type_table.get(id),
-                            ResolvedType::Struct { base_name: Some(base), is_monomorphized: true, .. } if base == &s.name
-                        )
-                    });
-
-                    struct_reachable || instance_reachable || monomorph_reachable
+                    reachable_struct_exact
+                        .contains(&(s.name.clone(), s.module_source.clone()))
+                        || reachable_generic_instance_names.contains(&s.name)
+                        || reachable_struct_monomorph_bases.contains(&s.name)
                 } else {
-                    // For monomorphized structs, check by exact name match
-                    reachable_types.iter().any(|&id| {
-                        matches!(
-                            type_table.get(id),
-                            ResolvedType::Struct { name, is_monomorphized: true, .. } if name == &s.name
-                        )
-                    })
+                    reachable_struct_monomorph_names.contains(&s.name)
                 }
             })
             .map(|s| (s.name.clone(), s.module_source.clone()))
             .collect();
 
-        // Collect names of variants to keep
-        // A variant is kept if:
-        // 1. Its base Variant type is reachable, OR
-        // 2. Any GenericInstance with its name is reachable (e.g., Result<i32, String>)
         let keep_variants: IndexSet<(String, ModuleSource)> = project
             .variants
             .iter()
             .filter(|v| {
-                // Check if base Variant type is reachable
-                let base_reachable = type_table
-                    .iter_type_ids()
-                    .find(|&id| {
-                        matches!(type_table.get(id), ResolvedType::Variant { name, module_source, .. }
-                            if name == &v.name && module_source == &v.module_source)
-                    })
-                    .map(|id| reachable_types.contains(&id))
-                    .unwrap_or(false);
-
-                // Check if any GenericInstance with this variant name is reachable
-                let instance_reachable = reachable_types.iter().any(|&id| {
-                    matches!(
-                        type_table.get(id),
-                        ResolvedType::GenericInstance { name, .. } if name == &v.name
-                    )
-                });
-
-                base_reachable || instance_reachable
+                reachable_variant_exact.contains(&(v.name.clone(), v.module_source.clone()))
+                    || reachable_generic_instance_names.contains(&v.name)
             })
             .map(|v| (v.name.clone(), v.module_source.clone()))
             .collect();
 
-        // Collect names of enums to keep
         let keep_enums: IndexSet<(String, ModuleSource)> = project
             .enums
             .iter()
             .filter(|e| {
-                type_table
-                    .iter_type_ids()
-                    .find(|&id| {
-                        matches!(type_table.get(id), ResolvedType::Enum { name, module_source, .. }
-                            if name == &e.name && module_source == &e.module_source)
-                    })
-                    .map(|id| reachable_types.contains(&id))
-                    .unwrap_or(false)
+                reachable_enum_exact.contains(&(e.name.clone(), e.module_source.clone()))
             })
             .map(|e| (e.name.clone(), e.module_source.clone()))
             .collect();
