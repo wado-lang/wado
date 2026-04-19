@@ -726,4 +726,58 @@ mod tests {
             assert_range(&result, 0, 7, 13);
         });
     }
+
+    #[test]
+    fn effect_in_with_clause_definition() {
+        futures::executor::block_on(async {
+            let source = concat!(
+                "effect Log {\n",
+                "    fn write(&self, msg: String);\n",
+                "}\n",
+                "fn run() with Log {\n",
+                "}\n",
+            );
+            let result = def_at(source, 3, 15).await.expect("Log in with clause");
+            assert_range(&result, 0, 7, 10);
+        });
+    }
+
+    #[test]
+    fn generic_effect_parameter_use_definition() {
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn wrapper<effect E>(f: fn() with E) with E {\n",
+                "    f();\n",
+                "}\n",
+            );
+            let result = def_at(source, 0, 34)
+                .await
+                .expect("E in inner with clause");
+            assert_range(&result, 0, 18, 19);
+        });
+    }
+
+    #[test]
+    fn use_from_filename_definition() {
+        futures::executor::block_on(async {
+            let lib = "pub fn helper() -> i32 { return 42; }\n";
+            let entry = concat!(
+                "use { helper } from \"./lib.wado\";\n",
+                "fn main() -> i32 {\n",
+                "    return helper();\n",
+                "}\n",
+            );
+            let result = def_at_in(
+                &[("/lib.wado", lib), ("/test.wado", entry)],
+                "/test.wado",
+                0,
+                25,
+            )
+            .await
+            .expect("cursor inside \"./lib.wado\" string");
+            assert_eq!(result.uri, "file:///lib.wado");
+            assert_eq!(result.range.start.line, 0);
+            assert_eq!(result.range.start.character, 0);
+        });
+    }
 }
