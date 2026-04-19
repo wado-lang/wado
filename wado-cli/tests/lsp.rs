@@ -1730,7 +1730,7 @@ fn query_definition_no_match_text() {
     let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
     std::fs::write(tmp.path(), "export fn run() {\n}\n").unwrap();
 
-    let output = wado()
+    let assertion = wado()
         .args([
             "query",
             "definition",
@@ -1741,12 +1741,51 @@ fn query_definition_no_match_text() {
             tmp.path().to_str().unwrap(),
         ])
         .assert()
+        .success();
+    let raw = assertion.get_output();
+    let text = String::from_utf8(raw.stdout.clone()).unwrap();
+    let err = String::from_utf8(raw.stderr.clone()).unwrap();
+    assert!(text.contains("No definition"), "got: {text}");
+    // Valid program — no compile-error warning should appear.
+    assert!(
+        !err.contains("compile errors"),
+        "expected no warning, got: {err}"
+    );
+}
+
+#[test]
+fn query_definition_warns_on_compile_errors() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();
+    std::fs::write(
+        tmp.path(),
+        "export fn run() {\n    let x: i32 = \"oops\";\n    let y = nonexistent();\n}\n",
+    )
+    .unwrap();
+
+    let output = wado()
+        .args([
+            "query",
+            "definition",
+            "--line",
+            "3",
+            "--column",
+            "14",
+            tmp.path().to_str().unwrap(),
+        ])
+        .assert()
         .success()
         .get_output()
-        .stdout
+        .stderr
         .clone();
-    let text = String::from_utf8(output).unwrap();
-    assert!(text.contains("No definition"), "got: {text}");
+    let err = String::from_utf8(output).unwrap();
+    assert!(
+        err.contains("warning: result may be incomplete due to compile errors:"),
+        "got: {err}"
+    );
+    assert!(
+        err.contains("type mismatch") || err.contains("nonexistent"),
+        "expected error details, got: {err}"
+    );
 }
 
 #[test]
@@ -1768,12 +1807,17 @@ fn query_references_requires_line_and_column() {
 }
 
 #[test]
-fn query_unknown_kind_lists_new_kinds() {
-    wado()
+fn query_unknown_kind_lists_available_kinds() {
+    let output = wado()
         .args(["query", "hover"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("references"))
-        .stderr(predicate::str::contains("document-highlight"))
-        .stderr(predicate::str::contains("definition"));
+        .get_output()
+        .stderr
+        .clone();
+    let stderr = String::from_utf8(output).unwrap();
+    assert_eq!(
+        stderr,
+        "Error: unknown query kind 'hover'. Available: diagnostics, references, document-highlight, definition\n",
+    );
 }
