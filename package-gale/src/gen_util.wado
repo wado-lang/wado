@@ -1,5 +1,25 @@
-use { Alternative, Element } from "./ir.wado";
+use { Alternative, Element, Visibility } from "./ir.wado";
+use { CodeWriter } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
+
+/// Emit a `// rule visibility: <name> (ignored by codegen, matches ANTLR4)`
+/// comment for a rule whose .g4 source carried a `public` / `private` /
+/// `protected` modifier. ANTLR4 itself ignores these modifiers at code
+/// generation time, so Gale matches that behavior but surfaces the value as
+/// a doc comment above the generated `parse_X` / `try_X` function so the
+/// modifier stays observable in the output.
+pub fn gen_visibility_comment(w: &mut CodeWriter, visibility: &Visibility) {
+    let label = match *visibility {
+        Default => "",
+        Public => "public",
+        Private => "private",
+        Protected => "protected",
+    };
+    if label == "" {
+        return;
+    }
+    w.line(&`// rule visibility: {label} (ignored by codegen, matches ANTLR4)`);
+}
 
 fn is_wado_reserved(name: &String) -> bool {
     return match *name {

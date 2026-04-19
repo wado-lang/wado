@@ -1,4 +1,4 @@
-use { Grammar, ParserRule, Alternative, Element, RepeatElement, LabelElement, NotElement, RepeatKind, LexerRule } from "./ir.wado";
+use { Grammar, OptionValue, ParserRule, Alternative, Element, RepeatElement, LabelElement, NotElement, RepeatKind, LexerRule } from "./ir.wado";
 use {
     to_pascal_case,
     to_snake_case,
@@ -40,6 +40,7 @@ pub struct GenerateOptions {
 pub fn generate(grammar: &Grammar, options: &GenerateOptions) -> String {
     let mut w = CodeWriter::new();
     gen_header(&mut w, grammar);
+    gen_grammar_metadata(&mut w, grammar);
     gen_runtime(&mut w);
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_cst_types(&mut w, &grammar.parser_rules);
@@ -87,6 +88,51 @@ fn gen_runtime(w: &mut CodeWriter) {
     w.raw(#include_str("./runtime.wado"));
     w.raw("\n");
 }
+
+/// Surface grammar-level options and named actions from the .g4 prequel as
+/// pass-through comments in the generated output. ANTLR4 stores these on the
+/// IR (`Grammar.options`, `Grammar.named_actions`) but most values have no
+/// semantic effect on Gale's Wado codegen (e.g. `language`, `superClass`,
+/// `tokenVocab`, or `@header` bodies whose host-language code is discarded).
+/// Emitting them as a comment block keeps the information observable for
+/// downstream tooling and makes the .g4 prequel round-trip visible.
+fn gen_grammar_metadata(w: &mut CodeWriter, grammar: &Grammar) {
+    if grammar.options.is_empty() && grammar.named_actions.is_empty() {
+        return;
+    }
+    w.line("// Grammar metadata from source .g4 prequels:");
+    for let opt of &grammar.options {
+        w.line(&`//   option {opt.name} = {format_option_value(&opt.value)}`);
+    }
+    for let act of &grammar.named_actions {
+        if let Some(scope) = &act.scope {
+            w.line(&`//   @{*scope}::{act.name}`);
+        } else {
+            w.line(&`//   @{act.name}`);
+        }
+    }
+    w.blank();
+}
+
+fn format_option_value(v: &OptionValue) -> String {
+    return match *v {
+        Ident(s) => s,
+        Qualified(parts) => {
+            let mut out = String::with_capacity(16);
+            for let mut i = 0; i < parts.len(); i += 1 {
+                if i > 0 {
+                    out.push('.');
+                }
+                out.push_str(parts[i]);
+            }
+            out
+        },
+        Str(s) => `"{s}"`,
+        Int(n) => `{n}`,
+        Action(_) => "{ ... }",
+    };
+}
+
 
 fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
     let mut e = EnumSpec::new("TokenKind");
