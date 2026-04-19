@@ -2509,14 +2509,12 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             } else if esc == 102 {
                 "core:prelude/string.wado/String::push"(result_9, 12);
             } else if esc == 117 {
-                let __match_scrut_1: ref "core:prelude/types.wado//Result<char,DeserializeError>";
-                __match_scrut_1 = "core:json/JsonDeserializer::read_unicode_escape"(self);
-                if ref.test "core:prelude/types.wado//Result<char,DeserializeError>::Ok"(__match_scrut_1) {
+                "core:prelude/string.wado/String::push"(result_9, let __match_scrut_1: ref "core:prelude/types.wado//Result<char,DeserializeError>"; __match_scrut_1 = "core:json/JsonDeserializer::read_unicode_escape"(self); (if ref.test "core:prelude/types.wado//Result<char,DeserializeError>::Ok"(__match_scrut_1) -> char {
                     let __cast_2: ref "core:prelude/types.wado//Result<char,DeserializeError>::Ok";
                     __cast_2 = ref.cast "core:prelude/types.wado//Result<char,DeserializeError>::Ok"(__match_scrut_1);
                     __local_19 = __cast_2.payload_0;
-                    "core:prelude/string.wado/String::push"(result_9, __local_19);
-                } else if ref.test "core:prelude/types.wado//Result<char,DeserializeError>::Err"(__match_scrut_1) {
+                    __local_19;
+                } else if ref.test "core:prelude/types.wado//Result<char,DeserializeError>::Err"(__match_scrut_1) -> char {
                     let __cast_1: ref "core:prelude/types.wado//Result<char,DeserializeError>::Err";
                     __cast_1 = ref.cast "core:prelude/types.wado//Result<char,DeserializeError>::Err"(__match_scrut_1);
                     __local_20 = __cast_1.payload_0;
@@ -2524,7 +2522,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                     unreachable;
                 } else {
                     unreachable;
-                }
+                }));
             } else {
                 return struct.new "core:prelude/types.wado//Result<String,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__malformed_24: block -> ref "core:serde//DeserializeError" {
                     __local_63 = __tmpl: block -> ref "core:prelude/string.wado//String" {

@@ -12869,20 +12869,7 @@ pub fn String::trim_start(self: &String) -> String {
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
             let c: char = __variant_payload(__pattern_temp_0, case=0);
             if Box<char> { value: c }.char::is_whitespace() {
-                let code: u32 = c as u32;
-                if (code < 0x80) {
-                    start = (start + 1);
-                } else {
-                    if (code < 0x800) {
-                        start = (start + 2);
-                    } else {
-                        if (code < 0x10000) {
-                            start = (start + 3);
-                        } else {
-                            start = (start + 4);
-                        }
-                    }
-                }
+                start = (start + Box<char> { value: c }.char::len_utf8());
             } else {
                 break;
             }
@@ -13143,31 +13130,22 @@ pub fn String::contains_char(self: &String, ch: char) -> bool {
 }
 
 pub fn String::find_char(self: &String, pred: fn(char) -> bool) -> Option<i32> {
-    let mut byte_index: i32 = 0;
     let mut iter: StrCharIter = self.String::chars();
-    loop {
-        let __pattern_temp_0: Option<char> = iter."StrCharIter^Iterator::next"();
-        if __variant_test(__pattern_temp_0, case=0, name=Some) {
-            let c: char = __variant_payload(__pattern_temp_0, case=0);
-            if pred(c) {
-                return Option<i32>::Some(byte_index);
-            }
-            let code: u32 = c as u32;
-            if (code < 0x80) {
-                byte_index = (byte_index + 1);
-            } else {
-                if (code < 0x800) {
-                    byte_index = (byte_index + 2);
-                } else {
-                    if (code < 0x10000) {
-                        byte_index = (byte_index + 3);
-                    } else {
-                        byte_index = (byte_index + 4);
+    __for_9: {
+        let mut byte_index: i32 = 0;
+        loop {
+            let __pattern_temp_0: Option<char> = iter."StrCharIter^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let c: char = __variant_payload(__pattern_temp_0, case=0);
+                __for_9_body: {
+                    if pred(c) {
+                        return Option<i32>::Some(byte_index);
                     }
                 }
+                byte_index = (byte_index + Box<char> { value: c }.char::len_utf8());
+            } else {
+                break __for_9;
             }
-        } else {
-            break;
         }
     }
     return null;
@@ -13190,7 +13168,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str("core:prelude/string.wado");
                 __r.String::push_str(":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 774 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 754 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(": ");
                 __r.String::push_str("index out of bounds");
                 __r.String::push_str("\ncondition: byte_index >= 0 && byte_index <= self.used\n");
@@ -13235,7 +13213,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                     __r.String::push_str("core:prelude/string.wado");
                     __r.String::push_str(":");
                     let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                    Box<i32> { value: 777 }."i32^Display::fmt"(&mut __f);
+                    Box<i32> { value: 757 }."i32^Display::fmt"(&mut __f);
                     __r.String::push_str(": ");
                     __r.String::push_str("not on a UTF-8 character boundary");
                     __r.String::push_str("\ncondition: b < 0x80 || b >= 0xC0\n");
@@ -13261,19 +13239,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
         }
     }
     let code: u32 = ch as u32;
-    let char_len: i32 = if (code < 0x80) {
-        1;
-    } else {
-        if (code < 0x800) {
-            2;
-        } else {
-            if (code < 0x10000) {
-                3;
-            } else {
-                4;
-            };
-        };
-    };
+    let char_len: i32 = Box<char> { value: ch }.char::len_utf8();
     let new_used: i32 = (self.used + char_len);
     if (new_used > core::builtin::array_len(self.repr)) {
         self.String::grow(new_used);
@@ -13332,7 +13298,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str("core:prelude/string.wado");
                 __r.String::push_str(":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 829 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 801 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(": ");
                 __r.String::push_str("index out of bounds");
                 __r.String::push_str("\ncondition: byte_index >= 0 && byte_index <= self.used\n");
@@ -13377,7 +13343,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                     __r.String::push_str("core:prelude/string.wado");
                     __r.String::push_str(":");
                     let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                    Box<i32> { value: 832 }."i32^Display::fmt"(&mut __f);
+                    Box<i32> { value: 804 }."i32^Display::fmt"(&mut __f);
                     __r.String::push_str(": ");
                     __r.String::push_str("not on a UTF-8 character boundary");
                     __r.String::push_str("\ncondition: b < 0x80 || b >= 0xC0\n");
@@ -13438,7 +13404,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str("core:prelude/string.wado");
                 __r.String::push_str(":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 855 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 827 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(": ");
                 __r.String::push_str("index out of bounds");
                 __r.String::push_str("\ncondition: byte_index >= 0 && byte_index < self.used\n");
@@ -13500,13 +13466,13 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
         };
     };
     let src: i32 = (byte_index + char_len);
-    __for_9: {
+    __for_10: {
         let mut i: i32 = src;
         loop {
             if !(i < self.used) {
-                break __for_9;
+                break __for_10;
             }
-            __for_9_body: {
+            __for_10_body: {
                 core::builtin::array_set_u8(self.repr, (i - char_len), core::builtin::array_get_u8(self.repr, i));
             }
             i = (i + 1);
@@ -13522,13 +13488,13 @@ pub fn String::repeat(self: &String, n: i32) -> String {
     }
     let total: i32 = (self.used * n);
     let repr: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(total);
-    __for_10: {
+    __for_11: {
         let mut r: i32 = 0;
         loop {
             if !(r < n) {
-                break __for_10;
+                break __for_11;
             }
-            __for_10_body: {
+            __for_11_body: {
                 "core::builtin::core/builtin/array_copy<u8>"(repr, (r * self.used), self.repr, 0, self.used);
             }
             r = (r + 1);
@@ -13561,16 +13527,16 @@ pub fn String::replacen(self: &String, from: String, to: String, count: i32) -> 
             break;
         }
         let mut matched: bool = true;
-        __for_11: {
+        __for_12: {
             let mut j: i32 = 0;
             loop {
                 if !(j < from_len) {
-                    break __for_11;
+                    break __for_12;
                 }
-                __for_11_body: {
+                __for_12_body: {
                     if (core::builtin::array_get_u8(self.repr, (pos + j)) != core::builtin::array_get_u8(from_repr, j)) {
                         matched = false;
-                        break __for_11;
+                        break __for_12;
                     }
                 }
                 j = (j + 1);
@@ -13631,16 +13597,16 @@ pub fn "StrSplitIter^Iterator::next"(self: &mut StrSplitIter) -> Option<String> 
             break;
         }
         let mut matched: bool = true;
-        __for_12: {
+        __for_13: {
             let mut j: i32 = 0;
             loop {
                 if !(j < self.sep_len) {
-                    break __for_12;
+                    break __for_13;
                 }
-                __for_12_body: {
+                __for_13_body: {
                     if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(self.sep_repr, j)) {
                         matched = false;
-                        break __for_12;
+                        break __for_13;
                     }
                 }
                 j = (j + 1);
@@ -13838,16 +13804,16 @@ pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String
             break;
         }
         let mut matched: bool = true;
-        __for_13: {
+        __for_14: {
             let mut j: i32 = 0;
             loop {
                 if !(j < self.sep_len) {
-                    break __for_13;
+                    break __for_14;
                 }
-                __for_13_body: {
+                __for_14_body: {
                     if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(self.sep_repr, j)) {
                         matched = false;
-                        break __for_13;
+                        break __for_14;
                     }
                 }
                 j = (j + 1);

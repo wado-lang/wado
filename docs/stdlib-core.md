@@ -4319,45 +4319,25 @@ Compresses data using DEFLATE with Huffman-only encoding (no LZ77).
 
 Compresses data using DEFLATE with the specified compression level and strategy.
 
-#### `pub fn zlib_compress(input: &Array<u8>) -> Array<u8>`
+#### `pub fn zlib_compress(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
 
-Compresses data in zlib format with default compression level.
-
-#### `pub fn compress2(input: &Array<u8>, level: i32) -> Array<u8>`
-
-Compresses data in zlib format with the specified compression level.
-
-#### `pub fn compress_with_strategy(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
-
-Compresses data in zlib format with the specified compression level and strategy.
+Compresses data in zlib format with the specified compression level (defaults to Z_DEFAULT_COMPRESSION) and strategy (defaults to Z_DEFAULT_STRATEGY).
 
 #### `pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
 
 Decompresses gzip-wrapped data (RFC 1952).
 
-#### `pub fn gzip_compress(input: &Array<u8>) -> Array<u8>`
+#### `pub fn gzip_compress(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
 
-Compresses data in gzip format with default compression level.
+Compresses data in gzip format with the specified compression level and strategy.
 
-#### `pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8>`
+#### `pub fn uncompress(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError>`
 
-Compresses data in gzip format with the specified compression level.
+Auto-detect format and decompress (zlib or gzip) with the specified output size limit.
 
-#### `pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, ZlibError>`
+#### `pub fn deflate_raw(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
 
-Decompresses zlib-wrapped data (alias for `inflate_zlib`).
-
-#### `pub fn deflate_raw(input: &Array<u8>) -> Array<u8>`
-
-Compresses data as raw DEFLATE (no header/checksum) with default level.
-
-#### `pub fn deflate_raw2(input: &Array<u8>, level: i32) -> Array<u8>`
-
-Compresses data as raw DEFLATE (no header/checksum) with the specified level.
-
-#### `pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError>`
-
-Decompresses zlib-wrapped data with a maximum output size limit.
+Compresses data as raw DEFLATE (no zlib/gzip header or trailer) with the specified level and strategy.
 
 #### `pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8>`
 

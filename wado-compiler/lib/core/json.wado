@@ -769,10 +769,7 @@ impl JsonDeserializer {
                 't' => result.push('\t'),
                 'b' => result.push(8 as u8 as char),
                 'f' => result.push(12 as u8 as char),
-                'u' => match self.read_unicode_escape() {
-                    Ok(c) => result.push(c),
-                    Err(e) => return Result::Err(e),
-                },
+                'u' => result.push(self.read_unicode_escape()?),
                 _ => return Result::Err(DeserializeError::malformed(
                     `invalid escape '\\{esc}'`,
                     self.pos as i64,

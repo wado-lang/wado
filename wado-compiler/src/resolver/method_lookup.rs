@@ -1211,26 +1211,38 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let base_type_id = self.get_base_type(receiver_type);
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
-        let struct_name = match &base_type {
-            ResolvedType::Struct { name, .. } => name.clone(),
-            ResolvedType::GenericInstance { name, .. } => name.clone(),
-            _ => return vec![],
-        };
-        let struct_module_source = match &base_type {
-            ResolvedType::Struct { module_source, .. }
-            | ResolvedType::GenericInstance { module_source, .. } => Some(module_source.clone()),
-            _ => None,
-        };
-
         // Locate the method's AST just to recover the list of type parameter
         // names (excluding effect params). We use these names together with
         // `impl_offset` to materialise the `TypeParam` ids the solver needs
         // to track, without re-resolving the method signature.
-        let Some(method_type_param_names) = self.find_method_type_param_names(
-            &struct_name,
-            struct_module_source.as_ref(),
-            method_name,
-        ) else {
+        let method_type_param_names = match &base_type {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => self.find_method_type_param_names(name, Some(module_source), method_name),
+            ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => self
+                .trait_ctx
+                .type_param_bounds
+                .get(name)
+                .cloned()
+                .and_then(|bounds| {
+                    self.find_method_type_param_names_in_trait_bounds(
+                        &bounds.iter().map(|b| b.name.clone()).collect::<Vec<_>>(),
+                        method_name,
+                    )
+                }),
+            ResolvedType::AssocTypeProjection { bounds, .. } => {
+                self.find_method_type_param_names_in_trait_bounds(bounds, method_name)
+            }
+            _ => None,
+        };
+        let Some(method_type_param_names) = method_type_param_names else {
             return vec![];
         };
 
@@ -1255,7 +1267,77 @@ impl<H: CompilerHost> Resolver<'_, H> {
             infer.add_expected_return(decl_return_type, expected);
         }
 
-        infer.solve()
+        // Accept an inference result when each method type param resolved
+        // either to a concrete type, or to an outer-scope `TypeParam` (one
+        // already registered in `trait_ctx.type_params`). Outer-scope params
+        // are fine because monomorphization's index-based substitution will
+        // rewrite them alongside the surrounding generics. Anything else —
+        // including a fresh method-level `TypeParam` that no outer binding
+        // knows about — would leave a dangling id at the call site, so
+        // drop the inference and let the caller fall back to `vec![]`.
+        let scope_params: Vec<TypeId> = self
+            .trait_ctx
+            .type_params
+            .values()
+            .map(|&(_, tid)| tid)
+            .collect();
+        let (inferred, all_concrete) = infer.solve_with_phantoms();
+        if !all_concrete {
+            let all_outer = inferred.iter().all(|tid| scope_params.contains(tid));
+            if !all_outer {
+                return vec![];
+            }
+        }
+        inferred
+    }
+
+    /// Find the non-effect method type parameter names by searching the
+    /// declarations of the given trait bounds. Used when the receiver is a
+    /// type parameter or an associated-type projection whose concrete type is
+    /// unknown at inference time.
+    fn find_method_type_param_names_in_trait_bounds(
+        &self,
+        trait_names: &[String],
+        method_name: &str,
+    ) -> Option<Vec<String>> {
+        let extract_names = |method: &ast::Function| -> Option<Vec<String>> {
+            let names: Vec<String> = method
+                .type_params
+                .iter()
+                .filter(|p| !p.is_effect)
+                .map(|tp| tp.name.clone())
+                .collect();
+            if names.is_empty() { None } else { Some(names) }
+        };
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Trait(trait_decl) = item
+                    && trait_names.iter().any(|n| n == &trait_decl.name)
+                {
+                    for trait_method in &trait_decl.methods {
+                        if trait_method.name == method_name
+                            && let Some(names) = extract_names(trait_method)
+                        {
+                            return Some(names);
+                        }
+                    }
+                }
+            }
+        }
+        for item in self.current_module_items {
+            if let Item::Trait(trait_decl) = item
+                && trait_names.iter().any(|n| n == &trait_decl.name)
+            {
+                for trait_method in &trait_decl.methods {
+                    if trait_method.name == method_name
+                        && let Some(names) = extract_names(trait_method)
+                    {
+                        return Some(names);
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// Find the non-effect type parameter names of an instance method, in
@@ -1290,8 +1372,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if names.is_empty() { None } else { Some(names) }
         };
 
-        let impl_matches_struct = |impl_block: &ast::ImplBlock| -> bool {
-            if impl_block.trait_type.is_some() {
+        let impl_matches_struct = |impl_block: &ast::ImplBlock, include_trait: bool| -> bool {
+            if !include_trait && impl_block.trait_type.is_some() {
                 return false;
             }
             let impl_type_name = self.get_type_name(&impl_block.ty);
@@ -1299,10 +1381,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             impl_type_name == struct_name || impl_base_name == struct_name
         };
 
-        let search_items = |items: &[Item]| -> Option<Vec<String>> {
+        let search_items = |items: &[Item], include_trait: bool| -> Option<Vec<String>> {
             for item in items {
                 if let Item::Impl(impl_block) = item
-                    && impl_matches_struct(impl_block)
+                    && impl_matches_struct(impl_block, include_trait)
                 {
                     for method in &impl_block.methods {
                         if method.name == method_name
@@ -1318,18 +1400,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         if let Some(module_source) = struct_module_source
             && let Some(module) = self.loaded_modules.get(module_source)
-            && let Some(names) = search_items(&module.items)
+            && let Some(names) = search_items(&module.items, false)
         {
             return Some(names);
         }
 
         for module in self.loaded_modules.values() {
-            if let Some(names) = search_items(&module.items) {
+            if let Some(names) = search_items(&module.items, false) {
                 return Some(names);
             }
         }
 
-        if let Some(names) = search_items(self.current_module_items) {
+        if let Some(names) = search_items(self.current_module_items, false) {
             return Some(names);
         }
 
@@ -1342,6 +1424,43 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         if default_method.name == method_name
                             && default_method.body.is_some()
                             && let Some(names) = extract_names(default_method)
+                        {
+                            return Some(names);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: trait impls on the struct. When the method is defined in
+        // `impl Trait for Struct`, it still has its own type parameters
+        // (e.g. `fn put<T: Display>(&mut self, v: &T)`), which the inference
+        // solver needs to materialise.
+        if let Some(module_source) = struct_module_source
+            && let Some(module) = self.loaded_modules.get(module_source)
+            && let Some(names) = search_items(&module.items, true)
+        {
+            return Some(names);
+        }
+
+        for module in self.loaded_modules.values() {
+            if let Some(names) = search_items(&module.items, true) {
+                return Some(names);
+            }
+        }
+
+        if let Some(names) = search_items(self.current_module_items, true) {
+            return Some(names);
+        }
+
+        // Fallback: trait method declarations without default body. These can
+        // be called through a trait impl that reuses the declared type params.
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Trait(trait_decl) = item {
+                    for trait_method in &trait_decl.methods {
+                        if trait_method.name == method_name
+                            && let Some(names) = extract_names(trait_method)
                         {
                             return Some(names);
                         }
@@ -1809,6 +1928,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .map(|t| scope.resolve_type(t))
                     .unwrap_or(TypeTable::UNIT);
 
+                // Extract param_types while method-level type params are still
+                // in scope — otherwise `&T` in a parameter would not resolve to
+                // the proper `TypeParam` id that inference expects.
+                let param_types = scope.extract_param_types(&params);
+
                 // Remove method-level type params from scope
                 for type_param in &method_type_params {
                     scope.trait_ctx.type_params.shift_remove(&type_param.name);
@@ -1817,7 +1941,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .type_param_bounds
                         .shift_remove(&type_param.name);
                 }
-                let param_types = scope.extract_param_types(&params);
                 let param_is_mut: Vec<bool> = params
                     .iter()
                     .filter(|p| p.name != "self")

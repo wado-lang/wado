@@ -296,7 +296,7 @@ impl Serialize for String {
 impl<T: Serialize> Serialize for Option<T> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         if let Some(v) = self {
-            return v.serialize::<S>(s);
+            return v.serialize(s);
         }
         return s.serialize_null();
     }
@@ -304,90 +304,51 @@ impl<T: Serialize> Serialize for Option<T> {
 
 impl<T: Serialize> Serialize for Array<T> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let seq = s.begin_seq(self.len());
-        if let Ok(mut seq) = seq {
-            for let item of *self {
-                let r = seq.element::<T>(&item);
-                if let Err(e) = r {
-                    return Result::Err(e);
-                }
-            }
-            return seq.end();
+        let seq = s.begin_seq(self.len())?;
+        for let item of self {
+            seq.element(item)?;
         }
-        if let Err(e) = seq {
-            return Result::Err(e);
-        }
-        return Result::Err(SerializeError {
-            kind: SerializeErrorKind::Custom,
-            message: "begin_seq failed",
-        });
+        return seq.end();
     }
 }
 
 
 impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        if let Ok(v) = self {
-            let var = s.begin_variant(&"Result", &"Ok", 0);
-            if let Ok(mut vs) = var {
-                let r = vs.payload::<T>(v);
-                if let Err(e) = r {
-                    return Result::Err(e);
-                }
-                return vs.end();
-            }
-            if let Err(e) = var {
-                return Result::Err(e);
-            }
-        }
-        if let Err(v) = self {
-            let var = s.begin_variant(&"Result", &"Err", 1);
-            if let Ok(mut vs) = var {
-                let r = vs.payload::<E>(v);
-                if let Err(e) = r {
-                    return Result::Err(e);
-                }
-                return vs.end();
-            }
-            if let Err(e) = var {
-                return Result::Err(e);
+        match self {
+            Ok(v) => {
+                let var = s.begin_variant(&"Result", &"Ok", 0)?;
+                var.payload(v)?;
+                return var.end();
+            },
+            Err(v) => {
+                let var = s.begin_variant(&"Result", &"Err", 1)?;
+                var.payload(v)?;
+                return var.end();
             }
         }
-        unreachable();
     }
 }
 
 impl Deserialize for i8 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<i8, DeserializeError> {
-        let r = d.deserialize_i32();
-        if let Ok(v) = r {
-            if v < -128 || v > 127 {
-                return Result::Err(DeserializeError::overflow("value out of range for i8", -1));
-            }
-            return Result::Ok(v as i8);
+        let v = d.deserialize_i32()?;
+        if v < -128 || v > 127 {
+            return Result::Err(DeserializeError::overflow("value out of range for i8", -1));
         }
-        if let Err(e) = r {
-            return Result::Err(e);
-        }
-        unreachable();
+        return Result::Ok(v as i8);
     }
 }
 
 impl Deserialize for i16 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<i16, DeserializeError> {
-        let r = d.deserialize_i32();
-        if let Ok(v) = r {
-            if v < -32768 || v > 32767 {
-                return Result::Err(
-                    DeserializeError::overflow("value out of range for i16", -1),
-                );
-            }
-            return Result::Ok(v as i16);
+        let v = d.deserialize_i32()?;
+        if v < -32768 || v > 32767 {
+            return Result::Err(
+                DeserializeError::overflow("value out of range for i16", -1),
+            );
         }
-        if let Err(e) = r {
-            return Result::Err(e);
-        }
-        unreachable();
+        return Result::Ok(v as i16);
     }
 }
 
@@ -405,35 +366,23 @@ impl Deserialize for i64 {
 
 impl Deserialize for u8 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<u8, DeserializeError> {
-        let r = d.deserialize_u32();
-        if let Ok(v) = r {
-            if v > 255 {
-                return Result::Err(DeserializeError::overflow("value out of range for u8", -1));
-            }
-            return Result::Ok(v as u8);
+        let v = d.deserialize_u32()?;
+        if v > 255 {
+            return Result::Err(DeserializeError::overflow("value out of range for u8", -1));
         }
-        if let Err(e) = r {
-            return Result::Err(e);
-        }
-        unreachable();
+        return Result::Ok(v as u8);
     }
 }
 
 impl Deserialize for u16 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<u16, DeserializeError> {
-        let r = d.deserialize_u32();
-        if let Ok(v) = r {
-            if v > 65535 {
-                return Result::Err(
-                    DeserializeError::overflow("value out of range for u16", -1),
-                );
-            }
-            return Result::Ok(v as u16);
+        let v = d.deserialize_u32()?;
+        if v > 65535 {
+            return Result::Err(
+                DeserializeError::overflow("value out of range for u16", -1),
+            );
         }
-        if let Err(e) = r {
-            return Result::Err(e);
-        }
-        unreachable();
+        return Result::Ok(v as u16);
     }
 }
 
@@ -493,121 +442,59 @@ impl Deserialize for String {
 
 impl<T: Deserialize> Deserialize for Option<T> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Option<T>, DeserializeError> {
-        let null_check = d.is_null();
-        if let Ok(is_null) = null_check {
-            if is_null {
-                return Result::Ok(null);
-            }
-            let inner = T::deserialize(d);
-            if let Ok(v) = inner {
-                return Result::Ok(Option::Some(v));
-            }
-            if let Err(e) = inner {
-                return Result::Err(e);
-            }
+        let is_null = d.is_null()?;
+        if is_null {
+            return Result::Ok(null);
         }
-        if let Err(e) = null_check {
-            return Result::Err(e);
-        }
-        unreachable();
+        let v = T::deserialize(d)?;
+        return Result::Ok(Option::Some(v));
     }
 }
 
 impl<T: Deserialize> Deserialize for Array<T> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Array<T>, DeserializeError> {
-        let seq_result = d.begin_seq();
-        if let Ok(mut seq) = seq_result {
-            // Peek at the first element before allocating backing storage.
-            // Empty arrays (very common in practice) avoid any capacity allocation.
-            // Non-empty arrays start at capacity 4, covering 1–4 elements without a grow.
-            let first = seq.next_element::<T>();
-            if let Ok(first_opt) = first {
-                if let Some(first_elem) = first_opt {
-                    let mut items: Array<T> = Array::with_capacity(2);
-                    items.push(first_elem);
-                    loop {
-                        let next = seq.next_element::<T>();
-                        if let Ok(next_opt) = next {
-                            if let Some(item) = next_opt {
-                                items.push(item);
-                            } else {
-                                let end_result = seq.end();
-                                if let Err(e) = end_result {
-                                    return Result::Err(e);
-                                }
-                                return Result::Ok(items);
-                            }
-                        }
-                        if let Err(e) = next {
-                            return Result::Err(e);
-                        }
-                    }
+        let seq = d.begin_seq()?;
+        // Peek at the first element before allocating backing storage.
+        // Empty arrays (very common in practice) avoid any capacity allocation.
+        // Non-empty arrays start at capacity 4, covering 1–4 elements without a grow.
+        let first_opt = seq.next_element::<T>()?;
+        if let Some(first_elem) = first_opt {
+            let mut items: Array<T> = Array::with_capacity(2);
+            items.push(first_elem);
+            loop {
+                let next_opt = seq.next_element::<T>()?;
+                if let Some(item) = next_opt {
+                    items.push(item);
                 } else {
-                    let end_result = seq.end();
-                    if let Err(e) = end_result {
-                        return Result::Err(e);
-                    }
-                    return Result::Ok([] as Array<T>);
+                    seq.end()?;
+                    return Result::Ok(items);
                 }
             }
-            if let Err(e) = first {
-                return Result::Err(e);
-            }
-            unreachable();
+        } else {
+            seq.end()?;
+            return Result::Ok([] as Array<T>);
         }
-        if let Err(e) = seq_result {
-            return Result::Err(e);
-        }
-        unreachable();
     }
 }
 
 impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Result<T, E>, DeserializeError> {
-        let va_r = d.begin_variant(&"Result", 2);
-        if let Ok(mut va) = va_r {
-            let name_r = va.variant_name();
-            if let Ok(name) = name_r {
-                if name == "Ok" {
-                    let val_r = va.payload::<T>();
-                    if let Ok(val) = val_r {
-                        let end_r = va.end();
-                        if let Err(e) = end_r {
-                            return Result::Err(e);
-                        }
-                        return Result::Ok(Result::Ok(val));
-                    }
-                    if let Err(e) = val_r {
-                        return Result::Err(e);
-                    }
-                }
-                if name == "Err" {
-                    let val_r = va.payload::<E>();
-                    if let Ok(val) = val_r {
-                        let end_r = va.end();
-                        if let Err(e) = end_r {
-                            return Result::Err(e);
-                        }
-                        return Result::Ok(Result::Err(val));
-                    }
-                    if let Err(e) = val_r {
-                        return Result::Err(e);
-                    }
-                }
-                return Result::Err(DeserializeError {
-                    kind: DeserializeErrorKind::UnknownVariant,
-                    message: `unknown Result variant: {name}`,
-                    offset: -1,
-                });
-            }
-            if let Err(e) = name_r {
-                return Result::Err(e);
-            }
+        let va = d.begin_variant(&"Result", 2)?;
+        let name = va.variant_name()?;
+        if name == "Ok" {
+            let val = va.payload::<T>()?;
+            va.end()?;
+            return Result::Ok(Result::Ok(val));
+        } else if name == "Err" {
+            let val = va.payload::<E>()?;
+            va.end()?;
+            return Result::Ok(Result::Err(val));
         }
-        if let Err(e) = va_r {
-            return Result::Err(e);
-        }
-        unreachable();
+        return Result::Err(DeserializeError {
+            kind: DeserializeErrorKind::UnknownVariant,
+            message: `unknown Result variant: {name}`,
+            offset: -1,
+        });
     }
 }
 
@@ -616,8 +503,12 @@ impl<..T: Serialize> Serialize for [..T] {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let mut seq = s.begin_seq((*self).len())?;
         for let v of *self {
-            seq.element(&v);
+            seq.element(&v)?;
         }
+        // FIXME: the following code causes ICE
+        // for let v of self {
+        //     seq.element(v)?;
+        // }
         return seq.end();
     }
 }
