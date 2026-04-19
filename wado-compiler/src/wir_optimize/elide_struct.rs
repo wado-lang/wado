@@ -5,10 +5,35 @@
 //! - **Multi-field struct local elimination**: same as above but for structs with
 //!   N > 1 fields where each field is accessed exactly once.
 //! - **Flatten seq assignments**: canonicalizes `LocalSet(x, Seq([preamble, final]))`.
+//!
+//! Both elision passes share a single-traversal stats collector that records, per
+//! local name: total `LocalGet` count, `StructGet(LocalGet(name), _)` use count,
+//! def count (`LocalSet` + `LocalTee`), and per-field use counts. Validation then
+//! consults this map in O(C), and substitution walks the body once more. Each
+//! iteration of the fixed-point loop is O(N) in body size, replacing the previous
+//! per-candidate re-walks (O(C · N)).
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
+
+#[derive(Default)]
+struct LocalStats {
+    /// Every `LocalGet(name)` anywhere in the tree (including those wrapped in StructGet).
+    total_localgets: u32,
+    /// Every `StructGet(LocalGet(name), _)` occurrence.
+    structget_uses: u32,
+    /// Every `LocalSet(name, _)` or `LocalTee(name, _)` occurrence.
+    defs: u32,
+    /// Per-field use counts for `StructGet(LocalGet(name), field)`.
+    field_uses: IndexMap<String, u32>,
+}
+
+/// Candidate def: `LocalSet(name, StructNew { type_idx, fields })`.
+struct Candidate {
+    type_idx: usize,
+    fields: Vec<WirInstr>,
+}
 
 pub(super) fn elide_single_field_struct_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
@@ -43,80 +68,195 @@ pub(super) fn elide_multi_field_struct_locals(module: &mut WirPackage) {
     }
 }
 
+/// Single traversal: populate `stats` with def/use counts per local name and,
+/// if `record_candidates == Some(min_fields)`, record `LocalSet(name, StructNew)`
+/// with at least `min_fields` as candidate defs.
+fn collect_stats(
+    instr: &WirInstr,
+    stats: &mut IndexMap<String, LocalStats>,
+    candidates: &mut IndexMap<String, Candidate>,
+    min_fields: usize,
+    max_fields: usize,
+) {
+    match instr {
+        WirInstr::LocalGet { name, .. } => {
+            stats.entry(name.clone()).or_default().total_localgets += 1;
+        }
+        WirInstr::LocalSet { name, value } => {
+            stats.entry(name.clone()).or_default().defs += 1;
+            if let WirInstr::StructNew { type_id, fields } = value.as_ref()
+                && fields.len() >= min_fields
+                && fields.len() <= max_fields
+            {
+                candidates.insert(
+                    name.clone(),
+                    Candidate {
+                        type_idx: type_id.index() as usize,
+                        fields: fields.clone(),
+                    },
+                );
+            }
+            collect_stats(value, stats, candidates, min_fields, max_fields);
+        }
+        WirInstr::LocalTee { name, value } => {
+            stats.entry(name.clone()).or_default().defs += 1;
+            collect_stats(value, stats, candidates, min_fields, max_fields);
+        }
+        WirInstr::StructGet {
+            expr, field_name, ..
+        } => {
+            if let WirInstr::LocalGet { name, .. } = expr.as_ref() {
+                let s = stats.entry(name.clone()).or_default();
+                s.total_localgets += 1;
+                s.structget_uses += 1;
+                *s.field_uses.entry(field_name.clone()).or_insert(0) += 1;
+                // Don't recurse into expr — it's the LocalGet we just counted.
+            } else {
+                collect_stats(expr, stats, candidates, min_fields, max_fields);
+            }
+        }
+        _ => {
+            instr.for_each_child(&mut |child| {
+                collect_stats(child, stats, candidates, min_fields, max_fields);
+            });
+        }
+    }
+}
+
+/// Walk `instr` to check whether any descendant `LocalGet(name)` has its name in
+/// `candidates` and not equal to `exclude`.
+fn inner_refs_any_candidate(
+    instr: &WirInstr,
+    candidates: &IndexSet<String>,
+    exclude: &str,
+) -> bool {
+    if let WirInstr::LocalGet { name, .. } = instr {
+        return candidates.contains(name) && name != exclude;
+    }
+    let mut found = false;
+    instr.for_each_child(&mut |child| {
+        if !found && inner_refs_any_candidate(child, candidates, exclude) {
+            found = true;
+        }
+    });
+    found
+}
+
+/// One pass: collect stats, validate candidates, rewrite. Returns `true` if anything changed.
+fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
+    let mut stats: IndexMap<String, LocalStats> = IndexMap::default();
+    let mut candidates: IndexMap<String, Candidate> = IndexMap::default();
+    for instr in body.iter() {
+        collect_stats(instr, &mut stats, &mut candidates, 1, 1);
+    }
+    if candidates.is_empty() {
+        return false;
+    }
+    let candidate_names: IndexSet<String> = candidates.keys().cloned().collect();
+
+    // Filter to valid leaf candidates:
+    //   - exactly one LocalSet/LocalTee of this name
+    //   - exactly one StructGet(LocalGet(name), _) use
+    //   - every LocalGet(name) is wrapped by StructGet
+    //   - inner value doesn't reference another candidate
+    let valid: IndexMap<String, WirInstr> = candidates
+        .into_iter()
+        .filter_map(|(name, cand)| {
+            let s = stats.get(&name)?;
+            if s.defs != 1 || s.structget_uses != 1 {
+                return None;
+            }
+            if s.total_localgets != s.structget_uses {
+                return None;
+            }
+            let inner = cand.fields.into_iter().next()?;
+            if inner_refs_any_candidate(&inner, &candidate_names, &name) {
+                return None;
+            }
+            Some((name, inner))
+        })
+        .collect();
+
+    if valid.is_empty() {
+        return false;
+    }
+
+    for instr in body.iter_mut() {
+        substitute_single_field(instr, &valid);
+    }
+    true
+}
+
+/// Single-pass mutator: replaces `StructGet(LocalGet(name), _)` with `inner.clone()`
+/// for every valid candidate, and nops their defining `LocalSet`.
+fn substitute_single_field(instr: &mut WirInstr, valid: &IndexMap<String, WirInstr>) {
+    match instr {
+        WirInstr::LocalSet { name, .. } if valid.contains_key(name) => {
+            *instr = WirInstr::Nop;
+            return;
+        }
+        WirInstr::StructGet { expr, .. } => {
+            if let WirInstr::LocalGet { name, .. } = expr.as_ref()
+                && let Some(inner) = valid.get(name)
+            {
+                *instr = inner.clone();
+                return;
+            }
+        }
+        _ => {}
+    }
+    instr.for_each_boxed_child_mut(&mut |child| substitute_single_field(child, valid));
+}
+
 /// One pass for multi-field struct local elision. Returns `true` if anything changed.
 /// `type_field_names[i]` is `Some(vec_of_field_names)` if type i is a struct, else `None`.
 fn elide_multi_field_struct_locals_one_pass(
     body: &mut [WirInstr],
     type_field_names: &[Option<Vec<String>>],
 ) -> bool {
-    // Step 1: collect LocalSet(name, StructNew { fields: [e0..eN-1] }) for N > 1.
-    // Maps name -> (type_idx, fields).
-    let mut all_defs: IndexMap<String, (usize, Vec<WirInstr>)> = IndexMap::default();
+    let mut stats: IndexMap<String, LocalStats> = IndexMap::default();
+    let mut candidates: IndexMap<String, Candidate> = IndexMap::default();
     for instr in body.iter() {
-        collect_multi_field_struct_defs(instr, &mut all_defs);
+        collect_stats(instr, &mut stats, &mut candidates, 2, usize::MAX);
     }
-    if all_defs.is_empty() {
+    if candidates.is_empty() {
         return false;
     }
+    let candidate_names: IndexSet<String> = candidates.keys().cloned().collect();
 
-    let candidate_names: IndexSet<String> = all_defs.keys().cloned().collect();
-
-    // Step 2: filter to valid candidates.
-    //   - Exactly one LocalSet/LocalTee of this name
-    //   - Every LocalGet(name) is the direct expr of a StructGet
-    //   - Each field is accessed exactly once via StructGet(LocalGet(name), field_k)
-    //   - All N fields are accessed (total uses == N)
-    //   - Inner field values don't reference other candidates
-    let valid: IndexMap<String, IndexMap<String, WirInstr>> = all_defs
+    // Filter: same as single-field, plus each field accessed exactly once with the
+    // struct's declared field names.
+    let valid: IndexMap<String, IndexMap<String, WirInstr>> = candidates
         .into_iter()
-        .filter_map(|(name, (type_idx, fields))| {
-            // Must have more than 1 field (single-field handled by other pass).
-            if fields.len() <= 1 {
+        .filter_map(|(name, cand)| {
+            let s = stats.get(&name)?;
+            if s.defs != 1 {
                 return None;
             }
-            // Exactly one def.
-            let def_count: usize = body.iter().map(|i| count_local_defs(i, &name)).sum();
-            if def_count != 1 {
+            let struct_field_names = type_field_names.get(cand.type_idx)?.as_ref()?;
+            if struct_field_names.len() != cand.fields.len() {
                 return None;
             }
-            // All LocalGet(name) are via StructGet.
-            if !body
-                .iter()
-                .all(|i| local_used_only_via_struct_get(i, &name))
-            {
+            if s.structget_uses as usize != cand.fields.len() {
                 return None;
             }
-            // Get field names from pre-computed table.
-            let struct_field_names = type_field_names.get(type_idx)?.as_ref()?;
-            if struct_field_names.len() != fields.len() {
+            if s.total_localgets != s.structget_uses {
                 return None;
             }
-            // Total StructGet uses must equal number of fields.
-            let use_count: usize = body.iter().map(|i| count_struct_get_uses(i, &name)).sum();
-            if use_count != fields.len() {
-                return None;
-            }
-            // Each field must be accessed exactly once.
-            for field_name in struct_field_names {
-                let field_uses: usize = body
-                    .iter()
-                    .map(|i| count_struct_get_field_uses(i, &name, field_name))
-                    .sum();
-                if field_uses != 1 {
+            for fname in struct_field_names {
+                if s.field_uses.get(fname).copied().unwrap_or(0) != 1 {
                     return None;
                 }
             }
-            // No inner value references other candidates.
-            for inner in &fields {
+            for inner in &cand.fields {
                 if inner_refs_any_candidate(inner, &candidate_names, &name) {
                     return None;
                 }
             }
-            // Build substitution map: field_name -> fields[k].
             let subst: IndexMap<String, WirInstr> = struct_field_names
                 .iter()
-                .zip(fields)
-                .map(|(f, v)| (f.clone(), v))
+                .cloned()
+                .zip(cand.fields)
                 .collect();
             Some((name, subst))
         })
@@ -126,227 +266,36 @@ fn elide_multi_field_struct_locals_one_pass(
         return false;
     }
 
-    // Step 3: substitute and nop.
-    for (name, field_map) in &valid {
-        for instr in body.iter_mut() {
-            substitute_multi_field_struct_get(instr, name, field_map);
-            nop_local_set_of(instr, name);
-        }
+    for instr in body.iter_mut() {
+        substitute_multi_field(instr, &valid);
     }
     true
 }
 
-/// Recursively collect `LocalSet(name, StructNew { fields: [e0..eN-1] })` for N > 1.
-fn collect_multi_field_struct_defs(
-    instr: &WirInstr,
-    defs: &mut IndexMap<String, (usize, Vec<WirInstr>)>,
-) {
-    if let WirInstr::LocalSet { name, value } = instr
-        && let WirInstr::StructNew { type_id, fields } = value.as_ref()
-        && fields.len() > 1
-    {
-        defs.insert(name.clone(), (type_id.index() as usize, fields.clone()));
-    }
-    instr.for_each_child(&mut |child| collect_multi_field_struct_defs(child, defs));
-}
-
-/// Count `StructGet(LocalGet(name), field_name)` for a specific `field_name`.
-fn count_struct_get_field_uses(instr: &WirInstr, local_name: &str, field_name: &str) -> usize {
-    if let WirInstr::StructGet {
-        field_name: f,
-        expr,
-        ..
-    } = instr
-        && let WirInstr::LocalGet { name: n, .. } = expr.as_ref()
-        && n == local_name
-        && f == field_name
-    {
-        return 1;
-    }
-    let mut count = 0usize;
-    instr.for_each_child(&mut |child| {
-        count += count_struct_get_field_uses(child, local_name, field_name);
-    });
-    count
-}
-
-/// Replace `StructGet(LocalGet(name), field_name)` with the mapped substitution value.
-fn substitute_multi_field_struct_get(
+/// Single-pass mutator for the multi-field pass.
+fn substitute_multi_field(
     instr: &mut WirInstr,
-    local_name: &str,
-    field_map: &IndexMap<String, WirInstr>,
+    valid: &IndexMap<String, IndexMap<String, WirInstr>>,
 ) {
-    if let WirInstr::StructGet {
-        field_name, expr, ..
-    } = instr
-        && let WirInstr::LocalGet { name: n, .. } = expr.as_ref()
-        && n == local_name
-        && let Some(value) = field_map.get(field_name)
-    {
-        *instr = value.clone();
-        return;
-    }
-    instr.for_each_boxed_child_mut(&mut |child| {
-        substitute_multi_field_struct_get(child, local_name, field_map);
-    });
-}
-
-/// One pass: collect candidates, validate, rewrite. Returns `true` if anything changed.
-fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
-    // Step 1: collect LocalSet(name, StructNew { [inner] }) at any depth.
-    let mut all_defs: IndexMap<String, WirInstr> = IndexMap::default();
-    for instr in body.iter() {
-        collect_struct_single_field_defs(instr, &mut all_defs);
-    }
-    if all_defs.is_empty() {
-        return false;
-    }
-
-    // Names of all candidates (used for leaf check).
-    let candidate_names: IndexSet<String> = all_defs.keys().cloned().collect();
-
-    // Step 2: filter to valid leaf candidates.
-    //   - exactly one LocalSet/LocalTee of this name in the whole tree
-    //   - every LocalGet(name) is the direct expr of a StructGet
-    //   - exactly one StructGet use (safe to inline inner without duplicating effects)
-    //   - inner value does not reference any other candidate (process leaves first)
-    let valid: IndexMap<String, WirInstr> = all_defs
-        .into_iter()
-        .filter(|(name, inner)| {
-            let def_count: usize = body.iter().map(|i| count_local_defs(i, name)).sum();
-            if def_count != 1 {
-                return false;
-            }
-            if !body.iter().all(|i| local_used_only_via_struct_get(i, name)) {
-                return false;
-            }
-            let use_count: usize = body.iter().map(|i| count_struct_get_uses(i, name)).sum();
-            if use_count != 1 {
-                return false;
-            }
-            !inner_refs_any_candidate(inner, &candidate_names, name)
-        })
-        .collect();
-
-    if valid.is_empty() {
-        return false;
-    }
-
-    // Step 3: substitute inner at StructGet use sites, nop the defining LocalSet.
-    for (name, inner) in &valid {
-        for instr in body.iter_mut() {
-            substitute_struct_get_local(instr, name, inner);
-            nop_local_set_of(instr, name);
-        }
-    }
-    true
-}
-
-/// Recursively collect `LocalSet(name, StructNew { [inner] })` at any depth,
-/// including inside `Call` args and nested block bodies.
-fn collect_struct_single_field_defs(instr: &WirInstr, defs: &mut IndexMap<String, WirInstr>) {
-    if let WirInstr::LocalSet { name, value } = instr
-        && let WirInstr::StructNew { fields, .. } = value.as_ref()
-        && fields.len() == 1
-    {
-        defs.insert(name.clone(), fields[0].clone());
-    }
-    instr.for_each_child(&mut |child| collect_struct_single_field_defs(child, defs));
-}
-
-/// Count `LocalSet(name, ..)` and `LocalTee(name, ..)` occurrences at any depth.
-fn count_local_defs(instr: &WirInstr, name: &str) -> usize {
-    let self_count = usize::from(matches!(
-        instr,
-        WirInstr::LocalSet { name: n, .. } | WirInstr::LocalTee { name: n, .. } if n == name
-    ));
-    let mut child_count = 0usize;
-    instr.for_each_child(&mut |child| {
-        child_count += count_local_defs(child, name);
-    });
-    self_count + child_count
-}
-
-/// Count `StructGet(LocalGet(name), _)` occurrences at any depth.
-fn count_struct_get_uses(instr: &WirInstr, name: &str) -> usize {
-    if let WirInstr::StructGet { expr, .. } = instr
-        && let WirInstr::LocalGet { name: n, .. } = expr.as_ref()
-        && n == name
-    {
-        return 1;
-    }
-    let mut count = 0usize;
-    instr.for_each_child(&mut |child| {
-        count += count_struct_get_uses(child, name);
-    });
-    count
-}
-
-/// Returns `true` if every `LocalGet(name)` in the tree is the direct `expr`
-/// of a `StructGet` (any field).  A bare `LocalGet(name)` in any other position
-/// returns `false`.
-fn local_used_only_via_struct_get(instr: &WirInstr, name: &str) -> bool {
     match instr {
-        // Bare LocalGet of our name — invalid.
-        WirInstr::LocalGet { name: n, .. } => n != name,
-        // StructGet whose expr IS exactly LocalGet(name) — valid; don't recurse into expr.
-        WirInstr::StructGet { expr, .. } if matches!(expr.as_ref(), WirInstr::LocalGet { name: n, .. } if n == name) => {
-            true
+        WirInstr::LocalSet { name, .. } if valid.contains_key(name) => {
+            *instr = WirInstr::Nop;
+            return;
         }
-        // All other nodes: check children.
-        _ => {
-            let mut ok = true;
-            instr.for_each_child(&mut |child| {
-                if !local_used_only_via_struct_get(child, name) {
-                    ok = false;
-                }
-            });
-            ok
-        }
-    }
-}
-
-/// Returns `true` if `instr` contains a `LocalGet` of any name that is in
-/// `candidates`, excluding `exclude` (the candidate being checked).
-fn inner_refs_any_candidate(
-    instr: &WirInstr,
-    candidates: &IndexSet<String>,
-    exclude: &str,
-) -> bool {
-    if let WirInstr::LocalGet { name, .. } = instr {
-        candidates.contains(name) && name != exclude
-    } else {
-        let mut found = false;
-        instr.for_each_child(&mut |child| {
-            if inner_refs_any_candidate(child, candidates, exclude) {
-                found = true;
+        WirInstr::StructGet {
+            expr, field_name, ..
+        } => {
+            if let WirInstr::LocalGet { name, .. } = expr.as_ref()
+                && let Some(field_map) = valid.get(name)
+                && let Some(value) = field_map.get(field_name)
+            {
+                *instr = value.clone();
+                return;
             }
-        });
-        found
+        }
+        _ => {}
     }
-}
-
-/// Replace every `StructGet(LocalGet(name), _)` in the tree with a clone of `value`.
-fn substitute_struct_get_local(instr: &mut WirInstr, name: &str, value: &WirInstr) {
-    if let WirInstr::StructGet { expr, .. } = instr
-        && let WirInstr::LocalGet { name: n, .. } = expr.as_ref()
-        && n == name
-    {
-        *instr = value.clone();
-        return;
-    }
-    instr.for_each_boxed_child_mut(&mut |child| substitute_struct_get_local(child, name, value));
-}
-
-/// Replace the first `LocalSet(name, ..)` found in the tree with `Nop`.
-fn nop_local_set_of(instr: &mut WirInstr, name: &str) {
-    if let WirInstr::LocalSet { name: n, .. } = instr
-        && n == name
-    {
-        *instr = WirInstr::Nop;
-        return;
-    }
-    instr.for_each_boxed_child_mut(&mut |child| nop_local_set_of(child, name));
+    instr.for_each_boxed_child_mut(&mut |child| substitute_multi_field(child, valid));
 }
 
 /// Flatten `LocalSet { name, value: Seq([preamble..., final]) }` into
