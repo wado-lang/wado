@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776599925304,
+  "lastUpdate": 1776603477278,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14885,6 +14885,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a05f283aa9587b98d0397ce054d8ddee29208b7c"
         },
         "date": 1776599924998,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a72e8ac7ca5f0df0615240f2de4bd05d60d2976a",
+          "message": "Merge pull request #890 from wado-lang/claude/fix-default-trait-generics-JSfqL\n\nfix(resolver): bind trait type params to impl args in default methods",
+          "timestamp": "2026-04-19T21:53:50+09:00",
+          "tree_id": "921b42cdc28f5e2eff2e4a4656b3796b3ada2c2a",
+          "url": "https://github.com/wado-lang/wado/commit/a72e8ac7ca5f0df0615240f2de4bd05d60d2976a"
+        },
+        "date": 1776603477175,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
