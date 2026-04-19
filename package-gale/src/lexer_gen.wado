@@ -103,22 +103,21 @@ fn collect_lits_from_elements(elements: &Array<Element>, seen: &mut Array<String
 }
 
 fn collect_lits_from_element(elem: &Element, seen: &mut Array<String>, result: &mut Array<LitToken>) {
-    if let Literal(l) = elem {
-        if !seen_contains(seen, &l.text) {
-            seen.push(l.text);
-            result.push(LitToken { text: l.text, const_name: literal_const_name(&l.text) });
-        }
-    }
-    if let Repeat(rep) = elem {
-        collect_lits_from_element(&rep.element, seen, result);
-    }
-    if let Group(g) = elem {
-        for let alt of &g.alternatives {
-            collect_lits_from_elements(&alt.elements, seen, result);
-        }
-    }
-    if let Label(lab) = elem {
-        collect_lits_from_element(&lab.element, seen, result);
+    match *elem {
+        Literal(l) => {
+            if !seen_contains(seen, &l.text) {
+                seen.push(l.text);
+                result.push(LitToken { text: l.text, const_name: literal_const_name(&l.text) });
+            }
+        },
+        Repeat(rep) => collect_lits_from_element(&rep.element, seen, result),
+        Group(g) => {
+            for let alt of &g.alternatives {
+                collect_lits_from_elements(&alt.elements, seen, result);
+            }
+        },
+        Label(lab) => collect_lits_from_element(&lab.element, seen, result),
+        _ => (),
     }
 }
 
