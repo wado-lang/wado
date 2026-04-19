@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776560361155,
+  "lastUpdate": 1776565949728,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14621,6 +14621,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d102b80f566858eb8b0e9aca2363d8d70dcb9c6a"
         },
         "date": 1776560360848,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0a40be1d080c4ec8eed7143ffc6d34dea67cded8",
+          "message": "Merge pull request #884 from wado-lang/claude/integrate-lsp-wado-0iCc8\n\nwado-vscode: integrate wado-lsp as bundled Wasm language server",
+          "timestamp": "2026-04-19T11:28:32+09:00",
+          "tree_id": "6e5ad04f6c26e10a5d9d0502d5412df109569db2",
+          "url": "https://github.com/wado-lang/wado/commit/0a40be1d080c4ec8eed7143ffc6d34dea67cded8"
+        },
+        "date": 1776565949437,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
