@@ -204,13 +204,11 @@ fn char_hex_name(c: char) -> String {
 /// is typically a terminal (TokenRef / Literal) or a simple terminal set; we
 /// derive a readable name from it so multi-element alternatives can dedup.
 pub fn not_element_field_name(inner: &Element) -> String {
-    if let TokenRef(t) = inner {
-        return `not_{to_lower(&t.name)}`;
-    }
-    if let Literal(l) = inner {
-        return `not_{literal_field_name(&l.text)}`;
-    }
-    return "not_set";
+    return match *inner {
+        TokenRef(t) => `not_{to_lower(&t.name)}`,
+        Literal(l) => `not_{literal_field_name(&l.text)}`,
+        _ => "not_set",
+    };
 }
 
 pub fn literal_field_name(text: &String) -> String {

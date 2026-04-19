@@ -76,6 +76,18 @@ struct PredictionBranch {
     child: PredictionNode,
 }
 
+/// Return the index of an existing branch whose child equals `child`, or -1
+/// when no branch matches. Callers use this to fold a new (token, child) entry
+/// into an existing branch instead of creating a duplicate.
+fn find_merge_branch(branches: &Array<PredictionBranch>, child: &PredictionNode) -> i32 {
+    for let mut b = 0; b < branches.len(); b += 1 {
+        if prediction_node_eq(&branches[b].child, child) {
+            return b;
+        }
+    }
+    return -1;
+}
+
 fn build_prediction(alt_indices: &Array<i32>, first_sets: &Array<Array<String>>, alt_elements: &Array<Array<Element>>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
     // Build initial SLL configs: one per alternative, at element position 0.
     let mut configs: Array<SllConfig> = [];
@@ -604,49 +616,26 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
             }
         }
 
-        if next_alts.len() == 1 {
+        let child = if next_alts.len() == 1 {
             // Resolved: this token uniquely identifies one alternative.
-            let mut merged = false;
-            for let mut b = 0; b < branches.len(); b += 1 {
-                if let Leaf(idx) = branches[b].child {
-                    if idx == next_alts[0] {
-                        branches[b].tokens.push(*tk);
-                        merged = true;
-                    }
-                }
-            }
-            if !merged {
-                branches.push(PredictionBranch {
-                    tokens: [*tk],
-                    child: PredictionNode::Leaf(next_alts[0]),
-                });
+            PredictionNode::Leaf(next_alts[0]);
+        } else if opaque_alts.len() > 0 {
+            // Still ambiguous with opaque alts: try expansion before giving up.
+            let expanded = try_expand_opaque(&closed, tk, &next_configs, opaque_alts, depth + 1, max_depth, ctx);
+            if let Some(node) = expanded {
+                node;
+            } else {
+                PredictionNode::Backtrack(next_alts);
             }
         } else {
             // Still ambiguous: recurse with deeper lookahead.
-            // If opaque alts exist, try expanding them before giving up.
-            let child = if opaque_alts.len() > 0 {
-                let expanded = try_expand_opaque(&closed, tk, &next_configs, opaque_alts, depth + 1, max_depth, ctx);
-                if let Some(node) = expanded {
-                    node;
-                } else {
-                    PredictionNode::Backtrack(next_alts);
-                }
-            } else {
-                build_sll_node(&deduped, depth + 1, max_depth, ctx);
-            };
-            let mut merged = false;
-            for let mut b = 0; b < branches.len(); b += 1 {
-                if prediction_node_eq(&branches[b].child, &child) {
-                    branches[b].tokens.push(*tk);
-                    merged = true;
-                }
-            }
-            if !merged {
-                branches.push(PredictionBranch {
-                    tokens: [*tk],
-                    child,
-                });
-            }
+            build_sll_node(&deduped, depth + 1, max_depth, ctx);
+        };
+        let idx = find_merge_branch(&branches, &child);
+        if idx >= 0 {
+            branches[idx].tokens.push(*tk);
+        } else {
+            branches.push(PredictionBranch { tokens: [*tk], child });
         }
     }
 
@@ -765,14 +754,10 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         } else {
             PredictionNode::Backtrack(token_alts.sorted());
         };
-        let mut merged = false;
-        for let mut b = 0; b < branches.len(); b += 1 {
-            if prediction_node_eq(&branches[b].child, &child) {
-                branches[b].tokens.push(*tk);
-                merged = true;
-            }
-        }
-        if !merged {
+        let idx = find_merge_branch(&branches, &child);
+        if idx >= 0 {
+            branches[idx].tokens.push(*tk);
+        } else {
             branches.push(PredictionBranch { tokens: [*tk], child });
         }
     }
@@ -991,37 +976,33 @@ fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
 }
 
 fn count_backtrack_nodes(node: &PredictionNode) -> i32 {
-    if let Backtrack(_) = node {
-        return 1;
-    }
-    if let Dispatch(d) = node {
-        let mut count = 0;
-        for let mut i = 0; i < d.branches.len(); i += 1 {
-            count += count_backtrack_nodes(&d.branches[i].child);
-        }
-        return count;
-    }
-    if let Consume(c) = node {
-        return count_backtrack_nodes(&c.child);
-    }
-    return 0;
+    return match *node {
+        Backtrack(_) => 1,
+        Dispatch(d) => {
+            let mut count = 0;
+            for let b of &d.branches {
+                count += count_backtrack_nodes(&b.child);
+            }
+            count
+        },
+        Consume(c) => count_backtrack_nodes(&c.child),
+        Leaf(_) => 0,
+    };
 }
 
 fn count_leaf_nodes(node: &PredictionNode) -> i32 {
-    if let Leaf(_) = node {
-        return 1;
-    }
-    if let Dispatch(d) = node {
-        let mut count = 0;
-        for let mut i = 0; i < d.branches.len(); i += 1 {
-            count += count_leaf_nodes(&d.branches[i].child);
-        }
-        return count;
-    }
-    if let Consume(c) = node {
-        return count_leaf_nodes(&c.child);
-    }
-    return 0;
+    return match *node {
+        Leaf(_) => 1,
+        Dispatch(d) => {
+            let mut count = 0;
+            for let b of &d.branches {
+                count += count_leaf_nodes(&b.child);
+            }
+            count
+        },
+        Consume(c) => count_leaf_nodes(&c.child),
+        Backtrack(_) => 0,
+    };
 }
 
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, ctx: &mut GenContext) {
@@ -1420,7 +1401,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices:
                     }
                 }
             }
-            gen_scan_element(w, elem, ctx);
+            gen_scan_element(w, elem, ctx, &"return -1;");
         }
         w.line("return pos;");
         w.end();
@@ -1850,13 +1831,14 @@ fn gen_scan_elements(w: &mut CodeWriter, elements: &Array<Element>, start: i32, 
                 }
             }
         }
-        gen_scan_element(w, elem, ctx);
+        gen_scan_element(w, elem, ctx, &"return -1;");
     }
 }
 
 /// `gen_scan_elements` variant that routes non-Optional failures through
 /// `break {label};` so the sequence lives inside a labeled block.
 fn gen_scan_elements_in_block(w: &mut CodeWriter, elements: &Array<Element>, start: i32, end: i32, ctx: &mut GenContext, label: &String) {
+    let fail = `break {*label};`;
     for let mut i = start; i < end; i += 1 {
         let elem = &elements[i];
         if let Repeat(rep) = elem {
@@ -1868,98 +1850,7 @@ fn gen_scan_elements_in_block(w: &mut CodeWriter, elements: &Array<Element>, sta
                 }
             }
         }
-        gen_scan_element_in_block(w, elem, ctx, label);
-    }
-}
-
-/// Generate scan code for a single element. On failure, emits `return -1;`.
-fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext) {
-    if let Label(lab) = elem {
-        gen_scan_element(w, &lab.element, ctx);
-        return;
-    }
-    if let TokenRef(t) = elem {
-        let const_name = `TK_{t.name}`;
-        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ return -1; \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let Literal(l) = elem {
-        let const_name = literal_const_name(&l.text);
-        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ return -1; \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let RuleRef(r) = elem {
-        let fn_name = `scan_{to_snake_case(&r.name)}`;
-        w.line(`pos = {fn_name}(tokens, pos);`);
-        w.line("if pos < 0 { return -1; }");
-        return;
-    }
-    if let Wildcard(_) = elem {
-        w.line("if pos >= tokens.len() || tokens[pos].kind == TK_EOF { return -1; }");
-        w.line("pos += 1;");
-        return;
-    }
-    if let Not(ne) = elem {
-        let check = not_scan_check(&ne.element);
-        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ return -1; \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let Repeat(rep) = elem {
-        gen_scan_repeat(w, rep, ctx, &"return -1;");
-        return;
-    }
-    if let Group(g) = elem {
-        gen_scan_group(w, &g.alternatives, ctx, &"return -1;", is_lenient_group(&g.alternatives));
-        return;
-    }
-}
-
-/// Generate scan code for a single element inside a labeled block.
-/// On failure, emits `break <label>;` instead of `return -1;`.
-fn gen_scan_element_in_block(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, label: &String) {
-    if let Label(lab) = elem {
-        gen_scan_element_in_block(w, &lab.element, ctx, label);
-        return;
-    }
-    if let TokenRef(t) = elem {
-        let const_name = `TK_{t.name}`;
-        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ break {*label}; \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let Literal(l) = elem {
-        let const_name = literal_const_name(&l.text);
-        w.line(`if pos >= tokens.len() || tokens[pos].kind != {const_name} \{ break {*label}; \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let RuleRef(r) = elem {
-        let fn_name = `scan_{to_snake_case(&r.name)}`;
-        w.line(`pos = {fn_name}(tokens, pos);`);
-        w.line(`if pos < 0 \{ break {*label}; \}`);
-        return;
-    }
-    if let Wildcard(_) = elem {
-        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF \{ break {*label}; \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let Not(ne) = elem {
-        let check = not_scan_check(&ne.element);
-        w.line(`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ break {*label}; \}`);
-        w.line("pos += 1;");
-        return;
-    }
-    if let Repeat(rep) = elem {
-        gen_scan_repeat(w, rep, ctx, &`break {*label};`);
-        return;
-    }
-    if let Group(g) = elem {
-        gen_scan_group(w, &g.alternatives, ctx, &`break {*label};`, is_lenient_group(&g.alternatives));
-        return;
+        gen_scan_element(w, elem, ctx, &fail);
     }
 }
 
@@ -2001,7 +1892,7 @@ fn gen_scan_repeat(w: &mut CodeWriter, rep: &RepeatElement, ctx: &mut GenContext
     }
     if let Plus = rep.kind {
         // First iteration is mandatory: its failure goes through fail_stmt.
-        gen_scan_element_with_fail(w, &rep.element, ctx, fail_stmt);
+        gen_scan_element(w, &rep.element, ctx, fail_stmt);
         w.begin(`while pos < tokens.len() && {check}`);
         w.line("let sp = pos;");
         gen_scan_element_assign(w, &rep.element, ctx);
@@ -2042,6 +1933,7 @@ fn gen_scan_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<E
         let gc = SCAN_GROUP_COUNTER;
         SCAN_GROUP_COUNTER += 1;
         let shape_label = `sol_{gc}`;
+        let fail = `break {shape_label};`;
         w.begin(`{shape_label}:`);
         for let mut k = 0; k < shape.len(); k += 1 {
             let idx = shape[k];
@@ -2050,13 +1942,13 @@ fn gen_scan_optional_with_lookahead(w: &mut CodeWriter, group_elements: &Array<E
             if let Group(g) = actual {
                 if g.alternatives.len() == 1 {
                     for let mut j = 0; j < g.alternatives[0].elements.len(); j += 1 {
-                        gen_scan_element_in_block(w, &g.alternatives[0].elements[j], ctx, &shape_label);
+                        gen_scan_element(w, &g.alternatives[0].elements[j], ctx, &fail);
                     }
                 } else {
-                    gen_scan_element_in_block(w, actual, ctx, &shape_label);
+                    gen_scan_element(w, actual, ctx, &fail);
                 }
             } else {
-                gen_scan_element_in_block(w, actual, ctx, &shape_label);
+                gen_scan_element(w, actual, ctx, &fail);
             }
         }
         w.end();
@@ -2102,9 +1994,11 @@ fn gen_scan_lookahead_condition(sig: &Array<Array<String>>) -> String {
 }
 
 /// Generate scan code for a single element, emitting `fail_stmt` on failure.
-fn gen_scan_element_with_fail(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fail_stmt: &String) {
+/// Pass `&"return -1;"` for the top-level scan entry point, or
+/// `&\`break {label};\`` inside a labeled block.
+fn gen_scan_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, fail_stmt: &String) {
     if let Label(lab) = elem {
-        gen_scan_element_with_fail(w, &lab.element, ctx, fail_stmt);
+        gen_scan_element(w, &lab.element, ctx, fail_stmt);
         return;
     }
     if let TokenRef(t) = elem {
@@ -3390,7 +3284,7 @@ fn emit_scan_guard_with_prefix(w: &mut CodeWriter, inner: &Element, ctx: &mut Ge
             gen_scan_group(w, &g.alternatives, ctx, &fail, false);
         }
     } else {
-        gen_scan_element_with_fail(w, inner, ctx, &fail);
+        gen_scan_element(w, inner, ctx, &fail);
     }
     if require_advance {
         w.line(`if pos <= p.pos \{ break {scan_label}; \}`);
