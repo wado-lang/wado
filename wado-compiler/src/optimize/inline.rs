@@ -151,6 +151,171 @@ fn count_block_exprs(block: &TirBlock) -> usize {
         .sum()
 }
 
+/// Returns true when the block contains a `return` nested under control flow.
+///
+/// The inliner rewrites returns into `break` to an outer labeled block.
+/// Nested-control-flow returns can currently produce invalid WIR/Wasm in some
+/// patterns, so we conservatively avoid inlining such functions.
+fn has_nested_control_flow_return(block: &TirBlock) -> bool {
+    fn block_has_nested_return(block: &TirBlock, top_level: bool) -> bool {
+        for stmt in &block.stmts {
+            match &stmt.kind {
+                TirStmtKind::Return { .. } => {
+                    if !top_level {
+                        return true;
+                    }
+                }
+                TirStmtKind::If {
+                    condition,
+                    then_block,
+                    else_block,
+                } => {
+                    if expr_has_nested_return(condition)
+                        || block_has_nested_return(then_block, false)
+                        || else_block
+                            .as_ref()
+                            .is_some_and(|b| block_has_nested_return(b, false))
+                    {
+                        return true;
+                    }
+                }
+                TirStmtKind::IfLet {
+                    scrutinee,
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    if expr_has_nested_return(scrutinee)
+                        || block_has_nested_return(then_block, false)
+                        || else_block
+                            .as_ref()
+                            .is_some_and(|b| block_has_nested_return(b, false))
+                    {
+                        return true;
+                    }
+                }
+                TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                    if block_has_nested_return(body, false) {
+                        return true;
+                    }
+                }
+                TirStmtKind::Expr(expr)
+                | TirStmtKind::Let { value: expr, .. }
+                | TirStmtKind::LetDestructure { value: expr, .. } => {
+                    if expr_has_nested_return(expr) {
+                        return true;
+                    }
+                }
+                TirStmtKind::Break { value, .. } => {
+                    if value.as_ref().is_some_and(expr_has_nested_return) {
+                        return true;
+                    }
+                }
+                TirStmtKind::Continue => {}
+                TirStmtKind::TaskReturn { .. } => {
+                    unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+                }
+                TirStmtKind::VariadicForOf { .. } => {
+                    unreachable!("VariadicForOf should be expanded during monomorphization")
+                }
+            }
+        }
+        false
+    }
+
+    fn expr_has_nested_return(expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::Block(block) => block_has_nested_return(block, false),
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                expr_has_nested_return(condition)
+                    || block_has_nested_return(then_branch, false)
+                    || else_branch
+                        .as_ref()
+                        .is_some_and(|b| block_has_nested_return(b, false))
+            }
+            TirExprKind::Match { expr, arms } => {
+                expr_has_nested_return(expr)
+                    || arms
+                        .iter()
+                        .any(|arm| {
+                            arm.guard.as_ref().is_some_and(expr_has_nested_return)
+                                || expr_has_nested_return(&arm.body)
+                        })
+            }
+            TirExprKind::LabeledBlock { block, .. } => block_has_nested_return(block, false),
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                expr_has_nested_return(scrutinee)
+                    || arms.iter().any(|b| block_has_nested_return(b, false))
+                    || block_has_nested_return(default, false)
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                expr_has_nested_return(left) || expr_has_nested_return(right)
+            }
+            TirExprKind::Unary { expr, .. }
+            | TirExprKind::FieldAccess { expr, .. }
+            | TirExprKind::TupleSpread { expr }
+            | TirExprKind::TupleZip { expr }
+            | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. }
+            | TirExprKind::VariantPayload { expr, .. }
+            | TirExprKind::TypePackExpansion { call_expr: expr, .. }
+            | TirExprKind::ClosureToCanonical { functor: expr, .. } => expr_has_nested_return(expr),
+            TirExprKind::Call { args, .. } => args.iter().any(|a| expr_has_nested_return(&a.expr)),
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                expr_has_nested_return(receiver)
+                    || args.iter().any(|a| expr_has_nested_return(&a.expr))
+            }
+            TirExprKind::CmRawCall { args, .. } => args.iter().any(expr_has_nested_return),
+            TirExprKind::Index { expr, index } => {
+                expr_has_nested_return(expr) || expr_has_nested_return(index)
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                fields.iter().any(|f| expr_has_nested_return(&f.value))
+            }
+            TirExprKind::TupleLiteral { elements } => elements.iter().any(expr_has_nested_return),
+            TirExprKind::VariantConstruct { payload, .. } => {
+                payload.as_ref().is_some_and(|e| expr_has_nested_return(e))
+            }
+            TirExprKind::Assign { target, value } => {
+                expr_has_nested_return(target) || expr_has_nested_return(value)
+            }
+            TirExprKind::Closure { body, .. } => expr_has_nested_return(body),
+            TirExprKind::IndirectCall { callee, args } => {
+                expr_has_nested_return(callee) || args.iter().any(expr_has_nested_return)
+            }
+            TirExprKind::GlobalVarSet { value, .. } => expr_has_nested_return(value),
+            TirExprKind::Cast { expr, .. } => {
+                expr_has_nested_return(expr)
+            }
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::BytesLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::FuncRef { .. }
+            | TirExprKind::GlobalVarGet { .. }
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. }
+            | TirExprKind::TemplateString { .. } => false,
+        }
+    }
+
+    block_has_nested_return(block, true)
+}
+
 /// Compute the fully qualified name of a `TirFunction`, using the same format
 /// as `FuncRef::full_name()`.  This is the key used by `collect_callees_from_expr`
 /// so it must match exactly.
@@ -197,6 +362,20 @@ fn is_inline_eligible(
     // Don't inline functions that return Never (!)
     // These are error/abort paths that are never hot, so no performance benefit to inlining
     if matches!(type_table.get(func.return_type), ResolvedType::Never) {
+        return false;
+    }
+
+    // Conservative safety guard: mutable parameters can participate in subtle
+    // aliasing/update ordering patterns that are not yet fully modeled by the
+    // current inliner rewrites.
+    if func.params.iter().any(|p| p.is_mut) {
+        return false;
+    }
+
+    // Conservatively avoid inlining functions whose returns are nested under
+    // control flow. The current return→break lowering for inline blocks can
+    // produce invalid WIR/Wasm for some such shapes.
+    if has_nested_control_flow_return(body) {
         return false;
     }
 
