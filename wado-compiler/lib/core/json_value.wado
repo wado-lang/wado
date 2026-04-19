@@ -83,38 +83,19 @@ impl Serialize for Value {
             Number(n) => s.serialize_f64(*n),
             String(str_val) => s.serialize_string(str_val),
             Array(arr) => {
-                let seq_r = s.begin_seq(arr.len());
-                match seq_r {
-                    Ok(mut seq) => {
-                        for let item of *arr {
-                            let r = seq.element::<Value>(&item);
-                            if let Err(e) = r {
-                                return Result::Err(e);
-                            }
-                        }
-                        seq.end();
-                    },
-                    Err(e) => Result::Err(e),
+                let seq = s.begin_seq(arr.len())?;
+                for let item of *arr {
+                    seq.element(&item)?;
                 }
+                seq.end();
             },
             Object(map) => {
-                let map_r = s.begin_map(map.len());
-                match map_r {
-                    Ok(mut m) => {
-                        for let [key, val] of map.entries() {
-                            let key_r = m.key::<String>(&key);
-                            if let Err(e) = key_r {
-                                return Result::Err(e);
-                            }
-                            let val_r = m.value::<Value>(&val);
-                            if let Err(e) = val_r {
-                                return Result::Err(e);
-                            }
-                        }
-                        m.end();
-                    },
-                    Err(e) => Result::Err(e),
+                let m = s.begin_map(map.len())?;
+                for let [key, val] of map.entries() {
+                    m.key(&key)?;
+                    m.value(&val)?;
                 }
+                m.end();
             },
         };
     }
@@ -145,21 +126,14 @@ impl Visitor for ValueVisitor {
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Value, DeserializeError> {
         let mut items: Array<Value> = [];
         loop {
-            let next: Result<Option<Value>, DeserializeError> = seq.next_element::<Value>();
-            match next {
-                Ok(opt) => match opt {
-                    Some(item) => {
-                        items.push(item);
-                    },
-                    None => {
-                        if let Err(e) = seq.end() {
-                            return Result::Err(e);
-                        }
-                        return Result::Ok(Value::Array(items));
-                    },
+            let next_opt = seq.next_element::<Value>()?; // FIXME: removing turbofish causes ICE
+            match next_opt {
+                Some(item) => {
+                    items.push(item);
                 },
-                Err(e) => {
-                    return Result::Err(e);
+                None => {
+                    seq.end()?;
+                    return Result::Ok(Value::Array(items));
                 },
             }
         }
@@ -168,29 +142,13 @@ impl Visitor for ValueVisitor {
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Value, DeserializeError> {
         let mut obj: TreeMap<String, Value> = TreeMap::new();
         loop {
-            let key_r: Result<Option<String>, DeserializeError> = map.next_key_string();
-            match key_r {
-                Ok(opt) => match opt {
-                    Some(key) => {
-                        let val_r: Result<Value, DeserializeError> = map.next_value::<Value>();
-                        match val_r {
-                            Ok(val) => {
-                                obj[key] = val;
-                            },
-                            Err(e) => {
-                                return Result::Err(e);
-                            },
-                        }
-                    },
-                    None => {
-                        if let Err(e) = map.end() {
-                            return Result::Err(e);
-                        }
-                        return Result::Ok(Value::Object(obj));
-                    },
+            match map.next_key_string()? {
+                Some(key) => {
+                    obj[key] = map.next_value::<Value>()?;
                 },
-                Err(e) => {
-                    return Result::Err(e);
+                None => {
+                    map.end()?;
+                    return Result::Ok(Value::Object(obj));
                 },
             }
         }
