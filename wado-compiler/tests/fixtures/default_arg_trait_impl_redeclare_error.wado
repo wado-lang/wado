@@ -1,0 +1,22 @@
+// Test: a trait impl cannot re-specify a parameter default.
+// Defaults live on the trait declaration only.
+
+trait Greeter {
+    fn greet(&self, prefix: String = "Hello") -> String;
+}
+
+struct EnglishGreeter {}
+
+impl Greeter for EnglishGreeter {
+    fn greet(&self, prefix: String = "Hi") -> String {
+        return prefix;
+    }
+}
+
+export fn run() {
+    let g = EnglishGreeter {};
+    assert g.greet() == "Hello";
+}
+
+__DATA__
+{"compile_error": "default"}

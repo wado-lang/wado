@@ -17,9 +17,17 @@ pub(crate) struct StructFieldInfo {
     pub(super) module_source: ModuleSource,
     /// Field definitions: (name, `type_id`, `is_pub`) triples
     pub(super) fields: Vec<(String, TypeId, bool)>,
+<<<<<<< HEAD
     /// Parallel array to `fields` holding each field's defining `AstId`.
     /// Used for recording use→def references (e.g. field access → field def).
     pub(super) field_ast_ids: Vec<AstId>,
+||||||| 86e8153
+=======
+    /// Default-value expressions, parallel to `fields`.
+    /// `Some(expr)` means the field declared `= expr` and may be omitted at
+    /// construction; `None` means the field is required.
+    pub(super) field_defaults: Vec<Option<ast::Expr>>,
+>>>>>>> origin/main
     /// Type parameter bounds: (`param_name`, `trait_bounds`)
     /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
     pub(super) type_param_bounds: Vec<(String, Vec<String>)>,
@@ -253,6 +261,28 @@ pub enum TypeError {
         found: String,
         span: Span,
     },
+
+    /// Trait impl cannot re-specify a parameter default (defaults belong to
+    /// the trait declaration).
+    DefaultInTraitImpl {
+        method: String,
+        param: String,
+        span: Span,
+    },
+
+    /// Closures cannot declare default parameter values. Closures erase
+    /// defaults when assigned to a `fn(...)` type, so allowing them would
+    /// be misleading — the default only ever applies to direct calls.
+    DefaultInClosure { param: String, span: Span },
+
+    /// `export fn` cannot declare default parameter values. The Component
+    /// Model ABI requires every parameter at the CM boundary, so defaults
+    /// would diverge from the WIT signature.
+    DefaultInExportFn {
+        function: String,
+        param: String,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for TypeError {
@@ -462,6 +492,35 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, expected, found
                 )
             }
+            TypeError::DefaultInTraitImpl {
+                method,
+                param,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: default value for parameter '{}' in method '{}' is not allowed; defaults belong to the trait declaration",
+                    span.line, span.column, param, method
+                )
+            }
+            TypeError::DefaultInClosure { param, span } => {
+                write!(
+                    f,
+                    "{}:{}: default value for parameter '{}' is not allowed in closure; closures erase defaults when assigned to a function type",
+                    span.line, span.column, param
+                )
+            }
+            TypeError::DefaultInExportFn {
+                function,
+                param,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: default value for parameter '{}' in export fn '{}' is not allowed; the Component Model ABI requires every parameter at the boundary",
+                    span.line, span.column, param, function
+                )
+            }
         }
     }
 }
@@ -638,6 +697,35 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 format!("pattern mismatch: expected '{expected}', found '{found}'"),
                 *span,
             ),
+            TypeError::DefaultInTraitImpl {
+                method,
+                param,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "default value for parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
+                ),
+                *span,
+            ),
+            TypeError::DefaultInClosure { param, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "default value for parameter '{param}' is not allowed in closure; closures erase defaults when assigned to a function type"
+                ),
+                *span,
+            ),
+            TypeError::DefaultInExportFn {
+                function,
+                param,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "default value for parameter '{param}' in export fn '{function}' is not allowed; the Component Model ABI requires every parameter at the boundary"
+                ),
+                *span,
+            ),
         };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,
@@ -676,6 +764,14 @@ pub(super) struct MethodInfo {
     pub(super) param_types: Vec<TypeId>,
     /// Whether each parameter (excluding self) is declared `mut`
     pub(super) param_is_mut: Vec<bool>,
+    /// Declared default-value expressions for each parameter (excluding self),
+    /// parallel to `param_types`. Populated from the method's AST; empty vec
+    /// means "no defaults known" (lookups that don't bother populating this).
+    pub(super) param_defaults: Vec<Option<ast::Expr>>,
+    /// Parameter names (excluding self), parallel to `param_types`. Used when
+    /// expanding defaults that reference earlier parameters (e.g. `fn f(w, h = w)`).
+    /// Empty vec when `param_defaults` is also empty.
+    pub(super) param_names: Vec<String>,
     /// If this method was inherited from a newtype's base type, the base type ID
     /// Used for method signature substitution
     pub(super) inherited_from_base: Option<TypeId>,
@@ -741,6 +837,9 @@ pub(super) struct FunctionContext {
     /// Box types for outer address-taken locals: maps outer var name -> `&mut T` type.
     /// When capturing such a variable, use `DerefCapture` to read through the box.
     pub(super) outer_box_types: IndexMap<String, TypeId>,
+    /// Per-local closure parameter defaults for `let f = |...| ...` bindings.
+    /// Keyed by local variable name; stores `(param_name, default_expr)` in declaration order.
+    pub(super) closure_defaults: IndexMap<String, Vec<(String, Option<crate::ast::Expr>)>>,
 }
 
 impl FunctionContext {
@@ -760,6 +859,7 @@ impl FunctionContext {
             function_name,
             deref_overrides: IndexMap::default(),
             outer_box_types: IndexMap::default(),
+            closure_defaults: IndexMap::default(),
         }
     }
 
@@ -809,6 +909,7 @@ impl FunctionContext {
             function_name,
             deref_overrides: IndexMap::default(),
             outer_box_types,
+            closure_defaults: IndexMap::default(),
         }
     }
 

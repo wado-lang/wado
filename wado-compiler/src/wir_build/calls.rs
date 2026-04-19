@@ -201,6 +201,24 @@ impl FunctionTranslator<'_, '_> {
                     value: Box::new(val),
                 })
             }
+            "builtin::v128_load" => {
+                let addr = self.translate_expr(&args[0].expr);
+                Some(WirInstr::V128Load {
+                    offset: 0,
+                    align: 4,
+                    addr: Box::new(addr),
+                })
+            }
+            "builtin::v128_store" => {
+                let addr = self.translate_expr(&args[0].expr);
+                let val = self.translate_expr(&args[1].expr);
+                Some(WirInstr::V128Store {
+                    offset: 0,
+                    align: 4,
+                    addr: Box::new(addr),
+                    value: Box::new(val),
+                })
+            }
 
             "builtin::array_new" => {
                 // array.new_default: creates a new array of the given element type

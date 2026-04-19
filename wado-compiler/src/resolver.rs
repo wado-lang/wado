@@ -177,6 +177,11 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// every `ctx.add_local(...)` call that carries a user-visible defining
     /// `AstId`. Shared via `Rc<RefCell<…>>` with `AnnotateState`.
     local_symbols: Rc<RefCell<IndexMap<SymbolKey, Symbol>>>,
+    /// When resolving a default-expression AST at a call site, fall back to
+    /// looking up unresolved identifiers in this module's global scope. This
+    /// preserves the callee's lexical scope for defaults that reference
+    /// module-private items (see WEP 2026-04-11).
+    pub(super) default_scope_module: Option<ModuleSource>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -241,6 +246,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             loaded_module_func_indices: IndexMap::default(),
             references: Rc::new(RefCell::new(IndexMap::default())),
             local_symbols: Rc::new(RefCell::new(IndexMap::default())),
+            default_scope_module: None,
         }
     }
 

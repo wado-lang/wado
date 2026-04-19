@@ -1,0 +1,13 @@
+// Test: a required field (without default) must still be provided.
+
+struct Config {
+    host: String,
+    port: i32 = 8080,
+}
+
+export fn run() {
+    let _c = Config { port: 3000 };
+}
+
+__DATA__
+{"compile_error": "missing field"}

@@ -396,6 +396,10 @@ impl<'a> Unparser<'a> {
         self.output.push_str(&param.name);
         self.output.push_str(": ");
         self.unparse_type(&param.ty);
+        if let Some(default) = &param.default {
+            self.output.push_str(" = ");
+            self.unparse_expr(default);
+        }
     }
 
     fn unparse_attr_arg(&mut self, arg: &AttrArg) {
@@ -498,6 +502,10 @@ impl<'a> Unparser<'a> {
         self.output.push_str(&field.name);
         self.output.push_str(": ");
         self.unparse_type(&field.ty);
+        if let Some(default) = &field.default {
+            self.output.push_str(" = ");
+            self.unparse_expr(default);
+        }
         self.output.push(',');
     }
 
@@ -3800,6 +3808,10 @@ pub fn unparse_param_into(param: &Param, output: &mut String) {
     output.push_str(&param.name);
     output.push_str(": ");
     unparse_type_into(&param.ty, output);
+    if let Some(default) = &param.default {
+        output.push_str(" = ");
+        unparse_expr_into(default, output, false);
+    }
 }
 
 pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &mut String) {

@@ -1,0 +1,13 @@
+// Test: a default expression may reference earlier parameters.
+
+fn make_rect(width: f64, height: f64 = width) -> f64 {
+    return width * height;
+}
+
+export fn run() {
+    assert make_rect(10.0) == 100.0;
+    assert make_rect(10.0, 20.0) == 200.0;
+}
+
+__DATA__
+{"stdout": ""}

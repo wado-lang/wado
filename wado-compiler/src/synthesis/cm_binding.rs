@@ -2487,6 +2487,7 @@ fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
+                    default_expr: None,
                 });
                 local_types.push(TypeTable::I32);
                 next_local += 1;
@@ -2504,6 +2505,7 @@ fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
+                    default_expr: None,
                 });
                 local_types.push(TypeTable::I32);
                 next_local += 1;
@@ -2517,6 +2519,7 @@ fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
+                    default_expr: None,
                 });
                 local_types.push(TypeTable::I32);
                 next_local += 1;
@@ -2534,6 +2537,7 @@ fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
+                    default_expr: None,
                 });
                 local_types.push(struct_type_id);
                 next_local += 1;
@@ -2551,6 +2555,7 @@ fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
+                    default_expr: None,
                 });
                 local_types.push(variant_type_id);
                 next_local += 1;
@@ -2568,6 +2573,7 @@ fn synthesize_adapter(
                     local_index: next_local,
                     is_mut: false,
                     span: synth_span(),
+                    default_expr: None,
                 });
                 local_types.push(option_type_id);
                 next_local += 1;
@@ -2587,6 +2593,7 @@ fn synthesize_adapter(
                         local_index: next_local,
                         is_mut: false,
                         span: synth_span(),
+                        default_expr: None,
                     });
                     local_types.push(*flat_ty);
                     next_local += 1;
@@ -4319,6 +4326,7 @@ fn synthesize_result_export_binding(
                 type_id: cm_val_type_to_type_id(vt),
                 local_index: i as u32,
                 is_mut: false,
+                default_expr: None,
                 span: synth_span(),
             })
             .collect();
@@ -4370,6 +4378,7 @@ fn synthesize_result_export_binding(
                 local_index: i as u32,
                 is_mut: false,
                 span: synth_span(),
+                default_expr: None,
             })
             .collect();
 
@@ -4859,6 +4868,7 @@ fn synthesize_general_export_binding(
                 type_id: cm_val_type_to_type_id(vt),
                 local_index: i as u32,
                 is_mut: false,
+                default_expr: None,
                 span: synth_span(),
             })
             .collect();
@@ -4908,6 +4918,7 @@ fn synthesize_general_export_binding(
                 local_index: i as u32,
                 is_mut: false,
                 span: synth_span(),
+                default_expr: None,
             })
             .collect();
 
@@ -5080,6 +5091,7 @@ fn synthesize_async_export_binding(
                 type_id: cm_val_type_to_type_id(vt),
                 local_index: i as u32,
                 is_mut: false,
+                default_expr: None,
                 span: synth_span(),
             })
             .collect();
@@ -5129,6 +5141,7 @@ fn synthesize_async_export_binding(
                 local_index: i as u32,
                 is_mut: false,
                 span: synth_span(),
+                default_expr: None,
             })
             .collect();
 
@@ -6429,6 +6442,7 @@ fn synthesize_stream_read_func(
                 type_id: TypeTable::I32,
                 is_mut: false,
                 span: synth_span(),
+                default_expr: None,
             },
             TirParam {
                 name: "max".to_string(),
@@ -6436,6 +6450,7 @@ fn synthesize_stream_read_func(
                 type_id: TypeTable::I32,
                 is_mut: false,
                 span: synth_span(),
+                default_expr: None,
             },
         ],
         return_type: array_type_id,

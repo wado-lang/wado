@@ -2466,6 +2466,19 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
         // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching
         let mut head: Array<i32> = Array::filled(32768, -1);
         let mut prev: Array<i32> = Array::filled(32768, -1);
+        // Mirror input into linear memory to enable 8-byte word compares
+        // in the LZ77 match-extension inner loops. GC arrays only support
+        // byte-level access; linear memory lets us load 8 bytes in a single
+        // i64.load. The extra 8 bytes of padding make i64 reads past the end
+        // well-defined (the final 7 positions don't contribute real matches).
+        let scratch_size = input_len + 8;
+        let scratch = builtin::realloc(0, 0, 8, scratch_size);
+        for let mut i = 0; i < input_len; i += 1 {
+            builtin::i32_store8(scratch + i, input[i]);
+        }
+        for let mut i = 0; i < 8; i += 1 {
+            builtin::i32_store8(scratch + input_len + i, 0 as u8);
+        }
 
         if config.use_lazy {
             // Lazy matching (levels 4-9)
@@ -2479,7 +2492,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                 let mut best_dist = 0;
 
                 if pos + 2 < input_len {
-                    let h = hash3(input[pos], input[pos + 1], input[pos + 2]);
+                    let h = hash3(builtin::i32_load8_u(scratch + pos), builtin::i32_load8_u(scratch + pos + 1), builtin::i32_load8_u(scratch + pos + 2));
                     let mut chain = head[h];
                     let mut chain_count = 0;
                     let max_chain = if match_available && prev_match_len >= config.good_length {
@@ -2496,15 +2509,33 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         }
 
                         // Early termination: skip if can't beat current best
-                        if best_len >= 3 && best_len < max_len && input[chain + best_len] != input[pos + best_len] {
+                        if best_len >= 3 && best_len < max_len && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(scratch + pos + best_len) {
                             chain = prev[chain & 32767];
                             chain_count += 1;
                             continue;
                         }
 
+                        // Word-wise match extension. 8-byte XOR + CTZ finds the
+                        // first differing byte in one step. The scratch buffer
+                        // is padded by 8, so i64_load past input end reads zeros.
                         let mut match_len = 0;
-                        while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
-                            match_len += 1;
+                        let word_limit = max_len - 7;
+                        while match_len < word_limit {
+                            let diff: i64 = builtin::i64_load(scratch + chain + match_len) ^ builtin::i64_load(scratch + pos + match_len);
+                            if diff == 0 {
+                                match_len += 8;
+                            } else {
+                                match_len += (builtin::i64_ctz(diff) >> 3) as i32;
+                                break;
+                            }
+                        }
+                        if match_len >= word_limit {
+                            while match_len < max_len && builtin::i32_load8_u(scratch + chain + match_len) == builtin::i32_load8_u(scratch + pos + match_len) {
+                                match_len += 1;
+                            }
+                        }
+                        if match_len > max_len {
+                            match_len = max_len;
                         }
 
                         if match_len >= 3 && match_len > best_len {
@@ -2526,7 +2557,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                 if match_available {
                     if best_len > prev_match_len {
                         // Current match is better: emit previous as literal
-                        symbols.push(input[pos - 1] as i32);
+                        symbols.push(builtin::i32_load8_u(scratch + pos - 1) as i32);
                         distances.push(0);
                         prev_match_len = best_len;
                         prev_match_dist = best_dist;
@@ -2539,7 +2570,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         let skip = prev_match_len - 1;
                         for let mut i = 0; i < skip - 1; i += 1 {
                             if pos + i + 2 < input_len {
-                                let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
+                                let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(scratch + pos + i + 1), builtin::i32_load8_u(scratch + pos + i + 2));
                                 prev[pos + i & 32767] = head[mh];
                                 head[mh] = pos + i;
                             }
@@ -2562,7 +2593,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         distances.push(best_dist);
                         for let mut i = 1; i < best_len; i += 1 {
                             if pos + i + 2 < input_len {
-                                let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
+                                let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(scratch + pos + i + 1), builtin::i32_load8_u(scratch + pos + i + 2));
                                 prev[pos + i & 32767] = head[mh];
                                 head[mh] = pos + i;
                             }
@@ -2572,7 +2603,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         prev_match_len = 0;
                     }
                 } else {
-                    symbols.push(input[pos] as i32);
+                    symbols.push(builtin::i32_load8_u(scratch + pos) as i32);
                     distances.push(0);
                     pos += 1;
                 }
@@ -2580,7 +2611,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
 
             // Flush pending match
             if match_available {
-                symbols.push(input[input_len - 1] as i32);
+                symbols.push(builtin::i32_load8_u(scratch + input_len - 1) as i32);
                 distances.push(0);
             }
         } else {
@@ -2591,7 +2622,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                 let mut best_dist = 0;
 
                 if pos + 2 < input_len {
-                    let h = hash3(input[pos], input[pos + 1], input[pos + 2]);
+                    let h = hash3(builtin::i32_load8_u(scratch + pos), builtin::i32_load8_u(scratch + pos + 1), builtin::i32_load8_u(scratch + pos + 2));
                     let mut chain = head[h];
                     let mut chain_count = 0;
 
@@ -2603,15 +2634,30 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                         }
 
                         // Early termination: skip if can't beat current best
-                        if best_len >= 3 && best_len < max_len && input[chain + best_len] != input[pos + best_len] {
+                        if best_len >= 3 && best_len < max_len && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(scratch + pos + best_len) {
                             chain = prev[chain & 32767];
                             chain_count += 1;
                             continue;
                         }
 
                         let mut match_len = 0;
-                        while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
-                            match_len += 1;
+                        let word_limit = max_len - 7;
+                        while match_len < word_limit {
+                            let diff: i64 = builtin::i64_load(scratch + chain + match_len) ^ builtin::i64_load(scratch + pos + match_len);
+                            if diff == 0 {
+                                match_len += 8;
+                            } else {
+                                match_len += (builtin::i64_ctz(diff) >> 3) as i32;
+                                break;
+                            }
+                        }
+                        if match_len >= word_limit {
+                            while match_len < max_len && builtin::i32_load8_u(scratch + chain + match_len) == builtin::i32_load8_u(scratch + pos + match_len) {
+                                match_len += 1;
+                            }
+                        }
+                        if match_len > max_len {
+                            match_len = max_len;
                         }
 
                         if match_len >= 3 && match_len > best_len {
@@ -2635,19 +2681,20 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                     distances.push(best_dist);
                     for let mut i = 1; i < best_len; i += 1 {
                         if pos + i + 2 < input_len {
-                            let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
+                            let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(scratch + pos + i + 1), builtin::i32_load8_u(scratch + pos + i + 2));
                             prev[pos + i & 32767] = head[mh];
                             head[mh] = pos + i;
                         }
                     }
                     pos += best_len;
                 } else {
-                    symbols.push(input[pos] as i32);
+                    symbols.push(builtin::i32_load8_u(scratch + pos) as i32);
                     distances.push(0);
                     pos += 1;
                 }
             }
         }
+        builtin::realloc(scratch, scratch_size, 8, 0);
     }
 
     let sym_count = symbols.len();

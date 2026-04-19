@@ -1,0 +1,11 @@
+// Test: export fn cannot declare default parameters.
+// The CM ABI requires every parameter from the host, so defaults would
+// create a divergence between the Wado signature and the WIT signature.
+
+export fn configure(name: String, debug: bool = false) {
+    assert name == "app";
+    assert debug == false;
+}
+
+__DATA__
+{"compile_error": "export"}

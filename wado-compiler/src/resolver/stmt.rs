@@ -332,6 +332,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
                 let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
                 self.record_local_symbol(*id, name, *name_span, is_mut);
+                {
+                    let mut closure_candidate = ast_value;
+                    while let ast::Expr::Unary(u) = closure_candidate {
+                        closure_candidate = &u.expr;
+                    }
+                    if let ast::Expr::Closure(closure) = closure_candidate {
+                        let defaults: Vec<(String, Option<ast::Expr>)> = closure
+                            .params
+                            .iter()
+                            .map(|p| (p.name.clone(), p.default.clone()))
+                            .collect();
+                        if defaults.iter().any(|(_, d)| d.is_some()) {
+                            ctx.closure_defaults.insert(name.clone(), defaults);
+                        }
+                    }
+                }
                 TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),

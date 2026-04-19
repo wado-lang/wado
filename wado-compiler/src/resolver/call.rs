@@ -42,7 +42,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let fn_return_type = return_type;
 
                     // Resolve arguments with coercion awareness based on closure param types
-                    let args: Vec<TirExpr> = call
+                    let mut args: Vec<TirExpr> = call
                         .args
                         .iter()
                         .enumerate()
@@ -51,6 +51,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             self.resolve_expr(arg, ctx, expected_type)
                         })
                         .collect();
+
+                    // Pad missing trailing args with closure defaults declared at `let` site.
+                    if args.len() < fn_params.len() {
+                        self.pad_args_with_defaults(
+                            &call.callee,
+                            &call.args,
+                            &mut args,
+                            &fn_params,
+                            ctx,
+                        );
+                    }
+
+                    // Arity check: function-typed variables have their defaults
+                    // erased (WEP 2026-04-11), so an under-saturated indirect
+                    // call is an error even if the underlying function had
+                    // defaults at its definition site.
+                    if args.len() != fn_params.len() {
+                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                            expected: fn_params.len(),
+                            found: args.len(),
+                            span: call.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                    }
 
                     // Check each argument type against expected parameter type
                     for (i, arg) in args.iter().enumerate() {
@@ -845,6 +869,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         } else {
             self.lookup_function_param_types_with_type_args(&call.callee, &type_args)
         };
+        if !check_param_types.is_empty() && args.len() < check_param_types.len() {
+            self.pad_args_with_defaults(
+                &call.callee,
+                &call.args,
+                &mut args,
+                &check_param_types,
+                ctx,
+            );
+        }
         if !check_param_types.is_empty() && args.len() != check_param_types.len() {
             let _ = self.logger.error(TypeError::ArgumentCountMismatch {
                 expected: check_param_types.len(),
@@ -1453,6 +1486,124 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             _ => Vec::new(),
         }
+    }
+
+    /// Fill missing trailing arguments with the callee's declared default
+    /// expressions, resolving each default in the caller's function context.
+    ///
+    /// A default may reference earlier parameters by name (e.g. `fn rect(w, h = w)`).
+    /// To make the caller's supplied value visible to the default expression,
+    /// we textually substitute param-name [`Expr::Ident`] occurrences inside
+    /// the default's cloned AST with the corresponding argument's AST before
+    /// resolving it. The resolver then type-checks the result against the
+    /// declared parameter type.
+    ///
+    /// Appends newly-synthesized arguments to `args`. Leaves `args` unchanged
+    /// for positions without a declared default; the caller's arity check
+    /// reports the remaining shortfall as a mismatch.
+    pub(super) fn pad_args_with_defaults(
+        &mut self,
+        callee: &Expr,
+        call_args_ast: &[Expr],
+        args: &mut Vec<TirExpr>,
+        param_types: &[TypeId],
+        ctx: &mut FunctionContext,
+    ) {
+        let (defaults, callee_module) = self.lookup_function_param_defaults(callee, ctx);
+        if defaults.is_empty() {
+            return;
+        }
+        let mut subs: IndexMap<String, Expr> = IndexMap::default();
+        for (i, arg_ast) in call_args_ast.iter().enumerate() {
+            if let Some((name, _)) = defaults.get(i) {
+                subs.insert(name.clone(), arg_ast.clone());
+            }
+        }
+        let saved_fallback = self.default_scope_module.take();
+        self.default_scope_module = callee_module;
+        for i in args.len()..param_types.len() {
+            let (name, default_ast) = match defaults.get(i) {
+                Some((n, Some(d))) => (n.clone(), d.clone()),
+                _ => break,
+            };
+            let mut default_expr = default_ast;
+            default_expr.substitute_idents(&subs);
+            let expected_type = param_types[i];
+            let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
+            if resolved.type_id == TypeTable::UNIT
+                && expected_type != TypeTable::UNIT
+                && expected_type != TypeTable::ERROR
+                && expected_type != TypeTable::UNKNOWN
+            {
+                let expected_name = self.type_table.borrow().type_name(expected_type);
+                panic!(
+                    "compiler bug: default expression for parameter '{name}' \
+                     re-resolved to () at call site but parameter expects '{expected_name}'. \
+                     Likely cause: the default references callee-only scope \
+                     (e.g. a callee type parameter like `T::default()`) that is \
+                     invisible during call-site re-resolution. \
+                     Resolving defaults per-monomorphization is deferred work; \
+                     see WEP 2026-04-11 `docs/wep-2026-04-11-default-arguments.md`. \
+                     Default span: {:?}",
+                    default_expr.span()
+                );
+            }
+            args.push(resolved);
+            subs.insert(name, default_expr);
+        }
+        self.default_scope_module = saved_fallback;
+    }
+
+    /// Look up the default-value AST and parameter name for each parameter of a
+    /// free function callee, in declaration order, along with the callee's
+    /// defining [`ModuleSource`] (for resolving defaults in the callee's
+    /// lexical scope). Returns `(Vec::new(), None)` for unknown/builtin
+    /// functions. Used to synthesize missing trailing arguments at the call
+    /// site.
+    pub(super) fn lookup_function_param_defaults(
+        &mut self,
+        callee: &Expr,
+        ctx: &FunctionContext,
+    ) -> (Vec<(String, Option<Expr>)>, Option<ModuleSource>) {
+        let Expr::Ident(ident) = callee else {
+            return (Vec::new(), None);
+        };
+        if ident.name.contains("::") {
+            return (Vec::new(), None);
+        }
+        if let Some(defaults) = ctx.closure_defaults.get(&ident.name) {
+            return (defaults.clone(), None);
+        }
+        if self.function_return_types.contains_key(&ident.name)
+            && let Some(func) = self.lookup_current_func(&ident.name)
+        {
+            return (
+                func.params
+                    .iter()
+                    .map(|p| (p.name.clone(), p.default.clone()))
+                    .collect(),
+                Some(self.current_module_source.clone()),
+            );
+        }
+        if let Some(symbol) = self.symbols.lookup(&ident.name) {
+            let src = symbol.module_source().clone();
+            let name = symbol.name.clone();
+            if let Some(func) = Self::lookup_func_in_loaded_module(
+                self.loaded_modules,
+                &self.loaded_module_func_indices,
+                &src,
+                &name,
+            ) {
+                return (
+                    func.params
+                        .iter()
+                        .map(|p| (p.name.clone(), p.default.clone()))
+                        .collect(),
+                    Some(src),
+                );
+            }
+        }
+        (Vec::new(), None)
     }
 
     /// Look up whether each parameter of a free function is `mut`.

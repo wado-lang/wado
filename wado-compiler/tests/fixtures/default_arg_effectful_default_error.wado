@@ -1,0 +1,20 @@
+// Test: function parameter default must be pure (no effects).
+
+use { println } from "core:cli";
+
+fn noisy() -> i32 with Stdout {
+    println("side effect");
+    return 42;
+}
+
+fn greet(value: i32 = noisy()) -> i32 with Stdout {
+    return value;
+}
+
+export fn run() with Stdout {
+    let x = greet();
+    assert x == 42;
+}
+
+__DATA__
+{"compile_error": "default"}

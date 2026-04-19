@@ -1,0 +1,24 @@
+// Test: enum variant as a default argument.
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn paint(intensity: i32, color: Color = Color::Red) -> i32 {
+    let shift = match color {
+        Red => 100,
+        Green => 200,
+        Blue => 300,
+    };
+    return intensity + shift;
+}
+
+export fn run() {
+    assert paint(1) == 101;
+    assert paint(1, Color::Blue) == 301;
+}
+
+__DATA__
+{"stdout": ""}

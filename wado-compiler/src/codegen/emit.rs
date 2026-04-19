@@ -2026,6 +2026,32 @@ impl<'a> WirEmitter<'a> {
                     memory_index: 0,
                 }));
             }
+            WirInstr::V128Load {
+                offset,
+                align,
+                addr,
+            } => {
+                self.emit_instr(f, addr);
+                f.instruction(&Instruction::V128Load(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
+            }
+            WirInstr::V128Store {
+                offset,
+                align,
+                addr,
+                value,
+            } => {
+                self.emit_instr(f, addr);
+                self.emit_instr(f, value);
+                f.instruction(&Instruction::V128Store(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
+            }
             WirInstr::MemorySize => {
                 f.instruction(&Instruction::MemorySize(0));
             }

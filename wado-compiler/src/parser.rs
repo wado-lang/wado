@@ -1005,7 +1005,22 @@ impl Parser {
     }
 
     fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
-        self.parse_comma_separated(&TokenKind::RParen, Self::parse_param)
+        let params = self.parse_comma_separated(&TokenKind::RParen, Self::parse_param)?;
+        let mut seen_default = false;
+        for p in &params {
+            if p.default.is_some() {
+                seen_default = true;
+            } else if seen_default && !matches!(p.self_kind, SelfKind::Ref | SelfKind::MutRef) {
+                return Err(ParseError {
+                    message: format!(
+                        "parameter '{}' has no default — parameters without defaults cannot follow parameters with defaults",
+                        p.name
+                    ),
+                    span: p.span,
+                });
+            }
+        }
+        Ok(params)
     }
 
     fn parse_param(&mut self) -> ParseResult<Param> {
@@ -1051,6 +1066,7 @@ impl Parser {
                         SelfKind::Ref
                     },
                     is_mut: false,
+                    default: None,
                     span: start_span,
                 });
             }
@@ -1084,6 +1100,13 @@ impl Parser {
         self.expect(&TokenKind::Colon)?;
         let ty = self.parse_type()?;
 
+        let default = if self.check(&TokenKind::Eq) {
+            self.advance();
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
         Ok(Param {
             id,
             name,
@@ -1091,6 +1114,7 @@ impl Parser {
             ty,
             self_kind: SelfKind::None,
             is_mut,
+            default,
             span: start_span,
         })
     }
@@ -3412,12 +3436,22 @@ impl Parser {
         } else {
             None
         };
+        let default = if self.check(&TokenKind::Eq) {
+            self.advance();
+            // Stop at `|` so the closing pipe terminates the default, matching
+            // the expectation that trivial defaults don't include bitwise-or.
+            // Wrap complex defaults in parentheses when bit-or is needed.
+            Some(self.parse_bitxor_expr()?)
+        } else {
+            None
+        };
         Ok(ClosureParam {
             id,
             name,
             name_span,
             ty,
             is_mut,
+            default,
         })
     }
 
@@ -3828,6 +3862,13 @@ impl Parser {
             self.expect(&TokenKind::Colon)?;
             let ty = self.parse_type()?;
 
+            let default = if self.check(&TokenKind::Eq) {
+                self.advance();
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+
             fields.push(StructField {
                 id,
                 name,
@@ -3835,6 +3876,7 @@ impl Parser {
                 is_pub,
                 ty,
                 attrs,
+                default,
                 span: start_span,
             });
 

@@ -359,6 +359,7 @@ mod tests {
                     }),
                     self_kind: SelfKind::None,
                     is_mut: false,
+                    default: None,
                     span: make_span(),
                 },
                 Param {
@@ -372,6 +373,7 @@ mod tests {
                     }),
                     self_kind: SelfKind::None,
                     is_mut: false,
+                    default: None,
                     span: make_span(),
                 },
                 Param {
@@ -385,6 +387,7 @@ mod tests {
                     }),
                     self_kind: SelfKind::None,
                     is_mut: false,
+                    default: None,
                     span: make_span(),
                 },
             ],

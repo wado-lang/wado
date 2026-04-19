@@ -128,6 +128,7 @@ fn generate_variant_from(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         }],
         variant_type,
         body,

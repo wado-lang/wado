@@ -782,6 +782,7 @@ impl Monomorphizer {
                 local_index: param.local_index,
                 is_mut: param.is_mut,
                 span: param.span,
+                default_expr: None,
             })
             .collect();
 

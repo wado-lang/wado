@@ -1651,6 +1651,17 @@ pub enum WirInstr {
         addr: Box<WirInstr>,
         value: Box<WirInstr>,
     },
+    V128Load {
+        offset: u64,
+        align: u32,
+        addr: Box<WirInstr>,
+    },
+    V128Store {
+        offset: u64,
+        align: u32,
+        addr: Box<WirInstr>,
+        value: Box<WirInstr>,
+    },
 
     // === Table ===
     TableGet {
@@ -2263,11 +2274,13 @@ impl WirInstr {
             | Self::I32Load8S { addr, .. }
             | Self::I32Load16U { addr, .. }
             | Self::I32Load16S { addr, .. }
-            | Self::I64Load { addr, .. } => f(addr),
+            | Self::I64Load { addr, .. }
+            | Self::V128Load { addr, .. } => f(addr),
             Self::I32Store { addr, value, .. }
             | Self::I32Store8 { addr, value, .. }
             | Self::I32Store16 { addr, value, .. }
-            | Self::I64Store { addr, value, .. } => {
+            | Self::I64Store { addr, value, .. }
+            | Self::V128Store { addr, value, .. } => {
                 f(addr);
                 f(value);
             }
@@ -2837,11 +2850,13 @@ impl WirInstr {
             | Self::I32Load8S { addr, .. }
             | Self::I32Load16U { addr, .. }
             | Self::I32Load16S { addr, .. }
-            | Self::I64Load { addr, .. } => f(addr),
+            | Self::I64Load { addr, .. }
+            | Self::V128Load { addr, .. } => f(addr),
             Self::I32Store { addr, value, .. }
             | Self::I32Store8 { addr, value, .. }
             | Self::I32Store16 { addr, value, .. }
-            | Self::I64Store { addr, value, .. } => {
+            | Self::I64Store { addr, value, .. }
+            | Self::V128Store { addr, value, .. } => {
                 f(addr);
                 f(value);
             }

@@ -1,0 +1,30 @@
+// Test: struct field defaults — fields with defaults may be omitted.
+
+struct Config {
+    host: String,
+    port: i32 = 8080,
+    timeout: i32 = 30,
+    debug: bool = false,
+}
+
+export fn run() {
+    let c1 = Config { host: "localhost" };
+    assert c1.port == 8080;
+    assert c1.timeout == 30;
+    assert c1.debug == false;
+
+    let c2 = Config { host: "localhost", port: 3000 };
+    assert c2.port == 3000;
+    assert c2.timeout == 30;
+
+    let c3 = Config {
+        host: "localhost",
+        port: 3000,
+        timeout: 60,
+        debug: true,
+    };
+    assert c3.debug == true;
+}
+
+__DATA__
+{"stdout": ""}

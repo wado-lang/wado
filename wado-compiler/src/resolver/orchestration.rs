@@ -156,7 +156,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     name: struct_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     fields: Vec::new(),
+<<<<<<< HEAD
                                     field_ast_ids: Vec::new(),
+||||||| 86e8153
+=======
+                                    field_defaults: Vec::new(),
+>>>>>>> origin/main
                                     type_param_bounds,
                                     type_param_type_ids: Vec::new(), // filled in second pass
                                 },
@@ -302,7 +307,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 match item {
                     Item::Struct(struct_decl) => {
                         let mut fields = Vec::new();
+<<<<<<< HEAD
                         let mut field_ast_ids = Vec::new();
+||||||| 86e8153
+=======
+                        let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
+>>>>>>> origin/main
                         // Extract type parameter names for generic structs
                         let type_params: Vec<String> = struct_decl
                             .type_params
@@ -337,7 +347,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 )
                             };
                             fields.push((field.name.clone(), type_id, field.is_pub));
+<<<<<<< HEAD
                             field_ast_ids.push(field.id);
+||||||| 86e8153
+=======
+                            field_defaults.push(field.default.clone());
+>>>>>>> origin/main
                         }
                         // Extract type parameter bounds
                         let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
@@ -368,7 +383,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             name: struct_decl.name.clone(),
                             module_source: module_source.clone(),
                             fields,
+<<<<<<< HEAD
                             field_ast_ids,
+||||||| 86e8153
+=======
+                            field_defaults,
+>>>>>>> origin/main
                             type_param_bounds,
                             type_param_type_ids,
                         };
@@ -867,6 +887,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 loaded_module_func_indices: state.all_module_func_indices.clone(),
                 references: Rc::clone(&state.references),
                 local_symbols: Rc::clone(&state.local_symbols),
+                default_scope_module: None,
             };
             // known_type_names_cache is pre-computed globally; no per-module rebuild needed
 

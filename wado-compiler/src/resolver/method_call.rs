@@ -232,6 +232,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             cm_name,
             is_ref_impl,
             method_type_param_ids: _,
+            param_defaults,
+            param_names,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -252,6 +254,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 cm_name: None,
                 is_ref_impl: false,
                 method_type_param_ids: vec![],
+                param_defaults: vec![],
+                param_names: vec![],
             }
         };
 
@@ -378,6 +382,34 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.resolve_expr(arg, ctx, expected_type)
             })
             .collect();
+
+        // Pad missing trailing args with declared parameter defaults.
+        // Earlier-parameter references inside a default (e.g. `fn f(w, h = w)`)
+        // are handled by substituting the caller's arg ASTs for those parameter
+        // names before resolving, mirroring the free-function path in
+        // `pad_args_with_defaults`.
+        if args.len() < expected_param_types.len() && !param_defaults.is_empty() {
+            let mut subs: crate::hashmap::IndexMap<String, ast::Expr> =
+                crate::hashmap::IndexMap::default();
+            for (i, arg_ast) in method_call.args.iter().enumerate() {
+                if let Some(name) = param_names.get(i) {
+                    subs.insert(name.clone(), arg_ast.clone());
+                }
+            }
+            for i in args.len()..expected_param_types.len() {
+                let Some(Some(default_ast)) = param_defaults.get(i) else {
+                    break;
+                };
+                let expected_type = expected_param_types[i];
+                let mut default_expr = default_ast.clone();
+                default_expr.substitute_idents(&subs);
+                let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
+                args.push(resolved);
+                if let Some(name) = param_names.get(i) {
+                    subs.insert(name.clone(), default_expr);
+                }
+            }
+        }
 
         // Check each argument against expected parameter type
         for (i, (arg, &expected_type)) in args.iter().zip(expected_param_types.iter()).enumerate() {

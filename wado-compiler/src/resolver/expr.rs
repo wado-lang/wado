@@ -697,12 +697,62 @@ impl<H: CompilerHost> Resolver<'_, H> {
             );
         }
 
+        // Fallback: when resolving a default expression, look up the
+        // identifier in the callee's lexical scope (see
+        // `default_scope_module`). This gives defaults access to the
+        // definition module's private globals and functions.
+        if let Some(fallback) = self.default_scope_module.clone()
+            && fallback != self.current_module_source
+            && let Some(result) =
+                self.resolve_ident_in_fallback_module(&ident.name, ident.span, &fallback)
+        {
+            return result;
+        }
+
         // Unknown variable - report error
         let _ = self.logger.error(TypeError::UnknownIdentifier {
             name: ident.name.clone(),
             span: ident.span,
         });
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
+    }
+
+    /// Look up an identifier in the callee module's global scope during
+    /// default-expression resolution. Supports globals and function refs.
+    fn resolve_ident_in_fallback_module(
+        &mut self,
+        name: &str,
+        span: Span,
+        fallback: &ModuleSource,
+    ) -> Option<TirExpr> {
+        let module = self.loaded_modules.get(fallback)?;
+        for item in &module.items {
+            match item {
+                crate::ast::Item::Global(global_decl) if global_decl.name == name => {
+                    let ty = self.resolve_type(&global_decl.ty);
+                    return Some(TirExpr::new(
+                        TirExprKind::GlobalVarGet {
+                            module_source: fallback.clone(),
+                            name: name.to_string(),
+                        },
+                        ty,
+                        span,
+                    ));
+                }
+                crate::ast::Item::Function(func) if func.name == name => {
+                    return Some(TirExpr::new(
+                        TirExprKind::FuncRef {
+                            module_source: fallback.clone(),
+                            name: name.to_string(),
+                        },
+                        TypeTable::UNKNOWN,
+                        span,
+                    ));
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     /// Resolve a binary expression
@@ -2341,11 +2391,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // struct_module_source was already determined above (before field resolution).
 
-        // Check for missing fields: all struct fields must be provided in the literal
+        // Check for missing fields: fields without a declared default must be
+        // provided; fields with `= expr` are synthesized from the default
+        // expression (pure, resolved in the struct's module scope).
+        let struct_field_defaults: Vec<Option<ast::Expr>> = self
+            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .map(|info| info.field_defaults.clone())
+            .unwrap_or_default();
+        let mut fields = fields;
         if !struct_field_types.is_empty() {
-            let provided_names: IndexSet<&str> = fields.iter().map(|f| f.name.as_str()).collect();
-            for (expected_name, _) in &struct_field_types {
-                if !provided_names.contains(expected_name.as_str()) {
+            let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
+            for (idx, (expected_name, expected_type_id)) in struct_field_types.iter().enumerate() {
+                if provided_names.contains(expected_name) {
+                    continue;
+                }
+                let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
+                if let Some(default_expr) = default_ast {
+                    let resolved = self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
+                    self.typecheck(resolved.type_id, *expected_type_id, struct_lit.span);
+                    fields.push(TirStructField {
+                        name: expected_name.clone(),
+                        value: resolved,
+                        field_index: idx as u32,
+                    });
+                } else {
                     let _ = self.logger.error(TypeError::MissingField {
                         struct_name: struct_name.clone(),
                         field_name: expected_name.clone(),
@@ -2553,7 +2622,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .iter()
                 .map(|f| (f.name.clone(), f.value.type_id, true))
                 .collect(),
+<<<<<<< HEAD
             field_ast_ids: Vec::new(),
+||||||| 86e8153
+=======
+            field_defaults: vec![None; resolved_fields.len()],
+>>>>>>> origin/main
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
         };
@@ -2572,6 +2646,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_hidden: false,
                 serde_rename: None,
                 serde_default: false,
+                default_expr: None,
             })
             .collect();
 

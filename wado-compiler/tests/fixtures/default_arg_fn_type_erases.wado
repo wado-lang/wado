@@ -1,0 +1,15 @@
+// Test: assigning a function with defaults to a `fn(...)`-typed variable erases
+// the defaults. Calling through the variable requires all arguments.
+
+fn greet(name: String, prefix: String = "Hello") -> String {
+    return `{prefix}, {name}!`;
+}
+
+export fn run() {
+    let f: fn(String, String) -> String = greet;
+    let s = f("Alice");
+    assert s == "";
+}
+
+__DATA__
+{"compile_error": "argument"}

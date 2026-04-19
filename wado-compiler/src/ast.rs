@@ -1205,6 +1205,9 @@ pub struct Param {
     pub ty: Type,
     pub self_kind: SelfKind,
     pub is_mut: bool,
+    /// Optional default value expression: `fn foo(x: i32 = 0)`.
+    /// Must be a pure expression (no effects). Only trailing parameters may have defaults.
+    pub default: Option<Expr>,
     pub span: Span,
 }
 
@@ -1677,6 +1680,105 @@ impl Expr {
             }
         }
     }
+
+    /// Substitute free occurrences of identifiers inside this expression.
+    ///
+    /// Walks the expression tree and replaces each [`Expr::Ident`] whose name
+    /// appears as a key in `subs` with a clone of the mapped expression.
+    /// Used by default-argument expansion to rewrite references to earlier
+    /// parameters (e.g. `fn make_rect(w, h = w)`) into the caller's values.
+    ///
+    /// Only traverses expression forms that can appear inside the simple,
+    /// pure defaults permitted by the language; blocks, closures, and
+    /// match/if forms are left untouched because they cannot appear in a
+    /// pure default.
+    pub fn substitute_idents(&mut self, subs: &crate::hashmap::IndexMap<String, Expr>) {
+        match self {
+            Expr::Ident(ident) => {
+                if let Some(replacement) = subs.get(&ident.name) {
+                    *self = replacement.clone();
+                }
+            }
+            Expr::Literal(_) => {}
+            Expr::Binary(b) => {
+                b.left.substitute_idents(subs);
+                b.right.substitute_idents(subs);
+            }
+            Expr::Unary(u) => {
+                u.expr.substitute_idents(subs);
+            }
+            Expr::ComparisonChain(c) => {
+                c.first.substitute_idents(subs);
+                for cmp in &mut c.comparisons {
+                    cmp.right.substitute_idents(subs);
+                }
+            }
+            Expr::Call(c) => {
+                c.callee.substitute_idents(subs);
+                for a in &mut c.args {
+                    a.substitute_idents(subs);
+                }
+            }
+            Expr::MethodCall(m) => {
+                m.receiver.substitute_idents(subs);
+                for a in &mut m.args {
+                    a.substitute_idents(subs);
+                }
+            }
+            Expr::StaticMethodCall(s) => {
+                for a in &mut s.args {
+                    a.substitute_idents(subs);
+                }
+            }
+            Expr::FieldAccess(f) => {
+                f.expr.substitute_idents(subs);
+            }
+            Expr::Index(i) => {
+                i.expr.substitute_idents(subs);
+                i.index.substitute_idents(subs);
+            }
+            Expr::Cast(c) => {
+                c.expr.substitute_idents(subs);
+            }
+            Expr::TemplateString(t) => {
+                for part in &mut t.parts {
+                    if let TemplatePart::Interpolation { expr, .. } = part {
+                        expr.substitute_idents(subs);
+                    }
+                }
+            }
+            Expr::TupleLiteral(t) => {
+                for e in &mut t.elements {
+                    e.substitute_idents(subs);
+                }
+            }
+            Expr::StructLiteral(sl) => {
+                for f in &mut sl.fields {
+                    f.value.substitute_idents(subs);
+                }
+            }
+            Expr::Range(r) => {
+                r.start.substitute_idents(subs);
+                r.end.substitute_idents(subs);
+            }
+            Expr::Spread(inner, _) => {
+                inner.substitute_idents(subs);
+            }
+            Expr::TryOp(t) => {
+                t.expr.substitute_idents(subs);
+            }
+            Expr::Assign(_)
+            | Expr::CompoundAssign(_)
+            | Expr::Block(_)
+            | Expr::If(_)
+            | Expr::Match(_)
+            | Expr::Matches(_)
+            | Expr::Closure(_)
+            | Expr::LabeledBlock(_) => {
+                // Not expected inside pure default expressions; leave as-is.
+            }
+        }
+    }
 }
 
 /// Type cast expression: `expr as Type`
@@ -2066,6 +2168,7 @@ pub struct ClosureParam {
     pub name_span: Span,
     pub ty: Option<Type>,
     pub is_mut: bool,
+    pub default: Option<Expr>,
 }
 
 /// Template string expression: `Hello, {name}!`
@@ -2273,6 +2376,9 @@ pub struct StructField {
     pub ty: Type,
     /// Attributes like `#[cm("...")]` for CM name override
     pub attrs: Vec<Attribute>,
+    /// Optional default value expression: `struct S { x: i32 = 0 }`.
+    /// Must be a pure expression (no effects).
+    pub default: Option<Expr>,
     pub span: Span,
 }
 

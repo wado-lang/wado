@@ -1,0 +1,20 @@
+// Test: direct-impl methods support default parameters.
+
+struct Circle {
+    radius: f64,
+}
+
+impl Circle {
+    fn scale(&self, factor: f64 = 2.0) -> f64 {
+        return self.radius * factor;
+    }
+}
+
+export fn run() {
+    let c = Circle { radius: 5.0 };
+    assert c.scale() == 10.0;
+    assert c.scale(3.0) == 15.0;
+}
+
+__DATA__
+{"stdout": ""}
