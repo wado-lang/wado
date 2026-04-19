@@ -1,105 +1,93 @@
 # Wado Language Support for VS Code
 
-Language support for the [Wado programming language](https://github.com/wado-lang/wado).
+Editor integration for the [Wado programming language](https://github.com/wado-lang/wado).
 
-## Features
+## Overview
 
-- Syntax highlighting for `.wado` files
-- Bracket matching and auto-closing
-- Comment toggling (`Ctrl+/` for line, `Shift+Alt+A` for block)
-- Code folding
-- Auto-indentation
-- Language Server Protocol integration (via bundled `wado-lsp` Wasm server)
-  - Diagnostics
-  - Hover, go-to-definition, find-references
-  - Document highlight
-  - Semantic tokens
+This extension contributes the `wado` language to VS Code and hosts the Wado
+language server (`wado-lsp`) as a bundled WebAssembly module. One build works
+across desktop VS Code and the browser (`vscode.dev` / `github.dev`) without a
+platform-specific binary. A native subprocess override is available for
+compiler development.
 
-## Installation (Local Development)
+Runtime shape:
 
-From the repository root:
-
-```bash
-mise run install-wado-vscode-dev  # Install extension via symlink
-mise run clean-wado-vscode-dev    # Remove the symlink
-```
-
-Then restart VS Code (Cmd+Q, then reopen).
-
-Changes to the grammar or configuration take effect after reloading VS Code (`Cmd+Shift+P` → "Developer: Reload Window").
+- Grammar and language configuration are generated from
+  `wado-compiler/src/syntax.rs` so highlighting stays in sync with the lexer.
+- `src/extension.ts` loads `out/wado_lsp.wasm` via `@vscode/wasm-wasi-lsp` and
+  speaks LSP over stdio through `vscode-languageclient`.
+- `ms-vscode.wasm-wasi-core` is declared as an `extensionDependencies` entry
+  and provides the Wasm host.
 
 ## Development
 
 ### Prerequisites
 
-- Node.js 18+
-- npm
+- Node.js 18+, npm
+- `mise` (installs Rust toolchains + the `wasm32-wasip1` target)
 
-### Setup
+### First-time setup
 
 ```bash
 cd wado-vscode
 npm install
 npm run compile
+mise run build-wado-lsp-wasm   # produces out/wado_lsp.wasm
 ```
 
-### Testing
+### Install into your local VS Code
 
 From the repository root:
 
 ```bash
-mise run test-wado-vscode  # Run all tests (unit + E2E)
+mise run install-wado-vscode-dev   # symlink into ~/.vscode/extensions
+mise run clean-wado-vscode-dev     # remove the symlink
 ```
 
-Or from `wado-vscode/`:
+Reload VS Code after install (`Cmd+Shift+P` → "Developer: Reload Window").
+
+### Inner loop
 
 ```bash
-npm run test:unit  # Run unit tests (no VS Code needed)
-npm run test       # Run E2E tests (launches VS Code)
+mise run watch-wado-lsp-wasm       # rebuild the Wasm server on change
 ```
 
-Press `F5` in VS Code to launch the Extension Development Host.
+The extension watches `out/wado_lsp.wasm` and restarts the client
+automatically (250 ms debounced). For raw `eprintln!` / debugger workflows,
+point `wado.serverPath` at a native build
+(`${workspaceFolder}/target/debug/wado-lsp`) and the extension launches that
+as a subprocess instead.
 
-### Updating Syntax Files
+Manual restart: `Wado: Restart Language Server`
+(`Ctrl+Shift+F5` / `Cmd+Shift+F5`).
 
-The TextMate grammar (`syntaxes/wado.tmLanguage.json`) and language configuration (`language-configuration.json`) are generated from the Wado compiler's canonical syntax definitions.
+### Tests
 
-To regenerate after language changes:
+```bash
+mise run test-wado-vscode          # full suite (unit + E2E)
+```
+
+From `wado-vscode/`:
+
+```bash
+npm run test:unit                  # tokenization, no VS Code
+npm run test                       # E2E: launches VS Code
+xvfb-run -a npm test               # headless Linux
+```
+
+E2E coverage: Wasm server diagnostics, native subprocess diagnostics, and
+cross-file import resolution through the `workspaceFolder` mount.
+
+### Regenerating the grammar
 
 ```bash
 mise run update-wado-vscode-grammar
 ```
 
-This ensures both files stay in sync with the compiler's keyword and syntax definitions.
-
-### Maintenance Pipeline
-
-The syntax highlighting pipeline has multiple layers of validation:
-
-1. **Canonical Syntax Definition** (`wado-compiler/src/syntax.rs`)
-   - Language-agnostic definition of keywords, operators, types, etc.
-   - Consistency tests verify it matches the lexer's keyword recognition
-
-2. **Grammar Generation** (`wado-cli/src/syntax.rs`)
-   - Transforms canonical definitions into TextMate grammar and VS Code language config
-   - Output validated against official JSON schemas
-
-3. **JSON Schema Validation**
-   - TextMate grammar validated against `tmlanguage.schema.json`
-   - Language config validated against `language-configuration.schema.json`
-   - To update local schema files: `mise run update-json-schema-files`
-
-4. **Tokenization Tests** (`src/test/unit/tokenization.test.ts`)
-   - Uses `vscode-textmate` to verify actual tokenization behavior
-   - Tests keyword highlighting, comments, strings, `__DATA__` section handling
-
-When adding new keywords or syntax:
-
-1. Add to lexer (`wado-compiler/src/lexer.rs`) and token (`token.rs`)
-2. Add to `SyntaxDefinition` (`wado-compiler/src/syntax.rs`)
-3. Run `cargo test -p wado-compiler syntax` to verify consistency
-4. Run `mise run update-wado-vscode-grammar` to regenerate
-5. Run `mise run test-wado-vscode` to verify tokenization
+This regenerates `syntaxes/wado.tmLanguage.json` and
+`language-configuration.json` from `wado-compiler/src/syntax.rs` and
+validates them against the TextMate / language-config JSON schemas. Run it
+whenever the lexer keyword set changes.
 
 ### Packaging
 
@@ -108,28 +96,43 @@ npm run vscode:prepublish
 npx vsce package
 ```
 
-## Language Server
+## Settings
 
-The extension ships the Wado language server (`wado-lsp`) compiled to WebAssembly. On activation it loads `out/wado_lsp.wasm` via `@vscode/wasm-wasi-lsp` and drives it as a standard LSP server over stdio. The same server implementation also powers `vscode.dev` and `github.dev` without a platform-specific binary.
+- `wado.serverPath` — absolute path to a native `wado-lsp` binary. Empty
+  (default) uses the bundled Wasm server.
+- `wado.trace.server` — `off` | `messages` | `verbose`. Standard LSP trace
+  verbosity forwarded to the language client.
 
-### Settings
+## Implemented
 
-- `wado.serverPath` — Absolute path to a native `wado-lsp` binary. When set, the extension launches that binary as a subprocess instead of the bundled Wasm. Compiler developers set this to `${workspaceFolder}/target/debug/wado-lsp` for a fast inner loop (`eprintln!`, `gdb`).
-- `wado.trace.server` — `off` / `messages` / `verbose`. Standard LSP trace verbosity.
+Editor contributions:
 
-### Commands
+- `.wado` file association, bracket matching, auto-closing, comment toggling,
+  folding, auto-indent.
+- Canonical TextMate grammar generated from the compiler's syntax definition.
 
-- `Wado: Restart Language Server` (default binding `Ctrl+Shift+F5` / `Cmd+Shift+F5` on `.wado` files). The extension also auto-restarts when `out/wado_lsp.wasm` changes on disk, so `mise run watch-wado-lsp-wasm` produces a hot-reload loop.
+Language server features (via `wado-lsp`):
 
-### Building the bundled Wasm
+- Diagnostics (push model, incremental on `didOpen` / `didChange`).
+- Hover with resolved types and item signatures.
+- Go-to-definition and find-references across imports.
+- Document highlight (reads vs. writes).
+- Semantic tokens (full document).
 
-```bash
-mise run build-wado-lsp-wasm   # produces out/wado_lsp.wasm
-mise run watch-wado-lsp-wasm   # rebuild on source changes
-```
+Infrastructure:
 
-The build targets `wasm32-wasip1` because `@vscode/wasm-wasi-lsp` currently hosts only preview 1 modules. Rationale: [LSP Architecture WEP](../docs/wep-2026-04-18-lsp-architecture.md).
+- Bundled `wasm32-wasip1` server, subprocess override via `wado.serverPath`.
+- Serialized start/stop/restart lifecycle, graceful activation on failure,
+  debounced auto-restart on Wasm changes.
+- Cross-platform CI matrix (ubuntu / macos / windows) with `xvfb-run` on
+  Linux.
 
 ## Roadmap
 
-- [ ] Additional LSP features — completion, formatting, rename, code actions (tracked in `wado-lsp/CLAUDE.md`).
+- Completion, formatting, rename, code actions.
+- Inlay hints for inferred types.
+- Workspace symbols and call hierarchy.
+- Single-file mount for imports outside any workspace folder (tracked as a
+  follow-up WEP).
+- Preview 2 (component) hosting when `@vscode/wasm-wasi-lsp` gains support;
+  see [LSP Architecture WEP](../docs/wep-2026-04-18-lsp-architecture.md).
