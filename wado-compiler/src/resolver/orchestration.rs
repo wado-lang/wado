@@ -862,6 +862,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 loaded_module_func_indices: state.all_module_func_indices.clone(),
                 references: Rc::clone(&state.references),
                 local_symbols: Rc::clone(&state.local_symbols),
+                default_scope_module: None,
             };
             // known_type_names_cache is pre-computed globally; no per-module rebuild needed
 

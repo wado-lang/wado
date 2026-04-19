@@ -1,0 +1,26 @@
+// Test: trait methods can declare defaults on the trait itself.
+// The impl block reuses the trait's defaults without re-specifying them.
+
+trait Greeter {
+    fn greet(&self, prefix: String = "Hello", suffix: String = "!") -> String;
+}
+
+struct EnglishGreeter {
+    name: String,
+}
+
+impl Greeter for EnglishGreeter {
+    fn greet(&self, prefix: String, suffix: String) -> String {
+        return `{prefix}, {self.name}{suffix}`;
+    }
+}
+
+export fn run() {
+    let g = EnglishGreeter { name: "Alice" };
+    assert g.greet() == "Hello, Alice!";
+    assert g.greet("Hi") == "Hi, Alice!";
+    assert g.greet("Hey", "?") == "Hey, Alice?";
+}
+
+__DATA__
+{"stdout": ""}

@@ -1,0 +1,38 @@
+// Test: a struct field with a declared default is implicitly `#[serde(default)]`
+// and uses the declared default expression (not zero-values) during deserialization.
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct Config {
+    host: String,
+    port: i32 = 8080,
+    verbose: bool = true,
+}
+
+impl Serialize for Config;
+impl Deserialize for Config;
+
+test "missing fields fall back to declared defaults" {
+    let r = from_string::<Config>(`\{"host":"localhost"\}`);
+    if let Ok(c) = r {
+        assert c.host == "localhost";
+        assert c.port == 8080;
+        assert c.verbose == true;
+    } else {
+        panic("deserialize with declared defaults failed");
+    }
+}
+
+test "provided fields override declared defaults" {
+    let r = from_string::<Config>(`\{"host":"example.com","port":9090,"verbose":false\}`);
+    if let Ok(c) = r {
+        assert c.host == "example.com";
+        assert c.port == 9090;
+        assert c.verbose == false;
+    } else {
+        panic("deserialize with all fields failed");
+    }
+}
+
+__DATA__
+{"test": {}}

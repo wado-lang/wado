@@ -1,0 +1,20 @@
+// Test: struct field default must be pure (no effects).
+
+use { println } from "core:cli";
+
+fn noisy() -> i32 with Stdout {
+    println("side effect");
+    return 99;
+}
+
+struct Config {
+    value: i32 = noisy(),
+}
+
+export fn run() with Stdout {
+    let c = Config {};
+    assert c.value == 99;
+}
+
+__DATA__
+{"compile_error": "default"}

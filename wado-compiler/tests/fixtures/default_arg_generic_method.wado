@@ -1,0 +1,28 @@
+// Test: defaults on a generic method work across multiple instantiations.
+// Each monomorphized copy inherits the declared default unchanged.
+
+struct MyBox<T> {
+    value: T,
+}
+
+impl<T> MyBox<T> {
+    pub fn new(value: T) -> MyBox<T> {
+        return MyBox { value };
+    }
+    fn scaled(&self, factor: i32 = 2) -> i32 {
+        return factor + 10;
+    }
+}
+
+export fn run() {
+    let bi = MyBox::<i32>::new(1);
+    assert bi.scaled() == 12;
+    assert bi.scaled(5) == 15;
+
+    let bs = MyBox::<String>::new("x");
+    assert bs.scaled() == 12;
+    assert bs.scaled(100) == 110;
+}
+
+__DATA__
+{"stdout": ""}

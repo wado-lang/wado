@@ -560,6 +560,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .filter(|p| p.name != "self")
                     .map(|p| p.default.clone())
                     .collect();
+                let param_names: Vec<String> = method
+                    .params
+                    .iter()
+                    .filter(|p| p.name != "self")
+                    .map(|p| p.name.clone())
+                    .collect();
 
                 drop(scope);
 
@@ -575,6 +581,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         is_ref_impl: false,
                         method_type_param_ids,
                         param_defaults,
+                        param_names,
                     },
                 ));
             }

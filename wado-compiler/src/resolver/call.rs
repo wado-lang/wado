@@ -62,6 +62,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         );
                     }
 
+                    // Arity check: function-typed variables have their defaults
+                    // erased (WEP 2026-04-11), so an under-saturated indirect
+                    // call is an error even if the underlying function had
+                    // defaults at its definition site.
+                    if args.len() != fn_params.len() {
+                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                            expected: fn_params.len(),
+                            found: args.len(),
+                            span: call.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                    }
+
                     // Check each argument type against expected parameter type
                     for (i, arg) in args.iter().enumerate() {
                         if let Some(&expected) = fn_params.get(i) {
@@ -1441,7 +1454,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         param_types: &[TypeId],
         ctx: &mut FunctionContext,
     ) {
-        let defaults = self.lookup_function_param_defaults(callee, ctx);
+        let (defaults, callee_module) = self.lookup_function_param_defaults(callee, ctx);
         if defaults.is_empty() {
             return;
         }
@@ -1451,6 +1464,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 subs.insert(name.clone(), arg_ast.clone());
             }
         }
+        let saved_fallback = self.default_scope_module.take();
+        self.default_scope_module = callee_module;
         for i in args.len()..param_types.len() {
             let (name, default_ast) = match defaults.get(i) {
                 Some((n, Some(d))) => (n.clone(), d.clone()),
@@ -1463,34 +1478,39 @@ impl<H: CompilerHost> Resolver<'_, H> {
             args.push(resolved);
             subs.insert(name, default_expr);
         }
+        self.default_scope_module = saved_fallback;
     }
 
     /// Look up the default-value AST and parameter name for each parameter of a
-    /// free function callee, in declaration order. Returns empty vec for
-    /// unknown/builtin functions. Used to synthesize missing trailing arguments
-    /// at the call site.
+    /// free function callee, in declaration order, along with the callee's
+    /// defining [`ModuleSource`] (for resolving defaults in the callee's
+    /// lexical scope). Returns `(Vec::new(), None)` for unknown/builtin
+    /// functions. Used to synthesize missing trailing arguments at the call
+    /// site.
     pub(super) fn lookup_function_param_defaults(
         &mut self,
         callee: &Expr,
         ctx: &FunctionContext,
-    ) -> Vec<(String, Option<Expr>)> {
+    ) -> (Vec<(String, Option<Expr>)>, Option<ModuleSource>) {
         let Expr::Ident(ident) = callee else {
-            return Vec::new();
+            return (Vec::new(), None);
         };
         if ident.name.contains("::") {
-            return Vec::new();
+            return (Vec::new(), None);
         }
         if let Some(defaults) = ctx.closure_defaults.get(&ident.name) {
-            return defaults.clone();
+            return (defaults.clone(), None);
         }
         if self.function_return_types.contains_key(&ident.name)
             && let Some(func) = self.lookup_current_func(&ident.name)
         {
-            return func
-                .params
-                .iter()
-                .map(|p| (p.name.clone(), p.default.clone()))
-                .collect();
+            return (
+                func.params
+                    .iter()
+                    .map(|p| (p.name.clone(), p.default.clone()))
+                    .collect(),
+                Some(self.current_module_source.clone()),
+            );
         }
         if let Some(symbol) = self.symbols.lookup(&ident.name) {
             let src = symbol.module_source().clone();
@@ -1501,14 +1521,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 &src,
                 &name,
             ) {
-                return func
-                    .params
-                    .iter()
-                    .map(|p| (p.name.clone(), p.default.clone()))
-                    .collect();
+                return (
+                    func.params
+                        .iter()
+                        .map(|p| (p.name.clone(), p.default.clone()))
+                        .collect(),
+                    Some(src),
+                );
             }
         }
-        Vec::new()
+        (Vec::new(), None)
     }
 
     /// Look up whether each parameter of a free function is `mut`.

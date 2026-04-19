@@ -54,6 +54,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         scope.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
 
+        // Resolve field defaults in the struct's module scope. A field default
+        // is standalone (no self, no other fields in scope) and must be pure;
+        // the purity check runs in `effect_check`.
+        let mut field_ctx =
+            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         let mut fields = Vec::new();
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = scope.resolve_type(&field.ty);
@@ -64,10 +69,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     None
                 }
             });
-            let serde_default = field
-                .attrs
-                .iter()
-                .any(|a| a.name == "serde" && a.has_arg("default"));
+            let default_expr = field.default.as_ref().map(|default_ast| {
+                let resolved = scope.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
+                scope.typecheck(resolved.type_id, type_id, default_ast.span());
+                Box::new(resolved)
+            });
+            // A field with a declared default is implicitly non-required at
+            // deserialization time: the synthesized Deserialize uses the
+            // default expression when the field is absent (WEP 2026-04-11).
+            let serde_default = default_expr.is_some()
+                || field
+                    .attrs
+                    .iter()
+                    .any(|a| a.name == "serde" && a.has_arg("default"));
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),
                 is_pub: field.is_pub,
@@ -77,7 +91,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_hidden: field.attrs.iter().any(|a| a.name == "hidden"),
                 serde_rename,
                 serde_default,
-                default_expr: None,
+                default_expr,
             });
         }
 
@@ -396,10 +410,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ctx.task_return_type = Some(declared_return_type);
         }
 
-        // Resolve parameters
+        // Resolve parameters. Each default expression is resolved in the
+        // callee's lexical scope, with only the earlier parameters in scope
+        // (a default cannot reference its own parameter or any later one).
+        // This gives defaults access to the definition module's private items
+        // and earlier parameters without needing call-site substitution.
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
+            let default_expr = param.default.as_ref().map(|default_ast| {
+                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
+                scope.typecheck(resolved.type_id, type_id, default_ast.span());
+                Box::new(resolved)
+            });
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             scope.record_local_symbol(param.id, &param.name, param.name_span, param.is_mut);
             params.push(TirParam {
@@ -407,7 +430,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
-                default_expr: None,
+                default_expr,
                 span: param.span,
             });
         }
@@ -780,7 +803,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let display_name = MethodName::format_local(struct_name, None, &func.name);
         let mut ctx = FunctionContext::new(return_type, display_name);
 
-        // Resolve parameters (including &self)
+        // Resolve parameters (including &self). Defaults are resolved in the
+        // method's lexical scope with earlier parameters already bound.
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = match param.self_kind {
@@ -799,6 +823,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     scope.resolve_type(&param.ty)
                 }
             };
+            // Reject parameter defaults on trait-impl methods: defaults live
+            // on the trait declaration only (WEP 2026-04-11).
+            if trait_name.is_some()
+                && let Some(default_ast) = &param.default
+            {
+                let _ = scope.logger.error(TypeError::DefaultInTraitImpl {
+                    method: func.name.clone(),
+                    param: param.name.clone(),
+                    span: default_ast.span(),
+                });
+            }
+            let default_expr = param.default.as_ref().map(|default_ast| {
+                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
+                scope.typecheck(resolved.type_id, type_id, default_ast.span());
+                Box::new(resolved)
+            });
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             scope.record_local_symbol(param.id, &param.name, param.name_span, param.is_mut);
             params.push(TirParam {
@@ -806,7 +846,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
-                default_expr: None,
+                default_expr,
                 span: param.span,
             });
         }

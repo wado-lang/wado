@@ -638,12 +638,62 @@ impl<H: CompilerHost> Resolver<'_, H> {
             );
         }
 
+        // Fallback: when resolving a default expression, look up the
+        // identifier in the callee's lexical scope (see
+        // `default_scope_module`). This gives defaults access to the
+        // definition module's private globals and functions.
+        if let Some(fallback) = self.default_scope_module.clone()
+            && fallback != self.current_module_source
+            && let Some(result) =
+                self.resolve_ident_in_fallback_module(&ident.name, ident.span, &fallback)
+        {
+            return result;
+        }
+
         // Unknown variable - report error
         let _ = self.logger.error(TypeError::UnknownIdentifier {
             name: ident.name.clone(),
             span: ident.span,
         });
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
+    }
+
+    /// Look up an identifier in the callee module's global scope during
+    /// default-expression resolution. Supports globals and function refs.
+    fn resolve_ident_in_fallback_module(
+        &mut self,
+        name: &str,
+        span: Span,
+        fallback: &ModuleSource,
+    ) -> Option<TirExpr> {
+        let module = self.loaded_modules.get(fallback)?;
+        for item in &module.items {
+            match item {
+                crate::ast::Item::Global(global_decl) if global_decl.name == name => {
+                    let ty = self.resolve_type(&global_decl.ty);
+                    return Some(TirExpr::new(
+                        TirExprKind::GlobalVarGet {
+                            module_source: fallback.clone(),
+                            name: name.to_string(),
+                        },
+                        ty,
+                        span,
+                    ));
+                }
+                crate::ast::Item::Function(func) if func.name == name => {
+                    return Some(TirExpr::new(
+                        TirExprKind::FuncRef {
+                            module_source: fallback.clone(),
+                            name: name.to_string(),
+                        },
+                        TypeTable::UNKNOWN,
+                        span,
+                    ));
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     /// Resolve a binary expression

@@ -865,7 +865,15 @@ fn generate_struct_deserialize(
     {
         let tt = module.type_table.borrow();
         for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
-            let default_val = default_value_for_type(*type_id, &tt, span);
+            // Prefer the field's declared default expression (WEP 2026-04-11)
+            // when available; fall back to `T::default()` for types with an
+            // auto-derived Default impl; otherwise null.
+            let default_val = struct_def
+                .fields
+                .get(i)
+                .and_then(|f| f.default_expr.as_ref())
+                .map(|e| (**e).clone())
+                .unwrap_or_else(|| default_value_for_type(*type_id, &tt, span));
             then_stmts.push(let_mut_stmt(
                 field_name,
                 field_locals[i],

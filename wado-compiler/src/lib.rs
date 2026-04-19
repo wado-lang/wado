@@ -51,7 +51,7 @@ pub use logger::{Bail, Logger};
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
-pub use effect_check::{EffectError, check_effects, check_stores};
+pub use effect_check::{EffectError, check_default_purity, check_effects, check_stores};
 pub use flat_package::FlatPackage;
 pub use lexer::{LexError, Lexer};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
@@ -359,6 +359,14 @@ fn compile_after_load<H: CompilerHost>(
     {
         let _span = logger.span("effect-check");
         check_effects(&package.tir_modules, logger)?;
+    }
+
+    // === Phase 8a2: Default-Value Purity Check ===
+    // Every `param: T = expr` and `field: T = expr` must be pure. Runs after
+    // effect checking so the effect map is consistent.
+    {
+        let _span = logger.span("default-purity-check");
+        check_default_purity(&package.tir_modules, logger)?;
     }
 
     // === Phase 8b: Stores Check ===

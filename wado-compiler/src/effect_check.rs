@@ -740,6 +740,300 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
     }
 }
 
+/// Error from default-value purity checking
+#[derive(Debug, Clone)]
+pub struct DefaultPurityError {
+    pub callee: String,
+    pub span: Span,
+}
+
+impl std::fmt::Display for DefaultPurityError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}:{}: default value expression must be pure (no effects), but calls effectful function '{}'",
+            self.span.line, self.span.column, self.callee
+        )
+    }
+}
+
+impl std::error::Error for DefaultPurityError {}
+
+impl From<DefaultPurityError> for crate::compiler_host::Diagnostic {
+    fn from(e: DefaultPurityError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        crate::compiler_host::Diagnostic {
+            severity: Severity::Error,
+            code: Code::TypeMismatch,
+            message: format!(
+                "default value expression must be pure (no effects), but calls effectful function '{}'",
+                e.callee
+            ),
+            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+        }
+    }
+}
+
+/// Check that every parameter and struct-field default expression is pure.
+///
+/// Defaults must not transitively call any function that declares effects
+/// (WEP 2026-04-11). Runs after `check_effects` so the effect map is built.
+pub fn check_default_purity<H: CompilerHost>(
+    modules: &IndexMap<ModuleSource, TirModule>,
+    logger: &Logger<H>,
+) -> Result<(), Bail> {
+    let checker = EffectChecker::new(modules, logger);
+    for module in modules.values() {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            for param in &func.params {
+                if let Some(default) = &param.default_expr {
+                    check_pure_expr(&checker, default, logger);
+                }
+            }
+        }
+        for impl_block in &module.impls {
+            for method in &impl_block.methods {
+                for param in &method.params {
+                    if let Some(default) = &param.default_expr {
+                        check_pure_expr(&checker, default, logger);
+                    }
+                }
+            }
+        }
+        for struct_decl in &module.structs {
+            for field in &struct_decl.fields {
+                if let Some(default) = &field.default_expr {
+                    check_pure_expr(&checker, default, logger);
+                }
+            }
+        }
+    }
+    logger.ok_or_bail(())
+}
+
+fn check_pure_expr<H: CompilerHost>(
+    checker: &EffectChecker<'_, H>,
+    expr: &TirExpr,
+    logger: &Logger<'_, H>,
+) {
+    match &expr.kind {
+        TirExprKind::Call { func, args, .. } => {
+            let effects = checker.get_function_effects(func);
+            if !effects.is_empty() {
+                let _ = logger.error(DefaultPurityError {
+                    callee: func.name.clone(),
+                    span: expr.span,
+                });
+            }
+            for arg in args {
+                check_pure_expr(checker, &arg.expr, logger);
+            }
+        }
+        TirExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } => {
+            let effects = checker.get_function_effects(func);
+            if !effects.is_empty() {
+                let _ = logger.error(DefaultPurityError {
+                    callee: func.name.clone(),
+                    span: expr.span,
+                });
+            }
+            check_pure_expr(checker, receiver, logger);
+            for arg in args {
+                check_pure_expr(checker, &arg.expr, logger);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            check_pure_expr(checker, callee, logger);
+            for arg in args {
+                check_pure_expr(checker, arg, logger);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            let _ = logger.error(DefaultPurityError {
+                callee: "<cm-raw>".to_string(),
+                span: expr.span,
+            });
+            for arg in args {
+                check_pure_expr(checker, arg, logger);
+            }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            check_pure_expr(checker, functor, logger);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            check_pure_expr(checker, left, logger);
+            check_pure_expr(checker, right, logger);
+        }
+        TirExprKind::Unary { expr: e, .. } => {
+            check_pure_expr(checker, e, logger);
+        }
+        TirExprKind::Assign { target, value } => {
+            check_pure_expr(checker, target, logger);
+            check_pure_expr(checker, value, logger);
+        }
+        TirExprKind::Cast { expr: e, .. } => {
+            check_pure_expr(checker, e, logger);
+        }
+        TirExprKind::FieldAccess { expr: e, .. } => {
+            check_pure_expr(checker, e, logger);
+        }
+        TirExprKind::Index { expr: e, index } => {
+            check_pure_expr(checker, e, logger);
+            check_pure_expr(checker, index, logger);
+        }
+        TirExprKind::Block(block) => check_pure_block(checker, block, logger),
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            check_pure_expr(checker, condition, logger);
+            check_pure_block(checker, then_branch, logger);
+            if let Some(else_blk) = else_branch {
+                check_pure_block(checker, else_blk, logger);
+            }
+        }
+        TirExprKind::Match { expr: e, arms } => {
+            check_pure_expr(checker, e, logger);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    check_pure_expr(checker, guard, logger);
+                }
+                check_pure_expr(checker, &arm.body, logger);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                check_pure_expr(checker, &field.value, logger);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                check_pure_expr(checker, elem, logger);
+            }
+        }
+        TirExprKind::TupleSpread { expr: e }
+        | TirExprKind::TupleZip { expr: e }
+        | TirExprKind::TypePackExpansion { call_expr: e, .. } => {
+            check_pure_expr(checker, e, logger);
+        }
+        TirExprKind::Closure { body, .. } => {
+            check_pure_expr(checker, body, logger);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                check_pure_expr(checker, p, logger);
+            }
+        }
+        TirExprKind::TemplateString { parts } => {
+            for part in parts {
+                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                    check_pure_expr(checker, inner, logger);
+                }
+            }
+        }
+        TirExprKind::LabeledBlock { block, .. } => {
+            check_pure_block(checker, block, logger);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            check_pure_expr(checker, value, logger);
+        }
+        TirExprKind::VariantTag { expr: e } | TirExprKind::VariantTest { expr: e, .. } => {
+            check_pure_expr(checker, e, logger);
+        }
+        TirExprKind::VariantPayload { expr: e, .. } => {
+            check_pure_expr(checker, e, logger);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            check_pure_expr(checker, scrutinee, logger);
+            for arm in arms {
+                check_pure_block(checker, arm, logger);
+            }
+            check_pure_block(checker, default, logger);
+        }
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+fn check_pure_block<H: CompilerHost>(
+    checker: &EffectChecker<'_, H>,
+    block: &TirBlock,
+    logger: &Logger<'_, H>,
+) {
+    for stmt in &block.stmts {
+        check_pure_stmt(checker, stmt, logger);
+    }
+}
+
+fn check_pure_stmt<H: CompilerHost>(
+    checker: &EffectChecker<'_, H>,
+    stmt: &TirStmt,
+    logger: &Logger<'_, H>,
+) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+            check_pure_expr(checker, value, logger);
+        }
+        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            if let Some(e) = value {
+                check_pure_expr(checker, e, logger);
+            }
+        }
+        TirStmtKind::TaskReturn { value } => check_pure_expr(checker, value, logger),
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            check_pure_expr(checker, condition, logger);
+            check_pure_block(checker, then_block, logger);
+            if let Some(else_blk) = else_block {
+                check_pure_block(checker, else_blk, logger);
+            }
+        }
+        TirStmtKind::Loop { body } => check_pure_block(checker, body, logger),
+        TirStmtKind::Continue => {}
+        TirStmtKind::LabeledBlock { block, .. } => check_pure_block(checker, block, logger),
+        TirStmtKind::IfLet {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            check_pure_expr(checker, scrutinee, logger);
+            check_pure_block(checker, then_block, logger);
+            if let Some(else_blk) = else_block {
+                check_pure_block(checker, else_blk, logger);
+            }
+        }
+        TirStmtKind::LetDestructure { value, .. } => check_pure_expr(checker, value, logger),
+        TirStmtKind::VariadicForOf { .. } => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

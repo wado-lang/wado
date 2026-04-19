@@ -245,6 +245,14 @@ pub enum TypeError {
         found: String,
         span: Span,
     },
+
+    /// Trait impl cannot re-specify a parameter default (defaults belong to
+    /// the trait declaration).
+    DefaultInTraitImpl {
+        method: String,
+        param: String,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for TypeError {
@@ -454,6 +462,17 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, expected, found
                 )
             }
+            TypeError::DefaultInTraitImpl {
+                method,
+                param,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: default value for parameter '{}' in method '{}' is not allowed; defaults belong to the trait declaration",
+                    span.line, span.column, param, method
+                )
+            }
         }
     }
 }
@@ -630,6 +649,17 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 format!("pattern mismatch: expected '{expected}', found '{found}'"),
                 *span,
             ),
+            TypeError::DefaultInTraitImpl {
+                method,
+                param,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "default value for parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
+                ),
+                *span,
+            ),
         };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,
@@ -672,6 +702,10 @@ pub(super) struct MethodInfo {
     /// parallel to `param_types`. Populated from the method's AST; empty vec
     /// means "no defaults known" (lookups that don't bother populating this).
     pub(super) param_defaults: Vec<Option<ast::Expr>>,
+    /// Parameter names (excluding self), parallel to `param_types`. Used when
+    /// expanding defaults that reference earlier parameters (e.g. `fn f(w, h = w)`).
+    /// Empty vec when `param_defaults` is also empty.
+    pub(super) param_names: Vec<String>,
     /// If this method was inherited from a newtype's base type, the base type ID
     /// Used for method signature substitution
     pub(super) inherited_from_base: Option<TypeId>,
