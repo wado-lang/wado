@@ -1839,7 +1839,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             methods
                                 .into_iter()
                                 .find(|m| m.name == method_name)
-                                .map(|m| m.params.clone())
+                                .map(|m| m.params)
                         });
                     param_names
                         .iter()

@@ -415,10 +415,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // (a default cannot reference its own parameter or any later one).
         // This gives defaults access to the definition module's private items
         // and earlier parameters without needing call-site substitution.
+        //
+        // `export fn` is rejected: the Component Model ABI requires every
+        // parameter at the boundary, so defaults cannot divergently exist
+        // only on the Wado side.
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
             let default_expr = param.default.as_ref().map(|default_ast| {
+                if func.is_export {
+                    let _ = scope.logger.error(TypeError::DefaultInExportFn {
+                        function: func.name.clone(),
+                        param: param.name.clone(),
+                        span: default_ast.span(),
+                    });
+                }
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
                 scope.typecheck(resolved.type_id, type_id, default_ast.span());
                 Box::new(resolved)

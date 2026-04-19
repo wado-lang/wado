@@ -1,0 +1,11 @@
+// Test: closures cannot declare default parameters.
+// The parser accepts the syntax but the resolver rejects it.
+
+export fn run() {
+    let greet = |name: String, greeting: String = "Hello"| `{greeting}, {name}!`;
+    let s = greet("Alice");
+    assert s == "Hello, Alice!";
+}
+
+__DATA__
+{"compile_error": "closure"}

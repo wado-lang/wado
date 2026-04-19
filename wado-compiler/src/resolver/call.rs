@@ -1475,6 +1475,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
             default_expr.substitute_idents(&subs);
             let expected_type = param_types[i];
             let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
+            if resolved.type_id == TypeTable::UNIT
+                && expected_type != TypeTable::UNIT
+                && expected_type != TypeTable::ERROR
+                && expected_type != TypeTable::UNKNOWN
+            {
+                let expected_name = self.type_table.borrow().type_name(expected_type);
+                panic!(
+                    "compiler bug: default expression for parameter '{name}' \
+                     re-resolved to () at call site but parameter expects '{expected_name}'. \
+                     Likely cause: the default references callee-only scope \
+                     (e.g. a callee type parameter like `T::default()`) that is \
+                     invisible during call-site re-resolution. \
+                     Resolving defaults per-monomorphization is deferred work; \
+                     see WEP 2026-04-11 `docs/wep-2026-04-11-default-arguments.md`. \
+                     Default span: {:?}",
+                    default_expr.span()
+                );
+            }
             args.push(resolved);
             subs.insert(name, default_expr);
         }

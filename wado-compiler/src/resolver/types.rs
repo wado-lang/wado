@@ -253,6 +253,20 @@ pub enum TypeError {
         param: String,
         span: Span,
     },
+
+    /// Closures cannot declare default parameter values. Closures erase
+    /// defaults when assigned to a `fn(...)` type, so allowing them would
+    /// be misleading — the default only ever applies to direct calls.
+    DefaultInClosure { param: String, span: Span },
+
+    /// `export fn` cannot declare default parameter values. The Component
+    /// Model ABI requires every parameter at the CM boundary, so defaults
+    /// would diverge from the WIT signature.
+    DefaultInExportFn {
+        function: String,
+        param: String,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for TypeError {
@@ -473,6 +487,24 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, param, method
                 )
             }
+            TypeError::DefaultInClosure { param, span } => {
+                write!(
+                    f,
+                    "{}:{}: default value for parameter '{}' is not allowed in closure; closures erase defaults when assigned to a function type",
+                    span.line, span.column, param
+                )
+            }
+            TypeError::DefaultInExportFn {
+                function,
+                param,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: default value for parameter '{}' in export fn '{}' is not allowed; the Component Model ABI requires every parameter at the boundary",
+                    span.line, span.column, param, function
+                )
+            }
         }
     }
 }
@@ -657,6 +689,24 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 Code::TypeMismatch,
                 format!(
                     "default value for parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
+                ),
+                *span,
+            ),
+            TypeError::DefaultInClosure { param, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "default value for parameter '{param}' is not allowed in closure; closures erase defaults when assigned to a function type"
+                ),
+                *span,
+            ),
+            TypeError::DefaultInExportFn {
+                function,
+                param,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "default value for parameter '{param}' in export fn '{function}' is not allowed; the Component Model ABI requires every parameter at the boundary"
                 ),
                 *span,
             ),

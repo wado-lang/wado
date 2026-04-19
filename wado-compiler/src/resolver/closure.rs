@@ -20,6 +20,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> TirExpr {
+        self.reject_closure_defaults(closure);
         // Step 1: Find all directly-assigned outer mutable variables
         let mut assigned_names: IndexSet<String> = IndexSet::default();
         Self::collect_mutated_vars(&closure.body, &mut assigned_names);
@@ -161,12 +162,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
+    /// Reject default parameter values on closures. Parser accepts the syntax
+    /// for uniform recovery, but defaults cannot survive the fn-type erasure
+    /// closures undergo, so they're rejected here.
+    fn reject_closure_defaults(&mut self, closure: &ast::ClosureExpr) {
+        for param in &closure.params {
+            if let Some(default) = &param.default {
+                let _ = self.logger.error(TypeError::DefaultInClosure {
+                    param: param.name.clone(),
+                    span: default.span(),
+                });
+            }
+        }
+    }
+
     /// Resolve a closure
     pub(super) fn resolve_closure(
         &mut self,
         closure: &ast::ClosureExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        self.reject_closure_defaults(closure);
         // Create a closure context with access to outer scope for capture detection
         let mut closure_ctx =
             FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.type_table);

@@ -172,14 +172,22 @@ This is a direct consequence of zero overhead: function types represent the actu
 
 #### Interaction with Closures
 
-Closures support default parameters with the same rules:
+Closures cannot declare default parameters. Closures are first-class values whose type is `fn(...)`, which carries arity but not defaults. Any call site of a closure must supply every argument.
 
 ```wado
+// Compile error: closure parameters cannot have defaults.
 let greet = |name: String, greeting: String = "Hello"| `{greeting}, {name}!`;
-greet("Alice");        // → greet("Alice", "Hello")
 ```
 
-When a closure is assigned to a function type, defaults are erased, same as for named functions.
+The parser still accepts the `= expr` syntax for closure parameters so that recovery is uniform with named functions, but the resolver rejects it with an error that points at the default expression. Use a wrapper function with defaults instead:
+
+```wado
+fn greet(name: String, greeting: String = "Hello") -> String {
+    return `{greeting}, {name}!`;
+}
+```
+
+Rationale: closures erase defaults the instant they are assigned to a `fn(...)` variable, so permitting defaults at the closure literal site would create inconsistent call-site behavior (same closure, different call sites, different argument counts) and would imply a non-trivial desugaring for captured state. Keeping defaults out of closures preserves the invariant that "a closure value and its type agree on arity".
 
 #### Interaction with Trait Methods
 
@@ -215,15 +223,21 @@ impl Circle {
 
 #### Interaction with Component Model Exports
 
-`export fn` may have default parameters. Defaults apply only to Wado-side calls. At the CM boundary, the host must provide all arguments (CM ABI requires all parameters):
+`export fn` cannot declare default parameters. Exported functions appear in the component's public interface (WIT), where every parameter is required by the CM ABI. Permitting defaults only on the Wado side would create a divergence between the WIT signature and the in-language signature that must be reconciled at every tool boundary (`wado doc`, IDE hover, CM host bindings). Rather than carry that inconsistency, Wado rejects the default outright.
 
 ```wado
+// Compile error: export fn cannot have default parameters.
 export fn configure(name: String, debug: bool = false) { ... }
+```
 
-// From Wado code:
-configure("app");         // → configure("app", false)
+The parser still accepts the syntax so that the error message can point at the default expression. The fix is either to drop the default, or to split into a private helper with the default and a thin `export fn` wrapper:
 
-// From the host (CM boundary): both arguments always required
+```wado
+fn configure_impl(name: String, debug: bool = false) { ... }
+
+export fn configure(name: String, debug: bool) {
+    configure_impl(name, debug);
+}
 ```
 
 ### Struct Field Defaults
@@ -433,8 +447,8 @@ let resp = Fetch::fetch(url, init).read();
 | Effect system    | Default expressions must be pure (no effects)       |
 | Traits           | Only trait definition specifies defaults            |
 | Function types   | Defaults erased — arity fixed                       |
-| Closures         | Defaults supported, same rules as functions         |
-| `export fn` (CM) | Defaults apply to Wado-side calls only              |
+| Closures         | Defaults rejected — parsed but error in resolver    |
+| `export fn` (CM) | Defaults rejected — arity must match WIT signature  |
 | Default trait    | Auto-derived for all-defaulted structs              |
 | Serde            | `#[serde(default)]` uses field default value        |
 | Generics         | Default expressions are monomorphized per call site |
