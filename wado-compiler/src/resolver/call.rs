@@ -252,10 +252,36 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     // Static methods are registered with mangled names "Type::method"
                     else if self.is_static_method(prefix, suffix) {
                         // Record the receiver-type segment (prefix) as a reference to
-                        // the type's decl. The method segment (suffix) is resolved
-                        // later through normal function-symbol lookup.
+                        // the type's decl.
                         if let Some(prefix_seg) = ident.segments.first() {
                             self.record_item_reference_by_name(prefix_seg.id, prefix);
+                        }
+                        // Record the method segment (suffix) as a reference to the
+                        // impl-block method's AstId in its defining module. Try the
+                        // actual impl module first (trait-qualified resolution),
+                        // falling back to the struct's own module.
+                        if let Some(suffix_seg) = ident.segments.get(1) {
+                            let arg_hint = if (suffix == "from" || suffix == "try_from")
+                                && args.len() == 1
+                            {
+                                Some(self.type_table.borrow().type_name(args[0].type_id))
+                            } else {
+                                None
+                            };
+                            let method_module = self
+                                .locate_static_method_impl(prefix, suffix, arg_hint.as_deref())
+                                .map_or_else(
+                                    || self.find_struct_module_source(prefix),
+                                    |(_, m)| m,
+                                );
+                            if let Some(method_ast_id) =
+                                self.find_impl_method_ast_id(&method_module, prefix, suffix)
+                            {
+                                self.record_reference_to_key(
+                                    suffix_seg.id,
+                                    SymbolKey::new(method_module, method_ast_id),
+                                );
+                            }
                         }
                         // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
                         let mut method_type_args: Vec<TypeId> = call

@@ -277,6 +277,36 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .insert(use_key, sym.defined_at.clone());
     }
 
+    /// Look up the `AstId` of an impl-block method by its defining module, the
+    /// receiving type name, and the method name. Returns `None` if the module
+    /// is not loaded or no matching method exists. Searches all impl blocks in
+    /// the module; for trait methods prefers the most specific match (struct +
+    /// method; trait name is not disambiguated here).
+    pub(super) fn find_impl_method_ast_id(
+        &self,
+        module_source: &ModuleSource,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<crate::ast::AstId> {
+        let items: &[Item] = if module_source == &self.current_module_source {
+            self.current_module_items
+        } else {
+            self.loaded_modules.get(module_source)?.items.as_slice()
+        };
+        for item in items {
+            if let Item::Impl(impl_block) = item
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
+            {
+                for method in &impl_block.methods {
+                    if method.name == method_name {
+                        return Some(method.id);
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Record a local binding's [`Symbol`] so that LSP hover on a use site can
     /// retrieve the defining name / mutability. Called at each site where a
     /// user-visible local is introduced.

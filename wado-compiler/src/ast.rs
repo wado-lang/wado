@@ -607,6 +607,7 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         }
         Expr::MethodCall(e) => {
             v.visit_expr(&e.receiver);
+            v.visit_id(e.method_id, e.method_span);
             for ty in &e.type_args {
                 v.visit_type(ty);
             }
@@ -616,6 +617,7 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         }
         Expr::StaticMethodCall(e) => {
             v.visit_type(&e.target_type);
+            v.visit_id(e.method_id, e.method_span);
             for ty in &e.type_args {
                 v.visit_type(ty);
             }
@@ -1877,6 +1879,10 @@ pub struct MethodCallExpr {
     pub id: AstId,
     pub receiver: Expr,
     pub method: String,
+    /// `AstId` of the method name token, for cursor-based navigation (jump-to-def).
+    pub method_id: AstId,
+    /// Span of just the method name token.
+    pub method_span: Span,
     /// Explicit type arguments for generic methods: `obj.foo::<i32>(x)`
     pub type_args: Vec<Type>,
     pub args: Vec<Expr>,
@@ -1893,6 +1899,10 @@ pub struct StaticMethodCallExpr {
     pub target_type: Type,
     /// The method name (e.g., `with_capacity` or `origin`)
     pub method: String,
+    /// `AstId` of the method name token, for cursor-based navigation (jump-to-def).
+    pub method_id: AstId,
+    /// Span of just the method name token.
+    pub method_span: Span,
     /// Explicit type arguments for generic methods: `Box::<i32>::wrap_other::<String>(x)`
     pub type_args: Vec<Type>,
     /// Arguments to the method

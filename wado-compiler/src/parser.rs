@@ -2691,6 +2691,8 @@ impl Parser {
                                 id: self.alloc_ast_id(),
                                 receiver: expr,
                                 method: field,
+                                method_id: self.alloc_ast_id(),
+                                method_span: field_span,
                                 type_args,
                                 args,
                                 has_trailing_comma,
@@ -2713,6 +2715,8 @@ impl Parser {
                             id: self.alloc_ast_id(),
                             receiver: expr,
                             method: field,
+                            method_id: self.alloc_ast_id(),
+                            method_span: field_span,
                             type_args: vec![],
                             args,
                             has_trailing_comma,
@@ -2813,7 +2817,7 @@ impl Parser {
 
                     if spec_ok && self.check(&TokenKind::ColonColon) {
                         self.advance(); // consume ::
-                        let method = self.consume_ident()?;
+                        let (method, method_span) = self.consume_ident_with_span()?;
 
                         // Check for method-level turbofish: method::<U>(...)
                         let method_type_args = if self.check(&TokenKind::ColonColon)
@@ -2838,6 +2842,8 @@ impl Parser {
                                 span: start_span,
                             }),
                             method,
+                            method_id: self.alloc_ast_id(),
+                            method_span,
                             type_args: method_type_args,
                             args,
                             has_trailing_comma,
