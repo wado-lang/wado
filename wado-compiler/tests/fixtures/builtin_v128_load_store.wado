@@ -1,0 +1,29 @@
+/// Verify builtin::v128_load and builtin::v128_store round-trip 16 bytes
+/// through linear memory and that lane extraction sees the expected values.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let buf = builtin::realloc(0, 0, 16, 32);
+    for let mut i = 0; i < 16; i += 1 {
+        builtin::i32_store8(buf + i, i as u8);
+    }
+
+    let v = builtin::v128_load(buf);
+    assert builtin::i8x16_extract_lane_u(0, v) == 0;
+    assert builtin::i8x16_extract_lane_u(7, v) == 7;
+    assert builtin::i8x16_extract_lane_u(15, v) == 15;
+
+    let splat = builtin::i8x16_splat(0xAB);
+    builtin::v128_store(buf + 16, splat);
+    for let mut i = 0; i < 16; i += 1 {
+        assert builtin::i32_load8_u(buf + 16 + i) == 0xAB as u8;
+    }
+
+    let eq = builtin::i8x16_eq(v, builtin::v128_load(buf));
+    assert builtin::i8x16_bitmask(eq) == 0xFFFF;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

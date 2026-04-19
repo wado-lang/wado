@@ -53,7 +53,7 @@ zlib compress/decompress of twitter.json (631 KB) x 10 iterations.
 | --------------------- | -------: | ---------: | -----: | ------: |
 | zlib-rs (Rust native) |    60 ms |      10 ms |  70 ms |   1.00x |
 | C zlib (Wasm)         |   110 ms |      16 ms | 126 ms |   1.80x |
-| **Wado** core:zlib    |   407 ms |     141 ms | 549 ms |   7.84x |
+| **Wado** core:zlib    |   224 ms |     117 ms | 341 ms |   4.87x |
 
 ## JSON: twitter
 
