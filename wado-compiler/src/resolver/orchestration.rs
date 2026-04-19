@@ -842,6 +842,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 current_module_items: &[], // Set in resolve_module
                 effect_sources: IndexMap::default(), // Populated per-module in resolve_module
                 current_effect_params: IndexSet::default(),
+                current_effect_param_decls: IndexMap::default(),
                 trait_ctx: super::trait_env::TraitContext::default(),
                 generic_struct_names: IndexSet::default(),
                 generic_function_params: IndexMap::default(),

@@ -87,7 +87,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     })
                     .collect();
                 // Resolve effect names in function type position
-                let effects = self.resolve_effects(&func_ty.effects);
+                let effects = self.resolve_effects(&func_ty.effects, &func_ty.effect_ids);
                 self.type_table
                     .borrow_mut()
                     .make_function(params, return_type, effects, stores)

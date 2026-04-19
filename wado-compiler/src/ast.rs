@@ -447,6 +447,9 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
     if let Some(ret) = &func.return_type {
         v.visit_type(ret);
     }
+    for (id, span) in &func.effect_ids {
+        v.visit_id(*id, *span);
+    }
     if let Some(body) = &func.body {
         v.visit_block(body);
     }
@@ -740,6 +743,9 @@ pub fn walk_type<V: AstVisitor>(v: &mut V, ty: &Type) {
                 v.visit_type(p);
             }
             v.visit_type(&ft.return_type);
+            for (id, span) in &ft.effect_ids {
+                v.visit_id(*id, *span);
+            }
         }
         Type::Tuple(ts) => {
             for t in ts {
@@ -1147,6 +1153,10 @@ pub struct Function {
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub effects: Vec<String>,
+    /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
+    /// it appeared in the `with` clause. Used by the resolver to record
+    /// use->def references for LSP jump-to-def.
+    pub effect_ids: Vec<(AstId, Span)>,
     /// Parameters declared in `stores[param1, param2]` — the function may store these references.
     pub stores: Vec<String>,
     /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
@@ -2118,6 +2128,11 @@ pub struct FunctionType {
     pub params: Vec<Type>,
     pub return_type: Type,
     pub effects: Vec<String>,
+    /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
+    /// it appeared in source. Used by the resolver to record use->def
+    /// references for LSP jump-to-def. Empty when constructed by the compiler
+    /// (synthesized function types from monomorphization, etc.).
+    pub effect_ids: Vec<(AstId, Span)>,
     /// Positional indices of parameters the function may store (e.g., `stores[0]`).
     pub stores: Vec<StoresEntry>,
 }

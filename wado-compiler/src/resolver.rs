@@ -124,6 +124,9 @@ pub struct Resolver<'a, H: CompilerHost> {
     effect_sources: IndexMap<String, ModuleSource>,
     /// Effect parameter names currently in scope (from enclosing function's `<effect E>`)
     current_effect_params: IndexSet<String>,
+    /// Map from effect parameter name to its declaration `AstId` in the current scope.
+    /// Used to record use→def edges for effect parameter references in `with` clauses.
+    current_effect_param_decls: IndexMap<String, crate::ast::AstId>,
     /// WASI registry for looking up effect return types
     wasi_registry: &'static WasiRegistry,
     /// Builtin registry for looking up builtin function return types
@@ -213,6 +216,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             current_module_items: &[],
             effect_sources: IndexMap::default(),
             current_effect_params: IndexSet::default(),
+            current_effect_param_decls: IndexMap::default(),
             trait_ctx: trait_env::TraitContext::default(),
             generic_struct_names: IndexSet::default(),
             generic_function_params: IndexMap::default(),
@@ -398,18 +402,40 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
-    pub(crate) fn resolve_effects(&self, effects: &[String]) -> Vec<tir::EffectRef> {
+    ///
+    /// `effect_ids` is a parallel slice with `(AstId, Span)` of each effect-name identifier
+    /// occurrence. When non-empty, use→def edges are recorded so LSP jump-to-definition
+    /// works on effect references in `with` clauses. An empty slice skips recording
+    /// (used by synthetic/internal effect lists with no source identifiers).
+    pub(crate) fn resolve_effects(
+        &self,
+        effects: &[String],
+        effect_ids: &[(crate::ast::AstId, crate::token::Span)],
+    ) -> Vec<tir::EffectRef> {
         effects
             .iter()
-            .map(|name| {
-                if self.current_effect_params.contains(name) {
+            .enumerate()
+            .map(|(i, name)| {
+                let use_id = effect_ids.get(i).map(|(id, _)| *id);
+                if let Some(&decl_id) = self.current_effect_param_decls.get(name) {
+                    if let Some(use_id) = use_id {
+                        self.record_reference(use_id, decl_id);
+                    }
                     tir::EffectRef::Param { name: name.clone() }
                 } else if let Some(source) = self.effect_sources.get(name) {
+                    if let Some(use_id) = use_id
+                        && let Some(sym) = self.symbols.lookup_in_module(source, name)
+                    {
+                        self.record_reference_to_key(use_id, sym.defined_at.clone());
+                    }
                     tir::EffectRef::Concrete {
                         name: name.clone(),
                         module_source: source.clone(),
                     }
                 } else {
+                    if let Some(use_id) = use_id {
+                        self.record_item_reference_by_name(use_id, name);
+                    }
                     // Fallback: effect from current module (local effect declaration)
                     tir::EffectRef::Concrete {
                         name: name.clone(),

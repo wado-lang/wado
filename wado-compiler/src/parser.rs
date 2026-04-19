@@ -959,7 +959,7 @@ impl Parser {
             None
         };
 
-        let (effects, stores) = self.parse_with_clause()?;
+        let (effects, effect_ids, stores) = self.parse_with_clause()?;
 
         // Check for bodyless function declaration (compiler built-in)
         // e.g., `pub fn stream_new() -> i64;`
@@ -986,6 +986,7 @@ impl Parser {
             params,
             return_type,
             effects,
+            effect_ids,
             stores,
             body,
             span,
@@ -1085,19 +1086,23 @@ impl Parser {
 
     /// Parse `with Effect1, Effect2, stores[param1, param2]` clause.
     /// Returns (effects, stores). The `stores` keyword can appear anywhere in the effect list.
-    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<String>)> {
+    fn parse_with_clause(
+        &mut self,
+    ) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<String>)> {
         if !self.check(&TokenKind::With) {
-            return Ok((Vec::new(), Vec::new()));
+            return Ok((Vec::new(), Vec::new(), Vec::new()));
         }
         self.advance();
 
         // Check if the first item is `stores[...]`
         if self.check(&TokenKind::Stores) {
             let stores = self.parse_stores_list()?;
-            return Ok((Vec::new(), stores));
+            return Ok((Vec::new(), Vec::new(), stores));
         }
 
-        let mut effects = vec![self.consume_ident()?];
+        let (first_name, first_span) = self.consume_ident_with_span()?;
+        let mut effects = vec![first_name];
+        let mut effect_ids = vec![(self.alloc_ast_id(), first_span)];
 
         while self.check(&TokenKind::Comma) {
             // Look ahead: if the token after comma is `ident :`, it's a parameter
@@ -1111,12 +1116,14 @@ impl Parser {
             // Check if next item is `stores[...]`
             if self.check(&TokenKind::Stores) {
                 let stores = self.parse_stores_list()?;
-                return Ok((effects, stores));
+                return Ok((effects, effect_ids, stores));
             }
-            effects.push(self.consume_ident()?);
+            let (name, span) = self.consume_ident_with_span()?;
+            effects.push(name);
+            effect_ids.push((self.alloc_ast_id(), span));
         }
 
-        Ok((effects, Vec::new()))
+        Ok((effects, effect_ids, Vec::new()))
     }
 
     /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
@@ -1134,19 +1141,23 @@ impl Parser {
 
     /// Parse `with` clause for function types: `with Effect1, stores[0, 1]`
     /// In function type position, stores entries are positional indices.
-    fn parse_with_clause_for_fn_type(&mut self) -> ParseResult<(Vec<String>, Vec<StoresEntry>)> {
+    fn parse_with_clause_for_fn_type(
+        &mut self,
+    ) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<StoresEntry>)> {
         if !self.check(&TokenKind::With) {
-            return Ok((Vec::new(), Vec::new()));
+            return Ok((Vec::new(), Vec::new(), Vec::new()));
         }
         self.advance();
 
         // Check if the first item is `stores[...]`
         if self.check(&TokenKind::Stores) {
             let stores = self.parse_stores_list_for_fn_type()?;
-            return Ok((Vec::new(), stores));
+            return Ok((Vec::new(), Vec::new(), stores));
         }
 
-        let mut effects = vec![self.consume_ident()?];
+        let (first_name, first_span) = self.consume_ident_with_span()?;
+        let mut effects = vec![first_name];
+        let mut effect_ids = vec![(self.alloc_ast_id(), first_span)];
 
         while self.check(&TokenKind::Comma) {
             // Lookahead: if the token after comma is `ident:`, this is a parameter
@@ -1159,12 +1170,14 @@ impl Parser {
             self.advance();
             if self.check(&TokenKind::Stores) {
                 let stores = self.parse_stores_list_for_fn_type()?;
-                return Ok((effects, stores));
+                return Ok((effects, effect_ids, stores));
             }
-            effects.push(self.consume_ident()?);
+            let (name, span) = self.consume_ident_with_span()?;
+            effects.push(name);
+            effect_ids.push((self.alloc_ast_id(), span));
         }
 
-        Ok((effects, Vec::new()))
+        Ok((effects, effect_ids, Vec::new()))
     }
 
     /// Parse `stores[0, 1]` or `stores[name]` in function type position.
@@ -3439,12 +3452,13 @@ impl Parser {
             };
 
             // Parse effects and stores (optional): with Effect1, stores[0]
-            let (effects, stores) = self.parse_with_clause_for_fn_type()?;
+            let (effects, effect_ids, stores) = self.parse_with_clause_for_fn_type()?;
 
             return Ok(Type::Function(Box::new(FunctionType {
                 params,
                 return_type,
                 effects,
+                effect_ids,
                 stores,
             })));
         }
