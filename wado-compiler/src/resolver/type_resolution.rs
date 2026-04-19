@@ -53,8 +53,12 @@ fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]) -> Type {
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn resolve_type(&mut self, ty: &Type) -> TypeId {
         match ty {
-            Type::Named(named) => self.resolve_named_type(&named.name, named.span),
+            Type::Named(named) => {
+                self.record_item_reference_by_name(named.id, &named.name);
+                self.resolve_named_type(&named.name, named.span)
+            }
             Type::Generic(generic) => {
+                self.record_item_reference_by_name(generic.id, &generic.name);
                 self.resolve_generic_type(&generic.name, &generic.args, generic.span)
             }
             Type::Function(func_ty) => {
