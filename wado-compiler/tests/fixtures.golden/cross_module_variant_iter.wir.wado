@@ -149,6 +149,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/run"() {
+    let tree: ref "core:prelude/types.wado//Box<Choice>";
     let result: i32;
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -158,9 +159,10 @@ fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/run"() {
     let __local_10: ref "./sub/cross_module_variant_iter_helper.wado//Counter";
     let __local_14: ref "core:prelude/format.wado//Formatter";
     let __local_25: ref "core:prelude/format.wado//Formatter";
+    tree = struct.new "core:prelude/types.wado//Box<Choice>" { value: ref.as_non_null("./sub/cross_module_variant_iter_helper.wado/make_tree"()) };
     result = __inline_count_2: block -> i32 {
         __local_10 = struct.new "./sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 };
-        "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>"(__local_10, ref.as_non_null("./sub/cross_module_variant_iter_helper.wado/make_tree"()));
+        "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>"(__local_10, tree.value);
         break __inline_count_2: __local_10.total;
     };
     __cond = result == 30;

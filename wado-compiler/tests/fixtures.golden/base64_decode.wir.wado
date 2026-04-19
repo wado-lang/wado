@@ -172,16 +172,24 @@ fn "wado-compiler/tests/fixtures/base64_decode.wado/run"() with Stdout {
     let __local_34: ref "core:prelude/format.wado//Formatter";
     let __local_35: ref "core:prelude/string.wado//String";
     let __local_36: ref "core:prelude/format.wado//Formatter";
+    let __local_37: ref "core:prelude/string.wado//String";
+    let __local_38: ref "core:prelude/string.wado//String";
     let __local_39: ref "core:prelude//Array<u8>";
+    let __local_46: ref "core:prelude/string.wado//String";
     let __local_47: ref "core:prelude//Array<u8>";
+    let __local_54: ref "core:prelude/string.wado//String";
     let __local_55: ref "core:prelude//Array<u8>";
     let __local_77: ref "core:prelude/string.wado//String";
     let __local_78: ref "core:prelude//Array<u8>";
     let __local_86: ref "core:prelude/string.wado//String";
     let __local_87: ref "core:prelude//Array<u8>";
+    let __local_94: ref "core:prelude/string.wado//String";
     let __local_95: ref "core:prelude//Array<u8>";
+    let __local_102: ref "core:prelude/string.wado//String";
     let __local_103: ref "core:prelude//Array<u8>";
+    let __local_110: ref "core:prelude/string.wado//String";
     let __local_111: ref "core:prelude//Array<u8>";
+    let __local_118: ref "core:prelude/string.wado//String";
     let __local_119: ref "core:prelude//Array<u8>";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
@@ -191,11 +199,13 @@ fn "wado-compiler/tests/fixtures/base64_decode.wado/run"() with Stdout {
         global:__modules_initialized = 1;
     };
     hello = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__inline_String__bytes_1: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
-        break __inline_String__bytes_1: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("Hello"), used: 5, index: 0 };
+        __local_37 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello"), used: 5 };
+        break __inline_String__bytes_1: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_37.repr, used: __local_37.used, index: 0 };
     });
     let __match_scrut_0: ref null "core:prelude//Array<u8>";
     __match_scrut_0 = __inline_decode_2: block -> ref null "core:prelude//Array<u8>" {
-        __local_39 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("SGVsbG8="), used: 8, index: 0 });
+        __local_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SGVsbG8="), used: 8 };
+        __local_39 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_38.repr, used: __local_38.used, index: 0 });
         break __inline_decode_2: "core:base64/decode_impl"(__local_39, __local_39.used);
     };
     __cond_2 = (if ref.is_null(__match_scrut_0) == 0 -> bool {
@@ -230,7 +240,8 @@ condition: decode(\"SGVsbG8=\") matches { Some(d) && d == hello }
     }
     let __match_scrut_1: ref null "core:prelude//Array<u8>";
     __match_scrut_1 = __inline_decode_7: block -> ref null "core:prelude//Array<u8>" {
-        __local_47 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("SGVsbG8"), used: 7, index: 0 });
+        __local_46 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SGVsbG8"), used: 7 };
+        __local_47 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_46.repr, used: __local_46.used, index: 0 });
         break __inline_decode_7: "core:base64/decode_impl"(__local_47, __local_47.used);
     };
     __cond_4 = (if ref.is_null(__match_scrut_1) == 0 -> bool {
@@ -265,7 +276,8 @@ condition: decode(\"SGVsbG8\") matches { Some(d) && d == hello }
     }
     let __match_scrut_2: ref null "core:prelude//Array<u8>";
     __match_scrut_2 = __inline_decode_12: block -> ref null "core:prelude//Array<u8>" {
-        __local_55 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: builtin::array_new<u8>(0), used: 0, index: 0 });
+        __local_54 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+        __local_55 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_54.repr, used: __local_54.used, index: 0 });
         break __inline_decode_12: "core:base64/decode_impl"(__local_55, __local_55.used);
     };
     __cond_6 = (if ref.is_null(__match_scrut_2) == 0 -> bool {
@@ -375,7 +387,8 @@ condition: decode(encode_url(&data)) matches { Some(d) && d == data }
         unreachable;
     }
     raw = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__inline_String__bytes_38: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
-        break __inline_String__bytes_38: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("SGVsbG8="), used: 8, index: 0 };
+        __local_94 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SGVsbG8="), used: 8 };
+        break __inline_String__bytes_38: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_94.repr, used: __local_94.used, index: 0 };
     });
     let __match_scrut_5: ref null "core:prelude//Array<u8>";
     __match_scrut_5 = __inline_decode_bytes_39: block -> ref null "core:prelude//Array<u8>" {
@@ -414,7 +427,8 @@ condition: decode_bytes(&raw) matches { Some(d) && d == hello }
     }
     let __match_scrut_6: ref null "core:prelude//Array<u8>";
     __match_scrut_6 = __inline_decode_44: block -> ref null "core:prelude//Array<u8>" {
-        __local_103 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("abc+def_ghi"), used: 11, index: 0 });
+        __local_102 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abc+def_ghi"), used: 11 };
+        __local_103 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_102.repr, used: __local_102.used, index: 0 });
         break __inline_decode_44: "core:base64/decode_impl"(__local_103, __local_103.used);
     };
     __cond_16 = (if ref.is_null(__match_scrut_6) == 0 -> bool {
@@ -448,7 +462,8 @@ condition: decode(\"abc+def_ghi\") matches { Some(_) }
     }
     let __match_scrut_7: ref null "core:prelude//Array<u8>";
     __match_scrut_7 = __inline_decode_49: block -> ref null "core:prelude//Array<u8>" {
-        __local_111 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("!!!"), used: 3, index: 0 });
+        __local_110 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("!!!"), used: 3 };
+        __local_111 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_110.repr, used: __local_110.used, index: 0 });
         break __inline_decode_49: "core:base64/decode_impl"(__local_111, __local_111.used);
     };
     __cond_17 = (if ref.is_null(__match_scrut_7) -> bool {
@@ -480,7 +495,8 @@ condition: decode(\"!!!\") matches { None }
     }
     let __match_scrut_8: ref null "core:prelude//Array<u8>";
     __match_scrut_8 = __inline_decode_54: block -> ref null "core:prelude//Array<u8>" {
-        __local_119 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("A"), used: 1, index: 0 });
+        __local_118 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A"), used: 1 };
+        __local_119 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_118.repr, used: __local_118.used, index: 0 });
         break __inline_decode_54: "core:base64/decode_impl"(__local_119, __local_119.used);
     };
     __cond_18 = (if ref.is_null(__match_scrut_8) -> bool {

@@ -151,6 +151,7 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/run"() {
     let leaf2: ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice";
     let __local_2: ref "core:prelude//Array<Choice>";
     let children: ref "core:prelude//Array<Choice>";
+    let tree: ref "core:prelude/types.wado//Box<Choice>";
     let result: i32;
     let __cond: bool;
     let __local_8: ref "core:prelude/string.wado//String";
@@ -166,9 +167,10 @@ fn "wado-compiler/tests/fixtures/single_module_variant_iter.wado/run"() {
         __local_2 = struct.new "core:prelude//Array<Choice>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice">(leaf1, leaf2), used: 2 };
         break __seq_lit: __local_2;
     };
+    tree = struct.new "core:prelude/types.wado//Box<Choice>" { value: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::A" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("root"), used: 4 }, children: children } } };
     result = __inline_count_7: block -> i32 {
         __local_21 = struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Counter" { total: 0 };
-        "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(__local_21, struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//Choice::A" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/single_module_variant_iter.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("root"), used: 4 }, children: children } });
+        "wado-compiler/tests/fixtures/single_module_variant_iter.wado/walk<Counter>"(__local_21, tree.value);
         break __inline_count_7: __local_21.total;
     };
     __cond = result == 30;

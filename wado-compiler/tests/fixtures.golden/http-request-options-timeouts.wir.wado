@@ -611,6 +611,7 @@ fn "wado-compiler/tests/fixtures/http-request-options-timeouts.wado/handle"() {
     let __local_352: ref "core:prelude/format.wado//Formatter";
     let __local_357: ref "core:prelude/format.wado//Formatter";
     let __local_363: ref "core:prelude/string.wado//String";
+    let __local_376: ref "core:prelude/string.wado//String";
     opts = "wado-compiler/tests/fixtures/http-request-options-timeouts.wado/__cm_binding__RequestOptions_new"();
     let __match_scrut_0: ref "core:prelude/types.wado//Option<u64>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/http-request-options-timeouts.wado/__cm_binding__RequestOptions_get_connect_timeout"(opts);
@@ -1447,7 +1448,8 @@ condition: opts.get_connect_timeout() matches { None }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     "core:internal/cm_stream_write_u8"(resp_tx, __inline_String__as_bytes_88: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_88: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("ok"), used: 2, index: 0 });
+        __local_376 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
+        break __inline_String__as_bytes_88: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_376.repr, used: __local_376.used, index: 0 });
     });
     "wasi/stream-drop-writable"(resp_tx);
     let __fw_write_ptr_3: i32;

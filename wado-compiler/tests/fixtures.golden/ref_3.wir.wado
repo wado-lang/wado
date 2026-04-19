@@ -160,17 +160,21 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/ref_3.wado/print_basic_point"(p) with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
+    let __local_5: ref "core:prelude/types.wado//Box<i32>";
     let __local_6: ref "core:prelude/format.wado//Formatter";
+    let __local_10: ref "core:prelude/types.wado//Box<i32>";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_5 = struct.new "core:prelude/types.wado//Box<i32>" { value: p.x };
         __local_6 = __local_2;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(p.x, __local_6);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_5.value, __local_6);
         "core:prelude/string.wado/String::push"(__local_1, 44);
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_10 = struct.new "core:prelude/types.wado//Box<i32>" { value: p.y };
         __local_11 = __local_2;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(p.y, __local_11);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_10.value, __local_11);
         break __tmpl: __local_1;
     });
 }
@@ -184,19 +188,23 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_struct_mut"() with Stdout {
     let p: ref "wado-compiler/tests/fixtures/ref_3.wado//Point";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
+    let __local_5: ref "core:prelude/types.wado//Box<i32>";
     let __local_6: ref "core:prelude/format.wado//Formatter";
+    let __local_10: ref "core:prelude/types.wado//Box<i32>";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     p = struct.new "wado-compiler/tests/fixtures/ref_3.wado//Point" { x: 1, y: 2 };
     "wado-compiler/tests/fixtures/ref_3.wado/move_point"(p);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_5 = struct.new "core:prelude/types.wado//Box<i32>" { value: p.x };
         __local_6 = __local_2;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(p.x, __local_6);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_5.value, __local_6);
         "core:prelude/string.wado/String::push"(__local_1, 44);
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
+        __local_10 = struct.new "core:prelude/types.wado//Box<i32>" { value: p.y };
         __local_11 = __local_2;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(p.y, __local_11);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_10.value, __local_11);
         break __tmpl: __local_1;
     });
 }
@@ -314,6 +322,7 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_array_ref_element"() with Stdout
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
+    let __local_31: ref "core:prelude/types.wado//Box<i32>";
     let __sroa_r_value: i32;
     arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
@@ -349,13 +358,14 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_array_ref_element"() with Stdout
         "core:prelude/string.wado/String::push"(__local_5, 58);
         "core:prelude/string.wado/String::push"(__local_5, 32);
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inline_Array_i32__IndexValue_i32___index_value_15: block -> i32 {
+        __local_31 = struct.new "core:prelude/types.wado//Box<i32>" { value: __inline_Array_i32__IndexValue_i32___index_value_15: block -> i32 {
             if 1 >= arr.used {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             break __inline_Array_i32__IndexValue_i32___index_value_15: builtin::array_get<i32>(arr.repr, 1);
-        }, __local_6);
+        } };
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_31.value, __local_6);
         break __tmpl: __local_5;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -490,12 +500,14 @@ fn "wado-compiler/tests/fixtures/ref_3.wado/ref_edge_nested"() with Stdout {
     let r: ref "core:prelude/types.wado//Box<i32>";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
+    let __local_7: ref "core:prelude/types.wado//Box<i32>";
     a = struct.new "core:prelude/types.wado//Box<i32>" { value: 42 };
     r = a;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(r.value, __local_4);
+        __local_7 = struct.new "core:prelude/types.wado//Box<i32>" { value: r.value };
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_7.value, __local_4);
         break __tmpl: __local_3;
     });
 }

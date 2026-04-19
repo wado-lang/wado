@@ -109,6 +109,7 @@ fn "wado-compiler/tests/fixtures/index_trait_complex_static.wado/run"() with Std
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
+    let __local_14: ref "core:prelude/types.wado//Box<i32>";
     let __local_23: ref "core:prelude/types.wado//Box<i32>";
     let value: ref "wado-compiler/tests/fixtures/index_trait_complex_static.wado//Value";
     let __local_33: ref "core:prelude/types.wado//Box<i32>";
@@ -119,7 +120,8 @@ fn "wado-compiler/tests/fixtures/index_trait_complex_static.wado/run"() with Std
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Initial: "), used: 9 });
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
-        "core:prelude/primitive.wado/i32::fmt_decimal"(v.n, __local_3);
+        __local_14 = struct.new "core:prelude/types.wado//Box<i32>" { value: v.n };
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__local_14.value, __local_3);
         break __tmpl: __local_2;
     });
     __sroa_c_item.n = __sroa_c_item.n * 2;

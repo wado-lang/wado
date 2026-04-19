@@ -512,16 +512,22 @@ fn "wado-compiler/tests/fixtures/http-response-trailers.wado/handle"() {
     let __packed_165: i64;
     let __ptr_166: i32;
     let __len_167: i32;
+    let __local_172: ref "core:prelude/string.wado//String";
+    let __local_173: ref "core:prelude/string.wado//String";
     let __local_177: ref "core:prelude/format.wado//Formatter";
     let __local_182: ref "core:prelude/format.wado//Formatter";
     let __local_188: ref "core:prelude/format.wado//Formatter";
     let __local_193: ref "core:prelude/format.wado//Formatter";
+    let __local_196: ref "core:prelude/string.wado//String";
+    let __local_197: ref "core:prelude/string.wado//String";
     trailers = "wado-compiler/tests/fixtures/http-response-trailers.wado/__cm_binding__Fields_new"();
     drop("wado-compiler/tests/fixtures/http-response-trailers.wado/__cm_binding__Fields_append"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-checksum"), used: 10 }, __inline_String__as_bytes_2: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_2: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("abc123"), used: 6, index: 0 });
+        __local_172 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abc123"), used: 6 };
+        break __inline_String__as_bytes_2: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_172.repr, used: __local_172.used, index: 0 });
     }));
     drop("wado-compiler/tests/fixtures/http-response-trailers.wado/__cm_binding__Fields_append"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-request-id"), used: 12 }, __inline_String__as_bytes_3: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_3: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("req-001"), used: 7, index: 0 });
+        __local_173 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("req-001"), used: 7 };
+        break __inline_String__as_bytes_3: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_173.repr, used: __local_173.used, index: 0 });
     }));
     __v0_2 = "wado-compiler/tests/fixtures/http-response-trailers.wado/__cm_binding__Fields_has"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-checksum"), used: 10 });
     if __v0_2 == 0 {
@@ -605,7 +611,8 @@ condition: trailers.has(\"x-request-id\" as FieldName)
     resp_tx = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     headers = "wado-compiler/tests/fixtures/http-response-trailers.wado/__cm_binding__Fields_new"();
     drop("wado-compiler/tests/fixtures/http-response-trailers.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, __inline_String__as_bytes_18: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_18: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("text/plain"), used: 10, index: 0 });
+        __local_196 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 };
+        break __inline_String__as_bytes_18: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_196.repr, used: __local_196.used, index: 0 });
     }));
     let __sroa___pattern_temp_2_0: i32;
     let __sroa___pattern_temp_2_1: i32;
@@ -914,7 +921,8 @@ condition: trailers.has(\"x-request-id\" as FieldName)
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     "core:internal/cm_stream_write_u8"(resp_tx, __inline_String__as_bytes_19: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_19: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("response body"), used: 13, index: 0 });
+        __local_197 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("response body"), used: 13 };
+        break __inline_String__as_bytes_19: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_197.repr, used: __local_197.used, index: 0 });
     });
     "wasi/stream-drop-writable"(resp_tx);
     let __fw_write_ptr_3: i32;

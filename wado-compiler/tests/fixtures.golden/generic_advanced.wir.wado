@@ -1140,19 +1140,23 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "wado-compiler/tests/fixtures/generic_advanced.wado/BTPoint^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_5: ref "core:prelude/string.wado//String";
+    let self_6: ref "core:prelude/types.wado//Box<i32>";
     let s_11: ref "core:prelude/string.wado//String";
     let s_13: ref "core:prelude/string.wado//String";
+    let self_14: ref "core:prelude/types.wado//Box<i32>";
     let s_19: ref "core:prelude/string.wado//String";
     s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("BTPoint { "), used: 10 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_3);
     s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x: "), used: 3 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_5);
-    "core:prelude/primitive.wado/i32::fmt_decimal"(self.x, f);
+    self_6 = struct.new "core:prelude/types.wado//Box<i32>" { value: self.x };
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self_6.value, f);
     s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_11);
     s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("y: "), used: 3 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_13);
-    "core:prelude/primitive.wado/i32::fmt_decimal"(self.y, f);
+    self_14 = struct.new "core:prelude/types.wado//Box<i32>" { value: self.y };
+    "core:prelude/primitive.wado/i32::fmt_decimal"(self_14.value, f);
     s_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_19);
 }

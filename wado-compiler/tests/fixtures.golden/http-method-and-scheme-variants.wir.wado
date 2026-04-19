@@ -619,6 +619,7 @@ fn "wado-compiler/tests/fixtures/http-method-and-scheme-variants.wado/handle"(re
     let __local_311: ref "core:prelude/format.wado//Formatter";
     let __local_317: ref "core:prelude/format.wado//Formatter";
     let __local_323: ref "core:prelude/format.wado//Formatter";
+    let __local_326: ref "core:prelude/string.wado//String";
     custom = struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PURGE"), used: 5 } };
     __v0_2 = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref "wasi:http/types.wado//Method"; __match_scrut_0 = custom; (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("GET"), used: 3 };
@@ -1586,7 +1587,8 @@ condition: name == \"http\" || name == \"https\"
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     "core:internal/cm_stream_write_u8"(resp_tx, __inline_String__as_bytes_75: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_75: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("ok"), used: 2, index: 0 });
+        __local_326 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
+        break __inline_String__as_bytes_75: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_326.repr, used: __local_326.used, index: 0 });
     });
     "wasi/stream-drop-writable"(resp_tx);
     let __fw_write_ptr_14: i32;

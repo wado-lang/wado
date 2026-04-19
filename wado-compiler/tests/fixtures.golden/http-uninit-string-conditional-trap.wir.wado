@@ -475,6 +475,7 @@ fn "wado-compiler/tests/fixtures/http-uninit-string-conditional-trap.wado/handle
     let __local_161: ref null "core:prelude/string.wado//String";
     let __local_166: ref "core:prelude/string.wado//String";
     let __local_167: ref "core:prelude/string.wado//String";
+    let __local_168: ref "core:prelude/string.wado//String";
     __local_161 = "wado-compiler/tests/fixtures/http-uninit-string-conditional-trap.wado/__cm_binding__Request_get_path_with_query"(request);
     take_else = (if ref.is_null(__local_161) == 0 -> bool {
         1;
@@ -501,7 +502,8 @@ fn "wado-compiler/tests/fixtures/http-uninit-string-conditional-trap.wado/handle
     body_tx = builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64);
     resp_headers = "wado-compiler/tests/fixtures/http-uninit-string-conditional-trap.wado/__cm_binding__Fields_new"();
     drop("wado-compiler/tests/fixtures/http-uninit-string-conditional-trap.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__inline_String__bytes_4: block -> ref "core:prelude/string.wado//StrUtf8ByteIter" {
-        break __inline_String__bytes_4: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("text/plain"), used: 10, index: 0 };
+        __local_168 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 };
+        break __inline_String__bytes_4: struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_168.repr, used: __local_168.used, index: 0 };
     })));
     let __sroa___pattern_temp_3_0: i32;
     let __sroa___pattern_temp_3_1: i32;

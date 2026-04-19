@@ -503,7 +503,9 @@ fn "wado-compiler/tests/fixtures/http-base64-decode.wado/handle"() {
     let __ptr_164: i32;
     let __len_165: i32;
     let __local_169: ref null "core:prelude//Array<u8>";
+    let __local_173: ref "core:prelude/string.wado//String";
     let __local_174: ref "core:prelude//Array<u8>";
+    let __local_184: ref "core:prelude/string.wado//String";
     let __local_185: ref "core:prelude//Array<u8>";
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
@@ -513,7 +515,8 @@ fn "wado-compiler/tests/fixtures/http-base64-decode.wado/handle"() {
         global:__modules_initialized = 1;
     };
     result = __inline_decode_2: block -> ref null "core:prelude//Array<u8>" {
-        __local_174 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("YWJj"), used: 4, index: 0 });
+        __local_173 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("YWJj"), used: 4 };
+        __local_174 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_173.repr, used: __local_173.used, index: 0 });
         break __inline_decode_2: "core:base64/decode_impl"(__local_174, __local_174.used);
     };
     let __match_scrut_0: ref null "core:prelude//Array<u8>";
@@ -867,7 +870,8 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     __local_169 = __inline_decode_10: block -> ref null "core:prelude//Array<u8>" {
-        __local_185 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("YWJj"), used: 4, index: 0 });
+        __local_184 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("YWJj"), used: 4 };
+        __local_185 = "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_184.repr, used: __local_184.used, index: 0 });
         break __inline_decode_10: "core:base64/decode_impl"(__local_185, __local_185.used);
     };
     text = (if ref.is_null(__local_169) == 0 -> ref "core:prelude/string.wado//String" {

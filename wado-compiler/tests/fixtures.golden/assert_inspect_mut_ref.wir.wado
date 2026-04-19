@@ -109,6 +109,7 @@ fn "wado-compiler/tests/fixtures/assert_inspect_mut_ref.wado/run"() with Stdout,
     let __local_16: ref "core:prelude/format.wado//Formatter";
     let __local_17: ref "core:prelude/types.wado//Box<i32>";
     let __local_19: ref "core:prelude/string.wado//String";
+    let __local_20: ref "core:prelude/types.wado//Box<i32>";
     let __local_26: ref "core:prelude/format.wado//Formatter";
     y = struct.new "core:prelude/types.wado//Box<i32>" { value: 100 };
     __v0 = y;
@@ -143,7 +144,8 @@ condition: *mr == 99
             __local_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&mut "), used: 5 };
             "core:prelude/string.wado/String::push_str"(__local_16.buf, __local_19);
             __local_17 = __local_15;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_17.value, __local_16);
+            __local_20 = struct.new "core:prelude/types.wado//Box<i32>" { value: __local_17.value };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_20.value, __local_16);
             "core:prelude/string.wado/String::push"(__local_5, 10);
             "core:prelude/string.wado/String::push"(__local_5, 42);
             "core:prelude/string.wado/String::push"(__local_5, 109);

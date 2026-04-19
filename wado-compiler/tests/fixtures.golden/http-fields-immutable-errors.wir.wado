@@ -610,11 +610,16 @@ fn "wado-compiler/tests/fixtures/http-fields-immutable-errors.wado/handle"(reque
     let __packed_183: i64;
     let __ptr_184: i32;
     let __len_185: i32;
+    let __local_190: ref "core:prelude/string.wado//String";
+    let __local_201: ref "core:prelude/string.wado//String";
+    let __local_221: ref "core:prelude/string.wado//String";
+    let __local_228: ref "core:prelude/string.wado//String";
     headers = "wado-compiler/tests/fixtures/http-fields-immutable-errors.wado/__cm_binding__Request_get_headers"(request);
     drop("wado-compiler/tests/fixtures/http-fields-immutable-errors.wado/__cm_binding__Fields_has"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("host"), used: 4 }));
     drop("wado-compiler/tests/fixtures/http-fields-immutable-errors.wado/__cm_binding__Fields_get"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("host"), used: 4 }));
     append_result = "wado-compiler/tests/fixtures/http-fields-immutable-errors.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-new"), used: 5 }, __inline_String__as_bytes_2: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_2: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("value"), used: 5, index: 0 });
+        __local_190 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 };
+        break __inline_String__as_bytes_2: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_190.repr, used: __local_190.used, index: 0 });
     });
     let __match_scrut_0: ref null "wasi:http/types.wado//HeaderError";
     __match_scrut_0 = append_result;
@@ -652,7 +657,8 @@ condition: append_result matches { Err(_) }
     }
     values = __seq_lit: block -> ref "core:prelude//Array<Array<u8>>" {
         __local_6 = struct.new "core:prelude//Array<Array<u8>>" { repr: array.new_fixed<ref "core:prelude//Array<u8>">(value_copy "core:prelude//Array<u8>"(__inline_String__as_bytes_10: block -> ref "core:prelude//Array<u8>" {
-            break __inline_String__as_bytes_10: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("val"), used: 3, index: 0 });
+            __local_201 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("val"), used: 3 };
+            break __inline_String__as_bytes_10: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_201.repr, used: __local_201.used, index: 0 });
         })), used: 1 };
         break __seq_lit: __local_6;
     };
@@ -764,7 +770,8 @@ condition: gad_result matches { Err(_) }
     drop("wado-compiler/tests/fixtures/http-fields-immutable-errors.wado/__cm_binding__Fields_copy_all"(headers));
     cloned = "wado-compiler/tests/fixtures/http-fields-immutable-errors.wado/__cm_binding__Fields_clone"(headers);
     clone_append = "wado-compiler/tests/fixtures/http-fields-immutable-errors.wado/__cm_binding__Fields_append"(cloned, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-clone"), used: 7 }, __inline_String__as_bytes_24: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_24: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("ok"), used: 2, index: 0 });
+        __local_221 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
+        break __inline_String__as_bytes_24: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_221.repr, used: __local_221.used, index: 0 });
     });
     let __match_scrut_4: ref null "wasi:http/types.wado//HeaderError";
     __match_scrut_4 = clone_append;
@@ -1114,7 +1121,8 @@ condition: clone_append matches { Ok(_) }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     "core:internal/cm_stream_write_u8"(resp_tx, __inline_String__as_bytes_29: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_29: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("ok"), used: 2, index: 0 });
+        __local_228 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
+        break __inline_String__as_bytes_29: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_228.repr, used: __local_228.used, index: 0 });
     });
     "wasi/stream-drop-writable"(resp_tx);
     let __fw_write_ptr_7: i32;
