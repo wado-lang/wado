@@ -10,7 +10,7 @@ use crate::ast::{
     FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
     IndexExpr, InnerAttribute, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
     MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
-    Newtype, Param, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
+    Newtype, Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
     StructLiteralField, StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr,
     TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
@@ -2822,21 +2822,46 @@ impl Parser {
                         id: self.alloc_ast_id(),
                         name,
                         span: start_span,
+                        segments: Vec::new(),
                     }));
                 }
                 // This is a qualified name like Effect::function or ns::Type::Case
-                // Consume a chain of ::ident segments
-                let mut qualified_name = format!("{name}::{}", self.consume_ident()?);
+                // Record the leading segment (already consumed above).
+                let mut segments = vec![PathSegment {
+                    id: self.alloc_ast_id(),
+                    name: name.clone(),
+                    span: start_span,
+                }];
+                // Consume a chain of ::ident segments, capturing each segment's
+                // AstId and span for LSP navigation.
+                let first_seg_span = self.peek().span;
+                let first_seg_name = self.consume_ident()?;
+                segments.push(PathSegment {
+                    id: self.alloc_ast_id(),
+                    name: first_seg_name.clone(),
+                    span: first_seg_span,
+                });
+                let mut qualified_name = format!("{name}::{first_seg_name}");
+                let mut end_span = first_seg_span;
                 while self.check(&TokenKind::ColonColon)
                     && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
                 {
                     self.advance(); // consume ::
-                    qualified_name = format!("{qualified_name}::{}", self.consume_ident()?);
+                    let seg_span = self.peek().span;
+                    let seg_name = self.consume_ident()?;
+                    segments.push(PathSegment {
+                        id: self.alloc_ast_id(),
+                        name: seg_name.clone(),
+                        span: seg_span,
+                    });
+                    qualified_name = format!("{qualified_name}::{seg_name}");
+                    end_span = seg_span;
                 }
                 return Ok(Expr::Ident(IdentExpr {
                     id: self.alloc_ast_id(),
                     name: qualified_name,
-                    span: start_span,
+                    span: start_span.merge(&end_span),
+                    segments,
                 }));
             } else if self.check(&TokenKind::Colon) && self.peek_nth(1).kind == TokenKind::LBrace {
                 // Labeled block expression: `label: { ... }`
@@ -2862,6 +2887,7 @@ impl Parser {
             return Ok(Expr::Ident(IdentExpr {
                 id: self.alloc_ast_id(),
                 name,
+                segments: Vec::new(),
                 span: start_span,
             }));
         }
@@ -4554,6 +4580,7 @@ impl Parser {
                         Expr::Ident(IdentExpr {
                             id: self.alloc_ast_id(),
                             name: field_name.clone(),
+                            segments: Vec::new(),
                             span: field_name_span,
                         }),
                         true,

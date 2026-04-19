@@ -1309,6 +1309,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
             expr: Box::new(Expr::Ident(IdentExpr {
                 id: ctx.synth_id(),
                 name: var_name.clone(),
+                segments: Vec::new(),
                 span,
             })),
             format: Some(FormatSpec {
@@ -1330,6 +1331,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
         callee: Expr::Ident(IdentExpr {
             id: ctx.synth_id(),
             name: "panic".to_string(),
+            segments: Vec::new(),
             span,
         }),
         type_args: vec![],
@@ -1347,6 +1349,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
             expr: Expr::Ident(IdentExpr {
                 id: ctx.synth_id(),
                 name: cond_var,
+                segments: Vec::new(),
                 span,
             }),
             span,
@@ -1446,6 +1449,7 @@ fn reconstruct_with_intermediates(expr: &Expr, intermediates: &[(String, String,
             return Expr::Ident(IdentExpr {
                 id: expr.id(),
                 name: var_name.clone(),
+                segments: Vec::new(),
                 span: expr.span(),
             });
         }
@@ -1868,6 +1872,7 @@ mod tests {
             target: Expr::Ident(IdentExpr {
                 id: crate::ast::AstId::fresh(),
                 name: "x".to_string(),
+                segments: Vec::new(),
                 span: dummy_span(),
             }),
             op: CompoundAssignOp::Add,
@@ -1921,6 +1926,7 @@ mod tests {
                     right: Expr::Ident(IdentExpr {
                         id: crate::ast::AstId::fresh(),
                         name: "x".to_string(),
+                        segments: Vec::new(),
                         span: dummy_span(),
                     }),
                     op_span: dummy_span(),

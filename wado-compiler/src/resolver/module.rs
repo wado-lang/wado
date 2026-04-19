@@ -188,6 +188,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         cases.push(VariantCaseData {
                             name: case.name.clone(),
                             payload,
+                            ast_id: case.id,
                         });
                     }
 
@@ -222,6 +223,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .map(|(index, case)| EnumCaseData {
                             name: case.name.clone(),
                             index: index as u32,
+                            ast_id: case.id,
                         })
                         .collect();
                     self.enum_cases.insert(
@@ -249,6 +251,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .map(|(i, m)| FlagsMemberData {
                             name: m.name.clone(),
                             bitmask: 1u32 << i,
+                            ast_id: m.id,
                         })
                         .collect();
                     self.flags_cases.insert(
@@ -256,6 +259,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         FlagsInfo {
                             type_id: flags_type,
                             members,
+                            module_source: self.current_module_source.clone(),
                         },
                     );
                 }

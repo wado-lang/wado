@@ -2243,6 +2243,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             receiver: Expr::Ident(IdentExpr {
                 id: for_of.id,
                 name: iter_var,
+                segments: Vec::new(),
                 span,
             }),
             method: "next".to_string(),
@@ -2301,6 +2302,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     expr: Expr::Ident(IdentExpr {
                         id: for_of.id,
                         name: elem_var,
+                        segments: Vec::new(),
                         span,
                     }),
                     span,

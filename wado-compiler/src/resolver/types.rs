@@ -35,6 +35,8 @@ pub(super) struct VariantCaseData {
     pub(super) name: String,
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
     pub(super) payload: TypeId,
+    /// AstId of the case declaration (`VariantCase::id`) in the owning module.
+    pub(super) ast_id: AstId,
 }
 
 /// Variant info: module source, type parameters, and cases
@@ -56,6 +58,8 @@ pub(crate) struct VariantInfo {
 pub(super) struct EnumCaseData {
     pub(super) name: String,
     pub(super) index: u32,
+    /// AstId of the case declaration (`EnumCase::id`) in the owning module.
+    pub(super) ast_id: AstId,
 }
 
 /// Enum info: module source and cases (enums have no type parameters or payloads)
@@ -92,6 +96,8 @@ impl EnumInfo {
 pub(super) struct FlagsMemberData {
     pub(super) name: String,
     pub(super) bitmask: u32,
+    /// AstId of the member declaration (`FlagsVariant::id`) in the owning module.
+    pub(super) ast_id: AstId,
 }
 
 /// Flags type info: newtype `TypeId` and members
@@ -99,6 +105,9 @@ pub(super) struct FlagsMemberData {
 pub(crate) struct FlagsInfo {
     pub(super) type_id: TypeId,
     pub(super) members: Vec<FlagsMemberData>,
+    /// Module source that owns this flags declaration. Used to build `SymbolKey`
+    /// entries for use->def references pointing at individual members.
+    pub(super) module_source: ModuleSource,
 }
 
 /// Resource info: module source and method names

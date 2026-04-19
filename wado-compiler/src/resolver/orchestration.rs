@@ -452,6 +452,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             cases.push(VariantCaseData {
                                 name: case.name.clone(),
                                 payload,
+                                ast_id: case.id,
                             });
                         }
                         let type_param_type_ids: Vec<TypeId> = type_params
@@ -486,6 +487,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .map(|(index, case)| EnumCaseData {
                                 name: case.name.clone(),
                                 index: index as u32,
+                                ast_id: case.id,
                             })
                             .collect();
                         all_enum_cases
@@ -516,6 +518,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .map(|(i, m)| FlagsMemberData {
                                 name: m.name.clone(),
                                 bitmask: 1u32 << i,
+                                ast_id: m.id,
                             })
                             .collect();
                         all_flags_cases
@@ -526,6 +529,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 FlagsInfo {
                                     type_id: flags_type,
                                     members,
+                                    module_source: module_source.clone(),
                                 },
                             );
                     }

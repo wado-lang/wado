@@ -568,7 +568,12 @@ pub fn walk_match_expr<V: AstVisitor>(v: &mut V, m: &MatchExpr) {
 pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
     v.visit_id(expr.id(), expr.span());
     match expr {
-        Expr::Ident(_) | Expr::Literal(_) => {}
+        Expr::Ident(i) => {
+            for segment in &i.segments {
+                v.visit_id(segment.id, segment.span);
+            }
+        }
+        Expr::Literal(_) => {}
         Expr::Binary(e) => {
             v.visit_expr(&e.left);
             v.visit_expr(&e.right);
@@ -1721,6 +1726,19 @@ pub struct CompoundAssignExpr {
 
 #[derive(Debug, Clone)]
 pub struct IdentExpr {
+    pub id: AstId,
+    pub name: String,
+    pub span: Span,
+    /// When the identifier is a qualified path like `Color::Red`, each segment
+    /// carries its own [`AstId`] and span so LSP navigation can pinpoint which
+    /// segment the cursor is on. Empty for simple identifiers. For a qualified
+    /// path with N segments, this has N entries in left-to-right order; the
+    /// last entry's name matches the suffix of `name` after the final `::`.
+    pub segments: Vec<PathSegment>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PathSegment {
     pub id: AstId,
     pub name: String,
     pub span: Span,
