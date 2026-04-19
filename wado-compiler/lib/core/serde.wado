@@ -502,9 +502,13 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
 impl<..T: Serialize> Serialize for [..T] {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let mut seq = s.begin_seq((*self).len())?;
-        for let v of self {
-            seq.element(v)?;
+        for let v of *self {
+            seq.element(&v)?;
         }
+        // FIXME: the following code causes ICE
+        // for let v of self {
+        //     seq.element(v)?;
+        // }
         return seq.end();
     }
 }
