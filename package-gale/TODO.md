@@ -10,20 +10,7 @@ exception). The remaining work is mostly about **propagating** parsed
 information into the IR and **using** it in the code generator so that
 generated parsers are semantically correct, not just syntactically accepted.
 
-## A. IR → pipeline wiring
-
-- `Grammar.options.superClass` / `tokenVocab` / `language` — completely
-  ignored. `tokenVocab` in particular is non-trivial: it implies loading
-  another grammar's token ids.
-- `Grammar.named_actions` — stored for presence/position but not
-  surfaced anywhere. At minimum, generated output could include a
-  comment marker so downstream tooling can see where actions used to be.
-- `ParserRule.visibility` / `LexerRule.visibility` — stored but unused.
-  ANTLR4 itself ignores these at codegen, so matching ANTLR4's behavior
-  is fine, but a lint or doc comment in the generated output would make
-  the information observable.
-
-## B. Driver-level verification (remaining gaps)
+## A. Driver-level verification (remaining gaps)
 
 - **Parser-side `~TOK` / `~(block)`.** No driver-test grammar currently
   uses a parser-level complement. Either add a minimal new grammar, or
@@ -43,7 +30,7 @@ generated parsers are semantically correct, not just syntactically accepted.
 - **Wildcard `.` at parser level.** Only lexer-level `.` is exercised
   today. A parser rule like `any : . ;` has no driver-level test.
 
-## C. Negative tests
+## B. Negative tests
 
 The parser test suite is overwhelmingly positive — it verifies that
 well-formed input parses. There are almost no negative tests that pin
@@ -127,3 +114,34 @@ scans per sql_stmt entry, not 9). Expect another perf improvement on
 ## Generated Parser Bugs
 
 (none currently)
+
+## Future Work: Actions and `superClass` (low priority)
+
+Gale currently skips the contents of `{ ... }` action blocks and semantic
+predicates — the g4 parser recognizes them (so real-world grammars parse
+cleanly) but the code generator discards the host-language source. This is
+intentional for the near term: emitting Wado from opaque Java/Rust/Python
+snippets requires a cross-language translator we do not have.
+
+Once action-body support is designed, `Grammar.options.superClass` becomes
+meaningful and can be wired through as a trait bound on the generated
+parser/lexer struct (something like `impl SuperClass for GeneratedParser`,
+with action bodies able to call `self.helper(...)`). Until then the option
+is surfaced only as a metadata comment.
+
+Rough sketch, for when this is picked up:
+
+- Extend the IR so `OptionValue::Action` and per-alt action elements carry
+  a language-tagged source fragment instead of being a placeholder string.
+- Add a pluggable "action translator" interface; ship at minimum an
+  identity translator for Wado-written action bodies.
+- Generate a `SuperClass` trait (name derived from `superClass = Foo`) and
+  require callers to `impl` it; emit action bodies as method calls on
+  `self` that resolve through that trait.
+- `tokenVocab` falls out naturally at that point — another grammar's
+  generated `TokenKind` enum can be imported by name rather than merged at
+  IR time.
+
+No work here blocks any current Gale user. Re-prioritize only when a real
+grammar outside the `clean` set (ANTLR4, Rust, TypeScript lexers) needs its
+action semantics reproduced, not just skipped.
