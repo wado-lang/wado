@@ -7,80 +7,136 @@ import * as cp from 'child_process';
 const LANGUAGE_ID = 'wado';
 const CLIENT_ID = 'wadoLanguageServer';
 const CLIENT_NAME = 'Wado Language Server';
-const WASM_RELATIVE_PATH = 'out/wado_lsp.wasm';
+const WASM_PATH_SEGMENTS = ['out', 'wado_lsp.wasm'] as const;
+const RESTART_DEBOUNCE_MS = 250;
 
-let client: LanguageClient | undefined;
-let wasmWatcher: vscode.FileSystemWatcher | undefined;
 let outputChannel: vscode.LogOutputChannel | undefined;
+let client: LanguageClient | undefined;
+let lifecycleQueue: Promise<void> = Promise.resolve();
+let pendingRestart: NodeJS.Timeout | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     outputChannel = vscode.window.createOutputChannel(CLIENT_NAME, { log: true });
     context.subscriptions.push(outputChannel);
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('wado.version', () => {
-            const version = context.extension.packageJSON.version as string;
-            vscode.window.showInformationMessage(`Wado Language Support v${version}`);
-        }),
+        vscode.commands.registerCommand('wado.restartLanguageServer', () =>
+            enqueueLifecycle(async () => {
+                await stopClientLocked();
+                await startClientLocked(context);
+            }),
+        ),
     );
 
-    context.subscriptions.push(
-        vscode.commands.registerCommand('wado.restartLanguageServer', async () => {
-            await restartClient(context);
-        }),
+    const wasmWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(context.extensionUri, WASM_PATH_SEGMENTS.join('/')),
     );
-
-    wasmWatcher = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(context.extensionUri, WASM_RELATIVE_PATH),
-    );
-    const onWasmChanged = async () => {
-        if (!vscode.workspace.getConfiguration('wado').get<string>('serverPath')) {
-            outputChannel?.appendLine('Bundled wado_lsp.wasm changed — restarting server.');
-            await restartClient(context);
+    const scheduleRestartOnWasmChange = () => {
+        if (usingNativeOverride()) {
+            return;
         }
+        if (pendingRestart) {
+            clearTimeout(pendingRestart);
+        }
+        pendingRestart = setTimeout(() => {
+            pendingRestart = undefined;
+            outputChannel?.info('Bundled wado_lsp.wasm changed — restarting server.');
+            enqueueLifecycle(async () => {
+                await stopClientLocked();
+                await startClientLocked(context);
+            }).catch((err: unknown) => {
+                outputChannel?.error(`Auto-restart failed: ${String(err)}`);
+            });
+        }, RESTART_DEBOUNCE_MS);
     };
-    wasmWatcher.onDidChange(onWasmChanged);
-    wasmWatcher.onDidCreate(onWasmChanged);
+    wasmWatcher.onDidChange(scheduleRestartOnWasmChange);
+    wasmWatcher.onDidCreate(scheduleRestartOnWasmChange);
     context.subscriptions.push(wasmWatcher);
 
     context.subscriptions.push(
-        vscode.workspace.onDidChangeConfiguration(async (event) => {
-            if (event.affectsConfiguration('wado.serverPath')) {
-                outputChannel?.appendLine('wado.serverPath changed — restarting server.');
-                await restartClient(context);
+        vscode.workspace.onDidChangeConfiguration((event) => {
+            if (!event.affectsConfiguration('wado.serverPath')) {
+                return;
             }
+            outputChannel?.info('wado.serverPath changed — restarting server.');
+            enqueueLifecycle(async () => {
+                await stopClientLocked();
+                await startClientLocked(context);
+            }).catch((err: unknown) => {
+                outputChannel?.error(`Config-change restart failed: ${String(err)}`);
+            });
         }),
     );
 
-    await startClient(context);
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeWorkspaceFolders(() => {
+            outputChannel?.info('Workspace folders changed — restarting server.');
+            enqueueLifecycle(async () => {
+                await stopClientLocked();
+                await startClientLocked(context);
+            }).catch((err: unknown) => {
+                outputChannel?.error(`Workspace-change restart failed: ${String(err)}`);
+            });
+        }),
+    );
+
+    await enqueueLifecycle(() => startClientLocked(context));
 }
 
 export async function deactivate(): Promise<void> {
-    await stopClient();
+    if (pendingRestart) {
+        clearTimeout(pendingRestart);
+        pendingRestart = undefined;
+    }
+    await enqueueLifecycle(stopClientLocked);
 }
 
-async function startClient(context: vscode.ExtensionContext): Promise<void> {
+function enqueueLifecycle(op: () => Promise<void>): Promise<void> {
+    const next = lifecycleQueue.then(op, op);
+    lifecycleQueue = next.catch(() => {
+        /* swallow so a failure doesn't poison the queue */
+    });
+    return next;
+}
+
+async function startClientLocked(context: vscode.ExtensionContext): Promise<void> {
     if (client) {
         return;
     }
-    const serverOptions = await buildServerOptions(context);
+    let serverOptions: ServerOptions;
+    try {
+        serverOptions = buildServerOptions(context);
+    } catch (err) {
+        outputChannel?.error(`Failed to build server options: ${String(err)}`);
+        vscode.window.showErrorMessage(
+            `${CLIENT_NAME} could not initialize. See the "${CLIENT_NAME}" output channel for details.`,
+        );
+        return;
+    }
     const clientOptions: LanguageClientOptions = {
         documentSelector: [{ language: LANGUAGE_ID }],
         outputChannel,
         diagnosticCollectionName: LANGUAGE_ID,
         uriConverters: createUriConverters(),
     };
-    client = new LanguageClient(CLIENT_ID, CLIENT_NAME, serverOptions, clientOptions);
+    const pending = new LanguageClient(CLIENT_ID, CLIENT_NAME, serverOptions, clientOptions);
     try {
-        await client.start();
+        await pending.start();
+        client = pending;
     } catch (err) {
-        outputChannel?.appendLine(`Failed to start ${CLIENT_NAME}: ${String(err)}`);
-        client = undefined;
-        throw err;
+        outputChannel?.error(`Failed to start ${CLIENT_NAME}: ${String(err)}`);
+        try {
+            await pending.dispose();
+        } catch (disposeErr) {
+            outputChannel?.error(`Failed to dispose half-started client: ${String(disposeErr)}`);
+        }
+        vscode.window.showWarningMessage(
+            `${CLIENT_NAME} failed to start. Run "Wado: Restart Language Server" after resolving the issue. See the "${CLIENT_NAME}" output channel for details.`,
+        );
     }
 }
 
-async function stopClient(): Promise<void> {
+async function stopClientLocked(): Promise<void> {
     if (!client) {
         return;
     }
@@ -89,16 +145,15 @@ async function stopClient(): Promise<void> {
     try {
         await running.stop();
     } catch (err) {
-        outputChannel?.appendLine(`Error stopping ${CLIENT_NAME}: ${String(err)}`);
+        outputChannel?.error(`Error stopping ${CLIENT_NAME}: ${String(err)}`);
     }
 }
 
-async function restartClient(context: vscode.ExtensionContext): Promise<void> {
-    await stopClient();
-    await startClient(context);
+function usingNativeOverride(): boolean {
+    return Boolean(vscode.workspace.getConfiguration('wado').get<string>('serverPath')?.trim());
 }
 
-async function buildServerOptions(context: vscode.ExtensionContext): Promise<ServerOptions> {
+function buildServerOptions(context: vscode.ExtensionContext): ServerOptions {
     const configuredPath = vscode.workspace.getConfiguration('wado').get<string>('serverPath')?.trim();
     if (configuredPath) {
         return buildSubprocessServerOptions(configuredPath);
@@ -107,17 +162,18 @@ async function buildServerOptions(context: vscode.ExtensionContext): Promise<Ser
 }
 
 function buildSubprocessServerOptions(serverPath: string): ServerOptions {
-    outputChannel?.appendLine(`Using native Wado LSP binary: ${serverPath}`);
+    outputChannel?.info(`Using native Wado LSP binary: ${serverPath}`);
     return () => {
-        const child = cp.spawn(serverPath, [], {
-            stdio: ['pipe', 'pipe', 'pipe'],
-        });
+        const child = cp.spawn(serverPath, [], { stdio: ['pipe', 'pipe', 'pipe'] });
         child.on('error', (err) => {
-            outputChannel?.appendLine(`Failed to spawn ${serverPath}: ${String(err)}`);
+            outputChannel?.error(`Failed to spawn ${serverPath}: ${String(err)}`);
         });
         child.stderr?.on('data', (chunk: Buffer) => {
             outputChannel?.append(chunk.toString('utf8'));
         });
+        if (!child.stdin || !child.stdout) {
+            return Promise.reject(new Error(`Native server ${serverPath} did not expose stdio streams.`));
+        }
         const info: StreamInfo = {
             reader: child.stdout,
             writer: child.stdin,
@@ -130,9 +186,9 @@ function buildSubprocessServerOptions(serverPath: string): ServerOptions {
 function buildWasmServerOptions(context: vscode.ExtensionContext): ServerOptions {
     return async () => {
         const wasm = await Wasm.load();
-        const wasmUri = vscode.Uri.joinPath(context.extensionUri, ...WASM_RELATIVE_PATH.split('/'));
-        const bits = await vscode.workspace.fs.readFile(wasmUri);
-        const module = await WebAssembly.compile(bits as unknown as BufferSource);
+        const wasmUri = vscode.Uri.joinPath(context.extensionUri, ...WASM_PATH_SEGMENTS);
+        const bytes = await vscode.workspace.fs.readFile(wasmUri);
+        const module = await WebAssembly.compile(toArrayBuffer(bytes));
         const process = await wasm.createProcess('wado-lsp', module, {
             stdio: createStdioOptions(),
             mountPoints: [{ kind: 'workspaceFolder' }],
@@ -143,4 +199,14 @@ function buildWasmServerOptions(context: vscode.ExtensionContext): ServerOptions
         });
         return startServer(process);
     };
+}
+
+// `vscode.workspace.fs.readFile` returns `Uint8Array<ArrayBufferLike>` because
+// the backing buffer could theoretically be a `SharedArrayBuffer`. `WebAssembly.compile`
+// wants a plain `ArrayBuffer`. Slicing into a fresh `ArrayBuffer` is guaranteed
+// to produce a contiguous, non-shared buffer regardless of the source backing.
+function toArrayBuffer(view: Uint8Array): ArrayBuffer {
+    const copy = new ArrayBuffer(view.byteLength);
+    new Uint8Array(copy).set(view);
+    return copy;
 }

@@ -1,0 +1,120 @@
+import * as assert from 'assert';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import * as vscode from 'vscode';
+
+const BROKEN_WADO_SOURCE = `fn main() -> i32 {
+    let x: i32 = "not an integer";
+    return x;
+}
+`;
+
+function extensionRoot(): string {
+    return path.resolve(__dirname, '..', '..', '..');
+}
+
+function nativeBinaryCandidates(): string[] {
+    const repoRoot = path.resolve(extensionRoot(), '..');
+    const exe = process.platform === 'win32' ? '.exe' : '';
+    return [
+        process.env.WADO_LSP_NATIVE_PATH ?? '',
+        path.join(repoRoot, 'target', 'release', `wado-lsp${exe}`),
+        path.join(repoRoot, 'target', 'debug', `wado-lsp${exe}`),
+    ].filter((candidate) => candidate.length > 0);
+}
+
+function findNativeBinary(): string | undefined {
+    return nativeBinaryCandidates().find((candidate) => {
+        try {
+            return fs.statSync(candidate).isFile();
+        } catch {
+            return false;
+        }
+    });
+}
+
+async function waitForDiagnostics(uri: vscode.Uri, timeoutMs: number): Promise<vscode.Diagnostic[]> {
+    const existing = vscode.languages.getDiagnostics(uri);
+    if (existing.length > 0) {
+        return existing;
+    }
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            subscription.dispose();
+            reject(new Error(`Timed out after ${timeoutMs}ms waiting for diagnostics on ${uri.toString()}`));
+        }, timeoutMs);
+        const subscription = vscode.languages.onDidChangeDiagnostics((event) => {
+            if (!event.uris.some((u) => u.toString() === uri.toString())) {
+                return;
+            }
+            const diags = vscode.languages.getDiagnostics(uri);
+            if (diags.length > 0) {
+                clearTimeout(timer);
+                subscription.dispose();
+                resolve(diags);
+            }
+        });
+    });
+}
+
+suite('Wado LSP (native subprocess)', () => {
+    let nativePath: string | undefined;
+    let previousServerPath: string | undefined;
+
+    suiteSetup(async function () {
+        nativePath = findNativeBinary();
+        if (!nativePath) {
+            this.skip();
+        }
+        const extension = vscode.extensions.getExtension('wado-lang.wado');
+        assert.ok(extension, 'Extension should be present');
+        if (!extension.isActive) {
+            await extension.activate();
+        }
+        const config = vscode.workspace.getConfiguration('wado');
+        previousServerPath = config.get<string>('serverPath') ?? '';
+        await config.update('serverPath', nativePath, vscode.ConfigurationTarget.Global);
+        // Config-change handler enqueues a restart on `lifecycleQueue`; wait for
+        // the restart to quiesce before running the assertion.
+        await new Promise((r) => setTimeout(r, 2_000));
+    });
+
+    suiteTeardown(async () => {
+        const config = vscode.workspace.getConfiguration('wado');
+        await config.update(
+            'serverPath',
+            previousServerPath ?? '',
+            vscode.ConfigurationTarget.Global,
+        );
+    });
+
+    test('publishes diagnostics when using the native subprocess server', async function () {
+        this.timeout(60_000);
+
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wado-lsp-subproc-'));
+        const filePath = path.join(tmpDir, 'broken.wado');
+        fs.writeFileSync(filePath, BROKEN_WADO_SOURCE, 'utf8');
+
+        try {
+            const uri = vscode.Uri.file(filePath);
+            const doc = await vscode.workspace.openTextDocument(uri);
+            await vscode.window.showTextDocument(doc);
+            const diagnostics = await waitForDiagnostics(uri, 30_000);
+            const hasError = diagnostics.some(
+                (d) => d.severity === vscode.DiagnosticSeverity.Error,
+            );
+            assert.ok(
+                hasError,
+                `Expected at least one error diagnostic from the native server, got: ${JSON.stringify(
+                    diagnostics.map((d) => ({
+                        severity: d.severity,
+                        message: d.message,
+                    })),
+                )}`,
+            );
+        } finally {
+            fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+    });
+});
