@@ -150,7 +150,7 @@ concrete code location involved.
       `Span` in `wado-compiler/src/ast.rs` so cursor-on-name works for:
       - `use foo from "./foo.wado"` (namespace import)
       - `use { Eff::{f, g} } from "..."` (effect function list — both the
-        effect name and the function names)
+      effect name and the function names)
 - [ ] **Narrow `#include_str` / `#include_bytes` cursor match to the path
       literal.** `Literal::IncludeStr(String)` / `IncludeBytes(String)` store
       only the path text, so `IncludePathFinder` in `src/definition.rs`
@@ -179,4 +179,3 @@ concrete code location involved.
       informational use and keep `module_uri` strictly for URIs a client can
       open (returning `None` for unopenable stdlib modules until
       `workspace/textDocumentContent` lands).
-
