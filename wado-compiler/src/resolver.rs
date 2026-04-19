@@ -411,7 +411,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             ast::UseItem::EffectFunctions { effect_name, .. } => {
                                 sources.insert(effect_name.clone(), source.clone());
                             }
-                            ast::UseItem::Simple { name, alias } => {
+                            ast::UseItem::Simple { name, alias, .. } => {
                                 // Track simple imports that look like effect names (PascalCase)
                                 let local_name = alias.as_ref().unwrap_or(name);
                                 if local_name.starts_with(|c: char| c.is_ascii_uppercase()) {
@@ -476,6 +476,32 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .collect()
     }
 
+    /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
+    /// declarations. The cursor landing on an imported name inside a `use`
+    /// specifier list should jump to the defining symbol in the source module.
+    fn record_use_specifier_references(&self, module: &Module) {
+        for item in &module.items {
+            let Item::Use(use_decl) = item else { continue };
+            let source = name::resolve_import_with_entry(
+                &self.current_module_source,
+                &use_decl.source,
+                Some(&self.entry_module_source),
+            );
+            for use_item in &use_decl.items {
+                match use_item {
+                    ast::UseItem::Simple { id, name, .. } => {
+                        if let Some(sym) = self.symbols.lookup_in_module(&source, name) {
+                            self.record_reference_to_key(*id, sym.defined_at.clone());
+                        }
+                    }
+                    ast::UseItem::EffectFunctions { .. }
+                    | ast::UseItem::Wildcard
+                    | ast::UseItem::Namespace { .. } => {}
+                }
+            }
+        }
+    }
+
     /// Resolve a module, converting AST to TIR
     pub fn resolve_module(
         &mut self,
@@ -492,6 +518,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.indexing_trait_cache.clear();
         // Build effect source map from imports
         self.effect_sources = Self::build_effect_sources(module, &module_source);
+
+        // Record use→def edges for names that appear inside `use { ... }` specifiers.
+        // These power LSP jump-to-definition when the cursor is on an imported
+        // name in the `use` declaration itself.
+        self.record_use_specifier_references(module);
 
         // First pass: collect type definitions
         {
@@ -524,7 +555,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 // Look up the source module to find global declarations
                 if let Some(source_module) = self.loaded_modules.get(&source_module_source) {
                     for use_item in &use_decl.items {
-                        if let ast::UseItem::Simple { name, alias } = use_item {
+                        if let ast::UseItem::Simple { name, alias, .. } = use_item {
                             // Check if this import refers to a global variable
                             if let Some(symbol) =
                                 self.symbols.lookup_in_module(&source_module_source, name)

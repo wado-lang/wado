@@ -779,6 +779,8 @@ impl Parser {
         self.expect(&TokenKind::From)?;
 
         // Parse source string
+        let source_span = self.peek().span;
+        let source_id = self.alloc_ast_id();
         let source = self.consume_string()?;
 
         // Parse optional `with { ... }` attributes
@@ -796,6 +798,8 @@ impl Parser {
             id,
             is_pub,
             source,
+            source_span,
+            source_id,
             items,
             attributes,
             span: start_span.merge(&end_span),
@@ -811,6 +815,7 @@ impl Parser {
         }
 
         loop {
+            let name_span = self.peek().span;
             let name = self.consume_ident()?;
 
             // Check if this is an effect with functions: `Effect::{...}`
@@ -834,7 +839,12 @@ impl Parser {
                 } else {
                     None
                 };
-                items.push(UseItem::Simple { name, alias });
+                items.push(UseItem::Simple {
+                    id: self.alloc_ast_id(),
+                    name,
+                    name_span,
+                    alias,
+                });
             }
 
             if !self.check(&TokenKind::Comma) {
@@ -4688,10 +4698,10 @@ mod tests {
             assert_eq!(use_decl.source, "core:cli");
             assert_eq!(use_decl.items.len(), 2);
             assert!(
-                matches!(&use_decl.items[0], UseItem::Simple { name, alias } if name == "println" && alias.is_none())
+                matches!(&use_decl.items[0], UseItem::Simple { name, alias, .. } if name == "println" && alias.is_none())
             );
             assert!(
-                matches!(&use_decl.items[1], UseItem::Simple { name, alias } if name == "Stdout" && alias.is_none())
+                matches!(&use_decl.items[1], UseItem::Simple { name, alias, .. } if name == "Stdout" && alias.is_none())
             );
             assert!(use_decl.attributes.is_none());
         } else {
@@ -4706,7 +4716,7 @@ mod tests {
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.source, "core:cli");
             assert!(
-                matches!(&use_decl.items[0], UseItem::Simple { name, alias } if name == "println" && alias.as_deref() == Some("print"))
+                matches!(&use_decl.items[0], UseItem::Simple { name, alias, .. } if name == "println" && alias.as_deref() == Some("print"))
             );
         } else {
             panic!("expected use declaration");

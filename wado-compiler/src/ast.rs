@@ -326,7 +326,15 @@ pub trait AstVisitor: Sized {
 
 pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
     match item {
-        Item::Use(u) => v.visit_id(u.id, u.span),
+        Item::Use(u) => {
+            v.visit_id(u.id, u.span);
+            v.visit_id(u.source_id, u.source_span);
+            for it in &u.items {
+                if let UseItem::Simple { id, name_span, .. } = it {
+                    v.visit_id(*id, *name_span);
+                }
+            }
+        }
         Item::Function(func) => v.visit_function(func),
         Item::Effect(e) => {
             v.visit_id(e.id, e.span);
@@ -1091,7 +1099,15 @@ pub struct WorldExport {
 #[derive(Debug, Clone)]
 pub enum UseItem {
     /// Simple import: `name` or `name as alias`
-    Simple { name: String, alias: Option<String> },
+    Simple {
+        /// AstId for the name identifier — used by LSP to record a use→def
+        /// edge from the specifier name back to the imported symbol.
+        id: AstId,
+        name: String,
+        /// Span of just the `name` identifier (narrower than the whole item).
+        name_span: Span,
+        alias: Option<String>,
+    },
     /// Effect with functions: `Effect::{func1, func2}`
     EffectFunctions {
         effect_name: String,
@@ -1129,6 +1145,12 @@ pub struct UseDecl {
     pub is_pub: bool,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
     pub source: String,
+    /// Span of the source string literal (without surrounding quotes in the
+    /// start/end columns; used by LSP for path jumps).
+    pub source_span: Span,
+    /// AstId for the source string literal — use→def target when a cursor
+    /// lands inside the `"./path"` portion of a use declaration.
+    pub source_id: AstId,
     /// Items being imported
     pub items: Vec<UseItem>,
     /// Optional import attributes

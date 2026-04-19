@@ -780,7 +780,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 if let Item::Use(use_decl) = item {
                     for use_item in &use_decl.items {
                         match use_item {
-                            crate::ast::UseItem::Simple { name, alias } => {
+                            crate::ast::UseItem::Simple { name, alias, .. } => {
                                 // Add both original name and alias (if any)
                                 imported_functions.insert(name.clone());
                                 if let Some(a) = alias {
@@ -1046,7 +1046,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     name::resolve_import_with_entry(from_module, &use_decl.source, entry_module);
                 for use_item in &use_decl.items {
                     match use_item {
-                        ast::UseItem::Simple { name, alias } => {
+                        ast::UseItem::Simple { name, alias, .. } => {
                             let local_name = alias.as_ref().unwrap_or(name);
                             sources.insert(local_name.clone(), source.clone());
                             if alias.is_some() {

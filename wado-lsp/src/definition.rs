@@ -10,12 +10,15 @@
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
-use wado_compiler::annotate::annotate;
-use wado_compiler::ast::{self, AstId, Item, Module};
+use wado_compiler::annotate::{Annotated, annotate};
+use wado_compiler::ast::{self, AstId, AstVisitor, Item, Literal, Module};
+use wado_compiler::name::resolve_import_with_entry;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
+use crate::location::{
+    module_uri, resolve_def_key, span_to_range, symbol_uri, uri_to_filename,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefinitionResult {
@@ -40,6 +43,14 @@ pub async fn find_definition<H: CompilerHost>(
     let line = position.line as usize + 1;
     let col = position.character as usize + 1;
 
+    // File-path jumps: `use { ... } from "./path"` and `#include_str("./path")`
+    // / `#include_bytes("./path")` do not resolve to declared symbols — they
+    // point to the start of the referenced file. Handle these before falling
+    // back to the symbol-based resolution below.
+    if let Some(result) = file_path_definition(&annotated, &module, line, col, uri) {
+        return Some(result);
+    }
+
     let def_key = resolve_def_key(&annotated, &module, line, col)?;
 
     // Most defs are registered as symbols (functions, types, globals, locals).
@@ -60,6 +71,104 @@ pub async fn find_definition<H: CompilerHost>(
         uri: def_uri,
         range: span_to_range(&span),
     })
+}
+
+/// Resolve a cursor landing on an on-disk file path (a `use ... from "./x"`
+/// source string or a `#include_str("./x")` / `#include_bytes("./x")` path)
+/// to the beginning of the referenced file. Returns `None` when the cursor is
+/// not on such a path.
+fn file_path_definition(
+    annotated: &Annotated,
+    module: &wado_compiler::name::ModuleSource,
+    line: usize,
+    col: usize,
+    request_uri: &str,
+) -> Option<DefinitionResult> {
+    let ast_module = annotated.modules.get(module)?;
+    let path = find_file_path_at_cursor(ast_module, line, col)?;
+    let target_module = resolve_import_with_entry(
+        module,
+        &path,
+        Some(&annotated.entry_module_source),
+    );
+    let target_uri = module_uri(annotated, &target_module, request_uri)?;
+    Some(DefinitionResult {
+        uri: target_uri,
+        range: Range {
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: 0,
+                character: 0,
+            },
+        },
+    })
+}
+
+/// Walk the module AST looking for a file-path node whose span covers
+/// `(line, col)`. Currently recognises `use ... from "source"` string literals
+/// and `#include_str` / `#include_bytes` path arguments.
+fn find_file_path_at_cursor(module: &Module, line: usize, col: usize) -> Option<String> {
+    for item in &module.items {
+        if let Item::Use(use_decl) = item
+            && span_contains(&use_decl.source_span, line, col)
+        {
+            return Some(use_decl.source.clone());
+        }
+    }
+    let mut finder = IncludePathFinder {
+        line,
+        col,
+        result: None,
+    };
+    for item in &module.items {
+        finder.visit_item(item);
+        if finder.result.is_some() {
+            break;
+        }
+    }
+    finder.result
+}
+
+struct IncludePathFinder {
+    line: usize,
+    col: usize,
+    result: Option<String>,
+}
+
+impl AstVisitor for IncludePathFinder {
+    fn visit_expr(&mut self, expr: &ast::Expr) {
+        if self.result.is_some() {
+            return;
+        }
+        if let ast::Expr::Literal(lit) = expr
+            && span_contains(&lit.span, self.line, self.col)
+        {
+            match &lit.value {
+                Literal::IncludeStr(path) | Literal::IncludeBytes(path) => {
+                    self.result = Some(path.clone());
+                    return;
+                }
+                _ => {}
+            }
+        }
+        ast::walk_expr(self, expr);
+    }
+}
+
+fn span_contains(span: &Span, line: usize, col: usize) -> bool {
+    if line < span.line || line > span.end_line {
+        return false;
+    }
+    if line == span.line && col < span.column {
+        return false;
+    }
+    if line == span.end_line && col > span.end_column {
+        return false;
+    }
+    true
 }
 
 /// Best-effort span for an arbitrary [`AstId`] — walks module items looking for
@@ -121,12 +230,40 @@ mod tests {
 
     impl CompilerHost for TestHost {
         async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-            self.sources
-                .get(path)
-                .cloned()
-                .ok_or_else(|| SourceError::NotFound {
-                    path: path.to_string(),
-                })
+            // Try the path as-is, then try the "./foo" ↔ "/foo" variations
+            // so tests can register files under absolute keys ("/lib.wado")
+            // while the compiler resolves local imports as "./lib.wado".
+            if let Some(b) = self.sources.get(path) {
+                return Ok(b.clone());
+            }
+            if let Some(rest) = path.strip_prefix("./") {
+                let alt = format!("/{rest}");
+                if let Some(b) = self.sources.get(&alt) {
+                    return Ok(b.clone());
+                }
+            }
+            if let Some(rest) = path.strip_prefix('/') {
+                let alt = format!("./{rest}");
+                if let Some(b) = self.sources.get(&alt) {
+                    return Ok(b.clone());
+                }
+            }
+            // Bare relative path (no leading slash or `./`) — try `/path` as
+            // stored. `load_included_files` strips the `./` for entry-file-
+            // relative includes and passes the bare name here.
+            if !path.starts_with('/') && !path.starts_with("./") {
+                let alt = format!("/{path}");
+                if let Some(b) = self.sources.get(&alt) {
+                    return Ok(b.clone());
+                }
+                let alt = format!("./{path}");
+                if let Some(b) = self.sources.get(&alt) {
+                    return Ok(b.clone());
+                }
+            }
+            Err(SourceError::NotFound {
+                path: path.to_string(),
+            })
         }
 
         fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
