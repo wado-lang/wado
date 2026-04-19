@@ -197,27 +197,99 @@ use crate::compiler_host::LogLevel;
 ///
 /// Loads all modules upfront before analysis and codegen.
 /// Uses a `CompilerHost` for I/O operations.
-/// Parse, bind, and desugar a stdlib module source into an AST.
+/// Format a compiler error for a stdlib module with a source snippet and caret.
+///
+/// Emits a multi-line message shaped like:
+///
+/// ```text
+/// parser error in core:zlib at core:zlib:2365:113: expected pattern, found Semicolon
+///   2365 |         0 => return DeflateConfig { ... };
+///        |                                                                                                                 ^
+/// ```
+fn format_stdlib_error(
+    kind: &str,
+    label: &str,
+    source: &str,
+    line: usize,
+    column: usize,
+    end_column: Option<usize>,
+    message: &str,
+) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "{kind} error in {label} at {label}:{line}:{column}: {message}"
+    );
+    if let Some(src_line) = source.lines().nth(line.saturating_sub(1)) {
+        let gutter = format!("{line:>6}");
+        let pad = " ".repeat(gutter.len());
+        let _ = writeln!(out, "{gutter} | {src_line}");
+        let caret_col = column.saturating_sub(1);
+        let caret_len = end_column
+            .and_then(|ec| ec.checked_sub(column))
+            .unwrap_or(1)
+            .max(1);
+        let caret = "^".repeat(caret_len);
+        let _ = writeln!(out, "{pad} | {0}{caret}", " ".repeat(caret_col));
+    }
+    out
+}
+
 fn parse_bind_desugar_stdlib(label: &str, source: &str) -> Module {
     let mut lexer = Lexer::new(source);
-    let tokens = lexer
-        .tokenize()
-        .unwrap_or_else(|e| panic!("lexer error in {label}: {e:?}"));
+    let tokens = lexer.tokenize().unwrap_or_else(|e| {
+        panic!(
+            "{}",
+            format_stdlib_error(
+                "lexer",
+                label,
+                source,
+                e.span.line,
+                e.span.column,
+                Some(e.span.end_column),
+                &e.message,
+            )
+        )
+    });
     let (data_section, _comments, shebang) = lexer.into_parts();
     let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-    let ast = parser
-        .parse()
-        .unwrap_or_else(|e| panic!("parser error in {label}: {e:?}"));
+    let ast = parser.parse().unwrap_or_else(|e| {
+        panic!(
+            "{}",
+            format_stdlib_error(
+                "parser",
+                label,
+                source,
+                e.span.line,
+                e.span.column,
+                Some(e.span.end_column),
+                &e.message,
+            )
+        )
+    });
     {
         let bind_host = crate::compiler_host::InMemoryCompilerHost::new();
         let bind_logger = Logger::new(&bind_host, LogLevel::Off);
         bind::bind_module(&ast, &bind_logger).unwrap_or_else(|_| {
-            let msgs: Vec<String> = bind_host
-                .diagnostics()
-                .iter()
-                .map(|d| d.message.clone())
-                .collect();
-            panic!("bind error in {label}: {}", msgs.join("; "));
+            let diags = bind_host.diagnostics();
+            let mut msg = format!("bind error in {label}:\n");
+            for d in &diags {
+                if let Some(span) = &d.span {
+                    msg.push_str(&format_stdlib_error(
+                        "bind",
+                        label,
+                        source,
+                        span.line,
+                        span.column,
+                        span.end_column,
+                        &d.message,
+                    ));
+                } else {
+                    msg.push_str(&format!("  {}\n", d.message));
+                }
+            }
+            panic!("{msg}");
         });
     }
     desugar_module(&ast)
