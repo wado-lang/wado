@@ -284,6 +284,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 callee: Expr::Ident(ast::IdentExpr {
                                     id: ident.id,
                                     name: new_name,
+                                    segments: Vec::new(),
                                     span: ident.span,
                                 }),
                                 type_args: call.type_args.clone(),
