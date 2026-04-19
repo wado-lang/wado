@@ -117,13 +117,24 @@
     (type (;0;) (func (param i32 i32 i32 i32) (result i32)))
     (type (;1;) (func (param i32)))
     (type (;2;) (func))
+    (type (;3;) (func))
     (import "mem" "realloc" (func (;0;) (type 0)))
     (import "wasi" "task-return" (func (;1;) (type 1)))
     (import "mem" "memory" (memory (;0;) 1))
+    (global (;0;) (mut i32) (i32.const 0))
     (export "run" (func $wado-compiler/tests/format.fixtures/ops.all.dirty.wado/__cm_export__run))
     (func $wado-compiler/tests/format.fixtures/ops.all.dirty.wado/__cm_export__run (;2;) (type 2)
+      (call $wado-compiler/tests/format.fixtures/ops.all.dirty.wado/__initialize_modules)
       (call 1
         (i32.const 0))
+    )
+    (func $wado-compiler/tests/format.fixtures/ops.all.dirty.wado/__initialize_modules (;3;) (type 3)
+      (if ;; label = @1
+        (global.get 0)
+        (then
+          (return)))
+      (global.set 0
+        (i32.const 1))
     )
   )
   (core instance $wasi-instance (;1;)

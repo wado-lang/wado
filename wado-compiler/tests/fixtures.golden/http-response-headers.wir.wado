@@ -250,31 +250,33 @@ type "functype//wado-compiler/tests/fixtures/http-response-headers.wado/__cm_bin
 
 type "functype//wado-compiler/tests/fixtures/http-response-headers.wado/__cm_export__handle" = fn(i32);  // TypeId(46)
 
-type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(47)
+type "functype//wado-compiler/tests/fixtures/http-response-headers.wado/__initialize_modules" = fn();  // TypeId(47)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(48)
+type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(48)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(49)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(49)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(50)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(50)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(51)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(51)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(52)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(52)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(53)
+type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(53)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(54)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(54)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(55)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(55)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(56)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(56)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(57)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(57)
 
-type "functype//wado-compiler/tests/fixtures/http-response-headers.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(58)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(58)
 
-type "functype//wado-compiler/tests/fixtures/http-response-headers.wado/handle" = fn();  // TypeId(59)
+type "functype//wado-compiler/tests/fixtures/http-response-headers.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(59)
+
+type "functype//wado-compiler/tests/fixtures/http-response-headers.wado/handle" = fn();  // TypeId(60)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -287,6 +289,8 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/http-response-headers.wado/handle"() {
     let trailers_future: i32;
@@ -429,6 +433,7 @@ fn "wado-compiler/tests/fixtures/http-response-headers.wado/handle"() {
     let __packed_156: i64;
     let __ptr_157: i32;
     let __len_158: i32;
+    "wado-compiler/tests/fixtures/http-response-headers.wado/__initialize_modules"();
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
@@ -849,7 +854,15 @@ fn "wado-compiler/tests/fixtures/http-response-headers.wado/__cm_binding__Respon
 }
 
 fn "wado-compiler/tests/fixtures/http-response-headers.wado/__cm_export__handle"(request) {
+    "wado-compiler/tests/fixtures/http-response-headers.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/http-response-headers.wado/handle"();
+}
+
+fn "wado-compiler/tests/fixtures/http-response-headers.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {
@@ -859,13 +872,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l47: loop {
+            l48: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l47;
+                continue l48;
             };
         };
     };
@@ -877,13 +890,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l50: loop {
+            l51: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l50;
+                continue l51;
             };
         };
     };
@@ -936,13 +949,13 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l54: loop {
+            l55: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l54;
+                continue l55;
             };
         };
     };

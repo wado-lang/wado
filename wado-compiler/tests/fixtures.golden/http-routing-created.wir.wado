@@ -243,27 +243,29 @@ type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__cm_bind
 
 type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__cm_export__handle" = fn(i32);  // TypeId(47)
 
-type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(48)
+type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__initialize_modules" = fn();  // TypeId(48)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(49)
+type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(49)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(50)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(50)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(51)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(51)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(52)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(52)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(53)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(53)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(54)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(54)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(55)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(55)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(56)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(56)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(57)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(57)
 
-type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(58)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(58)
+
+type "functype//wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(59)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -277,6 +279,8 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/http-routing-created.wado/handle"(request) {
     let path: ref null "core:prelude/string.wado//String";
@@ -419,6 +423,7 @@ fn "wado-compiler/tests/fixtures/http-routing-created.wado/handle"(request) {
     let __packed_156: i64;
     let __ptr_157: i32;
     let __len_158: i32;
+    "wado-compiler/tests/fixtures/http-routing-created.wado/__initialize_modules"();
     path = "wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Request_get_path_with_query"(request);
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -820,7 +825,15 @@ fn "wado-compiler/tests/fixtures/http-routing-created.wado/__cm_binding__Respons
 }
 
 fn "wado-compiler/tests/fixtures/http-routing-created.wado/__cm_export__handle"(request) {
+    "wado-compiler/tests/fixtures/http-routing-created.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/http-routing-created.wado/handle"(request);
+}
+
+fn "wado-compiler/tests/fixtures/http-routing-created.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {
@@ -830,13 +843,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l45: loop {
+            l46: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l45;
+                continue l46;
             };
         };
     };
@@ -848,13 +861,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l48: loop {
+            l49: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l48;
+                continue l49;
             };
         };
     };
@@ -885,7 +898,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     __for_1: block {
         i = 0;
         block {
-            l52: loop {
+            l53: loop {
                 if i >= len {
                     break __for_1;
                 }
@@ -893,7 +906,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
                     return 0;
                 }
                 i = i + 1;
-                continue l52;
+                continue l53;
             };
         };
     };

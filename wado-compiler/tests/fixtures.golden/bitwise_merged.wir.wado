@@ -20,36 +20,54 @@ type "functype//wado-compiler/tests/fixtures/bitwise_merged.wado/__cm_export____
 
 type "functype//wado-compiler/tests/fixtures/bitwise_merged.wado/__cm_export____test_6_shift_i64" = fn();  // TypeId(8)
 
+type "functype//wado-compiler/tests/fixtures/bitwise_merged.wado/__initialize_modules" = fn();  // TypeId(9)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/bitwise_merged.wado/__cm_export____test_0_and"() {
+    "wado-compiler/tests/fixtures/bitwise_merged.wado/__initialize_modules"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/bitwise_merged.wado/__cm_export____test_1_or"() {
+    "wado-compiler/tests/fixtures/bitwise_merged.wado/__initialize_modules"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/bitwise_merged.wado/__cm_export____test_2_xor"() {
+    "wado-compiler/tests/fixtures/bitwise_merged.wado/__initialize_modules"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/bitwise_merged.wado/__cm_export____test_3_not"() {
+    "wado-compiler/tests/fixtures/bitwise_merged.wado/__initialize_modules"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/bitwise_merged.wado/__cm_export____test_4_combined_precedence"() {
+    "wado-compiler/tests/fixtures/bitwise_merged.wado/__initialize_modules"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/bitwise_merged.wado/__cm_export____test_5_shift"() {
+    "wado-compiler/tests/fixtures/bitwise_merged.wado/__initialize_modules"();
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/bitwise_merged.wado/__cm_export____test_6_shift_i64"() {
+    "wado-compiler/tests/fixtures/bitwise_merged.wado/__initialize_modules"();
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/bitwise_merged.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 export fn "wado-compiler/tests/fixtures/bitwise_merged.wado/__cm_export____test_0_and" as "__test_0_and"

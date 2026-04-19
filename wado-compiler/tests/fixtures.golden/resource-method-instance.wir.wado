@@ -67,13 +67,13 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:sockets/TcpSocket::create" = fn(i32, i32);  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/resource-method-instance.wado/run" = fn();  // TypeId(17)
+type "functype//wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__TcpSocket_create" = fn(i32) -> ref "core:prelude/types.wado//Result<TcpSocket,ErrorCode>";  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__TcpSocket_create" = fn(i32) -> ref "core:prelude/types.wado//Result<TcpSocket,ErrorCode>";  // TypeId(19)
+type "functype//wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_export__run" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_export__run" = fn();  // TypeId(20)
+type "functype//wado-compiler/tests/fixtures/resource-method-instance.wado/__initialize_modules" = fn();  // TypeId(20)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(21)
 
@@ -109,17 +109,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-fn "wado-compiler/tests/fixtures/resource-method-instance.wado/run"() with Stdout {
-    let family: "wasi:sockets/types.wado//enum:IpAddressFamily";
-    let result: ref "core:prelude/types.wado//Result<TcpSocket,ErrorCode>";
-    family = 0;
-    result = "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__TcpSocket_create"(family);
-    if ref.test "core:prelude/types.wado//Result<TcpSocket,ErrorCode>::Ok"(result) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Resource extracted from Result"), used: 30 });
-    } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Failed to create socket"), used: 23 });
-    }
-}
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__Stdout_write_via_stream"(data) {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
@@ -194,8 +184,25 @@ fn "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__Tcp
 }
 
 fn "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_export__run"() {
-    "wado-compiler/tests/fixtures/resource-method-instance.wado/run"();
+    let family: "wasi:sockets/types.wado//enum:IpAddressFamily";
+    let result: ref "core:prelude/types.wado//Result<TcpSocket,ErrorCode>";
+    "wado-compiler/tests/fixtures/resource-method-instance.wado/__initialize_modules"();
+    "wado-compiler/tests/fixtures/resource-method-instance.wado/__initialize_modules"();
+    family = 0;
+    result = "wado-compiler/tests/fixtures/resource-method-instance.wado/__cm_binding__TcpSocket_create"(family);
+    if ref.test "core:prelude/types.wado//Result<TcpSocket,ErrorCode>::Ok"(result) {
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Resource extracted from Result"), used: 30 });
+    } else {
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Failed to create socket"), used: 23 });
+    }
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/resource-method-instance.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -235,13 +242,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l19: loop {
+            l20: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l19;
+                continue l20;
             };
         };
     };
@@ -253,13 +260,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l22: loop {
+            l23: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l22;
+                continue l23;
             };
         };
     };

@@ -8,12 +8,24 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(1)
 
 type "functype//wado-compiler/tests/fixtures/cross_module_same_name_flags.wado/__cm_export____test_0_cross_module_same_name_flags" = fn();  // TypeId(2)
 
+type "functype//wado-compiler/tests/fixtures/cross_module_same_name_flags.wado/__initialize_modules" = fn();  // TypeId(3)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/cross_module_same_name_flags.wado/__cm_export____test_0_cross_module_same_name_flags"() {
+    "wado-compiler/tests/fixtures/cross_module_same_name_flags.wado/__initialize_modules"();
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/cross_module_same_name_flags.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 export fn "wado-compiler/tests/fixtures/cross_module_same_name_flags.wado/__cm_export____test_0_cross_module_same_name_flags" as "__test_0_cross_module_same_name_flags"

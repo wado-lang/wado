@@ -261,23 +261,25 @@ type "functype//wado-compiler/tests/fixtures/http-method-routing.wado/__cm_bindi
 
 type "functype//wado-compiler/tests/fixtures/http-method-routing.wado/__cm_export__handle" = fn(i32);  // TypeId(49)
 
-type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(50)
+type "functype//wado-compiler/tests/fixtures/http-method-routing.wado/__initialize_modules" = fn();  // TypeId(50)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(51)
+type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(51)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(52)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(52)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(53)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(53)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(54)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(54)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(55)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(55)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(56)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(56)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(57)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(57)
 
-type "functype//wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(58)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(58)
+
+type "functype//wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(59)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -291,6 +293,8 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/http-method-routing.wado/handle"(request) {
     let method: ref "wasi:http/types.wado//Method";
@@ -433,6 +437,7 @@ fn "wado-compiler/tests/fixtures/http-method-routing.wado/handle"(request) {
     let __packed_156: i64;
     let __ptr_157: i32;
     let __len_158: i32;
+    "wado-compiler/tests/fixtures/http-method-routing.wado/__initialize_modules"();
     method = "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Request_get_method"(request);
     let __match_scrut_0: ref "wasi:http/types.wado//Method";
     __match_scrut_0 = method;
@@ -861,7 +866,15 @@ fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_binding__Response
 }
 
 fn "wado-compiler/tests/fixtures/http-method-routing.wado/__cm_export__handle"(request) {
+    "wado-compiler/tests/fixtures/http-method-routing.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/http-method-routing.wado/handle"(request);
+}
+
+fn "wado-compiler/tests/fixtures/http-method-routing.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {
@@ -871,13 +884,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l56: loop {
+            l57: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l56;
+                continue l57;
             };
         };
     };
@@ -889,13 +902,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l59: loop {
+            l60: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l59;
+                continue l60;
             };
         };
     };

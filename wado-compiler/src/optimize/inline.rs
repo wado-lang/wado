@@ -239,12 +239,10 @@ fn has_nested_control_flow_return(block: &TirBlock) -> bool {
             }
             TirExprKind::Match { expr, arms } => {
                 expr_has_nested_return(expr)
-                    || arms
-                        .iter()
-                        .any(|arm| {
-                            arm.guard.as_ref().is_some_and(expr_has_nested_return)
-                                || expr_has_nested_return(&arm.body)
-                        })
+                    || arms.iter().any(|arm| {
+                        arm.guard.as_ref().is_some_and(expr_has_nested_return)
+                            || expr_has_nested_return(&arm.body)
+                    })
             }
             TirExprKind::LabeledBlock { block, .. } => block_has_nested_return(block, false),
             TirExprKind::Switch {
@@ -267,7 +265,9 @@ fn has_nested_control_flow_return(block: &TirBlock) -> bool {
             | TirExprKind::VariantTag { expr }
             | TirExprKind::VariantTest { expr, .. }
             | TirExprKind::VariantPayload { expr, .. }
-            | TirExprKind::TypePackExpansion { call_expr: expr, .. }
+            | TirExprKind::TypePackExpansion {
+                call_expr: expr, ..
+            }
             | TirExprKind::ClosureToCanonical { functor: expr, .. } => expr_has_nested_return(expr),
             TirExprKind::Call { args, .. } => args.iter().any(|a| expr_has_nested_return(&a.expr)),
             TirExprKind::MethodCall { receiver, args, .. } => {
@@ -293,9 +293,7 @@ fn has_nested_control_flow_return(block: &TirBlock) -> bool {
                 expr_has_nested_return(callee) || args.iter().any(expr_has_nested_return)
             }
             TirExprKind::GlobalVarSet { value, .. } => expr_has_nested_return(value),
-            TirExprKind::Cast { expr, .. } => {
-                expr_has_nested_return(expr)
-            }
+            TirExprKind::Cast { expr, .. } => expr_has_nested_return(expr),
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
             | TirExprKind::BoolLiteral(_)

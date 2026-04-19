@@ -25,20 +25,25 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
 type "functype//wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado/__cm_export____test_0_nested_variant_match_on_reference" = fn();  // TypeId(6)
 
+type "functype//wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado/__initialize_modules" = fn();  // TypeId(7)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado/__cm_export____test_0_nested_variant_match_on_reference"() {
-    let __local_2: ref "core:prelude/types.wado//Box<Inner>";
+    let __local_1: ref "core:prelude/types.wado//Box<Inner>";
     let __sroa_node_value: ref "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Outer";
+    "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado/__initialize_modules"();
     __sroa_node_value = struct.new "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Outer::W" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Inner" { 0 } };
     if ref.test "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Outer::W"(__sroa_node_value) {
         let __cast_1: ref "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Outer::W";
         __cast_1 = ref.cast "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Outer::W"(__sroa_node_value);
-        __local_2 = struct.new "core:prelude/types.wado//Box<Inner>" { value: __cast_1.payload_0 };
+        __local_1 = struct.new "core:prelude/types.wado//Box<Inner>" { value: __cast_1.payload_0 };
         let __match_scrut_1: ref "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado//Inner";
-        __match_scrut_1 = __local_2.value;
+        __match_scrut_1 = __local_1.value;
         if __match_scrut_1.discriminant == 0 {
         } else {
             unreachable;
@@ -47,6 +52,13 @@ fn "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado/__cm_export_
         unreachable;
     }
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 export fn "wado-compiler/tests/fixtures/nested_variant_match_ref_test.wado/__cm_export____test_0_nested_variant_match_on_reference" as "__test_0_nested_variant_match_on_reference"

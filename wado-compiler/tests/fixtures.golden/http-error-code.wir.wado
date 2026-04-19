@@ -212,15 +212,19 @@ type "functype//wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32); 
 
 type "functype//wado-compiler/tests/fixtures/http-error-code.wado/__cm_export__handle" = fn(i32);  // TypeId(36)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(37)
+type "functype//wado-compiler/tests/fixtures/http-error-code.wado/__initialize_modules" = fn();  // TypeId(37)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(38)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(38)
 
-type "functype//wado-compiler/tests/fixtures/http-error-code.wado/handle" = fn();  // TypeId(39)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(39)
+
+type "functype//wado-compiler/tests/fixtures/http-error-code.wado/handle" = fn();  // TypeId(40)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/http-error-code.wado/handle"() {
     let __task_ret: ref "core:prelude/types.wado//Result<Response,ErrorCode>";
@@ -357,6 +361,7 @@ fn "wado-compiler/tests/fixtures/http-error-code.wado/handle"() {
     let __packed_149: i64;
     let __ptr_150: i32;
     let __len_151: i32;
+    "wado-compiler/tests/fixtures/http-error-code.wado/__initialize_modules"();
     __task_ret = struct.new "core:prelude/types.wado//Result<Response,ErrorCode>::Err" { discriminant: 1, payload_0: struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: ref.null none } };
     __tv_1 = 0;
     __tv_2 = 0;
@@ -662,7 +667,15 @@ fn "wado-compiler/tests/fixtures/http-error-code.wado/handle"() {
 }
 
 fn "wado-compiler/tests/fixtures/http-error-code.wado/__cm_export__handle"(request) {
+    "wado-compiler/tests/fixtures/http-error-code.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/http-error-code.wado/handle"();
+}
+
+fn "wado-compiler/tests/fixtures/http-error-code.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
@@ -670,13 +683,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l39: loop {
+            l40: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l39;
+                continue l40;
             };
         };
     };

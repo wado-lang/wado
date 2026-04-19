@@ -230,27 +230,29 @@ type "functype//wado-compiler/tests/fixtures/cm-error-context.wado/__cm_binding_
 
 type "functype//wado-compiler/tests/fixtures/cm-error-context.wado/__cm_export__handle" = fn(i32);  // TypeId(42)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(43)
+type "functype//wado-compiler/tests/fixtures/cm-error-context.wado/__initialize_modules" = fn();  // TypeId(43)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(44)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(44)
 
-type "functype//core:internal/cm_error_context_new" = fn(ref "core:prelude/string.wado//String") -> i32;  // TypeId(45)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(45)
 
-type "functype//wasi/error-context-drop" = fn(i32);  // TypeId(46)
+type "functype//core:internal/cm_error_context_new" = fn(ref "core:prelude/string.wado//String") -> i32;  // TypeId(46)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(47)
+type "functype//wasi/error-context-drop" = fn(i32);  // TypeId(47)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(48)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(48)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(49)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(49)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(50)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(50)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(51)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(51)
 
-type "functype//wado-compiler/tests/fixtures/cm-error-context.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(52)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(52)
 
-type "functype//wado-compiler/tests/fixtures/cm-error-context.wado/handle" = fn();  // TypeId(53)
+type "functype//wado-compiler/tests/fixtures/cm-error-context.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(53)
+
+type "functype//wado-compiler/tests/fixtures/cm-error-context.wado/handle" = fn();  // TypeId(54)
 
 import fn wasi/error-context-new from "wasi/error-context-new";
 import fn mem/realloc from "mem/realloc";
@@ -264,6 +266,8 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/cm-error-context.wado/handle"() {
     let ec: i32;
@@ -405,6 +409,7 @@ fn "wado-compiler/tests/fixtures/cm-error-context.wado/handle"() {
     let __packed_155: i64;
     let __ptr_156: i32;
     let __len_157: i32;
+    "wado-compiler/tests/fixtures/cm-error-context.wado/__initialize_modules"();
     ec = "core:internal/cm_error_context_new"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test error message"), used: 18 });
     "wasi/error-context-drop"(ec);
     let __pair_temp_1: i64;
@@ -764,7 +769,15 @@ fn "wado-compiler/tests/fixtures/cm-error-context.wado/__cm_binding__Response_ne
 }
 
 fn "wado-compiler/tests/fixtures/cm-error-context.wado/__cm_export__handle"(request) {
+    "wado-compiler/tests/fixtures/cm-error-context.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/cm-error-context.wado/handle"();
+}
+
+fn "wado-compiler/tests/fixtures/cm-error-context.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
@@ -772,13 +785,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l41: loop {
+            l42: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l41;
+                continue l42;
             };
         };
     };

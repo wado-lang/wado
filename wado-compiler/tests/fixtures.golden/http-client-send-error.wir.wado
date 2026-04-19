@@ -274,29 +274,31 @@ type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/__cm_bi
 
 type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/__cm_export__handle" = fn(i32);  // TypeId(56)
 
-type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(57)
+type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/__initialize_modules" = fn();  // TypeId(57)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(58)
+type "functype//core:internal/memory_to_gc_array" = fn(i32, i32) -> ref builtin::array<u8>;  // TypeId(58)
 
-type "functype//core:internal/wait_for_subtask" = fn(i32);  // TypeId(59)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(59)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(60)
+type "functype//core:internal/wait_for_subtask" = fn(i32);  // TypeId(60)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(61)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(61)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(62)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(62)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(63)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(63)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(64)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(64)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(65)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(65)
 
-type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<RequestOptions>") -> [i32, i32];  // TypeId(66)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(66)
 
-type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(67)
+type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<RequestOptions>") -> [i32, i32];  // TypeId(67)
 
-type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/handle" = fn();  // TypeId(68)
+type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(68)
+
+type "functype//wado-compiler/tests/fixtures/http-client-send-error.wado/handle" = fn();  // TypeId(69)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -314,6 +316,8 @@ import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
+
+global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/http-client-send-error.wado/handle"() {
     let headers: i32;
@@ -454,6 +458,7 @@ fn "wado-compiler/tests/fixtures/http-client-send-error.wado/handle"() {
     let __packed_155: i64;
     let __ptr_156: i32;
     let __len_157: i32;
+    "wado-compiler/tests/fixtures/http-client-send-error.wado/__initialize_modules"();
     headers = "wado-compiler/tests/fixtures/http-client-send-error.wado/__cm_binding__Fields_new"();
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -1258,7 +1263,15 @@ fn "wado-compiler/tests/fixtures/http-client-send-error.wado/__cm_binding__Clien
 }
 
 fn "wado-compiler/tests/fixtures/http-client-send-error.wado/__cm_export__handle"(request) {
+    "wado-compiler/tests/fixtures/http-client-send-error.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/http-client-send-error.wado/handle"();
+}
+
+fn "wado-compiler/tests/fixtures/http-client-send-error.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 fn "core:internal/memory_to_gc_array"(ptr, len) {
@@ -1268,13 +1281,13 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     __for_0: block {
         i = 0;
         block {
-            l110: loop {
+            l111: loop {
                 if i >= len {
                     break __for_0;
                 }
                 builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i) & 255);
                 i = i + 1;
-                continue l110;
+                continue l111;
             };
         };
     };
@@ -1286,13 +1299,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l113: loop {
+            l114: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l113;
+                continue l114;
             };
         };
     };
@@ -1312,16 +1325,16 @@ fn "core:internal/wait_for_subtask"(packed) {
             "wasi/waitable-join"(__local_5, ws);
             break __inline_cm_waitable_join_0: __local_5;
         });
-        b116: block {
-            l117: loop {
+        b117: block {
+            l118: loop {
                 let __sroa_event_code: i32;
                 let __sroa_event_handle: i32;
                 let __sroa_event_payload: u32;
                 multivalue_bind [__sroa_event_code, __sroa_event_handle, __sroa_event_payload] = "core:internal/cm_waitable_set_wait"(ws);
                 if __sroa_event_payload == 2 {
-                    break b116;
+                    break b117;
                 }
-                continue l117;
+                continue l118;
             };
         };
         "wasi/subtask-drop"(subtask);

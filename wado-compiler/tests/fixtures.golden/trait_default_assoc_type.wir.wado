@@ -29,23 +29,25 @@ type "functype//wado-compiler/tests/fixtures/trait_default_assoc_type.wado/__cm_
 
 type "functype//wado-compiler/tests/fixtures/trait_default_assoc_type.wado/__cm_export__run" = fn();  // TypeId(11)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(12)
+type "functype//wado-compiler/tests/fixtures/trait_default_assoc_type.wado/__initialize_modules" = fn();  // TypeId(12)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(13)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(14)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(15)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(15)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(16)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(16)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(17)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(18)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -60,18 +62,29 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global mut global:__modules_initialized: bool = 0;
+
 fn "wado-compiler/tests/fixtures/trait_default_assoc_type.wado/__cm_binding__Stdout_write_via_stream"(data) {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn "wado-compiler/tests/fixtures/trait_default_assoc_type.wado/__cm_export__run"() {
-    if __inline_IntBox_Container__has_items_5: block -> bool {
-        break __inline_IntBox_Container__has_items_5: 1;
-        break __inline_IntBox_Container__has_items_5: 0;
+    "wado-compiler/tests/fixtures/trait_default_assoc_type.wado/__initialize_modules"();
+    "wado-compiler/tests/fixtures/trait_default_assoc_type.wado/__initialize_modules"();
+    if __inline_IntBox_Container__has_items_0: block -> bool {
+        break __inline_IntBox_Container__has_items_0: 1;
+        break __inline_IntBox_Container__has_items_0: 0;
     } {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("has items"), used: 9 });
     }
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/trait_default_assoc_type.wado/__initialize_modules"() {
+    if global:__modules_initialized {
+        return;
+    }
+    global:__modules_initialized = 1;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -109,13 +122,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l3: loop {
+            l4: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l3;
+                continue l4;
             };
         };
     };
