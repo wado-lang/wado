@@ -34,8 +34,8 @@ To establish feasibility before this WEP was written, the following was verified
 
 ### Prerequisites to confirm at implementation time
 
-- [ ] `@vscode/wasm-wasi-core` or `@vscode/wasm-component-model` can host a `wasm32-wasip2` component as an LSP server with bidirectional stdio. If neither supports preview 2 components cleanly, fall back to `wasm32-wasip1` (which `wado-lsp` also builds for without source changes).
-- [ ] `vscode-languageclient` can be wired to a custom transport that bridges to the VS Code Wasm host.
+- [x] `@vscode/wasm-wasi-core` or `@vscode/wasm-component-model` can host a `wasm32-wasip2` component as an LSP server with bidirectional stdio. Outcome: **only `wasm32-wasip1` is supported today** by the published `@vscode/wasm-wasi-lsp` helper. We fell back to the wasip1 target, which `wado-lsp` builds for without source changes. Revisit when the Wasm host gains component-model support.
+- [x] `vscode-languageclient` can be wired to a custom transport that bridges to the VS Code Wasm host. `@vscode/wasm-wasi-lsp`'s `startServer()` returns a `MessageTransports` (reader/writer) that plugs directly into `LanguageClient`.
 
 ### Considered alternatives
 
@@ -145,14 +145,14 @@ This WEP does not design the browser playground integration. It requires only th
 
 ### Rollout
 
-- [ ] Validate `@vscode/wasm-wasi-core` or `@vscode/wasm-component-model` can host `wasm32-wasip2` components as stdio LSP servers. If not, pivot to `wasm32-wasip1`.
-- [x] Add `wasm32-wasip2` to `rust-toolchain.toml` targets.
+- [x] Validate `@vscode/wasm-wasi-core` or `@vscode/wasm-component-model` can host `wasm32-wasip2` components as stdio LSP servers. Pivoted to `wasm32-wasip1` (see Prerequisites).
+- [x] Add `wasm32-wasip1` and `wasm32-wasip2` to `rust-toolchain.toml` targets.
 - [x] Move the stdio LSP server from `wado-cli` to `wado-lsp`. Add `[[bin]] wado-lsp`. Delete `wado-cli/src/lsp_adapter.rs` and `wado-cli/src/lsp_rpc.rs`. Reduce `wado-cli/src/lsp.rs` to a delegation call.
 - [x] Move `FilesystemCompilerHost` to `wado-lsp`. Wire `wado-cli` to re-export or wrap it.
-- [x] Add `mise` tasks `build-wado-lsp-wasm` and `watch-wado-lsp-wasm`.
-- [ ] Add a CI job that runs `cargo build -p wado-lsp --target wasm32-wasip2 --release`. (Deferred until the VS Code extension lands and needs the artifact.)
-- [ ] Implement the VS Code LSP client in `wado-vscode` with both subprocess and Wasm paths, the `wado.serverPath` setting, the `wado.restartLanguageServer` command, and the `FileSystemWatcher` auto-restart.
-- [ ] Add an end-to-end test that drives the Wasm build through an `initialize` / `didOpen` / `publishDiagnostics` exchange.
+- [x] Add `mise` tasks `build-wado-lsp-wasm` and `watch-wado-lsp-wasm` (target `wasm32-wasip1`).
+- [x] Add a CI job that builds the Wasm artifact and runs the `wado-vscode` test suite.
+- [x] Implement the VS Code LSP client in `wado-vscode` with both subprocess and Wasm paths, the `wado.serverPath` setting, the `wado.restartLanguageServer` command, and the `FileSystemWatcher` auto-restart.
+- [x] Add an end-to-end test that drives the Wasm build through an `initialize` / `didOpen` / `publishDiagnostics` exchange.
 - [x] Rewrite `wado-lsp/README.md` to reflect the new architecture.
 
 ### Implementation notes

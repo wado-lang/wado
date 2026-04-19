@@ -9,6 +9,11 @@ Language support for the [Wado programming language](https://github.com/wado-lan
 - Comment toggling (`Ctrl+/` for line, `Shift+Alt+A` for block)
 - Code folding
 - Auto-indentation
+- Language Server Protocol integration (via bundled `wado-lsp` Wasm server)
+  - Diagnostics
+  - Hover, go-to-definition, find-references
+  - Document highlight
+  - Semantic tokens
 
 ## Installation (Local Development)
 
@@ -103,13 +108,28 @@ npm run vscode:prepublish
 npx vsce package
 ```
 
+## Language Server
+
+The extension ships the Wado language server (`wado-lsp`) compiled to WebAssembly. On activation it loads `out/wado_lsp.wasm` via `@vscode/wasm-wasi-lsp` and drives it as a standard LSP server over stdio. The same server implementation also powers `vscode.dev` and `github.dev` without a platform-specific binary.
+
+### Settings
+
+- `wado.serverPath` — Absolute path to a native `wado-lsp` binary. When set, the extension launches that binary as a subprocess instead of the bundled Wasm. Compiler developers set this to `${workspaceFolder}/target/debug/wado-lsp` for a fast inner loop (`eprintln!`, `gdb`).
+- `wado.trace.server` — `off` / `messages` / `verbose`. Standard LSP trace verbosity.
+
+### Commands
+
+- `Wado: Restart Language Server` (default binding `Ctrl+Shift+F5` / `Cmd+Shift+F5` on `.wado` files). The extension also auto-restarts when `out/wado_lsp.wasm` changes on disk, so `mise run watch-wado-lsp-wasm` produces a hot-reload loop.
+
+### Building the bundled Wasm
+
+```bash
+mise run build-wado-lsp-wasm   # produces out/wado_lsp.wasm
+mise run watch-wado-lsp-wasm   # rebuild on source changes
+```
+
+The build targets `wasm32-wasip1` because `@vscode/wasm-wasi-lsp` currently hosts only preview 1 modules. Rationale: [LSP Architecture WEP](../docs/wep-2026-04-18-lsp-architecture.md).
+
 ## Roadmap
 
-- [ ] LSP integration (when wado-compiler supports LSP)
-  - [ ] Diagnostics (errors/warnings)
-  - [ ] Go to definition
-  - [ ] Find references
-  - [ ] Hover information
-  - [ ] Code completion
-  - [ ] Formatting
-  - [ ] Linting
+- [ ] Additional LSP features — completion, formatting, rename, code actions (tracked in `wado-lsp/CLAUDE.md`).
