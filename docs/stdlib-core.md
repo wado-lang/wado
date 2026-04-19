@@ -4329,7 +4329,7 @@ Decompresses gzip-wrapped data (RFC 1952).
 
 #### `pub fn gzip_compress(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8>`
 
-Compresses data in gzip format with the specifed compression level.
+Compresses data in gzip format with the specified compression level and strategy.
 
 #### `pub fn uncompress(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError>`
 
