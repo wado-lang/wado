@@ -172,13 +172,6 @@ concrete code location involved.
       `Item`s, so struct fields, impl methods, and enum/variant cases can
       silently fall through. Extend `Annotated::name_span_of` to return a
       `Span` for every `AstId` that can appear as a definition target.
-- [ ] **Document the file-path-vs-symbol resolution precedence.**
-      `find_definition` currently tries `file_path_definition` *before*
-      symbol-based resolution, but the ordering is implicit. Either fold both
-      into a single predicate keyed on the AST node kind under the cursor, or
-      add a comment stating the rule and a regression test covering the
-      overlap case (cursor inside `#include_str("./foo")` on the macro name,
-      not the path).
 - [ ] **Split `module_uri` into display-vs-navigation helpers.** The current
       single helper in `src/location.rs` is used by both CLI output (where
       `core:<name>` is a readable pointer) and by LSP responses (where the

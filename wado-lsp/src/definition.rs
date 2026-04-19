@@ -43,10 +43,24 @@ pub async fn find_definition<H: CompilerHost>(
     let line = position.line as usize + 1;
     let col = position.character as usize + 1;
 
-    // File-path jumps: `use { ... } from "./path"` and `#include_str("./path")`
-    // / `#include_bytes("./path")` do not resolve to declared symbols — they
-    // point to the start of the referenced file. Handle these before falling
-    // back to the symbol-based resolution below.
+    // Priority: file-path jumps first, symbol-based resolution second.
+    //
+    // `use { ... } from "./path"` source strings and `#include_str("./path")`
+    // / `#include_bytes("./path")` literals do not carry any `AstId` that the
+    // symbol table can resolve — their only target is the file on disk.
+    // `resolve_def_key` would always return `None` for cursor positions inside
+    // those spans, so running the file-path matcher first lets us answer
+    // before falling through to `AstId`-based resolution.
+    //
+    // The two paths do not overlap in today's AST: path-literal spans belong
+    // to `UseDecl.source_span` and `Literal::{IncludeStr,IncludeBytes}`, both
+    // of which sit *outside* any identifier, type-name, or expression node
+    // that could yield a symbol. Swapping the order would therefore produce
+    // the same answer today — but only by accident. If a future AST change
+    // introduces overlap (e.g. an `AstId` attached to the string literal
+    // itself), keeping file-path resolution first preserves the current
+    // behaviour: jump to the file, not to whatever symbol happens to share
+    // the span.
     if let Some(result) = file_path_definition(&annotated, &module, line, col, uri) {
         return Some(result);
     }
