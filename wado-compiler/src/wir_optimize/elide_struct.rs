@@ -19,7 +19,7 @@ use crate::wir_visitor::WirMutVisitor;
 
 #[derive(Default)]
 struct LocalStats {
-    /// Every `LocalGet(name)` anywhere in the tree (including those wrapped in StructGet).
+    /// Every `LocalGet(name)` anywhere in the tree (including those wrapped in `StructGet`).
     total_localgets: u32,
     /// Every `StructGet(LocalGet(name), _)` occurrence.
     structget_uses: u32,
