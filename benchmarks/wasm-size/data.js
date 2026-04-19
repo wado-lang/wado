@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776565949728,
+  "lastUpdate": 1776566848020,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14665,6 +14665,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0a40be1d080c4ec8eed7143ffc6d34dea67cded8"
         },
         "date": 1776565949437,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "755dab30109c9745413ec565ef4344128c25e2a3",
+          "message": "Merge pull request #885 from wado-lang/claude/debug-wado-compiler-performance-b9bTF\n\ndce: replace string scans with metadata-keyed indices",
+          "timestamp": "2026-04-19T11:43:19+09:00",
+          "tree_id": "b123eb56cb538b0d13cfe24f9af0a30d292e3644",
+          "url": "https://github.com/wado-lang/wado/commit/755dab30109c9745413ec565ef4344128c25e2a3"
+        },
+        "date": 1776566847722,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
