@@ -34,6 +34,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
         None
     }
 
+    /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
+    pub(super) fn find_trait_decl_type_params(
+        &self,
+        trait_name: &str,
+    ) -> Option<Vec<ast::GenericParam>> {
+        if let Some((module_src, item_idx)) = self.trait_env.decl_index.get(trait_name) {
+            let module = &self.loaded_modules[module_src];
+            if let Item::Trait(trait_decl) = &module.items[*item_idx] {
+                return Some(trait_decl.type_params.clone());
+            }
+        }
+        for item in self.current_module_items {
+            if let Item::Trait(trait_decl) = item
+                && trait_decl.name == trait_name
+            {
+                return Some(trait_decl.type_params.clone());
+            }
+        }
+        None
+    }
+
     /// Check if a type implements a specific trait (for trait bound checking)
     pub(super) fn type_implements_trait(&self, type_id: TypeId, trait_name: &str) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();

@@ -508,6 +508,52 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
         idx
     }
+
+    /// Bind a trait's declared type parameters to the impl's concrete trait
+    /// arguments in the current scope. Given `trait Foo<T, U>` and an impl
+    /// instance `Foo<i32, String>`, this registers `T → i32` and `U → String`
+    /// in `trait_ctx.type_params` together with their declared bounds.
+    ///
+    /// Callers must have any impl-level type params already registered because
+    /// the trait args may reference them (e.g., `impl<X> Foo<Container<X>>`).
+    /// Trait args are resolved in the current scope before being inserted.
+    ///
+    /// Entries already present in `type_params` (e.g., re-used impl-level
+    /// names) are left untouched.
+    pub(super) fn bind_trait_type_params_from_impl(&mut self, trait_type: &ast::Type) {
+        let trait_name = self.get_type_name(trait_type);
+        let Some(trait_decl_type_params) = self.find_trait_decl_type_params(&trait_name) else {
+            return;
+        };
+        let trait_args: Vec<&ast::Type> = match trait_type {
+            ast::Type::Generic(g) => g.args.iter().collect(),
+            _ => Vec::new(),
+        };
+        for (i, tp) in trait_decl_type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .enumerate()
+        {
+            if self.trait_ctx.type_params.contains_key(&tp.name) {
+                continue;
+            }
+            let Some(arg_ast) = trait_args.get(i) else {
+                continue;
+            };
+            let resolved_arg = self.resolve_type(arg_ast);
+            let idx = self.trait_ctx.type_params.len() as u32;
+            self.trait_ctx
+                .type_params
+                .insert(tp.name.clone(), (idx, resolved_arg));
+            if !tp.bounds.is_empty() {
+                self.trait_ctx
+                    .type_param_bounds
+                    .entry(tp.name.clone())
+                    .or_default()
+                    .extend(tp.bounds.clone());
+            }
+        }
+    }
 }
 
 /// Extract a type name from an AST type without needing a Resolver instance.

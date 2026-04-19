@@ -1889,6 +1889,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 scope.trait_ctx.self_type = Some(recv_id);
                             }
 
+                            // Bind the trait's own type parameters to the impl's
+                            // concrete trait args so that a default method's
+                            // return/param types written in terms of the trait's
+                            // `T` resolve to the concrete type at the call site
+                            // (e.g., `Maker<i32>::make_with_default` returns i32,
+                            // not the unresolved T).
+                            scope.bind_trait_type_params_from_impl(&trait_type_for_name);
+
                             // Set up method-level type params (e.g., U in map<U>)
                             let impl_offset = scope.trait_ctx.type_params.len() as u32;
                             for (i, type_param) in default_method.type_params.iter().enumerate() {

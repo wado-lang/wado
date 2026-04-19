@@ -618,6 +618,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         struct_name: &str,
         impl_type: &Type,
         trait_name: Option<&str>,
+        trait_type: Option<&Type>,
     ) -> Option<TirFunction> {
         // Use an inherited scope so the caller's `assoc_type_bindings` (set up
         // for the surrounding impl block) remain visible — `Self::Output` etc.
@@ -758,6 +759,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // method-level bounds on top.
         let saved_bounds = scope.saved().type_param_bounds.clone();
         scope.trait_ctx.type_param_bounds = saved_bounds;
+
+        // Bind the trait's own type parameters to the impl's concrete trait
+        // args so that references like `T` inside a default method body resolve
+        // to the impl's instantiation (e.g., `impl Maker<i32> for IntMaker`
+        // binds the trait's `T` to `i32`). Impl type params were registered
+        // above, so `Maker<Container<U>>` in `impl<U> Maker<Container<U>> for
+        // Foo<U>` resolves correctly.
+        if let Some(trait_t) = trait_type {
+            scope.bind_trait_type_params_from_impl(trait_t);
+        }
 
         // Set effect params in scope (for resolving effect names in function types)
         let old_effect_params = std::mem::take(&mut scope.current_effect_params);

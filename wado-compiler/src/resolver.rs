@@ -699,6 +699,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &struct_name,
                             &impl_block.ty,
                             trait_name.as_deref(),
+                            impl_block.trait_type.as_ref(),
                         ) {
                             tir_func.name = MethodName::format_local(
                                 &struct_name,
@@ -710,10 +711,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     }
 
                     // For trait impls, synthesize TIR functions for default methods
-                    // not explicitly provided in the impl block
-                    if let Some(ref trait_n) = trait_name {
+                    // not explicitly provided in the impl block. `trait_name`
+                    // carries the mangled form ("Maker<i32>") used for method
+                    // naming; the trait declaration itself is indexed by its
+                    // base name ("Maker"), so we derive that from the AST.
+                    if let (Some(trait_n), Some(trait_ast)) =
+                        (trait_name.as_ref(), impl_block.trait_type.as_ref())
+                    {
+                        let trait_decl_name = self.get_type_name(trait_ast);
                         let default_methods: Vec<ast::Function> = self
-                            .find_trait_decl_methods(trait_n)
+                            .find_trait_decl_methods(&trait_decl_name)
                             .unwrap_or_default()
                             .into_iter()
                             .filter(|m| {
@@ -727,6 +734,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 &struct_name,
                                 &impl_block.ty,
                                 Some(trait_n),
+                                Some(trait_ast),
                             ) {
                                 tir_func.name = MethodName::format_local(
                                     &struct_name,
