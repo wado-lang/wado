@@ -1,0 +1,13 @@
+// Test: a default expression may reference module-private items in the
+// callee's module, even when the caller's module does not import them.
+// Regression for P1#4 — defaults must resolve in the callee's lexical scope.
+
+use { paint } from "./sub/default_arg_private_item_lib.wado";
+
+export fn run() {
+    assert paint() == 7;
+    assert paint(10) == 10;
+}
+
+__DATA__
+{"stdout": ""}

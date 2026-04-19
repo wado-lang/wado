@@ -671,6 +671,7 @@ fn generate_struct_serialize(
                 local_index: 0,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
             TirParam {
                 name: "s".to_string(),
@@ -678,6 +679,7 @@ fn generate_struct_serialize(
                 local_index: 1,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
         ],
         return_type: result_unit_err,
@@ -863,7 +865,15 @@ fn generate_struct_deserialize(
     {
         let tt = module.type_table.borrow();
         for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
-            let default_val = default_value_for_type(*type_id, &tt, span);
+            // Prefer the field's declared default expression (WEP 2026-04-11)
+            // when available; fall back to `T::default()` for types with an
+            // auto-derived Default impl; otherwise null.
+            let default_val = struct_def
+                .fields
+                .get(i)
+                .and_then(|f| f.default_expr.as_ref())
+                .map(|e| (**e).clone())
+                .unwrap_or_else(|| default_value_for_type(*type_id, &tt, span));
             then_stmts.push(let_mut_stmt(
                 field_name,
                 field_locals[i],
@@ -1206,6 +1216,7 @@ fn generate_struct_deserialize(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         }],
         return_type: result_struct_err,
         effects: Vec::new(),
@@ -1374,6 +1385,7 @@ fn generate_lookup_function(
                 local_index: 0,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
             TirParam {
                 name: "__start".to_string(),
@@ -1381,6 +1393,7 @@ fn generate_lookup_function(
                 local_index: 1,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
             TirParam {
                 name: "__end".to_string(),
@@ -1388,6 +1401,7 @@ fn generate_lookup_function(
                 local_index: 2,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
         ],
         return_type: option_i32,
@@ -1529,6 +1543,7 @@ fn generate_enum_serialize(
                 local_index: 0,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
             TirParam {
                 name: "s".to_string(),
@@ -1536,6 +1551,7 @@ fn generate_enum_serialize(
                 local_index: 1,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
         ],
         return_type: result_unit_err,
@@ -1908,6 +1924,7 @@ fn generate_enum_deserialize(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         }],
         return_type: result_enum_err,
         effects: Vec::new(),
@@ -2176,6 +2193,7 @@ fn generate_variant_serialize(
                 local_index: 0,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
             TirParam {
                 name: "s".to_string(),
@@ -2183,6 +2201,7 @@ fn generate_variant_serialize(
                 local_index: 1,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
         ],
         return_type: result_unit_err,
@@ -2715,6 +2734,7 @@ fn generate_variant_deserialize(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         }],
         return_type: result_variant_err,
         effects: Vec::new(),
@@ -2973,6 +2993,7 @@ fn generate_flags_serialize(
                 local_index: 0,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
             TirParam {
                 name: "s".to_string(),
@@ -2980,6 +3001,7 @@ fn generate_flags_serialize(
                 local_index: 1,
                 is_mut: false,
                 span,
+                default_expr: None,
             },
         ],
         return_type: result_unit_err,
@@ -3323,6 +3345,7 @@ fn generate_flags_deserialize(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         }],
         return_type: result_flags_err,
         effects: Vec::new(),

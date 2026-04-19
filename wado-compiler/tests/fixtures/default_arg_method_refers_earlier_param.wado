@@ -1,0 +1,20 @@
+// Test: a method default expression may reference an earlier parameter.
+
+struct Rect {
+    base: f64,
+}
+
+impl Rect {
+    fn area(&self, width: f64, height: f64 = width) -> f64 {
+        return self.base + width * height;
+    }
+}
+
+export fn run() {
+    let r = Rect { base: 0.0 };
+    assert r.area(10.0) == 100.0;
+    assert r.area(10.0, 20.0) == 200.0;
+}
+
+__DATA__
+{"stdout": ""}

@@ -1,0 +1,28 @@
+// Test: struct field defaults can be composite expressions that reference
+// other struct literals.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Rect {
+    origin: Point = Point { x: 0, y: 0 },
+    width: i32 = 10,
+    height: i32 = 20,
+}
+
+export fn run() {
+    let r = Rect {};
+    assert r.origin.x == 0;
+    assert r.origin.y == 0;
+    assert r.width == 10;
+    assert r.height == 20;
+
+    let r2 = Rect { origin: Point { x: 5, y: 5 } };
+    assert r2.origin.x == 5;
+    assert r2.width == 10;
+}
+
+__DATA__
+{"stdout": ""}

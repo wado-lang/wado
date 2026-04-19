@@ -1,0 +1,23 @@
+// Test: a pure associated-function call can be used as a default value.
+
+export fn run() {
+    let m = clamp(5);
+    assert m == 5;
+    let hi = clamp(100);
+    assert hi == 10;
+    let lo = clamp(-3, 0);
+    assert lo == 0;
+}
+
+fn clamp(x: i32, lo: i32 = i32::min(0, 0), hi: i32 = i32::max(5, 10)) -> i32 {
+    if x < lo {
+        return lo;
+    }
+    if x > hi {
+        return hi;
+    }
+    return x;
+}
+
+__DATA__
+{"stdout": ""}

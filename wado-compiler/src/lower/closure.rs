@@ -1114,6 +1114,7 @@ impl ClosureLowerer {
                     is_hidden: false,
                     serde_rename: None,
                     serde_default: false,
+                    default_expr: None,
                 })
                 .collect();
 
@@ -1143,6 +1144,7 @@ impl ClosureLowerer {
                 local_index: 0,
                 is_mut: false,
                 span: collected.span,
+                default_expr: None,
             });
 
             for (i, (name, type_id)) in collected.params.iter().enumerate() {
@@ -1152,6 +1154,7 @@ impl ClosureLowerer {
                     local_index: (i + 1) as u32,
                     is_mut: false,
                     span: collected.span,
+                    default_expr: None,
                 });
             }
 

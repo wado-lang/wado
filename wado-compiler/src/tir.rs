@@ -2809,6 +2809,9 @@ pub struct TirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
+    /// Resolved default expression for trailing parameters with `= expr`.
+    /// Used by the resolver to synthesize arguments at call sites.
+    pub default_expr: Option<Box<TirExpr>>,
     pub span: Span,
 }
 
@@ -2840,6 +2843,9 @@ pub struct TirField {
     pub serde_rename: Option<String>,
     /// `#[serde(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
+    /// Resolved default expression for `struct S { x: T = expr }`.
+    /// Inserted by the resolver when the field is omitted in a struct literal.
+    pub default_expr: Option<Box<TirExpr>>,
 }
 
 #[derive(Debug, Clone)]
