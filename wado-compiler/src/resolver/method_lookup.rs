@@ -1216,9 +1216,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // `impl_offset` to materialise the `TypeParam` ids the solver needs
         // to track, without re-resolving the method signature.
         let method_type_param_names = match &base_type {
-            ResolvedType::Struct { name, module_source, .. }
-            | ResolvedType::GenericInstance { name, module_source, .. } => self
-                .find_method_type_param_names(name, Some(module_source), method_name),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => self.find_method_type_param_names(name, Some(module_source), method_name),
             ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => self
                 .trait_ctx
                 .type_param_bounds
@@ -1230,8 +1237,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         method_name,
                     )
                 }),
-            ResolvedType::AssocTypeProjection { bounds, .. } => self
-                .find_method_type_param_names_in_trait_bounds(bounds, method_name),
+            ResolvedType::AssocTypeProjection { bounds, .. } => {
+                self.find_method_type_param_names_in_trait_bounds(bounds, method_name)
+            }
             _ => None,
         };
         let Some(method_type_param_names) = method_type_param_names else {
