@@ -2473,9 +2473,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
         // well-defined (the final 7 positions don't contribute real matches).
         let scratch_size = input_len + 8;
         let scratch = builtin::realloc(0, 0, 8, scratch_size);
-        let input_repr = input.internal_raw_data();
         for let mut i = 0; i < input_len; i += 1 {
-            builtin::i32_store8(scratch + i, builtin::array_get_u8(input_repr, i));
+            builtin::i32_store8(scratch + i, input[i]);
         }
         for let mut i = 0; i < 8; i += 1 {
             builtin::i32_store8(scratch + input_len + i, 0 as u8);
