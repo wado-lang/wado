@@ -151,169 +151,6 @@ fn count_block_exprs(block: &TirBlock) -> usize {
         .sum()
 }
 
-/// Returns true when the block contains a `return` nested under control flow.
-///
-/// The inliner rewrites returns into `break` to an outer labeled block.
-/// Nested-control-flow returns can currently produce invalid WIR/Wasm in some
-/// patterns, so we conservatively avoid inlining such functions.
-fn has_nested_control_flow_return(block: &TirBlock) -> bool {
-    fn block_has_nested_return(block: &TirBlock, top_level: bool) -> bool {
-        for stmt in &block.stmts {
-            match &stmt.kind {
-                TirStmtKind::Return { .. } => {
-                    if !top_level {
-                        return true;
-                    }
-                }
-                TirStmtKind::If {
-                    condition,
-                    then_block,
-                    else_block,
-                } => {
-                    if expr_has_nested_return(condition)
-                        || block_has_nested_return(then_block, false)
-                        || else_block
-                            .as_ref()
-                            .is_some_and(|b| block_has_nested_return(b, false))
-                    {
-                        return true;
-                    }
-                }
-                TirStmtKind::IfLet {
-                    scrutinee,
-                    then_block,
-                    else_block,
-                    ..
-                } => {
-                    if expr_has_nested_return(scrutinee)
-                        || block_has_nested_return(then_block, false)
-                        || else_block
-                            .as_ref()
-                            .is_some_and(|b| block_has_nested_return(b, false))
-                    {
-                        return true;
-                    }
-                }
-                TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                    if block_has_nested_return(body, false) {
-                        return true;
-                    }
-                }
-                TirStmtKind::Expr(expr)
-                | TirStmtKind::Let { value: expr, .. }
-                | TirStmtKind::LetDestructure { value: expr, .. } => {
-                    if expr_has_nested_return(expr) {
-                        return true;
-                    }
-                }
-                TirStmtKind::Break { value, .. } => {
-                    if value.as_ref().is_some_and(expr_has_nested_return) {
-                        return true;
-                    }
-                }
-                TirStmtKind::Continue => {}
-                TirStmtKind::TaskReturn { .. } => {
-                    unreachable!("TaskReturn should be eliminated by synthesis before this phase")
-                }
-                TirStmtKind::VariadicForOf { .. } => {
-                    unreachable!("VariadicForOf should be expanded during monomorphization")
-                }
-            }
-        }
-        false
-    }
-
-    fn expr_has_nested_return(expr: &TirExpr) -> bool {
-        match &expr.kind {
-            TirExprKind::Block(block) => block_has_nested_return(block, false),
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                expr_has_nested_return(condition)
-                    || block_has_nested_return(then_branch, false)
-                    || else_branch
-                        .as_ref()
-                        .is_some_and(|b| block_has_nested_return(b, false))
-            }
-            TirExprKind::Match { expr, arms } => {
-                expr_has_nested_return(expr)
-                    || arms.iter().any(|arm| {
-                        arm.guard.as_ref().is_some_and(expr_has_nested_return)
-                            || expr_has_nested_return(&arm.body)
-                    })
-            }
-            TirExprKind::LabeledBlock { block, .. } => block_has_nested_return(block, false),
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                expr_has_nested_return(scrutinee)
-                    || arms.iter().any(|b| block_has_nested_return(b, false))
-                    || block_has_nested_return(default, false)
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                expr_has_nested_return(left) || expr_has_nested_return(right)
-            }
-            TirExprKind::Unary { expr, .. }
-            | TirExprKind::FieldAccess { expr, .. }
-            | TirExprKind::TupleSpread { expr }
-            | TirExprKind::TupleZip { expr }
-            | TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. }
-            | TirExprKind::VariantPayload { expr, .. }
-            | TirExprKind::TypePackExpansion {
-                call_expr: expr, ..
-            }
-            | TirExprKind::ClosureToCanonical { functor: expr, .. } => expr_has_nested_return(expr),
-            TirExprKind::Call { args, .. } => args.iter().any(|a| expr_has_nested_return(&a.expr)),
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                expr_has_nested_return(receiver)
-                    || args.iter().any(|a| expr_has_nested_return(&a.expr))
-            }
-            TirExprKind::CmRawCall { args, .. } => args.iter().any(expr_has_nested_return),
-            TirExprKind::Index { expr, index } => {
-                expr_has_nested_return(expr) || expr_has_nested_return(index)
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                fields.iter().any(|f| expr_has_nested_return(&f.value))
-            }
-            TirExprKind::TupleLiteral { elements } => elements.iter().any(expr_has_nested_return),
-            TirExprKind::VariantConstruct { payload, .. } => {
-                payload.as_ref().is_some_and(|e| expr_has_nested_return(e))
-            }
-            TirExprKind::Assign { target, value } => {
-                expr_has_nested_return(target) || expr_has_nested_return(value)
-            }
-            TirExprKind::Closure { body, .. } => expr_has_nested_return(body),
-            TirExprKind::IndirectCall { callee, args } => {
-                expr_has_nested_return(callee) || args.iter().any(expr_has_nested_return)
-            }
-            TirExprKind::GlobalVarSet { value, .. } => expr_has_nested_return(value),
-            TirExprKind::Cast { expr, .. } => expr_has_nested_return(expr),
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. }
-            | TirExprKind::TemplateString { .. } => false,
-        }
-    }
-
-    block_has_nested_return(block, true)
-}
-
 /// Compute the fully qualified name of a `TirFunction`, using the same format
 /// as `FuncRef::full_name()`.  This is the key used by `collect_callees_from_expr`
 /// so it must match exactly.
@@ -325,6 +162,181 @@ fn tir_function_full_name(func: &TirFunction) -> String {
     } else {
         let path = func.module_source.to_path();
         format!("{}/{}", path.join("/"), &func.name)
+    }
+}
+
+fn collect_inner_labels_from_block(block: &TirBlock, labels: &mut IndexSet<String>) {
+    for stmt in &block.stmts {
+        match &stmt.kind {
+            TirStmtKind::LabeledBlock { label, block } => {
+                labels.insert(label.clone());
+                collect_inner_labels_from_block(block, labels);
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                collect_inner_labels_from_expr(condition, labels);
+                collect_inner_labels_from_block(then_block, labels);
+                if let Some(else_block) = else_block {
+                    collect_inner_labels_from_block(else_block, labels);
+                }
+            }
+            TirStmtKind::IfLet {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_inner_labels_from_expr(scrutinee, labels);
+                collect_inner_labels_from_block(then_block, labels);
+                if let Some(else_block) = else_block {
+                    collect_inner_labels_from_block(else_block, labels);
+                }
+            }
+            TirStmtKind::Loop { body } => collect_inner_labels_from_block(body, labels),
+            TirStmtKind::Expr(expr)
+            | TirStmtKind::Let { value: expr, .. }
+            | TirStmtKind::LetDestructure { value: expr, .. } => {
+                collect_inner_labels_from_expr(expr, labels);
+            }
+            TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    collect_inner_labels_from_expr(value, labels);
+                }
+            }
+            TirStmtKind::Continue => {}
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+            }
+            TirStmtKind::VariadicForOf { .. } => {
+                unreachable!("VariadicForOf should be expanded during monomorphization")
+            }
+        }
+    }
+}
+
+fn collect_inner_labels_from_expr(expr: &TirExpr, labels: &mut IndexSet<String>) {
+    match &expr.kind {
+        TirExprKind::Block(block) => collect_inner_labels_from_block(block, labels),
+        TirExprKind::LabeledBlock { label, block, .. } => {
+            labels.insert(label.clone());
+            collect_inner_labels_from_block(block, labels);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            collect_inner_labels_from_expr(condition, labels);
+            collect_inner_labels_from_block(then_branch, labels);
+            if let Some(else_branch) = else_branch {
+                collect_inner_labels_from_block(else_branch, labels);
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            collect_inner_labels_from_expr(expr, labels);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_inner_labels_from_expr(guard, labels);
+                }
+                collect_inner_labels_from_expr(&arm.body, labels);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_inner_labels_from_expr(scrutinee, labels);
+            for arm in arms {
+                collect_inner_labels_from_block(arm, labels);
+            }
+            collect_inner_labels_from_block(default, labels);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            collect_inner_labels_from_expr(left, labels);
+            collect_inner_labels_from_expr(right, labels);
+        }
+        TirExprKind::Unary { expr, .. }
+        | TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::TupleSpread { expr }
+        | TirExprKind::TupleZip { expr }
+        | TirExprKind::Cast { expr, .. }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. } => collect_inner_labels_from_expr(expr, labels),
+        TirExprKind::TypePackExpansion { call_expr, .. } => {
+            collect_inner_labels_from_expr(call_expr, labels);
+        }
+        TirExprKind::Call { args, .. } => {
+            for arg in args {
+                collect_inner_labels_from_expr(&arg.expr, labels);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            collect_inner_labels_from_expr(receiver, labels);
+            for arg in args {
+                collect_inner_labels_from_expr(&arg.expr, labels);
+            }
+        }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                collect_inner_labels_from_expr(arg, labels);
+            }
+        }
+        TirExprKind::Index { expr, index } => {
+            collect_inner_labels_from_expr(expr, labels);
+            collect_inner_labels_from_expr(index, labels);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                collect_inner_labels_from_expr(&field.value, labels);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                collect_inner_labels_from_expr(elem, labels);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload) = payload {
+                collect_inner_labels_from_expr(payload, labels);
+            }
+        }
+        TirExprKind::Assign { target, value } => {
+            collect_inner_labels_from_expr(target, labels);
+            collect_inner_labels_from_expr(value, labels);
+        }
+        TirExprKind::Closure { body, .. } => collect_inner_labels_from_expr(body, labels),
+        TirExprKind::IndirectCall { callee, args } => {
+            collect_inner_labels_from_expr(callee, labels);
+            for arg in args {
+                collect_inner_labels_from_expr(arg, labels);
+            }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_inner_labels_from_expr(functor, labels);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => collect_inner_labels_from_expr(value, labels),
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BytesLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::FuncRef { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+        TirExprKind::TemplateString { .. } => {
+            unreachable!("TemplateString should be expanded before this phase")
+        }
     }
 }
 
@@ -360,20 +372,6 @@ fn is_inline_eligible(
     // Don't inline functions that return Never (!)
     // These are error/abort paths that are never hot, so no performance benefit to inlining
     if matches!(type_table.get(func.return_type), ResolvedType::Never) {
-        return false;
-    }
-
-    // Conservative safety guard: mutable parameters can participate in subtle
-    // aliasing/update ordering patterns that are not yet fully modeled by the
-    // current inliner rewrites.
-    if func.params.iter().any(|p| p.is_mut) {
-        return false;
-    }
-
-    // Conservatively avoid inlining functions whose returns are nested under
-    // control flow. The current return→break lowering for inline blocks can
-    // produce invalid WIR/Wasm for some such shapes.
-    if has_nested_control_flow_return(body) {
         return false;
     }
 
@@ -1326,6 +1324,13 @@ fn build_inlined_labeled_block(
     }
     *local_count += new_locals_needed;
 
+    let mut inner_labels: IndexSet<String> = IndexSet::default();
+    collect_inner_labels_from_block(body, &mut inner_labels);
+    let mut label_map: IndexMap<String, String> = IndexMap::default();
+    for inner_label in inner_labels {
+        label_map.insert(inner_label.clone(), format!("{label}__{inner_label}"));
+    }
+
     // Convert the body, transforming `return` into `break label: expr`.
     let remapped_stmts = remap_and_convert_returns(
         body,
@@ -1333,6 +1338,7 @@ fn build_inlined_labeled_block(
         param_offset,
         callee_param_count,
         &label,
+        &label_map,
     );
 
     block_stmts.extend(remapped_stmts);
@@ -1457,7 +1463,7 @@ fn try_inline_method_call_expr(
     bindings.push(InlineBinding {
         callee_local_index: first_param.local_index,
         name: first_param.name.clone(),
-        is_mut: false,
+        is_mut: first_param.is_mut,
         local_type: self_type_id,
         value: self_value,
     });
@@ -1468,7 +1474,7 @@ fn try_inline_method_call_expr(
         bindings.push(InlineBinding {
             callee_local_index: param.local_index,
             name: param.name.clone(),
-            is_mut: false,
+            is_mut: param.is_mut,
             local_type: arg.expr.type_id,
             value: arg.expr.clone(),
         });
@@ -1502,6 +1508,7 @@ fn remap_and_convert_returns(
     local_offset: u32,
     param_count: u32,
     label: &str,
+    label_map: &IndexMap<String, String>,
 ) -> Vec<TirStmt> {
     let mut stmts = Vec::new();
 
@@ -1513,7 +1520,14 @@ fn remap_and_convert_returns(
                 // may itself contain nested blocks with return statements
                 // (e.g., try-op expansions inside tuple/struct literals).
                 let break_value = value.as_ref().map(|v| {
-                    remap_expr_inner(v, param_to_local, local_offset, param_count, Some(label))
+                    remap_expr_inner(
+                        v,
+                        param_to_local,
+                        local_offset,
+                        param_count,
+                        Some(label),
+                        label_map,
+                    )
                 });
                 stmts.push(TirStmt::new(
                     TirStmtKind::Break {
@@ -1535,6 +1549,7 @@ fn remap_and_convert_returns(
                     local_offset,
                     param_count,
                     label,
+                    label_map,
                 );
                 stmts.extend(inner);
             }
@@ -1545,6 +1560,7 @@ fn remap_and_convert_returns(
                     local_offset,
                     param_count,
                     label,
+                    label_map,
                 ));
             }
         }
@@ -1559,8 +1575,16 @@ fn remap_stmt_with_label(
     local_offset: u32,
     param_count: u32,
     label: &str,
+    label_map: &IndexMap<String, String>,
 ) -> TirStmt {
-    remap_stmt_inner(stmt, param_to_local, local_offset, param_count, Some(label))
+    remap_stmt_inner(
+        stmt,
+        param_to_local,
+        local_offset,
+        param_count,
+        Some(label),
+        label_map,
+    )
 }
 
 /// Remap local indices in a pattern
@@ -1675,7 +1699,14 @@ fn remap_expr(
     local_offset: u32,
     param_count: u32,
 ) -> TirExpr {
-    remap_expr_inner(expr, param_to_local, local_offset, param_count, None)
+    remap_expr_inner(
+        expr,
+        param_to_local,
+        local_offset,
+        param_count,
+        None,
+        &IndexMap::default(),
+    )
 }
 
 /// Remap local indices in an expression, optionally converting `return` to `break`.
@@ -1690,10 +1721,29 @@ fn remap_expr_inner(
     local_offset: u32,
     param_count: u32,
     label: Option<&str>,
+    label_map: &IndexMap<String, String>,
 ) -> TirExpr {
-    let re = |e: &TirExpr| remap_expr_inner(e, param_to_local, local_offset, param_count, label);
+    let re = |e: &TirExpr| {
+        remap_expr_inner(
+            e,
+            param_to_local,
+            local_offset,
+            param_count,
+            label,
+            label_map,
+        )
+    };
     let re_box = |e: &TirExpr| Box::new(re(e));
-    let rb = |b: &TirBlock| remap_block_inner(b, param_to_local, local_offset, param_count, label);
+    let rb = |b: &TirBlock| {
+        remap_block_inner(
+            b,
+            param_to_local,
+            local_offset,
+            param_count,
+            label,
+            label_map,
+        )
+    };
 
     let kind = match &expr.kind {
         TirExprKind::Local { index, name } => {
@@ -1865,7 +1915,10 @@ fn remap_expr_inner(
             block,
             result_type,
         } => TirExprKind::LabeledBlock {
-            label: inner_label.clone(),
+            label: label_map
+                .get(inner_label)
+                .cloned()
+                .unwrap_or_else(|| inner_label.clone()),
             block: rb(block),
             result_type: *result_type,
         },
@@ -1935,6 +1988,7 @@ fn remap_block_inner(
     local_offset: u32,
     param_count: u32,
     label: Option<&str>,
+    label_map: &IndexMap<String, String>,
 ) -> TirBlock {
     let mut stmts = Vec::new();
     for stmt in &block.stmts {
@@ -1951,6 +2005,7 @@ fn remap_block_inner(
                         local_offset,
                         param_count,
                         label,
+                        label_map,
                     );
                     stmts.extend(inner);
                     continue;
@@ -1964,6 +2019,7 @@ fn remap_block_inner(
             local_offset,
             param_count,
             label,
+            label_map,
         ));
     }
     TirBlock::new(stmts, block.span)
@@ -1975,9 +2031,28 @@ fn remap_stmt_inner(
     local_offset: u32,
     param_count: u32,
     label: Option<&str>,
+    label_map: &IndexMap<String, String>,
 ) -> TirStmt {
-    let re = |e: &TirExpr| remap_expr_inner(e, param_to_local, local_offset, param_count, label);
-    let rb = |b: &TirBlock| remap_block_inner(b, param_to_local, local_offset, param_count, label);
+    let re = |e: &TirExpr| {
+        remap_expr_inner(
+            e,
+            param_to_local,
+            local_offset,
+            param_count,
+            label,
+            label_map,
+        )
+    };
+    let rb = |b: &TirBlock| {
+        remap_block_inner(
+            b,
+            param_to_local,
+            local_offset,
+            param_count,
+            label,
+            label_map,
+        )
+    };
 
     let kind = match &stmt.kind {
         TirStmtKind::Let {
@@ -2029,7 +2104,10 @@ fn remap_stmt_inner(
             label: inner_label,
             block,
         } => TirStmtKind::LabeledBlock {
-            label: inner_label.clone(),
+            label: label_map
+                .get(inner_label)
+                .cloned()
+                .unwrap_or_else(|| inner_label.clone()),
             block: rb(block),
         },
         TirStmtKind::IfLet {
@@ -2047,7 +2125,12 @@ fn remap_stmt_inner(
             label: break_label,
             value,
         } => TirStmtKind::Break {
-            label: break_label.clone(),
+            label: break_label.as_ref().map(|break_label| {
+                label_map
+                    .get(break_label)
+                    .cloned()
+                    .unwrap_or_else(|| break_label.clone())
+            }),
             value: value.as_ref().map(&re),
         },
         TirStmtKind::Continue => TirStmtKind::Continue,
