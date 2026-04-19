@@ -82,9 +82,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     scope.register_generic_params(&struct_decl.type_params, 0);
 
                     let mut fields = Vec::new();
+                    let mut field_ast_ids = Vec::new();
                     for field in &struct_decl.fields {
                         let type_id = scope.resolve_type(&field.ty);
                         fields.push((field.name.clone(), type_id, field.is_pub));
+                        field_ast_ids.push(field.id);
                     }
                     // Extract type parameter bounds
                     let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
@@ -117,6 +119,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             name: struct_decl.name.clone(),
                             module_source,
                             fields,
+                            field_ast_ids,
                             type_param_bounds,
                             type_param_type_ids,
                         },

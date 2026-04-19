@@ -2694,6 +2694,8 @@ impl Parser {
                             id: self.alloc_ast_id(),
                             expr,
                             field,
+                            field_id: self.alloc_ast_id(),
+                            field_span,
                             span: merged_span,
                         }));
 
@@ -2705,6 +2707,8 @@ impl Parser {
                                 id: self.alloc_ast_id(),
                                 expr,
                                 field: second,
+                                field_id: self.alloc_ast_id(),
+                                field_span: second_span,
                                 span: second_span,
                             }));
                         }
@@ -4529,7 +4533,7 @@ impl Parser {
 
         if !self.check(&TokenKind::RBrace) {
             loop {
-                let field_span = self.peek().span;
+                let field_name_span = self.peek().span;
                 // Allow string literals as field names for JSON compatibility
                 let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
                     self.advance();
@@ -4537,24 +4541,30 @@ impl Parser {
                 } else {
                     self.consume_field_name()?
                 };
+                let field_name_id = self.alloc_ast_id();
 
-                let (value, is_shorthand) = if self.check(&TokenKind::Colon) {
+                let (value, is_shorthand, field_span) = if self.check(&TokenKind::Colon) {
                     self.advance();
-                    (self.parse_expr()?, false)
+                    let value = self.parse_expr()?;
+                    let span = field_name_span.merge(&value.span());
+                    (value, false, span)
                 } else {
                     // Shorthand: `{ x }` is equivalent to `{ x: x }`
                     (
                         Expr::Ident(IdentExpr {
                             id: self.alloc_ast_id(),
                             name: field_name.clone(),
-                            span: field_span,
+                            span: field_name_span,
                         }),
                         true,
+                        field_name_span,
                     )
                 };
 
                 fields.push(StructLiteralField {
                     name: field_name,
+                    name_id: field_name_id,
+                    name_span: field_name_span,
                     value,
                     is_shorthand,
                     span: field_span,
@@ -4574,9 +4584,17 @@ impl Parser {
         let end_span = self.peek().span;
         self.expect(&TokenKind::RBrace)?;
 
+        let (name_id, name_span) = if name.is_some() {
+            (Some(self.alloc_ast_id()), Some(start_span))
+        } else {
+            (None, None)
+        };
+
         Ok(Expr::StructLiteral(Box::new(StructLiteralExpr {
             id: self.alloc_ast_id(),
             name,
+            name_id,
+            name_span,
             fields,
             has_trailing_comma,
             span: start_span.merge(&end_span),

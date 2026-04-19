@@ -3,9 +3,10 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, Condition, Expr, IfExpr, Item, Literal, MatchArm};
+use crate::ast::{self, AstId, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
+use crate::symbol::SymbolKey;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
@@ -656,6 +657,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> TirExpr {
         let expr = self.resolve_expr(&field_access.expr, ctx, None);
 
+        // Record use→def reference for the field name, pointing at the field
+        // definition's AstId in the struct declaration.
+        self.record_field_reference(expr.type_id, &field_access.field, field_access.field_id);
+
         // Look up field type from struct type
         let (field_index, field_type) =
             self.lookup_field_type(expr.type_id, &field_access.field, field_access.span);
@@ -672,6 +677,47 @@ impl<H: CompilerHost> Resolver<'_, H> {
             field_type,
             field_access.span,
         )
+    }
+
+    /// Record a use→def reference for a struct field access.
+    /// `receiver_type` is the type of the struct being accessed;
+    /// `field_name` is the accessed field; `use_id` is the AstId of the
+    /// field-name token at the use site.
+    pub(super) fn record_field_reference(
+        &mut self,
+        receiver_type: TypeId,
+        field_name: &str,
+        use_id: AstId,
+    ) {
+        let resolved = self.type_table.borrow().get(receiver_type).clone();
+        let (struct_name, module_source) = match resolved {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => (name, module_source),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                return self.record_field_reference(inner, field_name, use_id);
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                return self.record_field_reference(base_type, field_name, use_id);
+            }
+            _ => return,
+        };
+        if let Some(info) = self.lookup_struct_fields(&struct_name, &module_source) {
+            for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
+                if fname == field_name {
+                    let def_key = SymbolKey::new(module_source, *fid);
+                    self.record_reference_to_key(use_id, def_key);
+                    return;
+                }
+            }
+        }
     }
 
     /// Look up field type from a struct or tuple type
@@ -2059,6 +2105,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return self.resolve_anonymous_struct_literal(struct_lit, ctx);
         };
 
+        // Record use→def reference for the struct type name.
+        if let Some(name_id) = struct_lit.name_id {
+            self.record_item_reference_by_name(name_id, name);
+        }
+
         // Look up the struct in the symbol table to resolve imports/aliases
         // We need both the struct name (for struct_fields lookup) and module_source (for disambiguation)
         // Local struct definitions (current module) shadow imported/prelude structs.
@@ -2096,6 +2147,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .collect()
             })
             .unwrap_or_default();
+
+        // Record use→def references for each field name, pointing at the
+        // field definition's AstId in the struct declaration.
+        let field_refs: Vec<(AstId, AstId)> = self
+            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .map(|info| {
+                struct_lit
+                    .fields
+                    .iter()
+                    .filter_map(|f| {
+                        info.fields
+                            .iter()
+                            .zip(info.field_ast_ids.iter())
+                            .find(|((fname, _, _), _)| fname == &f.name)
+                            .map(|(_, def_id)| (f.name_id, *def_id))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        for (use_id, def_id) in field_refs {
+            let def_key = SymbolKey::new(struct_module_source.clone(), def_id);
+            self.record_reference_to_key(use_id, def_key);
+        }
 
         // Resolve field expressions, converting tuple literals to arrays when needed.
         // For generic structs, tuple-to-sequence coercion may be deferred to a second
@@ -2423,6 +2497,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .iter()
                 .map(|f| (f.name.clone(), f.value.type_id, true))
                 .collect(),
+            field_ast_ids: Vec::new(),
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
         };

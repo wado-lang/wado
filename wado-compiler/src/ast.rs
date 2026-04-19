@@ -615,7 +615,10 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
                 v.visit_expr(a);
             }
         }
-        Expr::FieldAccess(e) => v.visit_expr(&e.expr),
+        Expr::FieldAccess(e) => {
+            v.visit_expr(&e.expr);
+            v.visit_id(e.field_id, e.field_span);
+        }
         Expr::Index(e) => {
             v.visit_expr(&e.expr);
             v.visit_expr(&e.index);
@@ -657,7 +660,11 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_type(&c.target_type);
         }
         Expr::StructLiteral(s) => {
+            if let (Some(name_id), Some(name_span)) = (s.name_id, s.name_span) {
+                v.visit_id(name_id, name_span);
+            }
             for field in &s.fields {
+                v.visit_id(field.name_id, field.name_span);
                 v.visit_expr(&field.value);
             }
         }
@@ -1641,6 +1648,12 @@ pub struct StructLiteralExpr {
     /// The struct type name. None for implicit struct literals like `{ x: 1, y: 2 }`
     /// which require type context (e.g., `let p: Point = { x: 1, y: 2 }`).
     pub name: Option<String>,
+    /// AstId of just the type name, for cursor-based navigation (jump-to-def).
+    /// Always `Some` iff `name` is `Some`.
+    pub name_id: Option<AstId>,
+    /// Span of just the type name token.
+    /// Always `Some` iff `name` is `Some`.
+    pub name_span: Option<Span>,
     pub fields: Vec<StructLiteralField>,
     /// Whether the original source had a trailing comma (for formatting purposes).
     /// Multiline formatting is used when this is true.
@@ -1652,6 +1665,10 @@ pub struct StructLiteralExpr {
 #[derive(Debug, Clone)]
 pub struct StructLiteralField {
     pub name: String,
+    /// AstId of the field name, for cursor-based navigation (jump-to-def).
+    pub name_id: AstId,
+    /// Span of just the field name token.
+    pub name_span: Span,
     pub value: Expr,
     /// Whether this field uses shorthand syntax `{ x }` instead of `{ x: x }`
     pub is_shorthand: bool,
@@ -1854,6 +1871,10 @@ pub struct FieldAccessExpr {
     pub id: AstId,
     pub expr: Expr,
     pub field: String,
+    /// AstId of the field name token, for cursor-based navigation (jump-to-def).
+    pub field_id: AstId,
+    /// Span of just the field name token.
+    pub field_span: Span,
     pub span: Span,
 }
 

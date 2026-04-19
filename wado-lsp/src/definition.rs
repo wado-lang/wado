@@ -15,7 +15,7 @@ use wado_compiler::ast::{self, AstId, Item, Module};
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
+use crate::location::{module_uri, resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefinitionResult {
@@ -42,12 +42,20 @@ pub async fn find_definition<H: CompilerHost>(
 
     let def_key = resolve_def_key(&annotated, &module, line, col)?;
 
-    let symbol = annotated.symbol_at(&def_key)?;
+    // Most defs are registered as symbols (functions, types, globals, locals).
+    // Struct fields / enum cases / variant cases / flags members / trait and
+    // impl methods are addressable by `AstId` via `name_span_of` but are not
+    // individually registered as symbols; handle both paths uniformly.
+    let symbol = annotated.symbol_at(&def_key);
     let span = annotated
         .name_span_of(&def_key)
-        .or(symbol.span)
+        .or_else(|| symbol.and_then(|s| s.span))
         .or_else(|| span_of_ast_id(annotated.modules.get(&def_key.module)?, def_key.ast_id))?;
-    let def_uri = symbol_uri(&annotated, symbol, uri)?;
+    let def_uri = if let Some(symbol) = symbol {
+        symbol_uri(&annotated, symbol, uri)?
+    } else {
+        module_uri(&annotated, &def_key.module, uri)?
+    };
     Some(DefinitionResult {
         uri: def_uri,
         range: span_to_range(&span),

@@ -562,6 +562,8 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             id: f.id,
             expr: desugar_expr(&f.expr),
             field: f.field.clone(),
+            field_id: f.field_id,
+            field_span: f.field_span,
             span: f.span,
         })),
         Expr::Index(i) => Expr::Index(Box::new(IndexExpr {
@@ -650,11 +652,15 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         Expr::StructLiteral(s) => Expr::StructLiteral(Box::new(StructLiteralExpr {
             id: s.id,
             name: s.name.clone(),
+            name_id: s.name_id,
+            name_span: s.name_span,
             fields: s
                 .fields
                 .iter()
                 .map(|f| StructLiteralField {
                     name: f.name.clone(),
+                    name_id: f.name_id,
+                    name_span: f.name_span,
                     value: desugar_expr(&f.value),
                     is_shorthand: f.is_shorthand,
                     span: f.span,

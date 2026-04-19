@@ -248,6 +248,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.references.borrow_mut().insert(use_key, def_key);
     }
 
+    /// Record a use→def reference when the definition lives in a (possibly
+    /// different) module identified directly by a [`SymbolKey`].
+    pub(super) fn record_reference_to_key(&self, use_id: crate::ast::AstId, def_key: SymbolKey) {
+        let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
+        self.references.borrow_mut().insert(use_key, def_key);
+    }
+
     /// Record that an identifier resolved to a declared symbol reachable from
     /// the current module under `name` (local item, imported item, imported
     /// namespace member, etc.). Looks up the defining [`SymbolKey`] through

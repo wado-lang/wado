@@ -17,6 +17,9 @@ pub(crate) struct StructFieldInfo {
     pub(super) module_source: ModuleSource,
     /// Field definitions: (name, `type_id`, `is_pub`) triples
     pub(super) fields: Vec<(String, TypeId, bool)>,
+    /// Parallel array to `fields` holding each field's defining `AstId`.
+    /// Used for recording use→def references (e.g. field access → field def).
+    pub(super) field_ast_ids: Vec<AstId>,
     /// Type parameter bounds: (`param_name`, `trait_bounds`)
     /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
     pub(super) type_param_bounds: Vec<(String, Vec<String>)>,
