@@ -462,13 +462,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let enum_type = self
                     .type_table
                     .borrow_mut()
-                    .make_enum(enum_info.name.clone(), enum_info.module_source.clone());
+                    .make_enum(enum_info.name.clone(), enum_info.module_source);
 
                 return TirExpr::new(
                     TirExprKind::EnumConstruct {
                         enum_type,
                         case_index: case_data.index,
-                        case_name: case_data.name.clone(),
+                        case_name: case_data.name,
                     },
                     enum_type,
                     ident.span,
@@ -587,12 +587,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let enum_type = self
                         .type_table
                         .borrow_mut()
-                        .make_enum(enum_info.name.clone(), enum_info.module_source.clone());
+                        .make_enum(enum_info.name.clone(), enum_info.module_source);
                     return TirExpr::new(
                         TirExprKind::EnumConstruct {
                             enum_type,
                             case_index: case_data.index,
-                            case_name: case_data.name.clone(),
+                            case_name: case_data.name,
                         },
                         enum_type,
                         ident.span,
@@ -787,7 +787,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Record a use→def reference for a struct field access.
     /// `receiver_type` is the type of the struct being accessed;
-    /// `field_name` is the accessed field; `use_id` is the AstId of the
+    /// `field_name` is the accessed field; `use_id` is the `AstId` of the
     /// field-name token at the use site.
     pub(super) fn record_field_reference(
         &mut self,

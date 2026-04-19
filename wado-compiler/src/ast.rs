@@ -1100,7 +1100,7 @@ pub struct WorldExport {
 pub enum UseItem {
     /// Simple import: `name` or `name as alias`
     Simple {
-        /// AstId for the name identifier — used by LSP to record a use→def
+        /// `AstId` for the name identifier — used by LSP to record a use→def
         /// edge from the specifier name back to the imported symbol.
         id: AstId,
         name: String,
@@ -1148,7 +1148,7 @@ pub struct UseDecl {
     /// Span of the source string literal (without surrounding quotes in the
     /// start/end columns; used by LSP for path jumps).
     pub source_span: Span,
-    /// AstId for the source string literal — use→def target when a cursor
+    /// `AstId` for the source string literal — use→def target when a cursor
     /// lands inside the `"./path"` portion of a use declaration.
     pub source_id: AstId,
     /// Items being imported
@@ -1797,7 +1797,7 @@ pub struct StructLiteralExpr {
     /// The struct type name. None for implicit struct literals like `{ x: 1, y: 2 }`
     /// which require type context (e.g., `let p: Point = { x: 1, y: 2 }`).
     pub name: Option<String>,
-    /// AstId of just the type name, for cursor-based navigation (jump-to-def).
+    /// `AstId` of just the type name, for cursor-based navigation (jump-to-def).
     /// Always `Some` iff `name` is `Some`.
     pub name_id: Option<AstId>,
     /// Span of just the type name token.
@@ -1814,7 +1814,7 @@ pub struct StructLiteralExpr {
 #[derive(Debug, Clone)]
 pub struct StructLiteralField {
     pub name: String,
-    /// AstId of the field name, for cursor-based navigation (jump-to-def).
+    /// `AstId` of the field name, for cursor-based navigation (jump-to-def).
     pub name_id: AstId,
     /// Span of just the field name token.
     pub name_span: Span,
@@ -2041,7 +2041,7 @@ pub struct FieldAccessExpr {
     pub id: AstId,
     pub expr: Expr,
     pub field: String,
-    /// AstId of the field name token, for cursor-based navigation (jump-to-def).
+    /// `AstId` of the field name token, for cursor-based navigation (jump-to-def).
     pub field_id: AstId,
     /// Span of just the field name token.
     pub field_span: Span,

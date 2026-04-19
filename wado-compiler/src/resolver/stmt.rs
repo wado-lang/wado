@@ -1312,7 +1312,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 self.record_reference_to_key(
                                     *id,
                                     crate::symbol::SymbolKey::new(
-                                        enum_info.module_source.clone(),
+                                        enum_info.module_source,
                                         case_data.ast_id,
                                     ),
                                 );

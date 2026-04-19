@@ -39,7 +39,7 @@ pub(super) struct VariantCaseData {
     pub(super) name: String,
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
     pub(super) payload: TypeId,
-    /// AstId of the case declaration (`VariantCase::id`) in the owning module.
+    /// `AstId` of the case declaration (`VariantCase::id`) in the owning module.
     pub(super) ast_id: AstId,
 }
 
@@ -62,7 +62,7 @@ pub(crate) struct VariantInfo {
 pub(super) struct EnumCaseData {
     pub(super) name: String,
     pub(super) index: u32,
-    /// AstId of the case declaration (`EnumCase::id`) in the owning module.
+    /// `AstId` of the case declaration (`EnumCase::id`) in the owning module.
     pub(super) ast_id: AstId,
 }
 
@@ -100,7 +100,7 @@ impl EnumInfo {
 pub(super) struct FlagsMemberData {
     pub(super) name: String,
     pub(super) bitmask: u32,
-    /// AstId of the member declaration (`FlagsVariant::id`) in the owning module.
+    /// `AstId` of the member declaration (`FlagsVariant::id`) in the owning module.
     pub(super) ast_id: AstId,
 }
 
