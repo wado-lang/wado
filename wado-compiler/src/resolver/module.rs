@@ -333,6 +333,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .trait_ctx
                             .type_params
                             .insert(param.name.clone(), (actual_idx, type_id));
+                        scope
+                            .trait_ctx
+                            .type_param_decls
+                            .insert(param.name.clone(), param.id);
                         if !param.bounds.is_empty() {
                             scope
                                 .trait_ctx
@@ -384,6 +388,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         }
                     }
 
+                    // Resolve the trait type for its side effect of recording a
+                    // use->def reference from the trait-name identifier in the
+                    // impl header (`impl Greet for Bot`) to the trait decl. The
+                    // resulting TypeId is unused because trait bounds are
+                    // checked via trait_query, not via type substitution.
+                    if let Some(trait_type) = &impl_block.trait_type {
+                        let _ = scope.resolve_type(trait_type);
+                    }
+                    // Resolve the implementing type for its reference-recording
+                    // side effect (already performed when method signatures are
+                    // later resolved, but doing it here ensures the ref is
+                    // recorded even for impls with no methods referencing it).
+                    let _ = scope.resolve_type(&impl_block.ty);
+
                     // Collect method signatures with mangled names
                     let struct_name = scope.get_type_name(&impl_block.ty);
                     let trait_name = impl_block
@@ -406,6 +424,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .trait_ctx
                                 .type_params
                                 .insert(param.name.clone(), (idx, type_id));
+                            scope
+                                .trait_ctx
+                                .type_param_decls
+                                .insert(param.name.clone(), param.id);
                             if !param.bounds.is_empty() {
                                 scope
                                     .trait_ctx

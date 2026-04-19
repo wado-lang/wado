@@ -523,6 +523,11 @@ fn name_span_of_item(item: &Item, target: AstId) -> Option<Span> {
             if f.id == target {
                 return Some(f.name_span);
             }
+            for tp in &f.type_params {
+                if tp.id == target {
+                    return Some(tp.name_span);
+                }
+            }
         }
         Item::Struct(s) => {
             if s.id == target {
@@ -531,6 +536,11 @@ fn name_span_of_item(item: &Item, target: AstId) -> Option<Span> {
             for field in &s.fields {
                 if field.id == target {
                     return Some(field.name_span);
+                }
+            }
+            for tp in &s.type_params {
+                if tp.id == target {
+                    return Some(tp.name_span);
                 }
             }
         }
@@ -553,6 +563,11 @@ fn name_span_of_item(item: &Item, target: AstId) -> Option<Span> {
                     return Some(case.name_span);
                 }
             }
+            for tp in &v.type_params {
+                if tp.id == target {
+                    return Some(tp.name_span);
+                }
+            }
         }
         Item::Flags(f) => {
             if f.id == target {
@@ -572,11 +587,26 @@ fn name_span_of_item(item: &Item, target: AstId) -> Option<Span> {
                 if method.id == target {
                     return Some(method.name_span);
                 }
+                for tp in &method.type_params {
+                    if tp.id == target {
+                        return Some(tp.name_span);
+                    }
+                }
+            }
+            for tp in &t.type_params {
+                if tp.id == target {
+                    return Some(tp.name_span);
+                }
             }
         }
         Item::Newtype(n) => {
             if n.id == target {
                 return Some(n.name_span);
+            }
+            for tp in &n.type_params {
+                if tp.id == target {
+                    return Some(tp.name_span);
+                }
             }
         }
         Item::Effect(e) => {
@@ -609,6 +639,16 @@ fn name_span_of_item(item: &Item, target: AstId) -> Option<Span> {
             for method in &imp.methods {
                 if method.id == target {
                     return Some(method.name_span);
+                }
+                for tp in &method.type_params {
+                    if tp.id == target {
+                        return Some(tp.name_span);
+                    }
+                }
+            }
+            for tp in &imp.type_params {
+                if tp.id == target {
+                    return Some(tp.name_span);
                 }
             }
         }
