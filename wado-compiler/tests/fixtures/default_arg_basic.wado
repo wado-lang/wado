@@ -1,0 +1,26 @@
+// Test: function parameter defaults — trailing args may be omitted.
+// The default value is substituted at the call site (compile-time desugaring).
+
+use { println, Stdout } from "core:cli";
+
+fn greet(name: String, greeting: String = "Hello") -> String {
+    return `{greeting}, {name}!`;
+}
+
+fn connect(host: String, port: i32 = 8080, timeout: i32 = 30) -> i32 {
+    return port + timeout;
+}
+
+export fn run() with Stdout {
+    assert greet("Alice") == "Hello, Alice!";
+    assert greet("Bob", "Hi") == "Hi, Bob!";
+
+    assert connect("localhost") == 8110;
+    assert connect("localhost", 3000) == 3030;
+    assert connect("localhost", 3000, 60) == 3060;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

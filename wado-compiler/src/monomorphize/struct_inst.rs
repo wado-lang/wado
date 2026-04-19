@@ -79,6 +79,7 @@ impl Monomorphizer {
                     is_hidden: field.is_hidden,
                     serde_rename: field.serde_rename.clone(),
                     serde_default: field.serde_default,
+                    default_expr: None,
                 }
             })
             .collect();

@@ -156,6 +156,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     name: struct_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     fields: Vec::new(),
+                                    field_defaults: Vec::new(),
                                     type_param_bounds,
                                     type_param_type_ids: Vec::new(), // filled in second pass
                                 },
@@ -301,6 +302,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 match item {
                     Item::Struct(struct_decl) => {
                         let mut fields = Vec::new();
+                        let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
                         // Extract type parameter names for generic structs
                         let type_params: Vec<String> = struct_decl
                             .type_params
@@ -335,6 +337,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 )
                             };
                             fields.push((field.name.clone(), type_id, field.is_pub));
+                            field_defaults.push(field.default.clone());
                         }
                         // Extract type parameter bounds
                         let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
@@ -365,6 +368,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             name: struct_decl.name.clone(),
                             module_source: module_source.clone(),
                             fields,
+                            field_defaults,
                             type_param_bounds,
                             type_param_type_ids,
                         };

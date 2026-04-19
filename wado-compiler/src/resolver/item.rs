@@ -77,6 +77,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_hidden: field.attrs.iter().any(|a| a.name == "hidden"),
                 serde_rename,
                 serde_default,
+                default_expr: None,
             });
         }
 
@@ -406,6 +407,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
+                default_expr: None,
                 span: param.span,
             });
         }
@@ -804,6 +806,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
+                default_expr: None,
                 span: param.span,
             });
         }

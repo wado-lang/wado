@@ -708,6 +708,7 @@ fn generate_enum_inspect_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "f".to_string(),
@@ -715,6 +716,7 @@ fn generate_enum_inspect_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -830,6 +832,7 @@ fn generate_struct_inspect_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "f".to_string(),
@@ -837,6 +840,7 @@ fn generate_struct_inspect_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -978,6 +982,7 @@ fn generate_generic_struct_inspect_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "f".to_string(),
@@ -985,6 +990,7 @@ fn generate_generic_struct_inspect_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -1152,6 +1158,7 @@ fn generate_variant_inspect_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "f".to_string(),
@@ -1159,6 +1166,7 @@ fn generate_variant_inspect_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -1299,6 +1307,7 @@ fn generate_generic_variant_inspect_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "f".to_string(),
@@ -1306,6 +1315,7 @@ fn generate_generic_variant_inspect_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -1825,6 +1835,7 @@ fn inspect_params(ref_type: TypeId, fmt_type: TypeId, span: Span) -> Vec<TirPara
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "f".to_string(),
@@ -1832,6 +1843,7 @@ fn inspect_params(ref_type: TypeId, fmt_type: TypeId, span: Span) -> Vec<TirPara
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ]
 }
@@ -2942,6 +2954,7 @@ fn generate_display_fallback(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "f".to_string(),
@@ -2949,6 +2962,7 @@ fn generate_display_fallback(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -3519,6 +3533,7 @@ fn generate_enum_eq_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "other".to_string(),
@@ -3526,6 +3541,7 @@ fn generate_enum_eq_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -3619,6 +3635,7 @@ fn generate_enum_ord_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "other".to_string(),
@@ -3626,6 +3643,7 @@ fn generate_enum_ord_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -3980,6 +3998,7 @@ fn generate_struct_eq_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "other".to_string(),
@@ -3987,6 +4006,7 @@ fn generate_struct_eq_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -4139,6 +4159,7 @@ fn generate_struct_ord_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "other".to_string(),
@@ -4146,6 +4167,7 @@ fn generate_struct_ord_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -4312,6 +4334,7 @@ fn generate_generic_struct_eq_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "other".to_string(),
@@ -4319,6 +4342,7 @@ fn generate_generic_struct_eq_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -4482,6 +4506,7 @@ fn generate_variant_eq_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "other".to_string(),
@@ -4489,6 +4514,7 @@ fn generate_variant_eq_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -4562,6 +4588,7 @@ fn generate_generic_variant_eq_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "other".to_string(),
@@ -4569,6 +4596,7 @@ fn generate_generic_variant_eq_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 
@@ -4810,6 +4838,7 @@ fn generate_generic_struct_ord_fn(
             local_index: 0,
             is_mut: false,
             span,
+            default_expr: None,
         },
         TirParam {
             name: "other".to_string(),
@@ -4817,6 +4846,7 @@ fn generate_generic_struct_ord_fn(
             local_index: 1,
             is_mut: false,
             span,
+            default_expr: None,
         },
     ];
 

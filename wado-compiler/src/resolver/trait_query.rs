@@ -554,6 +554,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .filter(|p| p.name != "self")
                     .map(|p| p.is_mut)
                     .collect();
+                let param_defaults: Vec<Option<ast::Expr>> = method
+                    .params
+                    .iter()
+                    .filter(|p| p.name != "self")
+                    .map(|p| p.default.clone())
+                    .collect();
 
                 drop(scope);
 
@@ -568,6 +574,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         cm_name: None,
                         is_ref_impl: false,
                         method_type_param_ids,
+                        param_defaults,
                     },
                 ));
             }

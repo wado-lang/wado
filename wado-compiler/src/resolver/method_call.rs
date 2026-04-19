@@ -232,6 +232,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             cm_name,
             is_ref_impl,
             method_type_param_ids: _,
+            param_defaults,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -252,6 +253,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 cm_name: None,
                 is_ref_impl: false,
                 method_type_param_ids: vec![],
+                param_defaults: vec![],
             }
         };
 
@@ -378,6 +380,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 self.resolve_expr(arg, ctx, expected_type)
             })
             .collect();
+
+        // Pad missing trailing args with declared parameter defaults.
+        for i in args.len()..expected_param_types.len() {
+            let Some(Some(default_ast)) = param_defaults.get(i) else {
+                break;
+            };
+            let expected_type = expected_param_types[i];
+            let resolved = self.resolve_expr(default_ast, ctx, Some(expected_type));
+            args.push(resolved);
+        }
 
         // Check each argument against expected parameter type
         for (i, (arg, &expected_type)) in args.iter().zip(expected_param_types.iter()).enumerate() {

@@ -404,6 +404,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             cm_name: None,
                             is_ref_impl: false,
                             method_type_param_ids: vec![],
+                            param_defaults: vec![],
                         });
                     }
                     if method_name == "zip" {
@@ -438,6 +439,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             cm_name: None,
                             is_ref_impl: false,
                             method_type_param_ids: vec![],
+                            param_defaults: vec![],
                         });
                     }
                     (
@@ -515,11 +517,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Some(&return_type) = self.function_return_types.get(&mangled_name) {
             // For locally registered methods, find self_kind and param_types from the AST
             // Also checks that bounded impl block constraints are satisfied
-            if let Some((self_kind, param_types, param_is_mut)) = self.find_local_method_info(
-                &struct_name,
-                method_name,
-                receiver_type_args.as_deref(),
-            ) {
+            if let Some((self_kind, param_types, param_is_mut, param_defaults)) = self
+                .find_local_method_info(&struct_name, method_name, receiver_type_args.as_deref())
+            {
                 return Some(MethodInfo {
                     return_type,
                     self_kind,
@@ -529,6 +529,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     cm_name: None,
                     is_ref_impl: false,
                     method_type_param_ids: vec![],
+                    param_defaults,
                 });
             }
             // If find_local_method_info returned None, the method either doesn't exist
@@ -635,6 +636,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .filter(|p| p.name != "self")
                                         .map(|p| p.is_mut)
                                         .collect();
+                                    let param_defaults: Vec<Option<ast::Expr>> = method
+                                        .params
+                                        .iter()
+                                        .filter(|p| p.name != "self")
+                                        .map(|p| p.default.clone())
+                                        .collect();
 
                                     std::mem::swap(
                                         &mut scope.struct_fields,
@@ -665,6 +672,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         cm_name: None,
                                         is_ref_impl: false,
                                         method_type_param_ids: vec![],
+                                        param_defaults,
                                     });
                                 }
                             }
@@ -745,6 +753,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         .filter(|p| p.name != "self")
                                         .map(|p| p.is_mut)
                                         .collect();
+                                    let param_defaults: Vec<Option<ast::Expr>> = method
+                                        .params
+                                        .iter()
+                                        .filter(|p| p.name != "self")
+                                        .map(|p| p.default.clone())
+                                        .collect();
 
                                     drop(scope);
 
@@ -757,6 +771,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                         cm_name: None,
                                         is_ref_impl: false,
                                         method_type_param_ids: vec![],
+                                        param_defaults,
                                     });
                                 }
                             }
@@ -890,6 +905,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 cm_name,
                 is_ref_impl: false,
                 method_type_param_ids: vec![],
+                param_defaults: vec![],
             });
         }
         None
@@ -901,7 +917,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         struct_name: &str,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
-    ) -> Option<(ast::SelfKind, Vec<TypeId>, Vec<bool>)> {
+    ) -> Option<(
+        ast::SelfKind,
+        Vec<TypeId>,
+        Vec<bool>,
+        Vec<Option<ast::Expr>>,
+    )> {
         // First collect method info without resolving types. We also capture the
         // impl block's type AST and the method's type params so that param-type
         // resolution can run with both impl- and method-level type params in scope
@@ -911,6 +932,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ast::SelfKind,
             Vec<ast::Type>,
             Vec<bool>,
+            Vec<Option<ast::Expr>>,
             ast::Type,
             Vec<ast::GenericParam>,
         )> = None;
@@ -939,10 +961,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 non_self.iter().map(|p| p.ty.clone()).collect();
                             let param_is_mut: Vec<bool> =
                                 non_self.iter().map(|p| p.is_mut).collect();
+                            let param_defaults: Vec<Option<ast::Expr>> =
+                                non_self.iter().map(|p| p.default.clone()).collect();
                             found_method = Some((
                                 self_kind,
                                 param_types,
                                 param_is_mut,
+                                param_defaults,
                                 impl_block.ty.clone(),
                                 method.type_params.clone(),
                             ));
@@ -960,7 +985,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // method-level type params in scope so that references to `T` resolve
         // to `TypeParam` rather than `UNKNOWN`.
         found_method.map(
-            |(self_kind, param_types_ast, param_is_mut, impl_ty, method_type_params)| {
+            |(
+                self_kind,
+                param_types_ast,
+                param_is_mut,
+                param_defaults,
+                impl_ty,
+                method_type_params,
+            )| {
                 // Inherited scope; only `type_params` is replaced.
                 let mut scope = self.enter_inherited_type_param_scope();
                 scope.trait_ctx.type_params.clear();
@@ -1019,7 +1051,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                 drop(scope);
 
-                (self_kind, param_types, param_is_mut)
+                (self_kind, param_types, param_is_mut, param_defaults)
             },
         )
     }
@@ -1749,6 +1781,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .filter(|p| p.name != "self")
                     .map(|p| p.is_mut)
                     .collect();
+                let param_defaults: Vec<Option<ast::Expr>> = params
+                    .iter()
+                    .filter(|p| p.name != "self")
+                    .map(|p| p.default.clone())
+                    .collect();
                 found_traits.push(TraitMethodMatch {
                     trait_name,
                     method_info: MethodInfo {
@@ -1760,6 +1797,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         cm_name: None,
                         is_ref_impl: false,
                         method_type_param_ids: vec![],
+                        param_defaults,
                     },
                     impl_module_source: impl_module_source.clone(),
                     blanket_type_param: blanket_type_param.clone(),
@@ -1825,6 +1863,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .filter(|p| p.name != "self")
                                 .map(|p| p.is_mut)
                                 .collect();
+                            let param_defaults: Vec<Option<ast::Expr>> = default_method
+                                .params
+                                .iter()
+                                .filter(|p| p.name != "self")
+                                .map(|p| p.default.clone())
+                                .collect();
 
                             // Remove method-level type params from scope
                             for type_param in &default_method.type_params {
@@ -1847,6 +1891,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     cm_name: None,
                                     is_ref_impl: false,
                                     method_type_param_ids: vec![],
+                                    param_defaults,
                                 },
                                 impl_module_source: impl_module_source.clone(),
                                 blanket_type_param: blanket_type_param.clone(),
@@ -2872,6 +2917,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             cm_name: _,
             is_ref_impl: _,
             method_type_param_ids: _,
+            param_defaults: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self

@@ -2209,11 +2209,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // struct_module_source was already determined above (before field resolution).
 
-        // Check for missing fields: all struct fields must be provided in the literal
+        // Check for missing fields: fields without a declared default must be
+        // provided; fields with `= expr` are synthesized from the default
+        // expression (pure, resolved in the struct's module scope).
+        let struct_field_defaults: Vec<Option<ast::Expr>> = self
+            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .map(|info| info.field_defaults.clone())
+            .unwrap_or_default();
+        let mut fields = fields;
         if !struct_field_types.is_empty() {
-            let provided_names: IndexSet<&str> = fields.iter().map(|f| f.name.as_str()).collect();
-            for (expected_name, _) in &struct_field_types {
-                if !provided_names.contains(expected_name.as_str()) {
+            let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
+            for (idx, (expected_name, expected_type_id)) in struct_field_types.iter().enumerate() {
+                if provided_names.contains(expected_name) {
+                    continue;
+                }
+                let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
+                if let Some(default_expr) = default_ast {
+                    let resolved = self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
+                    self.typecheck(resolved.type_id, *expected_type_id, struct_lit.span);
+                    fields.push(TirStructField {
+                        name: expected_name.clone(),
+                        value: resolved,
+                        field_index: idx as u32,
+                    });
+                } else {
                     let _ = self.logger.error(TypeError::MissingField {
                         struct_name: struct_name.clone(),
                         field_name: expected_name.clone(),
@@ -2421,6 +2440,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .iter()
                 .map(|f| (f.name.clone(), f.value.type_id, true))
                 .collect(),
+            field_defaults: vec![None; resolved_fields.len()],
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
         };
@@ -2439,6 +2459,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_hidden: false,
                 serde_rename: None,
                 serde_default: false,
+                default_expr: None,
             })
             .collect();
 

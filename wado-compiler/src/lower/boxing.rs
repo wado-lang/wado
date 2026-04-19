@@ -84,6 +84,7 @@ impl BoxLowerer {
                 is_hidden: false,
                 serde_rename: None,
                 serde_default: false,
+                default_expr: None,
             }],
             span: Span::new(0, 0, 0, 0),
             serde_rename_all: None,

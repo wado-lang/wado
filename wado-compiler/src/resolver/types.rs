@@ -17,6 +17,10 @@ pub(crate) struct StructFieldInfo {
     pub(super) module_source: ModuleSource,
     /// Field definitions: (name, `type_id`, `is_pub`) triples
     pub(super) fields: Vec<(String, TypeId, bool)>,
+    /// Default-value expressions, parallel to `fields`.
+    /// `Some(expr)` means the field declared `= expr` and may be omitted at
+    /// construction; `None` means the field is required.
+    pub(super) field_defaults: Vec<Option<ast::Expr>>,
     /// Type parameter bounds: (`param_name`, `trait_bounds`)
     /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
     pub(super) type_param_bounds: Vec<(String, Vec<String>)>,
@@ -664,6 +668,10 @@ pub(super) struct MethodInfo {
     pub(super) param_types: Vec<TypeId>,
     /// Whether each parameter (excluding self) is declared `mut`
     pub(super) param_is_mut: Vec<bool>,
+    /// Declared default-value expressions for each parameter (excluding self),
+    /// parallel to `param_types`. Populated from the method's AST; empty vec
+    /// means "no defaults known" (lookups that don't bother populating this).
+    pub(super) param_defaults: Vec<Option<ast::Expr>>,
     /// If this method was inherited from a newtype's base type, the base type ID
     /// Used for method signature substitution
     pub(super) inherited_from_base: Option<TypeId>,
@@ -729,6 +737,9 @@ pub(super) struct FunctionContext {
     /// Box types for outer address-taken locals: maps outer var name -> `&mut T` type.
     /// When capturing such a variable, use `DerefCapture` to read through the box.
     pub(super) outer_box_types: IndexMap<String, TypeId>,
+    /// Per-local closure parameter defaults for `let f = |...| ...` bindings.
+    /// Keyed by local variable name; stores `(param_name, default_expr)` in declaration order.
+    pub(super) closure_defaults: IndexMap<String, Vec<(String, Option<crate::ast::Expr>)>>,
 }
 
 impl FunctionContext {
@@ -748,6 +759,7 @@ impl FunctionContext {
             function_name,
             deref_overrides: IndexMap::default(),
             outer_box_types: IndexMap::default(),
+            closure_defaults: IndexMap::default(),
         }
     }
 
@@ -797,6 +809,7 @@ impl FunctionContext {
             function_name,
             deref_overrides: IndexMap::default(),
             outer_box_types,
+            closure_defaults: IndexMap::default(),
         }
     }
 
