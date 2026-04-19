@@ -1189,6 +1189,7 @@ impl WasiRegistry {
                     params: resolved_params,
                     return_type: resolved_return,
                     effects: func_ty.effects.clone(),
+                    effect_ids: func_ty.effect_ids.clone(),
                     stores: func_ty.stores.clone(),
                 }))
             }

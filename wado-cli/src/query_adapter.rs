@@ -3,7 +3,7 @@ use std::path::Path;
 use std::process;
 
 use serde_json::json;
-use wado_lsp::{DocumentHighlight, HighlightKind, Position, ReferenceLocation};
+use wado_lsp::{DefinitionResult, DocumentHighlight, HighlightKind, Position, ReferenceLocation};
 
 use crate::compiler_host::FilesystemCompilerHost;
 
@@ -90,6 +90,26 @@ pub async fn run_references(
     } else {
         print_references_text(&refs);
     }
+
+    warn_on_compile_errors(&prepared.host, refs.is_empty());
+}
+
+/// Run definition query and print results.
+pub async fn run_definition(filename: &str, line: u32, column: u32, json_output: bool) {
+    let prepared = prepare_query(filename);
+    let position = position_from_one_based(line, column);
+    let result = prepared
+        .engine
+        .definition(&prepared.uri, position, &prepared.host)
+        .await;
+
+    if json_output {
+        print_definition_json(result.as_ref());
+    } else {
+        print_definition_text(result.as_ref());
+    }
+
+    warn_on_compile_errors(&prepared.host, result.is_none());
 }
 
 /// Run document-highlight query and print results.
@@ -105,6 +125,31 @@ pub async fn run_document_highlight(filename: &str, line: u32, column: u32, json
         print_highlights_json(&highlights);
     } else {
         print_highlights_text(filename, &highlights);
+    }
+
+    warn_on_compile_errors(&prepared.host, highlights.is_empty());
+}
+
+/// When a position-based query returns no results, the cause is ambiguous —
+/// the cursor might genuinely be on nothing, or the file might have failed to
+/// compile far enough to populate the symbol table. Surface the compiler
+/// errors on stderr so users can distinguish the two without re-running
+/// `wado query diagnostics`.
+fn warn_on_compile_errors(host: &FilesystemCompilerHost, result_was_empty: bool) {
+    if !result_was_empty || !host.has_errors() {
+        return;
+    }
+    eprintln!("warning: result may be incomplete due to compile errors:");
+    for d in host.diagnostics() {
+        if !matches!(d.severity, wado_compiler::Severity::Error) {
+            continue;
+        }
+        let location = d
+            .span
+            .as_ref()
+            .map(|s| format!("{}:{}:{}", s.file, s.line, s.column))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        eprintln!("  {location}: {}", d.message);
     }
 }
 
@@ -192,6 +237,32 @@ fn print_references_text(refs: &[ReferenceLocation]) {
             r.range.start.line + 1,
             r.range.start.character + 1,
         );
+    }
+}
+
+fn print_definition_json(result: Option<&DefinitionResult>) {
+    let value = match result {
+        Some(r) => json!({
+            "uri": r.uri,
+            "range": {
+                "start": { "line": r.range.start.line, "character": r.range.start.character },
+                "end": { "line": r.range.end.line, "character": r.range.end.character },
+            },
+        }),
+        None => serde_json::Value::Null,
+    };
+    println!("{}", serde_json::to_string_pretty(&value).unwrap());
+}
+
+fn print_definition_text(result: Option<&DefinitionResult>) {
+    match result {
+        Some(r) => println!(
+            "{}:{}:{}",
+            uri_to_display(&r.uri),
+            r.range.start.line + 1,
+            r.range.start.character + 1,
+        ),
+        None => println!("No definition."),
     }
 }
 

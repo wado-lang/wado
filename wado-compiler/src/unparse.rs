@@ -228,7 +228,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_use_item(&mut self, item: &UseItem) {
         match item {
-            UseItem::Simple { name, alias } => {
+            UseItem::Simple { name, alias, .. } => {
                 self.output.push_str(name);
                 if let Some(alias) = alias {
                     self.output.push_str(" as ");

@@ -632,7 +632,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
         let param_is_mut = self.lookup_method_param_is_mut(&base_struct_name, &method_call.method);
         let mut method_info = LocalMethodName::new(
-            base_struct_name, // Use base struct name without type params
+            base_struct_name.clone(), // Use base struct name without type params
             trait_name,
             method_call.method.clone(),
         )
@@ -646,6 +646,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let method_module_source = trait_impl_module_source
             .or(Some(struct_module.clone()))
             .unwrap_or_else(|| self.current_module_source.clone());
+
+        // Record use->def for jump-to-definition on the method name token.
+        if let Some(method_ast_id) = self.find_impl_method_ast_id(
+            &method_module_source,
+            &base_struct_name,
+            &method_call.method,
+        ) {
+            self.record_reference_to_key(
+                method_call.method_id,
+                crate::symbol::SymbolKey::new(method_module_source.clone(), method_ast_id),
+            );
+        }
 
         TirExpr::new(
             TirExprKind::MethodCall {
@@ -1299,6 +1311,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Propagate #[cm("...")] from resource static methods for CM binding synthesis.
         method_info.cm_name =
             self.lookup_resource_static_cm(&struct_name, &struct_module, &static_call.method);
+
+        // Record use->def for jump-to-definition on the method name token.
+        if let Some(method_ast_id) =
+            self.find_impl_method_ast_id(&struct_module, &struct_name, &static_call.method)
+        {
+            self.record_reference_to_key(
+                static_call.method_id,
+                crate::symbol::SymbolKey::new(struct_module.clone(), method_ast_id),
+            );
+        }
 
         TirExpr::new(
             TirExprKind::Call {

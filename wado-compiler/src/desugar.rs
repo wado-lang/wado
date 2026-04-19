@@ -160,6 +160,7 @@ fn desugar_type(ty: &Type, ctx: &DesugarContext) -> Type {
             params: f.params.iter().map(|p| desugar_type(p, ctx)).collect(),
             return_type: desugar_type(&f.return_type, ctx),
             effects: f.effects.clone(),
+            effect_ids: f.effect_ids.clone(),
             stores: f.stores.clone(),
         })),
         Type::NamespacedGeneric(_) | Type::TypePackSpread(..) => ty.clone(),
@@ -219,6 +220,7 @@ fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
         params: func.params.clone(),
         return_type: func.return_type.clone(),
         effects: func.effects.clone(),
+        effect_ids: func.effect_ids.clone(),
         stores: func.stores.clone(),
         body: func.body.as_ref().map(|b| desugar_block(b, ctx)),
         span: func.span,
@@ -320,10 +322,14 @@ fn desugar_pattern(p: &Pattern) -> Pattern {
         }
         Pattern::Variant {
             variant_name,
+            name_id,
+            name_span,
             bindings,
             span,
         } => Pattern::Variant {
             variant_name: variant_name.clone(),
+            name_id: *name_id,
+            name_span: *name_span,
             bindings: bindings.iter().map(desugar_pattern).collect(),
             span: *span,
         },
@@ -544,6 +550,8 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             id: m.id,
             receiver: desugar_expr(&m.receiver),
             method: m.method.clone(),
+            method_id: m.method_id,
+            method_span: m.method_span,
             type_args: m.type_args.clone(),
             args: m.args.iter().map(desugar_expr).collect(),
             has_trailing_comma: m.has_trailing_comma,
@@ -553,6 +561,8 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             id: s.id,
             target_type: s.target_type.clone(),
             method: s.method.clone(),
+            method_id: s.method_id,
+            method_span: s.method_span,
             type_args: s.type_args.clone(),
             args: s.args.iter().map(desugar_expr).collect(),
             has_trailing_comma: s.has_trailing_comma,
@@ -562,6 +572,8 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
             id: f.id,
             expr: desugar_expr(&f.expr),
             field: f.field.clone(),
+            field_id: f.field_id,
+            field_span: f.field_span,
             span: f.span,
         })),
         Expr::Index(i) => Expr::Index(Box::new(IndexExpr {
@@ -650,11 +662,15 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
         Expr::StructLiteral(s) => Expr::StructLiteral(Box::new(StructLiteralExpr {
             id: s.id,
             name: s.name.clone(),
+            name_id: s.name_id,
+            name_span: s.name_span,
             fields: s
                 .fields
                 .iter()
                 .map(|f| StructLiteralField {
                     name: f.name.clone(),
+                    name_id: f.name_id,
+                    name_span: f.name_span,
                     value: desugar_expr(&f.value),
                     is_shorthand: f.is_shorthand,
                     span: f.span,
@@ -1303,6 +1319,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
             expr: Box::new(Expr::Ident(IdentExpr {
                 id: ctx.synth_id(),
                 name: var_name.clone(),
+                segments: Vec::new(),
                 span,
             })),
             format: Some(FormatSpec {
@@ -1324,6 +1341,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
         callee: Expr::Ident(IdentExpr {
             id: ctx.synth_id(),
             name: "panic".to_string(),
+            segments: Vec::new(),
             span,
         }),
         type_args: vec![],
@@ -1341,6 +1359,7 @@ fn desugar_assert(assert_stmt: &AssertStmt, ctx: &mut DesugarContext) -> Stmt {
             expr: Expr::Ident(IdentExpr {
                 id: ctx.synth_id(),
                 name: cond_var,
+                segments: Vec::new(),
                 span,
             }),
             span,
@@ -1440,6 +1459,7 @@ fn reconstruct_with_intermediates(expr: &Expr, intermediates: &[(String, String,
             return Expr::Ident(IdentExpr {
                 id: expr.id(),
                 name: var_name.clone(),
+                segments: Vec::new(),
                 span: expr.span(),
             });
         }
@@ -1627,6 +1647,8 @@ fn strip_ns_from_pattern(pattern: Pattern, ctx: &DesugarContext) -> Pattern {
     match pattern {
         Pattern::Variant {
             variant_name,
+            name_id,
+            name_span,
             bindings,
             span,
         } => {
@@ -1637,6 +1659,8 @@ fn strip_ns_from_pattern(pattern: Pattern, ctx: &DesugarContext) -> Pattern {
                 } else {
                     stripped.to_string()
                 },
+                name_id,
+                name_span,
                 bindings: bindings
                     .into_iter()
                     .map(|p| strip_ns_from_pattern(p, ctx))
@@ -1862,6 +1886,7 @@ mod tests {
             target: Expr::Ident(IdentExpr {
                 id: crate::ast::AstId::fresh(),
                 name: "x".to_string(),
+                segments: Vec::new(),
                 span: dummy_span(),
             }),
             op: CompoundAssignOp::Add,
@@ -1915,6 +1940,7 @@ mod tests {
                     right: Expr::Ident(IdentExpr {
                         id: crate::ast::AstId::fresh(),
                         name: "x".to_string(),
+                        segments: Vec::new(),
                         span: dummy_span(),
                     }),
                     op_span: dummy_span(),

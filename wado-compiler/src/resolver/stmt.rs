@@ -1,9 +1,9 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
 use crate::ast::{
-    self, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt, ForOfStmt,
-    IdentExpr, IfStmt, LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern, ReturnStmt, Stmt,
-    TaskReturnStmt, UnaryExpr, UnaryOp,
+    self, AstId, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt,
+    ForOfStmt, IdentExpr, IfStmt, LetStmt, Literal, LoopStmt, MethodCallExpr, Pattern, ReturnStmt,
+    Stmt, TaskReturnStmt, UnaryExpr, UnaryOp,
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
@@ -1063,10 +1063,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if !matches!(pattern, Pattern::MutIdent { .. })
                     && self.is_known_case_of_type(scrutinee_type, name)
                 {
-                    // Delegate to the Variant branch with empty bindings
+                    // Delegate to the Variant branch with empty bindings.
+                    // Preserve the identifier's AstId/span as name_id/name_span so
+                    // LSP jump-to-def on `None`/`Red` still resolves to the case decl.
                     return self.resolve_if_pattern_inner(
                         &Pattern::Variant {
                             variant_name: name.clone(),
+                            name_id: Some(*id),
+                            name_span: *name_span,
                             bindings: vec![],
                             span,
                         },
@@ -1214,6 +1218,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             Pattern::Variant {
                 variant_name,
+                name_id,
+                name_span,
                 bindings,
                 span,
             } => {
@@ -1299,8 +1305,19 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                     }
                     // Look up the enum case index
-                    if let Some(enum_info) = self.enum_cases.get(name) {
-                        if let Some(case_data) = enum_info.find_case(variant_name) {
+                    if let Some(enum_info) = self.enum_cases.get(name).cloned() {
+                        if let Some(case_data) = enum_info.find_case(variant_name).cloned() {
+                            // Record pattern's case-name identifier -> enum case decl
+                            if let Some(id) = name_id {
+                                self.record_reference_to_key(
+                                    *id,
+                                    crate::symbol::SymbolKey::new(
+                                        enum_info.module_source,
+                                        case_data.ast_id,
+                                    ),
+                                );
+                            }
+                            let _ = name_span;
                             return TirPattern::Enum {
                                 enum_type: scrutinee_type,
                                 case_name: variant_name.clone(),
@@ -1329,6 +1346,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     });
                     return TirPattern::Wildcard;
                 }
+
+                // Record use->def for the variant case name in the pattern
+                // (e.g., `Some` in `Some(x)`). Points at the case declaration's
+                // span so LSP jump-to-def from the pattern lands on the case decl.
+                let variant_type_name: Option<String> = match &resolved_type {
+                    ResolvedType::Variant { name, .. } => Some(name.clone()),
+                    ResolvedType::GenericInstance { name, .. }
+                        if self.variant_cases.contains_key(name) =>
+                    {
+                        Some(name.clone())
+                    }
+                    _ => None,
+                };
+                if let Some(id) = name_id
+                    && let Some(type_name) = variant_type_name.as_ref()
+                    && let Some(variant_info) = self.variant_cases.get(type_name).cloned()
+                    && let Some(case_data) = variant_info
+                        .cases
+                        .iter()
+                        .find(|c| c.name == *variant_name)
+                        .cloned()
+                {
+                    self.record_reference_to_key(
+                        *id,
+                        crate::symbol::SymbolKey::new(
+                            variant_info.module_source.clone(),
+                            case_data.ast_id,
+                        ),
+                    );
+                }
+                let _ = name_span;
 
                 // Each variant case has exactly one payload type.
                 // Determine the payload type for the variant case.
@@ -1550,11 +1598,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     // Update scope entries to use the first alternative's local indices
                     // so the arm body resolves names to the correct locals.
+                    //
+                    // Also align each binding's `defining_ast_id` with the first
+                    // alternative's pattern, so that LSP jump-to-def on a use
+                    // inside the arm body points at the first alternative's
+                    // binding (the canonical definition site).
+                    let mut first_alt_ast_ids: crate::hashmap::IndexMap<String, AstId> =
+                        crate::hashmap::IndexMap::default();
+                    if let Some(first_alt) = alternatives.first() {
+                        collect_ast_pattern_binding_ids(first_alt, &mut first_alt_ast_ids);
+                    }
                     for (name, local_index, _type_id) in &first_bindings {
                         if let Some(scope) = ctx.scopes.last_mut()
                             && let Some(var) = scope.get_mut(name)
                         {
                             var.index = *local_index;
+                            if let Some(first_id) = first_alt_ast_ids.get(name) {
+                                var.defining_ast_id = Some(*first_id);
+                            }
                         }
                     }
                 }
@@ -2201,6 +2262,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 id: for_of.id,
                 receiver: for_of.iterable.clone(),
                 method: "enumerate".to_string(),
+                method_id: for_of.id,
+                method_span: span,
                 type_args: vec![],
                 args: vec![],
                 has_trailing_comma: false,
@@ -2226,6 +2289,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 id: for_of.id,
                 receiver: into_iter_receiver,
                 method: "into_iter".to_string(),
+                method_id: for_of.id,
+                method_span: span,
                 type_args: vec![],
                 args: vec![],
                 has_trailing_comma: false,
@@ -2259,9 +2324,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             receiver: Expr::Ident(IdentExpr {
                 id: for_of.id,
                 name: iter_var,
+                segments: Vec::new(),
                 span,
             }),
             method: "next".to_string(),
+            method_id: for_of.id,
+            method_span: span,
             type_args: vec![],
             args: vec![],
             has_trailing_comma: false,
@@ -2275,6 +2343,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let (some_pattern, then_block) = if ref_mode == RefBinding::None {
             let pattern = Pattern::Variant {
                 variant_name: "Some".to_string(),
+                name_id: None,
+                name_span: span,
                 bindings: vec![for_of.binding.clone()],
                 span,
             };
@@ -2297,6 +2367,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             };
             let pattern = Pattern::Variant {
                 variant_name: "Some".to_string(),
+                name_id: None,
+                name_span: span,
                 bindings: vec![elem_pattern],
                 span,
             };
@@ -2317,6 +2389,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     expr: Expr::Ident(IdentExpr {
                         id: for_of.id,
                         name: elem_var,
+                        segments: Vec::new(),
                         span,
                     }),
                     span,
@@ -2456,6 +2529,42 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Resolve a continue statement
     pub(super) fn resolve_continue(&mut self, continue_stmt: &ContinueStmt) -> TirStmt {
         TirStmt::new(TirStmtKind::Continue, continue_stmt.span)
+    }
+}
+
+/// Collect `(binding_name -> AstId)` from an AST `Pattern`. Used by the
+/// or-pattern handler to align every alternative's `defining_ast_id` with
+/// the first alternative's source node, so that LSP jump-to-def from a use
+/// in the arm body lands on the first alternative's binding.
+fn collect_ast_pattern_binding_ids(
+    pattern: &Pattern,
+    out: &mut crate::hashmap::IndexMap<String, AstId>,
+) {
+    match pattern {
+        Pattern::Ident { id, name, .. } | Pattern::MutIdent { id, name, .. } => {
+            out.entry(name.clone()).or_insert(*id);
+        }
+        Pattern::Tuple(patterns, _) => {
+            for p in patterns {
+                collect_ast_pattern_binding_ids(p, out);
+            }
+        }
+        Pattern::Variant { bindings, .. } => {
+            for p in bindings {
+                collect_ast_pattern_binding_ids(p, out);
+            }
+        }
+        Pattern::Struct { fields, .. } => {
+            for f in fields {
+                collect_ast_pattern_binding_ids(&f.pattern, out);
+            }
+        }
+        Pattern::Or(alternatives) => {
+            if let Some(first) = alternatives.first() {
+                collect_ast_pattern_binding_ids(first, out);
+            }
+        }
+        Pattern::Wildcard | Pattern::Literal(_) | Pattern::Range { .. } => {}
     }
 }
 

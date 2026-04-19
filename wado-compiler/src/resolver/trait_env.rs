@@ -401,6 +401,9 @@ pub(super) struct TraitContext {
     /// Type parameters currently in scope (name → (index, `TypeId`)).
     /// Set when resolving generic structs, functions, or impl blocks.
     pub(super) type_params: IndexMap<String, (u32, TypeId)>,
+    /// `AstId` of each type param's declaration site (for LSP jump-to-def on
+    /// type-parameter uses). Parallel to `type_params`, keyed by name.
+    pub(super) type_param_decls: IndexMap<String, ast::AstId>,
     /// Trait bounds on type parameters in scope (name → full bounds with assoc types).
     /// Used for resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
     pub(super) type_param_bounds: IndexMap<String, Vec<ast::TraitBound>>,
@@ -499,6 +502,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             self.trait_ctx
                 .type_params
                 .insert(tp.name.clone(), (idx, type_id));
+            self.trait_ctx
+                .type_param_decls
+                .insert(tp.name.clone(), tp.id);
             if !tp.bounds.is_empty() {
                 self.trait_ctx
                     .type_param_bounds
