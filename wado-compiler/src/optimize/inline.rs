@@ -151,6 +151,20 @@ fn count_block_exprs(block: &TirBlock) -> usize {
         .sum()
 }
 
+/// Compute the fully qualified name of a `TirFunction`, using the same format
+/// as `FuncRef::full_name()`.  This is the key used by `collect_callees_from_expr`
+/// so it must match exactly.
+fn tir_function_full_name(func: &TirFunction) -> String {
+    if let Some(info) = &func.method_info {
+        info.to_mangled_name()
+    } else if func.module_source.is_entry_point() {
+        func.name.clone()
+    } else {
+        let path = func.module_source.to_path();
+        format!("{}/{}", path.join("/"), &func.name)
+    }
+}
+
 /// Check if a function is eligible for inlining.
 fn is_inline_eligible(
     func: &TirFunction,
@@ -186,8 +200,9 @@ fn is_inline_eligible(
         return false;
     }
 
-    // Not recursive
-    if recursive_functions.contains(&func.name) {
+    // Not recursive — compare using the same fully qualified name used to build
+    // the recursive set, so that cross-module recursive functions are not missed.
+    if recursive_functions.contains(&tir_function_full_name(func)) {
         return false;
     }
 
@@ -205,13 +220,18 @@ fn is_inline_eligible(
 
 /// Detect recursive functions using call graph analysis
 fn find_recursive_functions(functions: &[Rc<RefCell<TirFunction>>]) -> IndexSet<String> {
-    // Phase 1: Build name→index mapping (one String allocation per function)
+    // Phase 1: Build fully-qualified-name→index mapping.
+    // We use `tir_function_full_name` here so that the keys match the callee names
+    // produced by `collect_callees_from_expr` (which uses `FuncRef::full_name()`).
+    // Using only `func.name` caused cross-module recursive functions to go
+    // undetected, because the callee strings carried the module prefix while
+    // the node keys did not.
     let mut name_to_idx: IndexMap<String, usize> = IndexMap::default();
     let mut idx_to_name: Vec<String> = Vec::new();
 
     for func_rc in functions {
         let func = func_rc.borrow();
-        let name = func.name.clone();
+        let name = tir_function_full_name(&func);
         if !name_to_idx.contains_key(&name) {
             let idx = idx_to_name.len();
             idx_to_name.push(name.clone());
@@ -225,7 +245,8 @@ fn find_recursive_functions(functions: &[Rc<RefCell<TirFunction>>]) -> IndexSet<
 
     for func_rc in functions {
         let func = func_rc.borrow();
-        if let Some(caller_idx) = name_to_idx.get(&func.name) {
+        let full_name = tir_function_full_name(&func);
+        if let Some(caller_idx) = name_to_idx.get(&full_name) {
             let mut callee_names: IndexSet<String> = IndexSet::default();
             if let Some(body) = &func.body {
                 collect_callees_from_block(body, &mut callee_names);
