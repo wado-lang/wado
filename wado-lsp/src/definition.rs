@@ -758,6 +758,52 @@ mod tests {
     }
 
     #[test]
+    fn include_str_path_definition() {
+        futures::executor::block_on(async {
+            let runtime = "// helper\n";
+            let entry = concat!(
+                "fn f() {\n",
+                "    let x = #include_str(\"./runtime.wado\");\n",
+                "}\n",
+            );
+            let result = def_at_in(
+                &[("/runtime.wado", runtime), ("/test.wado", entry)],
+                "/test.wado",
+                1,
+                30,
+            )
+            .await
+            .expect("cursor inside #include_str path");
+            assert_eq!(result.uri, "file:///runtime.wado");
+            assert_eq!(result.range.start.line, 0);
+            assert_eq!(result.range.start.character, 0);
+        });
+    }
+
+    #[test]
+    fn include_bytes_path_definition() {
+        futures::executor::block_on(async {
+            let icon = "fake-bytes\n";
+            let entry = concat!(
+                "fn f() {\n",
+                "    let x = #include_bytes(\"./icon.png\");\n",
+                "}\n",
+            );
+            let result = def_at_in(
+                &[("/icon.png", icon), ("/test.wado", entry)],
+                "/test.wado",
+                1,
+                32,
+            )
+            .await
+            .expect("cursor inside #include_bytes path");
+            assert_eq!(result.uri, "file:///icon.png");
+            assert_eq!(result.range.start.line, 0);
+            assert_eq!(result.range.start.character, 0);
+        });
+    }
+
+    #[test]
     fn use_from_filename_definition() {
         futures::executor::block_on(async {
             let lib = "pub fn helper() -> i32 { return 42; }\n";
