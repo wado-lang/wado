@@ -3071,7 +3071,7 @@ pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
     return Result::Ok(output);
 }
 
-/// Compresses data in gzip format with the specifed compression level.
+/// Compresses data in gzip format with the specified compression level and strategy.
 pub fn gzip_compress(input: &Array<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> Array<u8> {
     let deflated = deflate_with_level(input, level, strategy);
     let mut output: Array<u8> = Array::with_capacity(deflated.len() + 18);
@@ -3142,7 +3142,7 @@ pub fn uncompress(input: &Array<u8>, max_output: i32 = i32::MAX) -> Result<Array
 
 /// Compresses data as raw DEFLATE (no zlib/gzip header or trailer) with the specified level and strategy.
 pub fn deflate_raw(input: &Array<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> Array<u8> {
-    return deflate_with_level(input, Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY);
+    return deflate_with_level(input, level, strategy);
 }
 
 /// Represents a gzip header for customization (deflateSetHeader / inflateGetHeader).
@@ -3311,7 +3311,7 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
 // Helper: build a string from bytes in an array
 fn bytes_to_string(buf: &Array<u8>, offset: i32, len: i32) -> String {
     let mut s = String::with_capacity(len);
-    // FIXMZE: UTF-8 handling
+    // FIXME: UTF-8 handling
     for let mut i = 0; i < len; i += 1 {
         s.push(buf[offset + i] as char);
     }
