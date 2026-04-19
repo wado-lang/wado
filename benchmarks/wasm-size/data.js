@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776585000162,
+  "lastUpdate": 1776585824944,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14797,6 +14797,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a38b333d01efeada8a0ba43c299810007923a715"
         },
         "date": 1776584999858,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "24abd76efc363007c4a90e399dd6d8203b918929",
+          "message": "Merge pull request #887 from wado-lang/claude/optimize-zlib-compress-HdGKd\n\nzlib: speed up deflate LZ77 with linear-memory word compare",
+          "timestamp": "2026-04-19T16:59:39+09:00",
+          "tree_id": "ae9f7cf0fd127e9b33cb2b7400c2c610f5fac4c1",
+          "url": "https://github.com/wado-lang/wado/commit/24abd76efc363007c4a90e399dd6d8203b918929"
+        },
+        "date": 1776585824644,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
