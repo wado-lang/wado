@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776570725412,
+  "lastUpdate": 1776585000162,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14753,6 +14753,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/86e8153c71f042c4a499ec4729ea7ca9a570c798"
         },
         "date": 1776570725121,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a38b333d01efeada8a0ba43c299810007923a715",
+          "message": "Merge pull request #888 from wado-lang/claude/implement-default-values-e1GHi\n\nImplement default values for function params and struct fields",
+          "timestamp": "2026-04-19T16:46:01+09:00",
+          "tree_id": "b6881757ef2e7e15fac224df201d72c47622cefd",
+          "url": "https://github.com/wado-lang/wado/commit/a38b333d01efeada8a0ba43c299810007923a715"
+        },
+        "date": 1776584999858,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
