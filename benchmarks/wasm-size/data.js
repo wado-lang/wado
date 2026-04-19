@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776566848020,
+  "lastUpdate": 1776570725412,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14709,6 +14709,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/755dab30109c9745413ec565ef4344128c25e2a3"
         },
         "date": 1776566847722,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8943,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18670,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "86e8153c71f042c4a499ec4729ea7ca9a570c798",
+          "message": "Merge pull request #886 from wado-lang/claude/ir-pipeline-wiring-J3gwl\n\ngale: surface grammar options, named actions, and rule visibility",
+          "timestamp": "2026-04-19T12:48:04+09:00",
+          "tree_id": "5ee3fb666e4f193b85e5dd670ecb49751d55708d",
+          "url": "https://github.com/wado-lang/wado/commit/86e8153c71f042c4a499ec4729ea7ca9a570c798"
+        },
+        "date": 1776570725121,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
