@@ -710,9 +710,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         {
             let dir = &module_source_str[..dir_end];
             let stripped = raw_path.strip_prefix("./").unwrap_or(raw_path);
-            if module_source_str.starts_with('/')
-                || dir.starts_with("./")
-                || dir.starts_with("../")
+            if module_source_str.starts_with('/') || dir.starts_with("./") || dir.starts_with("../")
             {
                 return format!("{dir}/{stripped}");
             }

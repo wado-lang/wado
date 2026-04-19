@@ -2548,9 +2548,7 @@ fn collect_ast_pattern_binding_ids(
                 collect_ast_pattern_binding_ids(first, out);
             }
         }
-        Pattern::Wildcard
-        | Pattern::Literal(_)
-        | Pattern::Range { .. } => {}
+        Pattern::Wildcard | Pattern::Literal(_) | Pattern::Range { .. } => {}
     }
 }
 

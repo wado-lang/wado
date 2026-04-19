@@ -16,9 +16,7 @@ use wado_compiler::name::resolve_import_with_entry;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{
-    module_uri, resolve_def_key, span_to_range, symbol_uri, uri_to_filename,
-};
+use crate::location::{module_uri, resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefinitionResult {
@@ -100,11 +98,8 @@ fn file_path_definition(
 ) -> Option<DefinitionResult> {
     let ast_module = annotated.modules.get(module)?;
     let path = find_file_path_at_cursor(ast_module, line, col)?;
-    let target_module = resolve_import_with_entry(
-        module,
-        &path,
-        Some(&annotated.entry_module_source),
-    );
+    let target_module =
+        resolve_import_with_entry(module, &path, Some(&annotated.entry_module_source));
     let target_uri = module_uri(annotated, &target_module, request_uri)?;
     Some(DefinitionResult {
         uri: target_uri,
@@ -210,4 +205,3 @@ fn item_span_if_match(item: &Item, target: AstId) -> Option<Span> {
         _ => None,
     }
 }
-

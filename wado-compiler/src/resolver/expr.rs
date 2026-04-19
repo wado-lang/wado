@@ -399,10 +399,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if let Some(suffix_seg) = ident.segments.get(1) {
                         self.record_reference_to_key(
                             suffix_seg.id,
-                            SymbolKey::new(
-                                variant_info.module_source.clone(),
-                                case_data.ast_id,
-                            ),
+                            SymbolKey::new(variant_info.module_source.clone(), case_data.ast_id),
                         );
                     }
                     // Unit variant - payload must be unit type

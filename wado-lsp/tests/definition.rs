@@ -3,8 +3,8 @@
 //! and file-path jumps.
 
 use indexmap::IndexMap;
-use wado_lsp::{DefinitionResult, Engine, Position};
 use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, SourceError};
+use wado_lsp::{DefinitionResult, Engine, Position};
 
 struct TestHost {
     sources: IndexMap<String, Vec<u8>>,
@@ -119,7 +119,8 @@ fn shadow_resolution() {
 #[test]
 fn item_definition() {
     futures::executor::block_on(async {
-        let source = "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    return helper();\n}\n";
+        let source =
+            "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    return helper();\n}\n";
         let result = def_at(source, 4, 11)
             .await
             .expect("call-site resolves to fn helper");
@@ -521,7 +522,9 @@ fn static_method_call_definition() {
             "    return Point::origin();\n",
             "}\n",
         );
-        let result = def_at(source, 7, 20).await.expect("Point::origin static call");
+        let result = def_at(source, 7, 20)
+            .await
+            .expect("Point::origin static call");
         assert_range(&result, 2, 7, 13);
     });
 }
@@ -571,11 +574,7 @@ fn newtype_reference_definition() {
 #[test]
 fn generic_type_parameter_use_definition() {
     futures::executor::block_on(async {
-        let source = concat!(
-            "fn identity<T>(x: T) -> T {\n",
-            "    return x;\n",
-            "}\n",
-        );
+        let source = concat!("fn identity<T>(x: T) -> T {\n", "    return x;\n", "}\n",);
         let result = def_at(source, 0, 18).await.expect("T in param type");
         assert_range(&result, 0, 12, 13);
     });
@@ -673,9 +672,7 @@ fn generic_effect_parameter_use_definition() {
             "    f();\n",
             "}\n",
         );
-        let result = def_at(source, 0, 34)
-            .await
-            .expect("E in inner with clause");
+        let result = def_at(source, 0, 34).await.expect("E in inner with clause");
         assert_range(&result, 0, 18, 19);
     });
 }

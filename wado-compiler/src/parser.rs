@@ -3,18 +3,19 @@
 
 use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison,
-    ClosureExpr, ClosureParam, CmImport, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
-    Condition, ConditionElement, ContinueStmt, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr,
-    ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
-    FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
-    IndexExpr, InnerAttribute, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
-    MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
-    Newtype, Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr,
-    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    VariantCase, VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
+    ChainedComparison, ClosureExpr, ClosureParam, CmImport, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EffectDecl,
+    EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
+    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, Item, LabeledBlockStmt,
+    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr,
+    Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr,
+    RangeKind, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry,
+    StructDecl, StructField, StructLiteralExpr, StructLiteralField, StructPatternField,
+    TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt,
+    WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -1096,9 +1097,7 @@ impl Parser {
 
     /// Parse `with Effect1, Effect2, stores[param1, param2]` clause.
     /// Returns (effects, stores). The `stores` keyword can appear anywhere in the effect list.
-    fn parse_with_clause(
-        &mut self,
-    ) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<String>)> {
+    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<String>)> {
         if !self.check(&TokenKind::With) {
             return Ok((Vec::new(), Vec::new(), Vec::new()));
         }
