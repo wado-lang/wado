@@ -17,17 +17,13 @@ pub(crate) struct StructFieldInfo {
     pub(super) module_source: ModuleSource,
     /// Field definitions: (name, `type_id`, `is_pub`) triples
     pub(super) fields: Vec<(String, TypeId, bool)>,
-<<<<<<< HEAD
     /// Parallel array to `fields` holding each field's defining `AstId`.
     /// Used for recording use→def references (e.g. field access → field def).
     pub(super) field_ast_ids: Vec<AstId>,
-||||||| 86e8153
-=======
     /// Default-value expressions, parallel to `fields`.
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
->>>>>>> origin/main
     /// Type parameter bounds: (`param_name`, `trait_bounds`)
     /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
     pub(super) type_param_bounds: Vec<(String, Vec<String>)>,

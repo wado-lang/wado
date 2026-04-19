@@ -2622,12 +2622,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .iter()
                 .map(|f| (f.name.clone(), f.value.type_id, true))
                 .collect(),
-<<<<<<< HEAD
             field_ast_ids: Vec::new(),
-||||||| 86e8153
-=======
             field_defaults: vec![None; resolved_fields.len()],
->>>>>>> origin/main
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
         };
