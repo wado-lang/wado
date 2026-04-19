@@ -1872,8 +1872,7 @@ pub fn remove_unreachable_types(project: &mut FlatPackage) {
             .iter()
             .filter(|s| {
                 if s.monomorph_info.is_none() {
-                    reachable_struct_exact
-                        .contains(&(s.name.clone(), s.module_source.clone()))
+                    reachable_struct_exact.contains(&(s.name.clone(), s.module_source.clone()))
                         || reachable_generic_instance_names.contains(&s.name)
                         || reachable_struct_monomorph_bases.contains(&s.name)
                 } else {
@@ -1896,9 +1895,7 @@ pub fn remove_unreachable_types(project: &mut FlatPackage) {
         let keep_enums: IndexSet<(String, ModuleSource)> = project
             .enums
             .iter()
-            .filter(|e| {
-                reachable_enum_exact.contains(&(e.name.clone(), e.module_source.clone()))
-            })
+            .filter(|e| reachable_enum_exact.contains(&(e.name.clone(), e.module_source.clone())))
             .map(|e| (e.name.clone(), e.module_source.clone()))
             .collect();
 
