@@ -1,0 +1,40 @@
+// Regression: T::default() inside a trait's default method body fails to resolve
+// when the trait has a `<T: Default>` type parameter.
+// Expected: the default method returns T::default() for the concrete T in the impl.
+
+trait Maker<T: Default> {
+    fn make(&self) -> T;
+
+    fn make_with_default(&self) -> T {
+        return T::default();
+    }
+}
+
+struct IntMaker {}
+
+impl Maker<i32> for IntMaker {
+    fn make(&self) -> i32 {
+        return 42;
+    }
+}
+
+struct StringMaker {}
+
+impl Maker<String> for StringMaker {
+    fn make(&self) -> String {
+        return "custom";
+    }
+}
+
+export fn run() {
+    let im = IntMaker {};
+    assert im.make() == 42;
+    assert im.make_with_default() == 0;
+
+    let sm = StringMaker {};
+    assert sm.make() == "custom";
+    assert sm.make_with_default() == "";
+}
+
+__DATA__
+{"stdout": ""}
