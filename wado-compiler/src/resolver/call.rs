@@ -263,6 +263,37 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     else if let Some(&(_param_idx, type_param_type_id)) =
                         self.trait_ctx.type_params.get(prefix)
                     {
+                        // If the "type parameter" is actually bound to a concrete
+                        // type (e.g., trait default method synthesized for an
+                        // impl binds the trait's `T` to the impl's concrete arg),
+                        // dispatch statically on that concrete type instead of
+                        // emitting a `T^Trait::method` call that would need a
+                        // monomorphizer substitution that never arrives.
+                        let is_abstract_type_param = matches!(
+                            self.type_table.borrow().get(type_param_type_id),
+                            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                        );
+                        if !is_abstract_type_param {
+                            let concrete_name = self
+                                .type_table
+                                .borrow()
+                                .mangle_type_name(type_param_type_id);
+                            let new_name = format!("{concrete_name}::{suffix}");
+                            let synthetic_call = ast::CallExpr {
+                                id: call.id,
+                                callee: Expr::Ident(ast::IdentExpr {
+                                    id: ident.id,
+                                    name: new_name,
+                                    segments: Vec::new(),
+                                    span: ident.span,
+                                }),
+                                type_args: call.type_args.clone(),
+                                args: call.args.clone(),
+                                has_trailing_comma: call.has_trailing_comma,
+                                span: call.span,
+                            };
+                            return self.resolve_call(&synthetic_call, ctx, expected_type);
+                        }
                         return self.resolve_type_param_static_call(
                             prefix,
                             suffix,
