@@ -1,0 +1,39 @@
+use { println } from "core:cli";
+
+pub trait Sink {
+    fn put<T: Display>(&mut self, v: &T) -> Result<(), String>;
+    fn end(&mut self) -> Result<(), String>;
+}
+
+struct StringSink {
+    buf: String,
+}
+
+impl Sink for StringSink {
+    fn put<T: Display>(&mut self, v: &T) -> Result<(), String> {
+        self.buf = `{self.buf}{*v}`;
+        return Result::<(), String>::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), String> {
+        return Result::<(), String>::Ok(());
+    }
+}
+
+fn write_values(s: &mut StringSink, values: Array<i32>) -> Result<(), String> {
+    for let v of values {
+        s.put(&v)?;
+    }
+    return s.end();
+}
+
+export fn run() with Stdout {
+    let mut s = StringSink { buf: "" };
+    let r = write_values(&mut s, [1, 2, 3] as Array<i32>);
+    if let Ok(_) = r {
+        println(s.buf);
+    }
+}
+
+__DATA__
+{"stdout": "123\n"}
