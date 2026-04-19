@@ -2,19 +2,20 @@
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AttrArg,
-    Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison,
-    ClosureExpr, ClosureParam, CmImport, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
-    Condition, ConditionElement, ContinueStmt, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr,
-    ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
-    FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
-    IndexExpr, InnerAttribute, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt,
-    MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType,
-    Newtype, Param, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr,
-    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    VariantCase, VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
+    AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
+    ChainedComparison, ClosureExpr, ClosureParam, CmImport, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EffectDecl,
+    EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
+    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, Item, LabeledBlockStmt,
+    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr,
+    Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr,
+    RangeKind, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry,
+    StructDecl, StructField, StructLiteralExpr, StructLiteralField, StructPatternField,
+    TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt,
+    WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -340,13 +341,25 @@ impl Parser {
 
     /// Parse variant pattern bindings: `Name(pat1, pat2, ...)`
     /// Assumes the name has been consumed and current token is `(`.
-    fn parse_variant_pattern(&mut self, name: String, start_span: Span) -> ParseResult<Pattern> {
+    ///
+    /// `name_id` / `name_span` identify the case-name identifier (the `Some`
+    /// in `Some(x)`, or the `Some` part of `Option::Some(x)`). They are used
+    /// by the resolver to record use→def references for LSP navigation.
+    fn parse_variant_pattern(
+        &mut self,
+        name: String,
+        start_span: Span,
+        name_id: Option<AstId>,
+        name_span: Span,
+    ) -> ParseResult<Pattern> {
         self.advance(); // consume (
         let bindings = self.parse_comma_separated(&TokenKind::RParen, Self::parse_pattern)?;
         let end_span = self.peek().span;
         self.expect(&TokenKind::RParen)?;
         Ok(Pattern::Variant {
             variant_name: name,
+            name_id,
+            name_span,
             bindings,
             span: start_span.merge(&end_span),
         })
@@ -767,6 +780,8 @@ impl Parser {
         self.expect(&TokenKind::From)?;
 
         // Parse source string
+        let source_span = self.peek().span;
+        let source_id = self.alloc_ast_id();
         let source = self.consume_string()?;
 
         // Parse optional `with { ... }` attributes
@@ -784,6 +799,8 @@ impl Parser {
             id,
             is_pub,
             source,
+            source_span,
+            source_id,
             items,
             attributes,
             span: start_span.merge(&end_span),
@@ -799,6 +816,7 @@ impl Parser {
         }
 
         loop {
+            let name_span = self.peek().span;
             let name = self.consume_ident()?;
 
             // Check if this is an effect with functions: `Effect::{...}`
@@ -822,7 +840,12 @@ impl Parser {
                 } else {
                     None
                 };
-                items.push(UseItem::Simple { name, alias });
+                items.push(UseItem::Simple {
+                    id: self.alloc_ast_id(),
+                    name,
+                    name_span,
+                    alias,
+                });
             }
 
             if !self.check(&TokenKind::Comma) {
@@ -947,7 +970,7 @@ impl Parser {
             None
         };
 
-        let (effects, stores) = self.parse_with_clause()?;
+        let (effects, effect_ids, stores) = self.parse_with_clause()?;
 
         // Check for bodyless function declaration (compiler built-in)
         // e.g., `pub fn stream_new() -> i64;`
@@ -974,6 +997,7 @@ impl Parser {
             params,
             return_type,
             effects,
+            effect_ids,
             stores,
             body,
             span,
@@ -1097,19 +1121,21 @@ impl Parser {
 
     /// Parse `with Effect1, Effect2, stores[param1, param2]` clause.
     /// Returns (effects, stores). The `stores` keyword can appear anywhere in the effect list.
-    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<String>)> {
+    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<String>)> {
         if !self.check(&TokenKind::With) {
-            return Ok((Vec::new(), Vec::new()));
+            return Ok((Vec::new(), Vec::new(), Vec::new()));
         }
         self.advance();
 
         // Check if the first item is `stores[...]`
         if self.check(&TokenKind::Stores) {
             let stores = self.parse_stores_list()?;
-            return Ok((Vec::new(), stores));
+            return Ok((Vec::new(), Vec::new(), stores));
         }
 
-        let mut effects = vec![self.consume_ident()?];
+        let (first_name, first_span) = self.consume_ident_with_span()?;
+        let mut effects = vec![first_name];
+        let mut effect_ids = vec![(self.alloc_ast_id(), first_span)];
 
         while self.check(&TokenKind::Comma) {
             // Look ahead: if the token after comma is `ident :`, it's a parameter
@@ -1123,12 +1149,14 @@ impl Parser {
             // Check if next item is `stores[...]`
             if self.check(&TokenKind::Stores) {
                 let stores = self.parse_stores_list()?;
-                return Ok((effects, stores));
+                return Ok((effects, effect_ids, stores));
             }
-            effects.push(self.consume_ident()?);
+            let (name, span) = self.consume_ident_with_span()?;
+            effects.push(name);
+            effect_ids.push((self.alloc_ast_id(), span));
         }
 
-        Ok((effects, Vec::new()))
+        Ok((effects, effect_ids, Vec::new()))
     }
 
     /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
@@ -1146,19 +1174,23 @@ impl Parser {
 
     /// Parse `with` clause for function types: `with Effect1, stores[0, 1]`
     /// In function type position, stores entries are positional indices.
-    fn parse_with_clause_for_fn_type(&mut self) -> ParseResult<(Vec<String>, Vec<StoresEntry>)> {
+    fn parse_with_clause_for_fn_type(
+        &mut self,
+    ) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<StoresEntry>)> {
         if !self.check(&TokenKind::With) {
-            return Ok((Vec::new(), Vec::new()));
+            return Ok((Vec::new(), Vec::new(), Vec::new()));
         }
         self.advance();
 
         // Check if the first item is `stores[...]`
         if self.check(&TokenKind::Stores) {
             let stores = self.parse_stores_list_for_fn_type()?;
-            return Ok((Vec::new(), stores));
+            return Ok((Vec::new(), Vec::new(), stores));
         }
 
-        let mut effects = vec![self.consume_ident()?];
+        let (first_name, first_span) = self.consume_ident_with_span()?;
+        let mut effects = vec![first_name];
+        let mut effect_ids = vec![(self.alloc_ast_id(), first_span)];
 
         while self.check(&TokenKind::Comma) {
             // Lookahead: if the token after comma is `ident:`, this is a parameter
@@ -1171,12 +1203,14 @@ impl Parser {
             self.advance();
             if self.check(&TokenKind::Stores) {
                 let stores = self.parse_stores_list_for_fn_type()?;
-                return Ok((effects, stores));
+                return Ok((effects, effect_ids, stores));
             }
-            effects.push(self.consume_ident()?);
+            let (name, span) = self.consume_ident_with_span()?;
+            effects.push(name);
+            effect_ids.push((self.alloc_ast_id(), span));
         }
 
-        Ok((effects, Vec::new()))
+        Ok((effects, effect_ids, Vec::new()))
     }
 
     /// Parse `stores[0, 1]` or `stores[name]` in function type position.
@@ -1947,23 +1981,28 @@ impl Parser {
             } else if self.check(&TokenKind::ColonColon) {
                 // Qualified name: Type::Case, Type::CONST, etc.
                 self.advance();
+                let suffix_span = self.peek().span;
                 let suffix = self.consume_ident()?;
+                let suffix_id = self.alloc_ast_id();
                 let qualified = format!("{name}::{suffix}");
                 let end_span = self.peek().span;
                 if self.check(&TokenKind::LParen) {
                     // Qualified variant with bindings: Option::Some(x)
-                    self.parse_variant_pattern(qualified, start_span)
+                    self.parse_variant_pattern(qualified, start_span, Some(suffix_id), suffix_span)
                 } else {
                     // Qualified name without bindings: Color::Red, i32::MAX
                     Ok(Pattern::Variant {
                         variant_name: qualified,
+                        name_id: Some(suffix_id),
+                        name_span: suffix_span,
                         bindings: vec![],
                         span: start_span.merge(&end_span),
                     })
                 }
             } else if self.check(&TokenKind::LParen) {
                 // Variant with bindings: Some(x), just(n), etc.
-                self.parse_variant_pattern(name, start_span)
+                let name_id = self.alloc_ast_id();
+                self.parse_variant_pattern(name, start_span, Some(name_id), start_span)
             } else if self.check(&TokenKind::LBrace) {
                 // Named struct pattern: Point { x, y }
                 self.parse_struct_pattern_fields(Some(name))
@@ -2685,6 +2724,8 @@ impl Parser {
                                 id: self.alloc_ast_id(),
                                 receiver: expr,
                                 method: field,
+                                method_id: self.alloc_ast_id(),
+                                method_span: field_span,
                                 type_args,
                                 args,
                                 has_trailing_comma,
@@ -2707,6 +2748,8 @@ impl Parser {
                             id: self.alloc_ast_id(),
                             receiver: expr,
                             method: field,
+                            method_id: self.alloc_ast_id(),
+                            method_span: field_span,
                             type_args: vec![],
                             args,
                             has_trailing_comma,
@@ -2718,6 +2761,8 @@ impl Parser {
                             id: self.alloc_ast_id(),
                             expr,
                             field,
+                            field_id: self.alloc_ast_id(),
+                            field_span,
                             span: merged_span,
                         }));
 
@@ -2729,6 +2774,8 @@ impl Parser {
                                 id: self.alloc_ast_id(),
                                 expr,
                                 field: second,
+                                field_id: self.alloc_ast_id(),
+                                field_span: second_span,
                                 span: second_span,
                             }));
                         }
@@ -2803,7 +2850,7 @@ impl Parser {
 
                     if spec_ok && self.check(&TokenKind::ColonColon) {
                         self.advance(); // consume ::
-                        let method = self.consume_ident()?;
+                        let (method, method_span) = self.consume_ident_with_span()?;
 
                         // Check for method-level turbofish: method::<U>(...)
                         let method_type_args = if self.check(&TokenKind::ColonColon)
@@ -2828,6 +2875,8 @@ impl Parser {
                                 span: start_span,
                             }),
                             method,
+                            method_id: self.alloc_ast_id(),
+                            method_span,
                             type_args: method_type_args,
                             args,
                             has_trailing_comma,
@@ -2842,21 +2891,46 @@ impl Parser {
                         id: self.alloc_ast_id(),
                         name,
                         span: start_span,
+                        segments: Vec::new(),
                     }));
                 }
                 // This is a qualified name like Effect::function or ns::Type::Case
-                // Consume a chain of ::ident segments
-                let mut qualified_name = format!("{name}::{}", self.consume_ident()?);
+                // Record the leading segment (already consumed above).
+                let mut segments = vec![PathSegment {
+                    id: self.alloc_ast_id(),
+                    name: name.clone(),
+                    span: start_span,
+                }];
+                // Consume a chain of ::ident segments, capturing each segment's
+                // AstId and span for LSP navigation.
+                let first_seg_span = self.peek().span;
+                let first_seg_name = self.consume_ident()?;
+                segments.push(PathSegment {
+                    id: self.alloc_ast_id(),
+                    name: first_seg_name.clone(),
+                    span: first_seg_span,
+                });
+                let mut qualified_name = format!("{name}::{first_seg_name}");
+                let mut end_span = first_seg_span;
                 while self.check(&TokenKind::ColonColon)
                     && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
                 {
                     self.advance(); // consume ::
-                    qualified_name = format!("{qualified_name}::{}", self.consume_ident()?);
+                    let seg_span = self.peek().span;
+                    let seg_name = self.consume_ident()?;
+                    segments.push(PathSegment {
+                        id: self.alloc_ast_id(),
+                        name: seg_name.clone(),
+                        span: seg_span,
+                    });
+                    qualified_name = format!("{qualified_name}::{seg_name}");
+                    end_span = seg_span;
                 }
                 return Ok(Expr::Ident(IdentExpr {
                     id: self.alloc_ast_id(),
                     name: qualified_name,
-                    span: start_span,
+                    span: start_span.merge(&end_span),
+                    segments,
                 }));
             } else if self.check(&TokenKind::Colon) && self.peek_nth(1).kind == TokenKind::LBrace {
                 // Labeled block expression: `label: { ... }`
@@ -2882,6 +2956,7 @@ impl Parser {
             return Ok(Expr::Ident(IdentExpr {
                 id: self.alloc_ast_id(),
                 name,
+                segments: Vec::new(),
                 span: start_span,
             }));
         }
@@ -3426,12 +3501,13 @@ impl Parser {
             };
 
             // Parse effects and stores (optional): with Effect1, stores[0]
-            let (effects, stores) = self.parse_with_clause_for_fn_type()?;
+            let (effects, effect_ids, stores) = self.parse_with_clause_for_fn_type()?;
 
             return Ok(Type::Function(Box::new(FunctionType {
                 params,
                 return_type,
                 effects,
+                effect_ids,
                 stores,
             })));
         }
@@ -4571,7 +4647,7 @@ impl Parser {
 
         if !self.check(&TokenKind::RBrace) {
             loop {
-                let field_span = self.peek().span;
+                let field_name_span = self.peek().span;
                 // Allow string literals as field names for JSON compatibility
                 let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
                     self.advance();
@@ -4579,24 +4655,31 @@ impl Parser {
                 } else {
                     self.consume_field_name()?
                 };
+                let field_name_id = self.alloc_ast_id();
 
-                let (value, is_shorthand) = if self.check(&TokenKind::Colon) {
+                let (value, is_shorthand, field_span) = if self.check(&TokenKind::Colon) {
                     self.advance();
-                    (self.parse_expr()?, false)
+                    let value = self.parse_expr()?;
+                    let span = field_name_span.merge(&value.span());
+                    (value, false, span)
                 } else {
                     // Shorthand: `{ x }` is equivalent to `{ x: x }`
                     (
                         Expr::Ident(IdentExpr {
                             id: self.alloc_ast_id(),
                             name: field_name.clone(),
-                            span: field_span,
+                            segments: Vec::new(),
+                            span: field_name_span,
                         }),
                         true,
+                        field_name_span,
                     )
                 };
 
                 fields.push(StructLiteralField {
                     name: field_name,
+                    name_id: field_name_id,
+                    name_span: field_name_span,
                     value,
                     is_shorthand,
                     span: field_span,
@@ -4616,9 +4699,17 @@ impl Parser {
         let end_span = self.peek().span;
         self.expect(&TokenKind::RBrace)?;
 
+        let (name_id, name_span) = if name.is_some() {
+            (Some(self.alloc_ast_id()), Some(start_span))
+        } else {
+            (None, None)
+        };
+
         Ok(Expr::StructLiteral(Box::new(StructLiteralExpr {
             id: self.alloc_ast_id(),
             name,
+            name_id,
+            name_span,
             fields,
             has_trailing_comma,
             span: start_span.merge(&end_span),
@@ -4648,10 +4739,10 @@ mod tests {
             assert_eq!(use_decl.source, "core:cli");
             assert_eq!(use_decl.items.len(), 2);
             assert!(
-                matches!(&use_decl.items[0], UseItem::Simple { name, alias } if name == "println" && alias.is_none())
+                matches!(&use_decl.items[0], UseItem::Simple { name, alias, .. } if name == "println" && alias.is_none())
             );
             assert!(
-                matches!(&use_decl.items[1], UseItem::Simple { name, alias } if name == "Stdout" && alias.is_none())
+                matches!(&use_decl.items[1], UseItem::Simple { name, alias, .. } if name == "Stdout" && alias.is_none())
             );
             assert!(use_decl.attributes.is_none());
         } else {
@@ -4666,7 +4757,7 @@ mod tests {
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.source, "core:cli");
             assert!(
-                matches!(&use_decl.items[0], UseItem::Simple { name, alias } if name == "println" && alias.as_deref() == Some("print"))
+                matches!(&use_decl.items[0], UseItem::Simple { name, alias, .. } if name == "println" && alias.as_deref() == Some("print"))
             );
         } else {
             panic!("expected use declaration");

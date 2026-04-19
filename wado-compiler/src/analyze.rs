@@ -598,7 +598,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 // Register re-exports (without creating new symbols)
                 for use_item in &use_decl.items {
                     match use_item {
-                        UseItem::Simple { name, alias } => {
+                        UseItem::Simple { name, alias, .. } => {
                             let export_name = alias.as_ref().unwrap_or(name);
                             self.symbols.register_reexport(
                                 module_source,
@@ -670,7 +670,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 // Register imported symbols
                 for use_item in &use_decl.items {
                     match use_item {
-                        UseItem::Simple { name, alias } => {
+                        UseItem::Simple { name, alias, .. } => {
                             if let Some(symbol) =
                                 self.symbols.lookup_in_module(&module_source, name)
                             {

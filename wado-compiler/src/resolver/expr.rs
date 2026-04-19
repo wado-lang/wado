@@ -3,9 +3,10 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, Condition, Expr, IfExpr, Item, Literal, MatchArm};
+use crate::ast::{self, AstId, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
+use crate::symbol::SymbolKey;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
@@ -389,6 +390,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .find(|(_, c)| c.name == suffix)
                     .map(|(i, c)| (i, c.clone()))
                 {
+                    // Record use->def for path segments.
+                    // - segments[0] (prefix) -> variant type decl in current module
+                    // - segments[1] (suffix) -> case decl's AstId in owning module
+                    if let Some(prefix_seg) = ident.segments.first() {
+                        self.record_item_reference_by_name(prefix_seg.id, prefix);
+                    }
+                    if let Some(suffix_seg) = ident.segments.get(1) {
+                        self.record_reference_to_key(
+                            suffix_seg.id,
+                            SymbolKey::new(variant_info.module_source.clone(), case_data.ast_id),
+                        );
+                    }
                     // Unit variant - payload must be unit type
                     let payload_is_unit = matches!(
                         self.type_table.borrow().get(case_data.payload),
@@ -433,20 +446,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
 
             // Check for enum case: Color::Red (enums have no payload)
-            if let Some(enum_info) = self.enum_cases.get(prefix)
-                && let Some(case_data) = enum_info.find_case(suffix)
+            if let Some(enum_info) = self.enum_cases.get(prefix).cloned()
+                && let Some(case_data) = enum_info.find_case(suffix).cloned()
             {
+                if let Some(prefix_seg) = ident.segments.first() {
+                    self.record_item_reference_by_name(prefix_seg.id, prefix);
+                }
+                if let Some(suffix_seg) = ident.segments.get(1) {
+                    self.record_reference_to_key(
+                        suffix_seg.id,
+                        SymbolKey::new(enum_info.module_source.clone(), case_data.ast_id),
+                    );
+                }
                 // Use canonical name (not import alias) for consistent TypeId interning
                 let enum_type = self
                     .type_table
                     .borrow_mut()
-                    .make_enum(enum_info.name.clone(), enum_info.module_source.clone());
+                    .make_enum(enum_info.name.clone(), enum_info.module_source);
 
                 return TirExpr::new(
                     TirExprKind::EnumConstruct {
                         enum_type,
                         case_index: case_data.index,
-                        case_name: case_data.name.clone(),
+                        case_name: case_data.name,
                     },
                     enum_type,
                     ident.span,
@@ -455,9 +477,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             // Check for flags member: PathFlags::SymlinkFollow
             // Flags members are bitmask integers (1 << index) represented as IntLiteral
-            if let Some(flags_info) = self.flags_cases.get(prefix)
-                && let Some(member) = flags_info.members.iter().find(|m| m.name == suffix)
+            if let Some(flags_info) = self.flags_cases.get(prefix).cloned()
+                && let Some(member) = flags_info
+                    .members
+                    .iter()
+                    .find(|m| m.name == suffix)
+                    .cloned()
             {
+                if let Some(prefix_seg) = ident.segments.first() {
+                    self.record_item_reference_by_name(prefix_seg.id, prefix);
+                }
+                if let Some(suffix_seg) = ident.segments.get(1) {
+                    self.record_reference_to_key(
+                        suffix_seg.id,
+                        SymbolKey::new(flags_info.module_source.clone(), member.ast_id),
+                    );
+                }
                 return TirExpr::new(
                     TirExprKind::IntLiteral {
                         value: u64::from(member.bitmask),
@@ -490,6 +525,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .find(|(_, c)| c.name == case_name)
                         .map(|(i, c)| (i, c.clone()))
                 {
+                    if let Some(seg) = ident.segments.get(2) {
+                        self.record_reference_to_key(
+                            seg.id,
+                            SymbolKey::new(variant_info.module_source.clone(), case_data.ast_id),
+                        );
+                    }
                     let payload_is_unit = matches!(
                         self.type_table.borrow().get(case_data.payload),
                         ResolvedType::Unit
@@ -535,17 +576,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .and_then(|maps| maps.enum_cases.get(type_name))
                     .cloned();
                 if let Some(enum_info) = ns_enum
-                    && let Some(case_data) = enum_info.find_case(case_name)
+                    && let Some(case_data) = enum_info.find_case(case_name).cloned()
                 {
+                    if let Some(seg) = ident.segments.get(2) {
+                        self.record_reference_to_key(
+                            seg.id,
+                            SymbolKey::new(enum_info.module_source.clone(), case_data.ast_id),
+                        );
+                    }
                     let enum_type = self
                         .type_table
                         .borrow_mut()
-                        .make_enum(enum_info.name.clone(), enum_info.module_source.clone());
+                        .make_enum(enum_info.name.clone(), enum_info.module_source);
                     return TirExpr::new(
                         TirExprKind::EnumConstruct {
                             enum_type,
                             case_index: case_data.index,
-                            case_name: case_data.name.clone(),
+                            case_name: case_data.name,
                         },
                         enum_type,
                         ident.span,
@@ -559,8 +606,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .and_then(|maps| maps.flags_cases.get(type_name))
                     .cloned();
                 if let Some(flags_info) = ns_flags
-                    && let Some(member) = flags_info.members.iter().find(|m| m.name == case_name)
+                    && let Some(member) = flags_info
+                        .members
+                        .iter()
+                        .find(|m| m.name == case_name)
+                        .cloned()
                 {
+                    if let Some(seg) = ident.segments.get(2) {
+                        self.record_reference_to_key(
+                            seg.id,
+                            SymbolKey::new(flags_info.module_source.clone(), member.ast_id),
+                        );
+                    }
                     return TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: u64::from(member.bitmask),
@@ -575,6 +632,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Check for global variables in current module
         if let Some(&(ty, _mutable)) = self.current_module_globals.get(&ident.name) {
+            self.record_item_reference_by_name(ident.id, &ident.name);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: self.current_module_source.clone(),
@@ -589,6 +647,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         if let Some((source_module, original_name, ty, _mutable)) =
             self.imported_globals.get(&ident.name)
         {
+            self.record_item_reference_by_name(ident.id, &ident.name);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: source_module.clone(),
@@ -704,6 +763,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> TirExpr {
         let expr = self.resolve_expr(&field_access.expr, ctx, None);
 
+        // Record use→def reference for the field name, pointing at the field
+        // definition's AstId in the struct declaration.
+        self.record_field_reference(expr.type_id, &field_access.field, field_access.field_id);
+
         // Look up field type from struct type
         let (field_index, field_type) =
             self.lookup_field_type(expr.type_id, &field_access.field, field_access.span);
@@ -720,6 +783,47 @@ impl<H: CompilerHost> Resolver<'_, H> {
             field_type,
             field_access.span,
         )
+    }
+
+    /// Record a use→def reference for a struct field access.
+    /// `receiver_type` is the type of the struct being accessed;
+    /// `field_name` is the accessed field; `use_id` is the `AstId` of the
+    /// field-name token at the use site.
+    pub(super) fn record_field_reference(
+        &mut self,
+        receiver_type: TypeId,
+        field_name: &str,
+        use_id: AstId,
+    ) {
+        let resolved = self.type_table.borrow().get(receiver_type).clone();
+        let (struct_name, module_source) = match resolved {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => (name, module_source),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                return self.record_field_reference(inner, field_name, use_id);
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                return self.record_field_reference(base_type, field_name, use_id);
+            }
+            _ => return,
+        };
+        if let Some(info) = self.lookup_struct_fields(&struct_name, &module_source) {
+            for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
+                if fname == field_name {
+                    let def_key = SymbolKey::new(module_source, *fid);
+                    self.record_reference_to_key(use_id, def_key);
+                    return;
+                }
+            }
+        }
     }
 
     /// Look up field type from a struct or tuple type
@@ -2107,6 +2211,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return self.resolve_anonymous_struct_literal(struct_lit, ctx);
         };
 
+        // Record use→def reference for the struct type name.
+        if let Some(name_id) = struct_lit.name_id {
+            self.record_item_reference_by_name(name_id, name);
+        }
+
         // Look up the struct in the symbol table to resolve imports/aliases
         // We need both the struct name (for struct_fields lookup) and module_source (for disambiguation)
         // Local struct definitions (current module) shadow imported/prelude structs.
@@ -2144,6 +2253,29 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .collect()
             })
             .unwrap_or_default();
+
+        // Record use→def references for each field name, pointing at the
+        // field definition's AstId in the struct declaration.
+        let field_refs: Vec<(AstId, AstId)> = self
+            .lookup_struct_fields(&struct_name, &struct_module_source)
+            .map(|info| {
+                struct_lit
+                    .fields
+                    .iter()
+                    .filter_map(|f| {
+                        info.fields
+                            .iter()
+                            .zip(info.field_ast_ids.iter())
+                            .find(|((fname, _, _), _)| fname == &f.name)
+                            .map(|(_, def_id)| (f.name_id, *def_id))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        for (use_id, def_id) in field_refs {
+            let def_key = SymbolKey::new(struct_module_source.clone(), def_id);
+            self.record_reference_to_key(use_id, def_key);
+        }
 
         // Resolve field expressions, converting tuple literals to arrays when needed.
         // For generic structs, tuple-to-sequence coercion may be deferred to a second
@@ -2490,6 +2622,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .iter()
                 .map(|f| (f.name.clone(), f.value.type_id, true))
                 .collect(),
+            field_ast_ids: Vec::new(),
             field_defaults: vec![None; resolved_fields.len()],
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),

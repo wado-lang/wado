@@ -10,12 +10,13 @@
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::CompilerHost;
-use wado_compiler::annotate::annotate;
-use wado_compiler::ast::{self, AstId, Item, Module};
+use wado_compiler::annotate::{Annotated, annotate};
+use wado_compiler::ast::{self, AstId, AstVisitor, Item, Literal, Module};
+use wado_compiler::name::resolve_import_with_entry;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
+use crate::location::{module_uri, resolve_def_key, span_to_range, symbol_uri, uri_to_filename};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DefinitionResult {
@@ -40,18 +41,143 @@ pub async fn find_definition<H: CompilerHost>(
     let line = position.line as usize + 1;
     let col = position.character as usize + 1;
 
+    // Priority: file-path jumps first, symbol-based resolution second.
+    //
+    // `use { ... } from "./path"` source strings and `#include_str("./path")`
+    // / `#include_bytes("./path")` literals do not carry any `AstId` that the
+    // symbol table can resolve — their only target is the file on disk.
+    // `resolve_def_key` would always return `None` for cursor positions inside
+    // those spans, so running the file-path matcher first lets us answer
+    // before falling through to `AstId`-based resolution.
+    //
+    // The two paths do not overlap in today's AST: path-literal spans belong
+    // to `UseDecl.source_span` and `Literal::{IncludeStr,IncludeBytes}`, both
+    // of which sit *outside* any identifier, type-name, or expression node
+    // that could yield a symbol. Swapping the order would therefore produce
+    // the same answer today — but only by accident. If a future AST change
+    // introduces overlap (e.g. an `AstId` attached to the string literal
+    // itself), keeping file-path resolution first preserves the current
+    // behaviour: jump to the file, not to whatever symbol happens to share
+    // the span.
+    if let Some(result) = file_path_definition(&annotated, &module, line, col, uri) {
+        return Some(result);
+    }
+
     let def_key = resolve_def_key(&annotated, &module, line, col)?;
 
-    let symbol = annotated.symbol_at(&def_key)?;
+    // Most defs are registered as symbols (functions, types, globals, locals).
+    // Struct fields / enum cases / variant cases / flags members / trait and
+    // impl methods are addressable by `AstId` via `name_span_of` but are not
+    // individually registered as symbols; handle both paths uniformly.
+    let symbol = annotated.symbol_at(&def_key);
     let span = annotated
         .name_span_of(&def_key)
-        .or(symbol.span)
+        .or_else(|| symbol.and_then(|s| s.span))
         .or_else(|| span_of_ast_id(annotated.modules.get(&def_key.module)?, def_key.ast_id))?;
-    let def_uri = symbol_uri(&annotated, symbol, uri)?;
+    let def_uri = if let Some(symbol) = symbol {
+        symbol_uri(&annotated, symbol, uri)?
+    } else {
+        module_uri(&annotated, &def_key.module, uri)?
+    };
     Some(DefinitionResult {
         uri: def_uri,
         range: span_to_range(&span),
     })
+}
+
+/// Resolve a cursor landing on an on-disk file path (a `use ... from "./x"`
+/// source string or a `#include_str("./x")` / `#include_bytes("./x")` path)
+/// to the beginning of the referenced file. Returns `None` when the cursor is
+/// not on such a path.
+fn file_path_definition(
+    annotated: &Annotated,
+    module: &wado_compiler::name::ModuleSource,
+    line: usize,
+    col: usize,
+    request_uri: &str,
+) -> Option<DefinitionResult> {
+    let ast_module = annotated.modules.get(module)?;
+    let path = find_file_path_at_cursor(ast_module, line, col)?;
+    let target_module =
+        resolve_import_with_entry(module, &path, Some(&annotated.entry_module_source));
+    let target_uri = module_uri(annotated, &target_module, request_uri)?;
+    Some(DefinitionResult {
+        uri: target_uri,
+        range: Range {
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: 0,
+                character: 0,
+            },
+        },
+    })
+}
+
+/// Walk the module AST looking for a file-path node whose span covers
+/// `(line, col)`. Currently recognises `use ... from "source"` string literals
+/// and `#include_str` / `#include_bytes` path arguments.
+fn find_file_path_at_cursor(module: &Module, line: usize, col: usize) -> Option<String> {
+    for item in &module.items {
+        if let Item::Use(use_decl) = item
+            && span_contains(&use_decl.source_span, line, col)
+        {
+            return Some(use_decl.source.clone());
+        }
+    }
+    let mut finder = IncludePathFinder {
+        line,
+        col,
+        result: None,
+    };
+    for item in &module.items {
+        finder.visit_item(item);
+        if finder.result.is_some() {
+            break;
+        }
+    }
+    finder.result
+}
+
+struct IncludePathFinder {
+    line: usize,
+    col: usize,
+    result: Option<String>,
+}
+
+impl AstVisitor for IncludePathFinder {
+    fn visit_expr(&mut self, expr: &ast::Expr) {
+        if self.result.is_some() {
+            return;
+        }
+        if let ast::Expr::Literal(lit) = expr
+            && span_contains(&lit.span, self.line, self.col)
+        {
+            match &lit.value {
+                Literal::IncludeStr(path) | Literal::IncludeBytes(path) => {
+                    self.result = Some(path.clone());
+                    return;
+                }
+                _ => {}
+            }
+        }
+        ast::walk_expr(self, expr);
+    }
+}
+
+fn span_contains(span: &Span, line: usize, col: usize) -> bool {
+    if line < span.line || line > span.end_line {
+        return false;
+    }
+    if line == span.line && col < span.column {
+        return false;
+    }
+    if line == span.end_line && col > span.end_column {
+        return false;
+    }
+    true
 }
 
 /// Best-effort span for an arbitrary [`AstId`] — walks module items looking for
@@ -77,203 +203,5 @@ fn item_span_if_match(item: &Item, target: AstId) -> Option<Span> {
         Item::Newtype(n) if n.id == target => Some(n.span),
         Item::Global(g) if g.id == target => Some(g.span),
         _ => None,
-    }
-}
-
-#[allow(dead_code)]
-fn _touch_ast_module_import(module: &ast::Module) {
-    let _ = module;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use indexmap::IndexMap;
-    use wado_compiler::{Diagnostic as CompilerDiagnostic, SourceError};
-
-    struct TestHost {
-        sources: IndexMap<String, Vec<u8>>,
-    }
-
-    impl TestHost {
-        fn new(path: &str, source: &str) -> Self {
-            let mut sources = IndexMap::new();
-            sources.insert(path.to_string(), source.as_bytes().to_vec());
-            Self { sources }
-        }
-    }
-
-    impl CompilerHost for TestHost {
-        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-            self.sources
-                .get(path)
-                .cloned()
-                .ok_or_else(|| SourceError::NotFound {
-                    path: path.to_string(),
-                })
-        }
-
-        fn emit_diagnostic(&self, _diagnostic: CompilerDiagnostic) {}
-    }
-
-    async fn def_at(source: &str, line: u32, character: u32) -> Option<DefinitionResult> {
-        let path = "/test.wado";
-        let uri = format!("file://{path}");
-        let host = TestHost::new(path, source);
-        find_definition(source, Position { line, character }, &uri, &host).await
-    }
-
-    #[test]
-    fn param_definition() {
-        futures::executor::block_on(async {
-            let source = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
-            let result = def_at(source, 1, 11)
-                .await
-                .expect("definition of a in body");
-            assert_eq!(result.range.start.line, 0);
-            assert_eq!(result.range.start.character, 7);
-            assert_eq!(result.range.end.character, 8);
-        });
-    }
-
-    #[test]
-    fn local_var_definition() {
-        futures::executor::block_on(async {
-            let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n";
-            let result = def_at(source, 2, 11)
-                .await
-                .expect("definition of x in return");
-            assert_eq!(result.range.start.line, 1);
-            assert_eq!(result.range.start.character, 8);
-            assert_eq!(result.range.end.character, 9);
-        });
-    }
-
-    #[test]
-    fn shadow_resolution() {
-        futures::executor::block_on(async {
-            let source = "fn f() -> i32 {\n    let x = 1;\n    let x = x + 1;\n    return x;\n}\n";
-            let result = def_at(source, 2, 12)
-                .await
-                .expect("RHS x resolves to outer let");
-            assert_eq!(result.range.start.line, 1);
-            assert_eq!(result.range.start.character, 8);
-            assert_eq!(result.range.end.character, 9);
-        });
-    }
-
-    #[test]
-    fn item_definition() {
-        futures::executor::block_on(async {
-            let source = "fn helper() -> i32 {\n    return 1;\n}\nfn run() -> i32 {\n    return helper();\n}\n";
-            let result = def_at(source, 4, 11)
-                .await
-                .expect("call-site resolves to fn helper");
-            assert_eq!(result.range.start.line, 0);
-            assert_eq!(result.range.start.character, 3);
-            assert_eq!(result.range.end.character, 9);
-        });
-    }
-
-    #[test]
-    fn struct_destructuring_binding_definition() {
-        futures::executor::block_on(async {
-            let source = concat!(
-                "struct Point { x: i32, y: i32 }\n",
-                "fn f(p: Point) -> i32 {\n",
-                "    let { x, y } = p;\n",
-                "    return x + y;\n",
-                "}\n",
-            );
-            let result = def_at(source, 3, 11).await.expect("use of destructured x");
-            assert_eq!(result.range.start.line, 2);
-            assert_eq!(result.range.start.character, 10);
-            assert_eq!(result.range.end.character, 11);
-        });
-    }
-
-    #[test]
-    fn tuple_destructuring_binding_definition() {
-        futures::executor::block_on(async {
-            let source = concat!(
-                "fn f() -> i32 {\n",
-                "    let [a, b] = [1, 2];\n",
-                "    return a + b;\n",
-                "}\n",
-            );
-            let result = def_at(source, 2, 11).await.expect("use of a");
-            assert_eq!(result.range.start.line, 1);
-            assert_eq!(result.range.start.character, 9);
-            assert_eq!(result.range.end.character, 10);
-        });
-    }
-
-    #[test]
-    fn closure_param_definition() {
-        futures::executor::block_on(async {
-            let source = concat!(
-                "fn f() -> i32 {\n",
-                "    let g = |x: i32| x + 1;\n",
-                "    return g(1);\n",
-                "}\n",
-            );
-            let result = def_at(source, 1, 21).await.expect("use of x in body");
-            assert_eq!(result.range.start.line, 1);
-            assert_eq!(result.range.start.character, 13);
-            assert_eq!(result.range.end.character, 14);
-        });
-    }
-
-    #[test]
-    fn closure_capture_definition() {
-        futures::executor::block_on(async {
-            let source = concat!(
-                "fn f() -> i32 {\n",
-                "    let outer = 10;\n",
-                "    let g = |x: i32| x + outer;\n",
-                "    return g(1);\n",
-                "}\n",
-            );
-            let result = def_at(source, 2, 25).await.expect("capture of outer");
-            assert_eq!(result.range.start.line, 1);
-            assert_eq!(result.range.start.character, 8);
-            assert_eq!(result.range.end.character, 13);
-        });
-    }
-
-    #[test]
-    fn if_let_binding_definition() {
-        futures::executor::block_on(async {
-            let source = concat!(
-                "fn f(opt: Option<i32>) -> i32 {\n",
-                "    if let Some(v) = opt {\n",
-                "        return v;\n",
-                "    }\n",
-                "    return 0;\n",
-                "}\n",
-            );
-            let result = def_at(source, 2, 15).await.expect("use of v");
-            assert_eq!(result.range.start.line, 1);
-            assert_eq!(result.range.start.character, 16);
-            assert_eq!(result.range.end.character, 17);
-        });
-    }
-
-    #[test]
-    fn match_arm_binding_definition() {
-        futures::executor::block_on(async {
-            let source = concat!(
-                "fn f(opt: Option<i32>) -> i32 {\n",
-                "    return match opt {\n",
-                "        Some(v) => v,\n",
-                "        None => 0,\n",
-                "    };\n",
-                "}\n",
-            );
-            let result = def_at(source, 2, 19).await.expect("use of v in arm");
-            assert_eq!(result.range.start.line, 2);
-            assert_eq!(result.range.start.character, 13);
-            assert_eq!(result.range.end.character, 14);
-        });
     }
 }

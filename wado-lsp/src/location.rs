@@ -41,7 +41,9 @@ pub(crate) fn module_uri(
     match module {
         ModuleSource::EntryPoint { filename } => Some(filename_to_uri(filename)),
         ModuleSource::Local { path } => Some(resolve_local_uri(path, request_uri)),
-        _ => None,
+        ModuleSource::Core { name } => Some(format!("core:{name}")),
+        ModuleSource::Wasi { interface } => Some(format!("wasi:{interface}")),
+        ModuleSource::Remote { url } => Some(url.clone()),
     }
 }
 
@@ -55,8 +57,14 @@ fn resolve_local_uri(module_path: &str, request_uri: &str) -> String {
         .map(|(dir, _)| dir)
         .unwrap_or("");
     let normalized = module_path.strip_prefix("./").unwrap_or(module_path);
+    // When the request path is rooted at "/" (e.g. "/test.wado"), rsplit_once
+    // yields an empty base_dir, so preserve the leading slash explicitly.
     if base_dir.is_empty() {
-        filename_to_uri(normalized)
+        if request_path.starts_with('/') {
+            filename_to_uri(&format!("/{normalized}"))
+        } else {
+            filename_to_uri(normalized)
+        }
     } else {
         filename_to_uri(&format!("{base_dir}/{normalized}"))
     }

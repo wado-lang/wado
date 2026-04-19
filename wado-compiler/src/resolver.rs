@@ -124,6 +124,9 @@ pub struct Resolver<'a, H: CompilerHost> {
     effect_sources: IndexMap<String, ModuleSource>,
     /// Effect parameter names currently in scope (from enclosing function's `<effect E>`)
     current_effect_params: IndexSet<String>,
+    /// Map from effect parameter name to its declaration `AstId` in the current scope.
+    /// Used to record use→def edges for effect parameter references in `with` clauses.
+    current_effect_param_decls: IndexMap<String, crate::ast::AstId>,
     /// WASI registry for looking up effect return types
     wasi_registry: &'static WasiRegistry,
     /// Builtin registry for looking up builtin function return types
@@ -218,6 +221,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             current_module_items: &[],
             effect_sources: IndexMap::default(),
             current_effect_params: IndexSet::default(),
+            current_effect_param_decls: IndexMap::default(),
             trait_ctx: trait_env::TraitContext::default(),
             generic_struct_names: IndexSet::default(),
             generic_function_params: IndexMap::default(),
@@ -254,6 +258,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.references.borrow_mut().insert(use_key, def_key);
     }
 
+    /// Record a use→def reference when the definition lives in a (possibly
+    /// different) module identified directly by a [`SymbolKey`].
+    pub(super) fn record_reference_to_key(&self, use_id: crate::ast::AstId, def_key: SymbolKey) {
+        let use_key = SymbolKey::new(self.current_module_source.clone(), use_id);
+        self.references.borrow_mut().insert(use_key, def_key);
+    }
+
     /// Record that an identifier resolved to a declared symbol reachable from
     /// the current module under `name` (local item, imported item, imported
     /// namespace member, etc.). Looks up the defining [`SymbolKey`] through
@@ -270,6 +281,36 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.references
             .borrow_mut()
             .insert(use_key, sym.defined_at.clone());
+    }
+
+    /// Look up the `AstId` of an impl-block method by its defining module, the
+    /// receiving type name, and the method name. Returns `None` if the module
+    /// is not loaded or no matching method exists. Searches all impl blocks in
+    /// the module; for trait methods prefers the most specific match (struct +
+    /// method; trait name is not disambiguated here).
+    pub(super) fn find_impl_method_ast_id(
+        &self,
+        module_source: &ModuleSource,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<crate::ast::AstId> {
+        let items: &[Item] = if module_source == &self.current_module_source {
+            self.current_module_items
+        } else {
+            self.loaded_modules.get(module_source)?.items.as_slice()
+        };
+        for item in items {
+            if let Item::Impl(impl_block) = item
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
+            {
+                for method in &impl_block.methods {
+                    if method.name == method_name {
+                        return Some(method.id);
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// Record a local binding's [`Symbol`] so that LSP hover on a use site can
@@ -376,7 +417,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             ast::UseItem::EffectFunctions { effect_name, .. } => {
                                 sources.insert(effect_name.clone(), source.clone());
                             }
-                            ast::UseItem::Simple { name, alias } => {
+                            ast::UseItem::Simple { name, alias, .. } => {
                                 // Track simple imports that look like effect names (PascalCase)
                                 let local_name = alias.as_ref().unwrap_or(name);
                                 if local_name.starts_with(|c: char| c.is_ascii_uppercase()) {
@@ -397,18 +438,40 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
-    pub(crate) fn resolve_effects(&self, effects: &[String]) -> Vec<tir::EffectRef> {
+    ///
+    /// `effect_ids` is a parallel slice with `(AstId, Span)` of each effect-name identifier
+    /// occurrence. When non-empty, use→def edges are recorded so LSP jump-to-definition
+    /// works on effect references in `with` clauses. An empty slice skips recording
+    /// (used by synthetic/internal effect lists with no source identifiers).
+    pub(crate) fn resolve_effects(
+        &self,
+        effects: &[String],
+        effect_ids: &[(crate::ast::AstId, crate::token::Span)],
+    ) -> Vec<tir::EffectRef> {
         effects
             .iter()
-            .map(|name| {
-                if self.current_effect_params.contains(name) {
+            .enumerate()
+            .map(|(i, name)| {
+                let use_id = effect_ids.get(i).map(|(id, _)| *id);
+                if let Some(&decl_id) = self.current_effect_param_decls.get(name) {
+                    if let Some(use_id) = use_id {
+                        self.record_reference(use_id, decl_id);
+                    }
                     tir::EffectRef::Param { name: name.clone() }
                 } else if let Some(source) = self.effect_sources.get(name) {
+                    if let Some(use_id) = use_id
+                        && let Some(sym) = self.symbols.lookup_in_module(source, name)
+                    {
+                        self.record_reference_to_key(use_id, sym.defined_at.clone());
+                    }
                     tir::EffectRef::Concrete {
                         name: name.clone(),
                         module_source: source.clone(),
                     }
                 } else {
+                    if let Some(use_id) = use_id {
+                        self.record_item_reference_by_name(use_id, name);
+                    }
                     // Fallback: effect from current module (local effect declaration)
                     tir::EffectRef::Concrete {
                         name: name.clone(),
@@ -417,6 +480,32 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
             })
             .collect()
+    }
+
+    /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
+    /// declarations. The cursor landing on an imported name inside a `use`
+    /// specifier list should jump to the defining symbol in the source module.
+    fn record_use_specifier_references(&self, module: &Module) {
+        for item in &module.items {
+            let Item::Use(use_decl) = item else { continue };
+            let source = name::resolve_import_with_entry(
+                &self.current_module_source,
+                &use_decl.source,
+                Some(&self.entry_module_source),
+            );
+            for use_item in &use_decl.items {
+                match use_item {
+                    ast::UseItem::Simple { id, name, .. } => {
+                        if let Some(sym) = self.symbols.lookup_in_module(&source, name) {
+                            self.record_reference_to_key(*id, sym.defined_at.clone());
+                        }
+                    }
+                    ast::UseItem::EffectFunctions { .. }
+                    | ast::UseItem::Wildcard
+                    | ast::UseItem::Namespace { .. } => {}
+                }
+            }
+        }
     }
 
     /// Resolve a module, converting AST to TIR
@@ -435,6 +524,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.indexing_trait_cache.clear();
         // Build effect source map from imports
         self.effect_sources = Self::build_effect_sources(module, &module_source);
+
+        // Record use→def edges for names that appear inside `use { ... }` specifiers.
+        // These power LSP jump-to-definition when the cursor is on an imported
+        // name in the `use` declaration itself.
+        self.record_use_specifier_references(module);
 
         // First pass: collect type definitions
         {
@@ -467,7 +561,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 // Look up the source module to find global declarations
                 if let Some(source_module) = self.loaded_modules.get(&source_module_source) {
                     for use_item in &use_decl.items {
-                        if let ast::UseItem::Simple { name, alias } = use_item {
+                        if let ast::UseItem::Simple { name, alias, .. } = use_item {
                             // Check if this import refers to a global variable
                             if let Some(symbol) =
                                 self.symbols.lookup_in_module(&source_module_source, name)

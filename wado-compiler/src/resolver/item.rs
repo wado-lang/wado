@@ -363,6 +363,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Set effect params in scope (for resolving effect names in function types)
         let old_effect_params = std::mem::take(&mut scope.current_effect_params);
+        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
             let _ = scope.logger.error(TypeError::InvalidLiteral {
@@ -371,6 +372,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
         scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
+        scope.current_effect_param_decls = effect_params
+            .iter()
+            .map(|p| (p.name.clone(), p.id))
+            .collect();
 
         // Populate the generic-function inference caches
         // (`generic_function_params`, `generic_function_resolved_param_types`,
@@ -483,10 +488,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // Resolve effects while effect params are still in scope
-        let effects = scope.resolve_effects(&func.effects);
+        let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
 
         // Restore effect params scope
         scope.current_effect_params = old_effect_params;
+        scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);
 
         Some(TirFunction {
@@ -772,6 +778,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // Set effect params in scope (for resolving effect names in function types)
         let old_effect_params = std::mem::take(&mut scope.current_effect_params);
+        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
             let _ = scope.logger.error(TypeError::InvalidLiteral {
@@ -780,6 +787,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             });
         }
         scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
+        scope.current_effect_param_decls = effect_params
+            .iter()
+            .map(|p| (p.name.clone(), p.id))
+            .collect();
 
         // Then, collect method-level type params
         let offset = scope.trait_ctx.type_params.len();
@@ -922,11 +933,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Resolve effects while effect params are still in scope
-        let effects = scope.resolve_effects(&func.effects);
+        let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
 
         // Restore effect params and Self type. `trait_ctx` is auto-restored on
         // `drop(scope)`, which replaces everything set up above.
         scope.current_effect_params = old_effect_params;
+        scope.current_effect_param_decls = old_effect_param_decls;
         scope.trait_ctx.self_type = old_self_type;
         drop(scope);
 

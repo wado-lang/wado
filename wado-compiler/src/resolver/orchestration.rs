@@ -156,6 +156,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     name: struct_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     fields: Vec::new(),
+                                    field_ast_ids: Vec::new(),
                                     field_defaults: Vec::new(),
                                     type_param_bounds,
                                     type_param_type_ids: Vec::new(), // filled in second pass
@@ -302,6 +303,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 match item {
                     Item::Struct(struct_decl) => {
                         let mut fields = Vec::new();
+                        let mut field_ast_ids = Vec::new();
                         let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
                         // Extract type parameter names for generic structs
                         let type_params: Vec<String> = struct_decl
@@ -337,6 +339,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 )
                             };
                             fields.push((field.name.clone(), type_id, field.is_pub));
+                            field_ast_ids.push(field.id);
                             field_defaults.push(field.default.clone());
                         }
                         // Extract type parameter bounds
@@ -368,6 +371,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             name: struct_decl.name.clone(),
                             module_source: module_source.clone(),
                             fields,
+                            field_ast_ids,
                             field_defaults,
                             type_param_bounds,
                             type_param_type_ids,
@@ -452,6 +456,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             cases.push(VariantCaseData {
                                 name: case.name.clone(),
                                 payload,
+                                ast_id: case.id,
                             });
                         }
                         let type_param_type_ids: Vec<TypeId> = type_params
@@ -486,6 +491,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .map(|(index, case)| EnumCaseData {
                                 name: case.name.clone(),
                                 index: index as u32,
+                                ast_id: case.id,
                             })
                             .collect();
                         all_enum_cases
@@ -516,6 +522,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .map(|(i, m)| FlagsMemberData {
                                 name: m.name.clone(),
                                 bitmask: 1u32 << i,
+                                ast_id: m.id,
                             })
                             .collect();
                         all_flags_cases
@@ -526,6 +533,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 FlagsInfo {
                                     type_id: flags_type,
                                     members,
+                                    module_source: module_source.clone(),
                                 },
                             );
                     }
@@ -776,7 +784,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 if let Item::Use(use_decl) = item {
                     for use_item in &use_decl.items {
                         match use_item {
-                            crate::ast::UseItem::Simple { name, alias } => {
+                            crate::ast::UseItem::Simple { name, alias, .. } => {
                                 // Add both original name and alias (if any)
                                 imported_functions.insert(name.clone());
                                 if let Some(a) = alias {
@@ -838,6 +846,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 current_module_items: &[], // Set in resolve_module
                 effect_sources: IndexMap::default(), // Populated per-module in resolve_module
                 current_effect_params: IndexSet::default(),
+                current_effect_param_decls: IndexMap::default(),
                 trait_ctx: super::trait_env::TraitContext::default(),
                 generic_struct_names: IndexSet::default(),
                 generic_function_params: IndexMap::default(),
@@ -1042,7 +1051,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     name::resolve_import_with_entry(from_module, &use_decl.source, entry_module);
                 for use_item in &use_decl.items {
                     match use_item {
-                        ast::UseItem::Simple { name, alias } => {
+                        ast::UseItem::Simple { name, alias, .. } => {
                             let local_name = alias.as_ref().unwrap_or(name);
                             sources.insert(local_name.clone(), source.clone());
                             if alias.is_some() {

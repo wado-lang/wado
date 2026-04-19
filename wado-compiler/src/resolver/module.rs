@@ -82,10 +82,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     scope.register_generic_params(&struct_decl.type_params, 0);
 
                     let mut fields = Vec::new();
+                    let mut field_ast_ids = Vec::new();
                     let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
                     for field in &struct_decl.fields {
                         let type_id = scope.resolve_type(&field.ty);
                         fields.push((field.name.clone(), type_id, field.is_pub));
+                        field_ast_ids.push(field.id);
                         field_defaults.push(field.default.clone());
                     }
                     // Extract type parameter bounds
@@ -119,6 +121,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             name: struct_decl.name.clone(),
                             module_source,
                             fields,
+                            field_ast_ids,
                             field_defaults,
                             type_param_bounds,
                             type_param_type_ids,
@@ -188,6 +191,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         cases.push(VariantCaseData {
                             name: case.name.clone(),
                             payload,
+                            ast_id: case.id,
                         });
                     }
 
@@ -222,6 +226,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .map(|(index, case)| EnumCaseData {
                             name: case.name.clone(),
                             index: index as u32,
+                            ast_id: case.id,
                         })
                         .collect();
                     self.enum_cases.insert(
@@ -249,6 +254,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         .map(|(i, m)| FlagsMemberData {
                             name: m.name.clone(),
                             bitmask: 1u32 << i,
+                            ast_id: m.id,
                         })
                         .collect();
                     self.flags_cases.insert(
@@ -256,6 +262,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         FlagsInfo {
                             type_id: flags_type,
                             members,
+                            module_source: self.current_module_source.clone(),
                         },
                     );
                 }
@@ -329,6 +336,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .trait_ctx
                             .type_params
                             .insert(param.name.clone(), (actual_idx, type_id));
+                        scope
+                            .trait_ctx
+                            .type_param_decls
+                            .insert(param.name.clone(), param.id);
                         if !param.bounds.is_empty() {
                             scope
                                 .trait_ctx
@@ -380,6 +391,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         }
                     }
 
+                    // Resolve the trait type for its side effect of recording a
+                    // use->def reference from the trait-name identifier in the
+                    // impl header (`impl Greet for Bot`) to the trait decl. The
+                    // resulting TypeId is unused because trait bounds are
+                    // checked via trait_query, not via type substitution.
+                    if let Some(trait_type) = &impl_block.trait_type {
+                        let _ = scope.resolve_type(trait_type);
+                    }
+                    // Resolve the implementing type for its reference-recording
+                    // side effect (already performed when method signatures are
+                    // later resolved, but doing it here ensures the ref is
+                    // recorded even for impls with no methods referencing it).
+                    let _ = scope.resolve_type(&impl_block.ty);
+
                     // Collect method signatures with mangled names
                     let struct_name = scope.get_type_name(&impl_block.ty);
                     let trait_name = impl_block
@@ -402,6 +427,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 .trait_ctx
                                 .type_params
                                 .insert(param.name.clone(), (idx, type_id));
+                            scope
+                                .trait_ctx
+                                .type_param_decls
+                                .insert(param.name.clone(), param.id);
                             if !param.bounds.is_empty() {
                                 scope
                                     .trait_ctx

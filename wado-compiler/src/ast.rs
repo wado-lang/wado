@@ -326,7 +326,15 @@ pub trait AstVisitor: Sized {
 
 pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
     match item {
-        Item::Use(u) => v.visit_id(u.id, u.span),
+        Item::Use(u) => {
+            v.visit_id(u.id, u.span);
+            v.visit_id(u.source_id, u.source_span);
+            for it in &u.items {
+                if let UseItem::Simple { id, name_span, .. } = it {
+                    v.visit_id(*id, *name_span);
+                }
+            }
+        }
         Item::Function(func) => v.visit_function(func),
         Item::Effect(e) => {
             v.visit_id(e.id, e.span);
@@ -446,6 +454,9 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
     }
     if let Some(ret) = &func.return_type {
         v.visit_type(ret);
+    }
+    for (id, span) in &func.effect_ids {
+        v.visit_id(*id, *span);
     }
     if let Some(body) = &func.body {
         v.visit_block(body);
@@ -568,7 +579,12 @@ pub fn walk_match_expr<V: AstVisitor>(v: &mut V, m: &MatchExpr) {
 pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
     v.visit_id(expr.id(), expr.span());
     match expr {
-        Expr::Ident(_) | Expr::Literal(_) => {}
+        Expr::Ident(i) => {
+            for segment in &i.segments {
+                v.visit_id(segment.id, segment.span);
+            }
+        }
+        Expr::Literal(_) => {}
         Expr::Binary(e) => {
             v.visit_expr(&e.left);
             v.visit_expr(&e.right);
@@ -599,6 +615,7 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         }
         Expr::MethodCall(e) => {
             v.visit_expr(&e.receiver);
+            v.visit_id(e.method_id, e.method_span);
             for ty in &e.type_args {
                 v.visit_type(ty);
             }
@@ -608,6 +625,7 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         }
         Expr::StaticMethodCall(e) => {
             v.visit_type(&e.target_type);
+            v.visit_id(e.method_id, e.method_span);
             for ty in &e.type_args {
                 v.visit_type(ty);
             }
@@ -615,7 +633,10 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
                 v.visit_expr(a);
             }
         }
-        Expr::FieldAccess(e) => v.visit_expr(&e.expr),
+        Expr::FieldAccess(e) => {
+            v.visit_expr(&e.expr);
+            v.visit_id(e.field_id, e.field_span);
+        }
         Expr::Index(e) => {
             v.visit_expr(&e.expr);
             v.visit_expr(&e.index);
@@ -657,7 +678,11 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_type(&c.target_type);
         }
         Expr::StructLiteral(s) => {
+            if let (Some(name_id), Some(name_span)) = (s.name_id, s.name_span) {
+                v.visit_id(name_id, name_span);
+            }
             for field in &s.fields {
+                v.visit_id(field.name_id, field.name_span);
                 v.visit_expr(&field.value);
             }
         }
@@ -691,7 +716,15 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
                 v.visit_pattern(&field.pattern);
             }
         }
-        Pattern::Variant { bindings, .. } => {
+        Pattern::Variant {
+            name_id,
+            name_span,
+            bindings,
+            ..
+        } => {
+            if let Some(id) = name_id {
+                v.visit_id(*id, *name_span);
+            }
             for p in bindings {
                 v.visit_pattern(p);
             }
@@ -720,6 +753,9 @@ pub fn walk_type<V: AstVisitor>(v: &mut V, ty: &Type) {
                 v.visit_type(p);
             }
             v.visit_type(&ft.return_type);
+            for (id, span) in &ft.effect_ids {
+                v.visit_id(*id, *span);
+            }
         }
         Type::Tuple(ts) => {
             for t in ts {
@@ -1063,7 +1099,15 @@ pub struct WorldExport {
 #[derive(Debug, Clone)]
 pub enum UseItem {
     /// Simple import: `name` or `name as alias`
-    Simple { name: String, alias: Option<String> },
+    Simple {
+        /// `AstId` for the name identifier — used by LSP to record a use→def
+        /// edge from the specifier name back to the imported symbol.
+        id: AstId,
+        name: String,
+        /// Span of just the `name` identifier (narrower than the whole item).
+        name_span: Span,
+        alias: Option<String>,
+    },
     /// Effect with functions: `Effect::{func1, func2}`
     EffectFunctions {
         effect_name: String,
@@ -1101,6 +1145,12 @@ pub struct UseDecl {
     pub is_pub: bool,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
     pub source: String,
+    /// Span of the source string literal (without surrounding quotes in the
+    /// start/end columns; used by LSP for path jumps).
+    pub source_span: Span,
+    /// `AstId` for the source string literal — use→def target when a cursor
+    /// lands inside the `"./path"` portion of a use declaration.
+    pub source_id: AstId,
     /// Items being imported
     pub items: Vec<UseItem>,
     /// Optional import attributes
@@ -1127,6 +1177,10 @@ pub struct Function {
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub effects: Vec<String>,
+    /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
+    /// it appeared in the `with` clause. Used by the resolver to record
+    /// use->def references for LSP jump-to-def.
+    pub effect_ids: Vec<(AstId, Span)>,
     /// Parameters declared in `stores[param1, param2]` — the function may store these references.
     pub stores: Vec<String>,
     /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
@@ -1743,6 +1797,12 @@ pub struct StructLiteralExpr {
     /// The struct type name. None for implicit struct literals like `{ x: 1, y: 2 }`
     /// which require type context (e.g., `let p: Point = { x: 1, y: 2 }`).
     pub name: Option<String>,
+    /// `AstId` of just the type name, for cursor-based navigation (jump-to-def).
+    /// Always `Some` iff `name` is `Some`.
+    pub name_id: Option<AstId>,
+    /// Span of just the type name token.
+    /// Always `Some` iff `name` is `Some`.
+    pub name_span: Option<Span>,
     pub fields: Vec<StructLiteralField>,
     /// Whether the original source had a trailing comma (for formatting purposes).
     /// Multiline formatting is used when this is true.
@@ -1754,6 +1814,10 @@ pub struct StructLiteralExpr {
 #[derive(Debug, Clone)]
 pub struct StructLiteralField {
     pub name: String,
+    /// `AstId` of the field name, for cursor-based navigation (jump-to-def).
+    pub name_id: AstId,
+    /// Span of just the field name token.
+    pub name_span: Span,
     pub value: Expr,
     /// Whether this field uses shorthand syntax `{ x }` instead of `{ x: x }`
     pub is_shorthand: bool,
@@ -1806,6 +1870,19 @@ pub struct CompoundAssignExpr {
 
 #[derive(Debug, Clone)]
 pub struct IdentExpr {
+    pub id: AstId,
+    pub name: String,
+    pub span: Span,
+    /// When the identifier is a qualified path like `Color::Red`, each segment
+    /// carries its own [`AstId`] and span so LSP navigation can pinpoint which
+    /// segment the cursor is on. Empty for simple identifiers. For a qualified
+    /// path with N segments, this has N entries in left-to-right order; the
+    /// last entry's name matches the suffix of `name` after the final `::`.
+    pub segments: Vec<PathSegment>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PathSegment {
     pub id: AstId,
     pub name: String,
     pub span: Span,
@@ -1926,6 +2003,10 @@ pub struct MethodCallExpr {
     pub id: AstId,
     pub receiver: Expr,
     pub method: String,
+    /// `AstId` of the method name token, for cursor-based navigation (jump-to-def).
+    pub method_id: AstId,
+    /// Span of just the method name token.
+    pub method_span: Span,
     /// Explicit type arguments for generic methods: `obj.foo::<i32>(x)`
     pub type_args: Vec<Type>,
     pub args: Vec<Expr>,
@@ -1942,6 +2023,10 @@ pub struct StaticMethodCallExpr {
     pub target_type: Type,
     /// The method name (e.g., `with_capacity` or `origin`)
     pub method: String,
+    /// `AstId` of the method name token, for cursor-based navigation (jump-to-def).
+    pub method_id: AstId,
+    /// Span of just the method name token.
+    pub method_span: Span,
     /// Explicit type arguments for generic methods: `Box::<i32>::wrap_other::<String>(x)`
     pub type_args: Vec<Type>,
     /// Arguments to the method
@@ -1956,6 +2041,10 @@ pub struct FieldAccessExpr {
     pub id: AstId,
     pub expr: Expr,
     pub field: String,
+    /// `AstId` of the field name token, for cursor-based navigation (jump-to-def).
+    pub field_id: AstId,
+    /// Span of just the field name token.
+    pub field_span: Span,
     pub span: Span,
 }
 
@@ -2025,6 +2114,14 @@ pub enum Pattern {
     /// Variant pattern: `Some(x)` or `None`
     Variant {
         variant_name: String,
+        /// `AstId` of the variant-name identifier in the pattern. Used to
+        /// record use→def references for LSP navigation (cursor on `Some`
+        /// inside a match arm jumps to the case's declaration site).
+        /// `None` for resolver-synthesized patterns that do not originate in
+        /// source (e.g., None-coercion from `null`).
+        name_id: Option<AstId>,
+        /// Span of the variant-name identifier (not the whole pattern).
+        name_span: Span,
         bindings: Vec<Pattern>,
         span: Span,
     },
@@ -2166,6 +2263,11 @@ pub struct FunctionType {
     pub params: Vec<Type>,
     pub return_type: Type,
     pub effects: Vec<String>,
+    /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
+    /// it appeared in source. Used by the resolver to record use->def
+    /// references for LSP jump-to-def. Empty when constructed by the compiler
+    /// (synthesized function types from monomorphization, etc.).
+    pub effect_ids: Vec<(AstId, Span)>,
     /// Positional indices of parameters the function may store (e.g., `stores[0]`).
     pub stores: Vec<StoresEntry>,
 }

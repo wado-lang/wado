@@ -10,6 +10,7 @@ enum QueryKind {
     Diagnostics,
     References,
     DocumentHighlight,
+    Definition,
 }
 
 pub struct QueryOptions {
@@ -88,6 +89,11 @@ fn format_usage() -> String {
         "  document-highlight   Highlight occurrences of the symbol at --line/--column"
     )
     .unwrap();
+    writeln!(
+        buf,
+        "  definition           Jump to the definition of the symbol at --line/--column"
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
@@ -142,9 +148,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
                     "diagnostics" => QueryKind::Diagnostics,
                     "references" => QueryKind::References,
                     "document-highlight" => QueryKind::DocumentHighlight,
+                    "definition" => QueryKind::Definition,
                     other => {
                         return Err(CliExit::error(format!(
-                            "unknown query kind '{other}'. Available: diagnostics, references, document-highlight"
+                            "unknown query kind '{other}'. Available: diagnostics, references, document-highlight, definition"
                         )));
                     }
                 });
@@ -160,7 +167,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<QueryOptions, CliExit> {
     let kind = kind.ok_or_else(|| CliExit::error_with_usage("missing query kind", &usage))?;
     let input = input.ok_or_else(|| CliExit::error_with_usage("missing input file", &usage))?;
 
-    if matches!(kind, QueryKind::References | QueryKind::DocumentHighlight) {
+    if matches!(
+        kind,
+        QueryKind::References | QueryKind::DocumentHighlight | QueryKind::Definition
+    ) {
         if line.is_none() {
             return Err(CliExit::error_with_usage(
                 "--line is required for this query kind",
@@ -200,6 +210,15 @@ pub async fn run(opts: QueryOptions) {
         }
         QueryKind::DocumentHighlight => {
             query_adapter::run_document_highlight(
+                &opts.input,
+                opts.line.unwrap(),
+                opts.column.unwrap(),
+                opts.json,
+            )
+            .await;
+        }
+        QueryKind::Definition => {
+            query_adapter::run_definition(
                 &opts.input,
                 opts.line.unwrap(),
                 opts.column.unwrap(),
