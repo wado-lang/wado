@@ -130,15 +130,18 @@ fn i32_clz(x: i32) -> i32;
 fn unreachable() -> !;
 
 export fn __cm_export__run() {
-    __initialize_modules();
-    __initialize_modules();
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        __modules_initialized = true;
+    };
+    __inline___initialize_modules_3: {
+        if __modules_initialized {
+            break __inline___initialize_modules_3;
+        }
+        __modules_initialized = true;
+    };
     cm_raw_call task-return(0);
-}
-
-fn __initialize_modules() {
-    if __modules_initialized {
-        return;
-    }
-    __modules_initialized = true;
 }
 

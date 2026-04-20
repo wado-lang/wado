@@ -228,19 +228,17 @@ type "functype//wado-compiler/tests/fixtures/stream-cm-future-drop.wado/__cm_bin
 
 type "functype//wado-compiler/tests/fixtures/stream-cm-future-drop.wado/__cm_export__handle" = fn(i32);  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/stream-cm-future-drop.wado/__initialize_modules" = fn();  // TypeId(42)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(42)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(43)
+type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(43)
 
-type "functype//core:internal/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(44)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(44)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(45)
+type "functype//wasi/future-drop-writable" = fn(i32);  // TypeId(45)
 
-type "functype//wasi/future-drop-writable" = fn(i32);  // TypeId(46)
+type "functype//wado-compiler/tests/fixtures/stream-cm-future-drop.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(46)
 
-type "functype//wado-compiler/tests/fixtures/stream-cm-future-drop.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> [i32, i32];  // TypeId(47)
-
-type "functype//wado-compiler/tests/fixtures/stream-cm-future-drop.wado/handle" = fn();  // TypeId(48)
+type "functype//wado-compiler/tests/fixtures/stream-cm-future-drop.wado/handle" = fn();  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -249,8 +247,6 @@ import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
 import fn wasi/future-new from "wasi/future-new";
 import fn wasi/future-drop-writable from "wasi/future-drop-writable";
-
-global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/stream-cm-future-drop.wado/handle"() {
     let trailers_future: i32;
@@ -391,7 +387,6 @@ fn "wado-compiler/tests/fixtures/stream-cm-future-drop.wado/handle"() {
     let __packed_154: i64;
     let __ptr_155: i32;
     let __len_156: i32;
-    "wado-compiler/tests/fixtures/stream-cm-future-drop.wado/__initialize_modules"();
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
     trailers_future = builtin::i32_wrap_i64(__pair_temp_1);
@@ -730,15 +725,7 @@ fn "wado-compiler/tests/fixtures/stream-cm-future-drop.wado/__cm_binding__Respon
 }
 
 fn "wado-compiler/tests/fixtures/stream-cm-future-drop.wado/__cm_export__handle"(request) {
-    "wado-compiler/tests/fixtures/stream-cm-future-drop.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/stream-cm-future-drop.wado/handle"();
-}
-
-fn "wado-compiler/tests/fixtures/stream-cm-future-drop.wado/__initialize_modules"() {
-    if global:__modules_initialized {
-        return;
-    }
-    global:__modules_initialized = 1;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
@@ -746,13 +733,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l41: loop {
+            l40: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l41;
+                continue l40;
             };
         };
     };

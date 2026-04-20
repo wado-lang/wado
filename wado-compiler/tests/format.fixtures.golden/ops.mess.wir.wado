@@ -8,24 +8,12 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(1)
 
 type "functype//wado-compiler/tests/format.fixtures/ops.mess.dirty.wado/__cm_export__run" = fn();  // TypeId(2)
 
-type "functype//wado-compiler/tests/format.fixtures/ops.mess.dirty.wado/__initialize_modules" = fn();  // TypeId(3)
-
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
 import memory (1) from "mem/memory";
 
-global mut global:__modules_initialized: bool = 0;
-
 fn "wado-compiler/tests/format.fixtures/ops.mess.dirty.wado/__cm_export__run"() {
-    "wado-compiler/tests/format.fixtures/ops.mess.dirty.wado/__initialize_modules"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/format.fixtures/ops.mess.dirty.wado/__initialize_modules"() {
-    if global:__modules_initialized {
-        return;
-    }
-    global:__modules_initialized = 1;
 }
 
 export fn "wado-compiler/tests/format.fixtures/ops.mess.dirty.wado/__cm_export__run" as "run"

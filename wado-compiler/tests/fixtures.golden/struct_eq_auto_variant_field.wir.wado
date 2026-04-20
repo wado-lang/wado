@@ -67,37 +67,35 @@ type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/_
 
 type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_export__run" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__initialize_modules" = fn();  // TypeId(20)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(21)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(21)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(22)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(22)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(23)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(23)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(24)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(25)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(25)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(26)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(26)
 
-type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(27)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(27)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(28)
+type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel") -> bool;  // TypeId(28)
 
-type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel") -> bool;  // TypeId(29)
+type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container") -> bool;  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container") -> bool;  // TypeId(30)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(32)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(33)
+type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Color^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color") -> bool;  // TypeId(33)
 
-type "functype//wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Color^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color", ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color") -> bool;  // TypeId(34)
-
-type "functype//core:prelude/types.wado/Option<i32>^Eq::eq" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/types.wado//Option<i32>") -> bool;  // TypeId(35)
+type "functype//core:prelude/types.wado/Option<i32>^Eq::eq" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/types.wado//Option<i32>") -> bool;  // TypeId(34)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -112,8 +110,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-
 fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/run"() with Stdout {
     let p1: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel";
     let p2: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel";
@@ -126,7 +122,6 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/run"() with S
     let c2: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container";
     let c3: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container";
     let c4: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container";
-    "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__initialize_modules"();
     p1 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 0 } };
     p2 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 0 } };
     p3 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 1 } };
@@ -169,16 +164,8 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_binding_
 }
 
 fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__cm_export__run"() {
-    "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/__initialize_modules"() {
-    if global:__modules_initialized {
-        return;
-    }
-    global:__modules_initialized = 1;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -216,13 +203,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l11: loop {
+            l10: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l11;
+                continue l10;
             };
         };
     };
@@ -278,7 +265,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     __for_1: block {
         i = 0;
         block {
-            l16: loop {
+            l15: loop {
                 if i >= len {
                     break __for_1;
                 }
@@ -286,7 +273,7 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
                     return 0;
                 }
                 i = i + 1;
-                continue l16;
+                continue l15;
             };
         };
     };
@@ -302,11 +289,13 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"
         __local_2 = struct.new "core:prelude/types.wado//Box<i32>" { value: self.x };
         __local_3 = struct.new "core:prelude/types.wado//Box<i32>" { value: other.x };
         break __inline_i32_Eq__eq_0: __local_2.value == __local_3.value;
+        unreachable;
     } -> i32 {
         __inline_i32_Eq__eq_1: block -> bool {
             __local_4 = struct.new "core:prelude/types.wado//Box<i32>" { value: self.y };
             __local_5 = struct.new "core:prelude/types.wado//Box<i32>" { value: other.y };
             break __inline_i32_Eq__eq_1: __local_4.value == __local_5.value;
+            unreachable;
         };
     } else {
         0;
@@ -340,6 +329,7 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Color^Eq::eq"
                 __local_4 = ref.cast "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue"(self).payload_0;
                 __local_5 = ref.cast "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue"(other).payload_0;
                 break __inline_i32_Eq__eq_0: __local_4 == __local_5;
+                unreachable;
             };
         } else {
             return 0;

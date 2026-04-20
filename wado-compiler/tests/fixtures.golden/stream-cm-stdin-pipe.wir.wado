@@ -24,19 +24,17 @@ type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_bind
 
 type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_export__run" = fn();  // TypeId(7)
 
-type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__initialize_modules" = fn();  // TypeId(8)
+type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(10)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(11)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(12)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(13)
-
-type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdin_read_via_stream" = fn() -> [i32, i32];  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdin_read_via_stream" = fn() -> [i32, i32];  // TypeId(13)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -48,8 +46,6 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
-
-global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdout_write_via_stream"(data) {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
@@ -70,8 +66,6 @@ fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdin_r
 fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_export__run"() {
     let stdin_stream: i32;
     let subtask: i32;
-    "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__initialize_modules"();
-    "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__initialize_modules"();
     let __sroa___pattern_temp_0_0: i32;
     let __sroa___pattern_temp_0_1: i32;
     multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_binding__Stdin_read_via_stream"();
@@ -98,13 +92,6 @@ fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_export__run"() {
         ref.null none;
     }); drop("mem/realloc"(__fr_ptr_1, 40, 8, 0)); __fr_opt_2);
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__initialize_modules"() {
-    if global:__modules_initialized {
-        return;
-    }
-    global:__modules_initialized = 1;
 }
 
 export fn "wado-compiler/tests/fixtures/stream-cm-stdin-pipe.wado/__cm_export__run" as "run"

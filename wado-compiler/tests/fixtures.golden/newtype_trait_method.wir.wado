@@ -20,31 +20,34 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(3)
+struct wado-compiler/tests/fixtures/newtype_trait_method.wado//Point {  // TypeId(3)
+    mut x: i32,
+    mut y: i32,
+}
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(4)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(7)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(8)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(9)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/newtype_trait_method.wado/run" = fn();  // TypeId(12)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/newtype_trait_method.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//wado-compiler/tests/fixtures/newtype_trait_method.wado/run" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/newtype_trait_method.wado/__cm_export__run" = fn();  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/newtype_trait_method.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/newtype_trait_method.wado/__initialize_modules" = fn();  // TypeId(15)
+type "functype//wado-compiler/tests/fixtures/newtype_trait_method.wado/__cm_export__run" = fn();  // TypeId(15)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
 
@@ -95,19 +98,19 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-
 fn "wado-compiler/tests/fixtures/newtype_trait_method.wado/run"() with Stdout {
+    let loc: ref "wado-compiler/tests/fixtures/newtype_trait_method.wado//Point";
     let d: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    "wado-compiler/tests/fixtures/newtype_trait_method.wado/__initialize_modules"();
-    d = 10 + 20;
+    loc = value_copy "wado-compiler/tests/fixtures/newtype_trait_method.wado//Point"(struct.new "wado-compiler/tests/fixtures/newtype_trait_method.wado//Point" { x: 10, y: 20 });
+    d = loc.x + loc.y;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(d, __local_3);
         break __tmpl: __local_2;
+        unreachable;
     });
 }
 
@@ -116,16 +119,8 @@ fn "wado-compiler/tests/fixtures/newtype_trait_method.wado/__cm_binding__Stdout_
 }
 
 fn "wado-compiler/tests/fixtures/newtype_trait_method.wado/__cm_export__run"() {
-    "wado-compiler/tests/fixtures/newtype_trait_method.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/newtype_trait_method.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/newtype_trait_method.wado/__initialize_modules"() {
-    if global:__modules_initialized {
-        return;
-    }
-    global:__modules_initialized = 1;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -163,13 +158,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l3: loop {
+            l2: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l3;
+                continue l2;
             };
         };
     };
@@ -221,13 +216,13 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     __for_1: block {
         t = val;
         block {
-            l8: loop {
+            l7: loop {
                 if t <= 0_i64 {
                     break __for_1;
                 }
                 n = n + 1;
                 t = t / 10_i64;
-                continue l8;
+                continue l7;
             };
         };
     };
@@ -244,14 +239,14 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         __for_2: block {
             temp = abs_val;
             block {
-                l12: loop {
+                l11: loop {
                     if temp <= 0_i64 {
                         break __for_2;
                     }
                     pos = pos - 1;
                     builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     temp = temp / 10_i64;
-                    continue l12;
+                    continue l11;
                 };
             };
         };
@@ -275,6 +270,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -292,8 +288,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -361,13 +359,13 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
         i = 0;
         _licm_buf_4 = self.buf;
         block {
-            l24: loop {
+            l23: loop {
                 if i >= n {
                     break __for_0;
                 }
                 "core:prelude/string.wado/String::push"(_licm_buf_4, c);
                 i = i + 1;
-                continue l24;
+                continue l23;
             };
         };
     };

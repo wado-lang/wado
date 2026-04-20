@@ -8,59 +8,50 @@ variant ./variant_struct_string_module.wado//Align {  // TypeId(0)
     Center,
 }
 
-struct ./variant_struct_string_module.wado//Opts {  // TypeId(1)
-    mut align: ref "./variant_struct_string_module.wado//Align",
-    mut width: i32,
-}
+array builtin::array<u8> (mut u8);  // TypeId(1)
 
-array builtin::array<u8> (mut u8);  // TypeId(2)
-
-struct core:prelude/string.wado//String {  // TypeId(3)
+struct core:prelude/string.wado//String {  // TypeId(2)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_export__run" = fn();  // TypeId(13)
+type "functype//wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_export__run" = fn();  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/variant_struct_string.wado/__initialize_modules" = fn();  // TypeId(14)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
 
-type "functype//./variant_struct_string_module.wado/format_str" = fn(ref "core:prelude/string.wado//String", ref "./variant_struct_string_module.wado//Opts") -> ref "core:prelude/string.wado//String";  // TypeId(15)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(15)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(17)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(16)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(18)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(19)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(18)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -75,43 +66,34 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-
 fn "wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_binding__Stdout_write_via_stream"(data) {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn "wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_export__run"() {
-    let opts: ref "./variant_struct_string_module.wado//Opts";
     let s: ref "core:prelude/string.wado//String";
-    "wado-compiler/tests/fixtures/variant_struct_string.wado/__initialize_modules"();
-    "wado-compiler/tests/fixtures/variant_struct_string.wado/__initialize_modules"();
-    opts = struct.new "./variant_struct_string_module.wado//Opts" { align: struct.new "./variant_struct_string_module.wado//Align" { 1 }, width: 0 };
-    s = "./variant_struct_string_module.wado/format_str"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, opts);
-    "core:cli/println"(s);
-    "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/variant_struct_string.wado/__initialize_modules"() {
-    if global:__modules_initialized {
-        return;
-    }
-    global:__modules_initialized = 1;
-}
-
-fn "./variant_struct_string_module.wado/format_str"(s, opts) {
-    if opts.width <= 0 {
-        return s;
-    }
-    return let __match_scrut_0: ref "./variant_struct_string_module.wado//Align", __match_scrut_0 = opts.align, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
-        s;
-    } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
-        s;
-    } else if __match_scrut_0.discriminant == 2 -> ref "core:prelude/string.wado//String" {
-        s;
-    } else {
+    let __local_4: ref "core:prelude/string.wado//String";
+    let __sroa_opts_align: ref "./variant_struct_string_module.wado//Align";
+    __sroa_opts_align = struct.new "./variant_struct_string_module.wado//Align" { 1 };
+    s = value_copy "core:prelude/string.wado//String"(__inline_format_str_6: block -> ref "core:prelude/string.wado//String" {
+        __local_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+        break __inline_format_str_6: __local_4;
+        let __match_scrut_0: ref "./variant_struct_string_module.wado//Align";
+        __match_scrut_0 = __sroa_opts_align;
+        if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+            __local_4;
+        } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+            __local_4;
+        } else if __match_scrut_0.discriminant == 2 -> ref "core:prelude/string.wado//String" {
+            __local_4;
+        } else {
+            unreachable;
+        }
+        break __inline_format_str_6;
         unreachable;
     });
+    "core:cli/println"(s);
+    "wasi/task-return"(0);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -149,13 +131,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l7: loop {
+            l5: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l7;
+                continue l5;
             };
         };
     };

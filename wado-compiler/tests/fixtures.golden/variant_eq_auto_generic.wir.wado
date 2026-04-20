@@ -51,29 +51,27 @@ type "functype//wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__cm_b
 
 type "functype//wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__cm_export__run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__initialize_modules" = fn();  // TypeId(17)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(18)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(18)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(19)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(19)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(20)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(20)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(21)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(22)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(22)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(23)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
+type "functype//wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/Option<i32>^Eq::eq" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/types.wado//Option<i32>") -> bool;  // TypeId(26)
 
-type "functype//wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/Option<i32>^Eq::eq" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/types.wado//Option<i32>") -> bool;  // TypeId(27)
-
-type "functype//wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/Maybe<i32>^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>", ref "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>") -> bool;  // TypeId(28)
+type "functype//wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/Maybe<i32>^Eq::eq" = fn(ref "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>", ref "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>") -> bool;  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -88,8 +86,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-
 fn "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/run"() with Stdout {
     let a: ref "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>";
     let b: ref "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>";
@@ -99,7 +95,6 @@ fn "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/run"() with Stdout
     let x: ref "core:prelude/types.wado//Option<i32>";
     let y: ref "core:prelude/types.wado//Option<i32>";
     let z: ref "core:prelude/types.wado//Option<i32>";
-    "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__initialize_modules"();
     a = struct.new "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just" { discriminant: 0, payload_0: 42 };
     b = struct.new "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just" { discriminant: 0, payload_0: 42 };
     c = struct.new "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado//Maybe<i32>::Just" { discriminant: 0, payload_0: 7 };
@@ -136,16 +131,8 @@ fn "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__cm_binding__Stdo
 }
 
 fn "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__cm_export__run"() {
-    "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/variant_eq_auto_generic.wado/__initialize_modules"() {
-    if global:__modules_initialized {
-        return;
-    }
-    global:__modules_initialized = 1;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -183,13 +170,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l10: loop {
+            l9: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l10;
+                continue l9;
             };
         };
     };

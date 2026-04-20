@@ -41,25 +41,23 @@ type "functype//wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__cm_bi
 
 type "functype//wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__cm_export__run" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__initialize_modules" = fn();  // TypeId(15)
+type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(15)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(16)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(16)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(17)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(18)
+type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(18)
 
-type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(19)
+type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(19)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(20)
+type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(20)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(24)
+type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(23)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -74,15 +72,12 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-cli";
 
-global mut global:__modules_initialized: bool = 0;
-
 fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/run"() with Stderr {
     let rx: i32;
     let tx: i32;
     let subtask: i32;
     let __local_3: ref "core:prelude//Array<u8>";
     let data: ref "core:prelude//Array<u8>";
-    "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__initialize_modules"();
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(__pair_temp_1);
@@ -91,6 +86,7 @@ fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/run"() with Stderr 
     data = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __local_3 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
         break __seq_lit: __local_3;
+        unreachable;
     };
     "core:internal/cm_stream_write_u8"(tx, data);
     "wasi/stream-drop-writable"(tx);
@@ -121,16 +117,8 @@ fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__cm_binding__Stder
 }
 
 fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__cm_export__run"() {
-    "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__initialize_modules"();
     "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "wado-compiler/tests/fixtures/stream-cm-stderr-write.wado/__initialize_modules"() {
-    if global:__modules_initialized {
-        return;
-    }
-    global:__modules_initialized = 1;
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
@@ -138,13 +126,13 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l5: loop {
+            l4: loop {
                 if i >= len {
                     break __for_1;
                 }
                 builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 i = i + 1;
-                continue l5;
+                continue l4;
             };
         };
     };
@@ -182,6 +170,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
         __local_9 = data.repr;
         __local_10 = data.used;
         break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_9, __local_10);
+        unreachable;
     };
     ptr = builtin::i32_wrap_i64(packed);
     len = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -214,6 +203,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;
@@ -221,13 +211,13 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l10: loop {
+            l9: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set_u8(new_repr, i, builtin::array_get<u8>(old_repr, i));
                 i = i + 1;
-                continue l10;
+                continue l9;
             };
         };
     };

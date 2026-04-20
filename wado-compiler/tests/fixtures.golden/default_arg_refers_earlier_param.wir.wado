@@ -17,11 +17,9 @@ type "functype//wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wa
 
 type "functype//wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wado/__initialize_module" = fn();  // TypeId(5)
 
-type "functype//wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wado/__initialize_modules" = fn();  // TypeId(6)
+type "functype//core:prelude/array.wado/Array<u64>::push" = fn(ref "core:prelude//Array<u64>", u64);  // TypeId(6)
 
-type "functype//core:prelude/array.wado/Array<u64>::push" = fn(ref "core:prelude//Array<u64>", u64);  // TypeId(7)
-
-type "functype//core:prelude/array.wado/Array<u64>::grow" = fn(ref "core:prelude//Array<u64>");  // TypeId(8)
+type "functype//core:prelude/array.wado/Array<u64>::grow" = fn(ref "core:prelude//Array<u64>");  // TypeId(7)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -30,20 +28,24 @@ import memory (1) from "mem/memory";
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wado/__cm_export__run"() {
-    "wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wado/__initialize_modules"();
-    "wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wado/__initialize_modules"();
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
+    __inline_run_0____inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline_run_0____inline___initialize_modules_0;
+        }
+        "wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wado/__initialize_module"();
+        global:__modules_initialized = 1;
+    };
     "wasi/task-return"(0);
 }
 
 fn "wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wado/__initialize_module"() {
-}
-
-fn "wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wado/__initialize_modules"() {
-    if global:__modules_initialized {
-        return;
-    }
-    "wado-compiler/tests/fixtures/default_arg_refers_earlier_param.wado/__initialize_module"();
-    global:__modules_initialized = 1;
 }
 
 fn "core:prelude/array.wado/Array<u64>::push"(self, value) {
@@ -68,6 +70,7 @@ fn "core:prelude/array.wado/Array<u64>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u64>(new_capacity);
     old_repr = self.repr;
@@ -75,13 +78,13 @@ fn "core:prelude/array.wado/Array<u64>::grow"(self) {
     __for_0: block {
         i = 0;
         block {
-            l3: loop {
+            l4: loop {
                 if i >= used {
                     break __for_0;
                 }
                 builtin::array_set<u64>(new_repr, i, builtin::array_get<u64>(old_repr, i));
                 i = i + 1;
-                continue l3;
+                continue l4;
             };
         };
     };
