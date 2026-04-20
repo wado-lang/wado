@@ -1,30 +1,13 @@
-// Standalone inlining regression (non-int128):
-// repeated inline sites with labeled blocks must be namespaced per inline site.
-use { Stdout } from "core:cli";
-
-#[inline(always)]
-fn inner(n: i32) -> i32 {
-    let v = foo: {
-        if n > 0 {
-            break foo: n;
-        }
-        break foo: 0;
-    };
-    return v + 1;
-}
-
-#[inline(always)]
-fn outer() -> i32 {
-    return inner(2) + inner(3);
-}
+// O3 inlining regression: printing u128 should compile and run correctly.
+use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    assert outer() == 7;
+    let x: u128 = 12345;
+    println(`x={x}`);
 }
 
 __DATA__
 {
-    "stdout": "",
-    "only_opt": ["O2"],
-    "wir_expect:O2": ["break __inline_inner_", "__foo:"]
+    "stdout": "x=12345\n",
+    "only_opt": ["O3"]
 }
