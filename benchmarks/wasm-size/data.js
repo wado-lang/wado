@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776616346000,
+  "lastUpdate": 1776718574676,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -14993,6 +14993,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 618057,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "312622c7091eda43948a2c164cc4ca89bfa96453",
+          "message": "Merge pull request #891 from wado-lang/copilot/set-inline-threshold-to-30\n\nRaise -O3 inline threshold to 30",
+          "timestamp": "2026-04-21T05:52:38+09:00",
+          "tree_id": "effc6b837f8b9e33d541a8ce4a6a619f8a0f32db",
+          "url": "https://github.com/wado-lang/wado/commit/312622c7091eda43948a2c164cc4ca89bfa96453"
+        },
+        "date": 1776718574429,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1773,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8982,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18988,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 635559,
             "unit": "bytes"
           }
         ]
