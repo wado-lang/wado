@@ -17,7 +17,7 @@ All levels run DCE (Dead Code Elimination) on functions, types, and globals.
 | `-O0`           | 0          | N/A              | DCE only                 |
 | `-O1`           | 2          | 5                |                          |
 | `-O2` (default) | 10         | 12               |                          |
-| `-O3`           | 100        | 20               |                          |
+| `-O3`           | 100        | 30               |                          |
 | `-Os`           | 10         | 12               | strips Wasm name section |
 
 Optimization passes run in a fixed-point loop with early exit on convergence.

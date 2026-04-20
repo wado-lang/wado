@@ -139,6 +139,7 @@ fn "wado-compiler/tests/fixtures/select_basic.wado/run"() with Stdout {
 condition: if fa32 > fb32 { fa32; } else { fb32; } == 3.0 as f32
 "), used: 66 });
             break __tmpl: __local_69;
+            unreachable;
         });
         unreachable;
     }
@@ -162,6 +163,7 @@ condition: if fa32 > fb32 { fa32; } else { fb32; } == 3.0 as f32
 condition: if false { 1.0 as f32; } else { 2.0 as f32; } == 2.0 as f32
 "), used: 72 });
             break __tmpl: __local_71;
+            unreachable;
         });
         unreachable;
     }
@@ -185,6 +187,7 @@ condition: if false { 1.0 as f32; } else { 2.0 as f32; } == 2.0 as f32
 condition: if true { ca; } else { cb; } == 'a'
 "), used: 48 });
             break __tmpl: __local_77;
+            unreachable;
         });
         unreachable;
     }
@@ -208,6 +211,7 @@ condition: if true { ca; } else { cb; } == 'a'
 condition: if false { ca; } else { cb; } == 'z'
 "), used: 49 });
             break __tmpl: __local_79;
+            unreachable;
         });
         unreachable;
     }
@@ -407,6 +411,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -424,8 +429,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

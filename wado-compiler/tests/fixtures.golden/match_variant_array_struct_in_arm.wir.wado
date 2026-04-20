@@ -156,11 +156,13 @@ fn "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado/classify
             __seq_lit: block -> ref "core:prelude//Array<Pair>" {
                 __local_2 = struct.new "core:prelude//Array<Pair>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Pair">(struct.new "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Pair" { a: __local_1, b: __local_1 }), used: 1 };
                 break __seq_lit: __local_2;
+                unreachable;
             };
         } else {
             __seq_lit: block -> ref "core:prelude//Array<Pair>" {
                 __local_3 = struct.new "core:prelude//Array<Pair>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Pair">(0), used: 0 };
                 break __seq_lit: __local_3;
+                unreachable;
             };
         }
     } else if ref.test "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Shape::Rect"(__match_scrut_0) -> ref "core:prelude//Array<Pair>" {
@@ -170,11 +172,13 @@ fn "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado/classify
         __seq_lit: block -> ref "core:prelude//Array<Pair>" {
             __local_5 = struct.new "core:prelude//Array<Pair>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Pair">(struct.new "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Pair" { a: __local_4.0, b: __local_4.1 }), used: 1 };
             break __seq_lit: __local_5;
+            unreachable;
         };
     } else if __match_scrut_0.discriminant == 2 -> ref "core:prelude//Array<Pair>" {
         __seq_lit: block -> ref "core:prelude//Array<Pair>" {
             __local_6 = struct.new "core:prelude//Array<Pair>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Pair">(0), used: 0 };
             break __seq_lit: __local_6;
+            unreachable;
         };
     } else {
         unreachable;
@@ -249,6 +253,7 @@ condition: result.len() == 1
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_1, __local_37);
             "core:prelude/string.wado/String::push"(__local_15, 10);
             break __tmpl: __local_15;
+            unreachable;
         });
         unreachable;
     }
@@ -258,6 +263,7 @@ condition: result.len() == 1
             unreachable;
         }
         break __inline_Array_Pair__IndexValue_i32___index_value_10: builtin::array_get<ref "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Pair">(result.repr, 0);
+        unreachable;
     }.a;
     __cond_4 = __v0_3 == 5;
     if __cond_4 == 0 {
@@ -285,6 +291,7 @@ condition: result[0].a == 5
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_3, __local_50);
             "core:prelude/string.wado/String::push"(__local_17, 10);
             break __tmpl: __local_17;
+            unreachable;
         });
         unreachable;
     }
@@ -316,6 +323,7 @@ condition: empty.len() == 0
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_6, __local_62);
             "core:prelude/string.wado/String::push"(__local_19, 10);
             break __tmpl: __local_19;
+            unreachable;
         });
         unreachable;
     }
@@ -347,6 +355,7 @@ condition: rect.len() == 1
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_9, __local_74);
             "core:prelude/string.wado/String::push"(__local_21, 10);
             break __tmpl: __local_21;
+            unreachable;
         });
         unreachable;
     }
@@ -356,6 +365,7 @@ condition: rect.len() == 1
             unreachable;
         }
         break __inline_Array_Pair__IndexValue_i32___index_value_34: builtin::array_get<ref "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Pair">(rect.repr, 0);
+        unreachable;
     }.a;
     __cond_12 = __v0_11 == 3;
     if __cond_12 == 0 {
@@ -383,6 +393,7 @@ condition: rect[0].a == 3
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_11, __local_87);
             "core:prelude/string.wado/String::push"(__local_23, 10);
             break __tmpl: __local_23;
+            unreachable;
         });
         unreachable;
     }
@@ -392,6 +403,7 @@ condition: rect[0].a == 3
             unreachable;
         }
         break __inline_Array_Pair__IndexValue_i32___index_value_42: builtin::array_get<ref "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Pair">(rect.repr, 0);
+        unreachable;
     }.b;
     __cond_14 = __v0_13 == 4;
     if __cond_14 == 0 {
@@ -419,6 +431,7 @@ condition: rect[0].b == 4
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_13, __local_100);
             "core:prelude/string.wado/String::push"(__local_25, 10);
             break __tmpl: __local_25;
+            unreachable;
         });
         unreachable;
     }
@@ -618,6 +631,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -635,8 +649,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -820,6 +836,7 @@ fn "core:prelude/array.wado/Array<Pair>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/match_variant_array_struct_in_arm.wado//Pair">(new_capacity);
     old_repr = self.repr;

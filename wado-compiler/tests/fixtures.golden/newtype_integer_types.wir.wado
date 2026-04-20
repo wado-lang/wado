@@ -136,6 +136,7 @@ fn "wado-compiler/tests/fixtures/newtype_integer_types.wado/run"() with Stdout {
         __local_30 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as UserId"), used: 10 };
         "core:prelude/string.wado/String::push_str"(__local_24.buf, __local_30);
         break __tmpl: __local_6;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
@@ -151,6 +152,7 @@ fn "wado-compiler/tests/fixtures/newtype_integer_types.wado/run"() with Stdout {
         __local_42 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as Timestamp"), used: 13 };
         "core:prelude/string.wado/String::push_str"(__local_36.buf, __local_42);
         break __tmpl: __local_8;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
@@ -167,6 +169,7 @@ fn "wado-compiler/tests/fixtures/newtype_integer_types.wado/run"() with Stdout {
         __local_54 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as Count"), used: 9 };
         "core:prelude/string.wado/String::push_str"(__local_48.buf, __local_54);
         break __tmpl: __local_10;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
@@ -177,6 +180,7 @@ fn "wado-compiler/tests/fixtures/newtype_integer_types.wado/run"() with Stdout {
         __local_66 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as UserId"), used: 10 };
         "core:prelude/string.wado/String::push_str"(__local_60.buf, __local_66);
         break __tmpl: __local_12;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
@@ -193,6 +197,7 @@ fn "wado-compiler/tests/fixtures/newtype_integer_types.wado/run"() with Stdout {
         __local_78 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as Timestamp"), used: 13 };
         "core:prelude/string.wado/String::push_str"(__local_72.buf, __local_78);
         break __tmpl: __local_14;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
@@ -208,6 +213,7 @@ fn "wado-compiler/tests/fixtures/newtype_integer_types.wado/run"() with Stdout {
         __local_90 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as Count"), used: 9 };
         "core:prelude/string.wado/String::push_str"(__local_84.buf, __local_90);
         break __tmpl: __local_16;
+        unreachable;
     });
 }
 
@@ -367,6 +373,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -387,6 +394,7 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -411,6 +419,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         repr = __inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
             __local_12 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_12.repr;
+            unreachable;
         };
         "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
@@ -425,6 +434,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
             __local_13 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_13.repr;
+            unreachable;
         }, offset_11, abs_val, digit_count_10);
     }
 }
@@ -443,8 +453,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

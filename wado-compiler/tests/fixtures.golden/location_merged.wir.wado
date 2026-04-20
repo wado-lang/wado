@@ -107,6 +107,7 @@ fn "wado-compiler/tests/fixtures/location_merged.wado/test_line_template"() with
         __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_0 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(34, __local_1);
         break __tmpl: __local_0;
+        unreachable;
     });
 }
 
@@ -121,7 +122,7 @@ fn "wado-compiler/tests/fixtures/location_merged.wado/__cm_export__run"() {
     let __local_7: ref "core:prelude/format.wado//Formatter";
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"stdout_contains\": [\"LOCATION_DATA_MARKER\", \"data: \", \"LOCATION_DATA_MARKER\", \"location_merged.wado\", \"test_function\", \"LocFoo::bar\"]}
 "), used: 136 });
-    s = __tmpl: block -> ref "core:prelude/string.wado//String" {
+    s = __inline_test_data_template_6____tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
         "core:prelude/string.wado/String::push"(__local_3, 100);
         "core:prelude/string.wado/String::push"(__local_3, 97);
@@ -131,7 +132,8 @@ fn "wado-compiler/tests/fixtures/location_merged.wado/__cm_export__run"() {
         "core:prelude/string.wado/String::push"(__local_3, 32);
         "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"stdout_contains\": [\"LOCATION_DATA_MARKER\", \"data: \", \"LOCATION_DATA_MARKER\", \"location_merged.wado\", \"test_function\", \"LocFoo::bar\"]}
 "), used: 136 });
-        break __tmpl: __local_3;
+        break __inline_test_data_template_6____tmpl: __local_3;
+        unreachable;
     };
     "core:cli/println"(s);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/location_merged.wado"), used: 49 });
@@ -141,6 +143,7 @@ fn "wado-compiler/tests/fixtures/location_merged.wado/__cm_export__run"() {
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_6 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(30, __local_7);
         break __inline_i32__to_string_11: __local_6;
+        unreachable;
     });
     "wado-compiler/tests/fixtures/location_merged.wado/test_line_template"();
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("LocFoo::bar"), used: 11 });
@@ -294,6 +297,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -311,8 +315,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

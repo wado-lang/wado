@@ -166,6 +166,7 @@ fn "wado-compiler/tests/fixtures/match_or_pattern_6.wado/run"() {
             unreachable;
         }
         break __inline_is_horizontal_2;
+        unreachable;
     };
     if __v0_0 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -196,6 +197,7 @@ condition: is_horizontal(Direction::East)
             }));
             "core:prelude/string.wado/String::push"(__local_12, 10);
             break __tmpl: __local_12;
+            unreachable;
         });
         unreachable;
     }
@@ -215,6 +217,7 @@ condition: is_horizontal(Direction::East)
             unreachable;
         }
         break __inline_is_horizontal_10;
+        unreachable;
     };
     if __v0_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -245,6 +248,7 @@ condition: is_horizontal(Direction::West)
             }));
             "core:prelude/string.wado/String::push"(__local_14, 10);
             break __tmpl: __local_14;
+            unreachable;
         });
         unreachable;
     }
@@ -264,6 +268,7 @@ condition: is_horizontal(Direction::West)
             unreachable;
         }
         break __inline_is_horizontal_18;
+        unreachable;
     };
     __cond_5 = __v0_4 == 0;
     if __cond_5 == 0 {
@@ -295,6 +300,7 @@ condition: !is_horizontal(Direction::North)
             }));
             "core:prelude/string.wado/String::push"(__local_16, 10);
             break __tmpl: __local_16;
+            unreachable;
         });
         unreachable;
     }
@@ -314,6 +320,7 @@ condition: !is_horizontal(Direction::North)
             unreachable;
         }
         break __inline_is_horizontal_26;
+        unreachable;
     };
     __cond_7 = __v0_6 == 0;
     if __cond_7 == 0 {
@@ -345,10 +352,11 @@ condition: !is_horizontal(Direction::South)
             }));
             "core:prelude/string.wado/String::push"(__local_18, 10);
             break __tmpl: __local_18;
+            unreachable;
         });
         unreachable;
     }
-    __v0_8 = __inline_describe_34: block -> ref "core:prelude/string.wado//String" {
+    __v0_8 = value_copy "core:prelude/string.wado//String"(__inline_describe_34: block -> ref "core:prelude/string.wado//String" {
         __local_73 = 0;
         let __match_scrut_4: "wado-compiler/tests/fixtures/match_or_pattern_6.wado//enum:Direction";
         __match_scrut_4 = __local_73;
@@ -364,7 +372,8 @@ condition: !is_horizontal(Direction::South)
             unreachable;
         }
         break __inline_describe_34;
-    };
+        unreachable;
+    });
     __cond_9 = "core:prelude/string.wado/String^Eq::eq"(__v0_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("vertical"), used: 8 });
     if __cond_9 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -390,10 +399,11 @@ condition: describe(Direction::North) == \"vertical\"
             "core:prelude/format.wado/String^Inspect::inspect"(__v0_8, __local_21);
             "core:prelude/string.wado/String::push"(__local_20, 10);
             break __tmpl: __local_20;
+            unreachable;
         });
         unreachable;
     }
-    __v0_10 = __inline_describe_40: block -> ref "core:prelude/string.wado//String" {
+    __v0_10 = value_copy "core:prelude/string.wado//String"(__inline_describe_40: block -> ref "core:prelude/string.wado//String" {
         __local_81 = 2;
         let __match_scrut_5: "wado-compiler/tests/fixtures/match_or_pattern_6.wado//enum:Direction";
         __match_scrut_5 = __local_81;
@@ -409,7 +419,8 @@ condition: describe(Direction::North) == \"vertical\"
             unreachable;
         }
         break __inline_describe_40;
-    };
+        unreachable;
+    });
     __cond_11 = "core:prelude/string.wado/String^Eq::eq"(__v0_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("horizontal"), used: 10 });
     if __cond_11 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -435,6 +446,7 @@ condition: describe(Direction::East) == \"horizontal\"
             "core:prelude/format.wado/String^Inspect::inspect"(__v0_10, __local_23);
             "core:prelude/string.wado/String::push"(__local_22, 10);
             break __tmpl: __local_22;
+            unreachable;
         });
         unreachable;
     }
@@ -599,6 +611,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -616,8 +629,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -701,6 +716,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
         return 0, __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     }
     if b0 <u 224 {
@@ -893,13 +909,15 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
-    };
+        unreachable;
+    });
     _licm_buf_33 = f.buf;
     b89: block {
         l90: loop {

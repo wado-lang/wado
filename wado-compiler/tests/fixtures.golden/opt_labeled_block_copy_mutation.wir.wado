@@ -77,18 +77,21 @@ fn "wado-compiler/tests/fixtures/opt_labeled_block_copy_mutation.wado/run"() wit
         __local_1 = value_copy "core:prelude/string.wado//String"(s);
         "core:prelude/string.wado/String::push_str"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b"), used: 1 });
         break l: __local_1;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("s="), used: 2 });
         "core:prelude/string.wado/String::push_str"(__local_3, s);
         break __tmpl: __local_3;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("t="), used: 2 });
         "core:prelude/string.wado/String::push_str"(__local_4, t);
         break __tmpl: __local_4;
+        unreachable;
     });
 }
 
@@ -198,8 +201,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

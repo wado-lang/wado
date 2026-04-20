@@ -183,6 +183,7 @@ fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/__test_0_enum_field_
 condition: r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData }
 "), used: 81 });
             break __tmpl: __local_3;
+            unreachable;
         });
         unreachable;
     }
@@ -236,6 +237,7 @@ condition: e.kind == DeserializeErrorKind::UnexpectedType
                 "core:serde/DeserializeErrorKind^Inspect::inspect"(__v1, __local_6);
                 "core:prelude/string.wado/String::push"(__local_5, 10);
                 break __tmpl: __local_5;
+                unreachable;
             });
             unreachable;
         }
@@ -645,6 +647,7 @@ fn "core:prelude/fpfmt.wado/pack64"(m, e) {
         return __inline_f64__from_bits_0: block -> f64 {
             __local_5 = m;
             break __inline_f64__from_bits_0: builtin::f64_reinterpret_i64(__local_5);
+            unreachable;
         };
     }
     mantissa_bits = m & -4503599627370497_i64;
@@ -652,6 +655,7 @@ fn "core:prelude/fpfmt.wado/pack64"(m, e) {
     return __inline_f64__from_bits_1: block -> f64 {
         __local_6 = mantissa_bits | exp_bits;
         break __inline_f64__from_bits_1: builtin::f64_reinterpret_i64(__local_6);
+        unreachable;
     };
 }
 
@@ -669,6 +673,7 @@ fn "core:prelude/fpfmt.wado/parse"(d, p) {
     e = __inline_i32__min_2: block -> i32 {
         __local_14 = (53 - b) - lp;
         break __inline_i32__min_2: select i32(1074 < __local_14, 1074, __local_14);
+        unreachable;
     };
     x = d << builtin::i64_extend_i32_s(64 - b);
     let __sroa_pm_hi: u64;
@@ -750,6 +755,7 @@ fn "core:json/core/json/from_string<i32>"(input) {
         __local_3 = __cast_1.payload_0;
         return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: __local_3 };
         unreachable;
+        unreachable;
     } else {
         unreachable;
     });
@@ -757,10 +763,12 @@ fn "core:json/core/json/from_string<i32>"(input) {
     if de.pos < __inline_String__len_0: block -> i32 {
         __local_5 = de.input;
         break __inline_String__len_0: __local_5.used;
+        unreachable;
     } {
         return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__trailing_1: block -> ref "core:serde//DeserializeError" {
             __local_6 = builtin::i64_extend_i32_s(de.pos);
             break __inline_DeserializeError__trailing_1: struct.new "core:serde//DeserializeError" { kind: 7, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trailing data after value"), used: 25 }, offset: __local_6 };
+            unreachable;
         }) };
     }
     return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Ok" { discriminant: 0, payload_0: v };
@@ -783,6 +791,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -800,8 +809,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -925,6 +936,7 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {
             b = __inline_String__get_byte_1: block -> u8 {
                 __local_4 = _hfs_pos_8;
                 break __inline_String__get_byte_1: builtin::array_get_u8(_licm_repr_7, __local_4);
+                unreachable;
             };
             if b > 32 {
                 self.pos = _hfs_pos_8;
@@ -997,6 +1009,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     if self.pos >= __inline_String__len_0: block -> i32 {
         __local_16 = self.input;
         break __inline_String__len_0: __local_16.used;
+        unreachable;
     } {
         return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start } };
     }
@@ -1005,6 +1018,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
         __local_18 = self.input;
         __local_19 = self.pos;
         break __inline_String__get_byte_2: builtin::array_get_u8(__local_18.repr, __local_19);
+        unreachable;
     } == 45 {
         neg = 1;
         self.pos = self.pos + 1;
@@ -1012,16 +1026,19 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     if self.pos >= __inline_String__len_3: block -> i32 {
         __local_20 = self.input;
         break __inline_String__len_3: __local_20.used;
+        unreachable;
     } {
         return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__eof_4: block -> ref "core:serde//DeserializeError" {
             __local_21 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__eof_4: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: __local_21 };
+            unreachable;
         }) };
     }
     first = __inline_String__get_byte_5: block -> u8 {
         __local_22 = self.input;
         __local_23 = self.pos;
         break __inline_String__get_byte_5: builtin::array_get_u8(__local_22.repr, __local_23);
+        unreachable;
     };
     if (if first < 48 -> i32 {
         1;
@@ -1032,6 +1049,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
             __local_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected number"), used: 15 };
             __local_25 = builtin::i64_extend_i32_s(self.pos);
             break __inline_DeserializeError__unexpected_type_6: struct.new "core:serde//DeserializeError" { kind: 0, message: __local_24, offset: __local_25 };
+            unreachable;
         }) };
     }
     result = first - 48;
@@ -1048,6 +1066,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
             b = __inline_String__get_byte_8: block -> u8 {
                 __local_28 = _hfs_pos_51;
                 break __inline_String__get_byte_8: builtin::array_get_u8(_licm_repr_48, __local_28);
+                unreachable;
             };
             if (if 48 <= b -> i32 {
                 b <= 57;
@@ -1079,6 +1098,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                             b2 = __inline_String__get_byte_10: block -> u8 {
                                 __local_31 = _hfs_pos_49;
                                 break __inline_String__get_byte_10: builtin::array_get_u8(_licm_repr_48, __local_31);
+                                unreachable;
                             };
                             if (if 48 <= b2 -> i32 {
                                 b2 <= 57;
@@ -1102,6 +1122,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                     eb = __inline_String__get_byte_12: block -> u8 {
                         __local_34 = _hfs_pos_51;
                         break __inline_String__get_byte_12: builtin::array_get_u8(_licm_repr_48, __local_34);
+                        unreachable;
                     };
                     if (if eb == 101 -> i32 {
                         1;
@@ -1114,6 +1135,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                             sb = __inline_String__get_byte_14: block -> u8 {
                                 __local_37 = _hfs_pos_51;
                                 break __inline_String__get_byte_14: builtin::array_get_u8(_licm_repr_48, __local_37);
+                                unreachable;
                             };
                             if sb == 45 {
                                 exp_neg = 1;
@@ -1132,6 +1154,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                                 b3 = __inline_String__get_byte_16: block -> u8 {
                                     __local_40 = _hfs_pos_50;
                                     break __inline_String__get_byte_16: builtin::array_get_u8(_licm_repr_48, __local_40);
+                                    unreachable;
                                 };
                                 if (if 48 <= b3 -> i32 {
                                     b3 <= 57;
@@ -1164,6 +1187,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                     return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__unexpected_type_18: block -> ref "core:serde//DeserializeError" {
                         __local_42 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 };
                         break __inline_DeserializeError__unexpected_type_18: struct.new "core:serde//DeserializeError" { kind: 0, message: __local_42, offset: start };
+                        unreachable;
                     }) };
                 }
                 if (if v_signed < -2147483648 -> i32 {
@@ -1175,6 +1199,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                     return struct.new "core:prelude/types.wado//Result<i32,DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__inline_DeserializeError__overflow_19: block -> ref "core:serde//DeserializeError" {
                         __local_44 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 };
                         break __inline_DeserializeError__overflow_19: struct.new "core:serde//DeserializeError" { kind: 5, message: __local_44, offset: start };
+                        unreachable;
                     }) };
                 }
                 self.pos = _hfs_pos_51;

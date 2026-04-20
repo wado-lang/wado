@@ -71,6 +71,7 @@ fn "wado-compiler/tests/fixtures/variant-cross-module-pattern.wado/run"() with S
     ord = __inline_compare_2: block -> "core:prelude/traits.wado//enum:Ordering" {
         break __inline_compare_2: 0;
         break __inline_compare_2: 1;
+        unreachable;
     };
     if ord == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("1 < 2"), used: 5 });
@@ -82,6 +83,7 @@ fn "wado-compiler/tests/fixtures/variant-cross-module-pattern.wado/run"() with S
     ord3 = __inline_compare_4: block -> "core:prelude/traits.wado//enum:Ordering" {
         break __inline_compare_4: 2;
         break __inline_compare_4: 1;
+        unreachable;
     };
     if ord3 == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("5 > 1"), used: 5 });

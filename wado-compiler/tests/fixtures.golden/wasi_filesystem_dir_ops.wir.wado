@@ -295,6 +295,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
             unreachable;
         }
         break __inline_Array_Tuple_Descriptor_String___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0);
+        unreachable;
     }.0;
     drop("wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_remove_directory_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 }));
     mkdir_result = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_create_directory_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 });
@@ -396,6 +397,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
         __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_17 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(entry_count, __local_18);
         break __tmpl: __local_17;
+        unreachable;
     });
     rmdir_result = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_remove_directory_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 });
     if rmdir_result.discriminant == 0 {
@@ -450,6 +452,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Preo
                 __local_10 = builtin::load_i32((__elem_addr + 4) + 4);
                 __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
                 break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_11, used: __local_10 };
+                unreachable;
             };
             "core:prelude/Array<Tuple<Descriptor,String>>::push"(__result, struct.new "tuple//[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
@@ -569,6 +572,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Desc
                     __local_12 = builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4);
                     __local_13 = "core:internal/memory_to_gc_array"(__local_11, __local_12);
                     break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_13, used: __local_12 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -685,6 +689,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Desc
                     __local_12 = builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4);
                     __local_13 = "core:internal/memory_to_gc_array"(__local_11, __local_12);
                     break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_13, used: __local_12 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -773,6 +778,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_stream_read_D
                         __local_19 = builtin::load_i32(((addr + 4) + 4) + 4);
                         __local_20 = "core:internal/memory_to_gc_array"(__local_18, __local_19);
                         break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_20, used: __local_19 };
+                        unreachable;
                     });
                     drop("mem/realloc"(builtin::load_i32((addr + 4) + 4), builtin::load_i32(((addr + 4) + 4) + 4), 1, 0));
                 }
@@ -783,6 +789,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_stream_read_D
                 __local_22 = builtin::load_i32((addr + 16) + 4);
                 __local_23 = "core:internal/memory_to_gc_array"(__local_21, __local_22);
                 break __inline_memory_to_gc_string_2: struct.new "core:prelude/string.wado//String" { repr: __local_23, used: __local_22 };
+                unreachable;
             };
             __struct_result = struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: __vresult, name: __lifted_result_13 };
             "core:prelude/array.wado/Array<DirectoryEntry>::push"(arr, __struct_result);
@@ -904,6 +911,7 @@ fn "core:internal/wait_for_subtask"(packed) {
             __local_5 = subtask;
             "wasi/waitable-join"(__local_5, ws);
             break __inline_cm_waitable_join_0: __local_5;
+            unreachable;
         });
         b122: block {
             l123: loop {
@@ -1066,6 +1074,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1083,8 +1092,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1297,6 +1308,7 @@ fn "core:prelude/array.wado/Array<DirectoryEntry>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(new_capacity);
     old_repr = self.repr;
@@ -1339,6 +1351,7 @@ fn "core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(new_capacity);
     old_repr = self.repr;

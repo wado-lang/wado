@@ -208,15 +208,17 @@ fn "wado-compiler/tests/fixtures/treemap-literal-basic.wado/run"() with Stdout {
     let __local_84: ref "core:prelude/format.wado//Formatter";
     let __local_89: ref "core:prelude/format.wado//Formatter";
     m = __kv_lit: block -> ref "core:collections//TreeMap<String,i32>" {
-        __local_0 = struct.new "core:collections//TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,i32>>" {
+        __local_0 = struct.new "core:collections//TreeMap<String,i32>" { root: ref.null none, entries: ref.as_non_null(__inline_TreeMap_String_i32___new_3____seq_lit: block -> ref "core:prelude//Array<TreeMapEntry<String,i32>>" {
             __local_24 = struct.new "core:prelude//Array<TreeMapEntry<String,i32>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<String,i32>">(0), used: 0 };
-            break __seq_lit: __local_24;
+            break __inline_TreeMap_String_i32___new_3____seq_lit: __local_24;
+            unreachable;
         }), size: 0, deleted_count: 0 };
         __local_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("width"), used: 5 };
         "core:collections/TreeMap<String,i32>::insert"(__local_0, __local_26, 1920);
         __local_29 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("height"), used: 6 };
         "core:collections/TreeMap<String,i32>::insert"(__local_0, __local_29, 1080);
         break __kv_lit: __local_0;
+        unreachable;
     };
     __v0_2 = m.size;
     __cond_3 = __v0_2 == 2;
@@ -245,12 +247,14 @@ condition: m.len() == 2
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_2, __local_41);
             "core:prelude/string.wado/String::push"(__local_12, 10);
             break __tmpl: __local_12;
+            unreachable;
         });
         unreachable;
     }
     __v0_4 = __inline_TreeMap_String_i32___contains_key_15: block -> bool {
         __local_45 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("width"), used: 5 };
         break __inline_TreeMap_String_i32___contains_key_15: "core:collections/TreeMap<String,i32>::find_index"(m, __local_45) >= 0;
+        unreachable;
     };
     if __v0_4 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -281,12 +285,14 @@ condition: m.contains_key(\"width\")
             }));
             "core:prelude/string.wado/String::push"(__local_14, 10);
             break __tmpl: __local_14;
+            unreachable;
         });
         unreachable;
     }
     __v0_6 = __inline_TreeMap_String_i32___contains_key_23: block -> bool {
         __local_58 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("height"), used: 6 };
         break __inline_TreeMap_String_i32___contains_key_23: "core:collections/TreeMap<String,i32>::find_index"(m, __local_58) >= 0;
+        unreachable;
     };
     if __v0_6 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -317,6 +323,7 @@ condition: m.contains_key(\"height\")
             }));
             "core:prelude/string.wado/String::push"(__local_16, 10);
             break __tmpl: __local_16;
+            unreachable;
         });
         unreachable;
     }
@@ -347,6 +354,7 @@ condition: m[\"width\"] == 1920
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_8, __local_78);
             "core:prelude/string.wado/String::push"(__local_18, 10);
             break __tmpl: __local_18;
+            unreachable;
         });
         unreachable;
     }
@@ -377,6 +385,7 @@ condition: m[\"height\"] == 1080
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_10, __local_89);
             "core:prelude/string.wado/String::push"(__local_20, 10);
             break __tmpl: __local_20;
+            unreachable;
         });
         unreachable;
     }
@@ -576,6 +585,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -593,8 +603,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -721,6 +733,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
         return 0, __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     }
     if b0 <u 224 {
@@ -913,13 +926,15 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
-    };
+        unreachable;
+    });
     _licm_buf_33 = f.buf;
     b70: block {
         l71: loop {
@@ -968,6 +983,7 @@ fn "core:collections/TreeMap<String,i32>^IndexValue<K>::index_value"(self, key) 
             __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_3 };
             "core:prelude/format.wado/String^Inspect::inspect"(key, __local_4);
             break __tmpl: __local_3;
+            unreachable;
         });
         unreachable;
     }
@@ -978,6 +994,7 @@ fn "core:collections/TreeMap<String,i32>^IndexValue<K>::index_value"(self, key) 
             unreachable;
         }
         break __inline_Array_TreeMapEntry_String_i32___IndexValue_i32___index_value_2: builtin::array_get<ref "core:collections//TreeMapEntry<String,i32>">(__local_7.repr, index);
+        unreachable;
     }.value;
 }
 
@@ -1007,6 +1024,7 @@ fn "core:collections/TreeMap<String,i32>::find_index"(self, key) {
                             unreachable;
                         }
                         break __inline_Array_TreeMapEntry_String_i32___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapEntry<String,i32>">(_licm_repr_10, __local_7);
+                        unreachable;
                     };
                     if entry.deleted {
                         return -1;
@@ -1042,12 +1060,14 @@ fn "core:collections/TreeMap<String,i32>::insert"(self, key, value) {
                 unreachable;
             }
             break __inline_Array_TreeMapEntry_String_i32___IndexValue_i32___index_value_0: builtin::array_get<ref "core:collections//TreeMapEntry<String,i32>">(__local_6.repr, existing_index);
+            unreachable;
         }.value = value;
         return;
     }
     new_index = __inline_Array_TreeMapEntry_String_i32____len_1: block -> i32 {
         __local_8 = self.entries;
         break __inline_Array_TreeMapEntry_String_i32____len_1: __local_8.used;
+        unreachable;
     };
     entry = struct.new "core:collections//TreeMapEntry<String,i32>" { key: key, value: value, deleted: 0 };
     "core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::push"(self.entries, entry);
@@ -1146,6 +1166,7 @@ fn "core:prelude/array.wado/Array<TreeMapEntry<String,i32>>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<String,i32>">(new_capacity);
     old_repr = self.repr;

@@ -115,6 +115,7 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/run"() with 
             if s.pos >= __inline_String__len_2: block -> i32 {
                 __local_5 = s.data;
                 break __inline_String__len_2: __local_5.used;
+                unreachable;
             } {
                 break b0;
             }
@@ -131,6 +132,7 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/run"() with 
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(count, __local_3);
         break __tmpl: __local_2;
+        unreachable;
     });
 }
 
@@ -290,6 +292,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -307,8 +310,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -376,6 +381,7 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::pee
     if self.pos >= __inline_String__len_0: block -> i32 {
         __local_1 = self.data;
         break __inline_String__len_0: __local_1.used;
+        unreachable;
     } {
         return -1;
     }
@@ -383,6 +389,7 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::pee
         __local_2 = self.data;
         __local_3 = self.pos;
         break __inline_String__get_byte_1: builtin::array_get_u8(__local_2.repr, __local_3);
+        unreachable;
     };
 }
 
@@ -405,6 +412,7 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::ski
             b = __inline_String__get_byte_1: block -> u8 {
                 __local_4 = _hfs_pos_8;
                 break __inline_String__get_byte_1: builtin::array_get_u8(_licm_repr_7, __local_4);
+                unreachable;
             };
             if b == 32 {
                 _hfs_pos_8 = _hfs_pos_8 + 1;

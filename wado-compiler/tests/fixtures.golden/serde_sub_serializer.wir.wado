@@ -144,6 +144,7 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/run"() with Stdout {
         drop(__inline_TextSeqSerializer_SerializeSeq__end_3: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
             "core:prelude/string.wado/String::push"(s_2.parent.buf, 93);
             break __inline_TextSeqSerializer_SerializeSeq__end_3: ref.null none;
+            unreachable;
         });
         break __fused___inline_TextSerializer_Serializer__begin_seq_2;
     };
@@ -156,6 +157,7 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push"(__local_10, 32);
         "core:prelude/string.wado/String::push_str"(__local_10, ser.buf);
         break __tmpl: __local_10;
+        unreachable;
     });
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     __fused___inline_TextSerializer_Serializer__begin_struct_5: block {
@@ -169,6 +171,7 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/run"() with Stdout {
         drop(__inline_TextStructSerializer_SerializeStruct__end_6: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
             "core:prelude/string.wado/String::push"(s_7.parent.buf, 125);
             break __inline_TextStructSerializer_SerializeStruct__end_6: ref.null none;
+            unreachable;
         });
         break __fused___inline_TextSerializer_Serializer__begin_struct_5;
     };
@@ -184,6 +187,7 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push"(__local_11, 32);
         "core:prelude/string.wado/String::push_str"(__local_11, ser.buf);
         break __tmpl: __local_11;
+        unreachable;
     });
 }
 
@@ -343,6 +347,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -360,8 +365,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -430,6 +437,7 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serial
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_3);
         break __tmpl: __local_2;
+        unreachable;
     });
     return ref.null none;
 }
@@ -442,6 +450,7 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serial
         "core:prelude/string.wado/String::push_str"(__local_2, v);
         "core:prelude/string.wado/String::push"(__local_2, 34);
         break __tmpl: __local_2;
+        unreachable;
     });
     return ref.null none;
 }
@@ -560,10 +569,12 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextStructSerializer^
         "core:prelude/string.wado/String::push"(__local_3, 34);
         "core:prelude/string.wado/String::push"(__local_3, 58);
         break __tmpl: __local_3;
+        unreachable;
     });
     drop(__inline_i32_Serialize__serialize_TextSerializer__1: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
         __local_6 = self.parent;
         break __inline_i32_Serialize__serialize_TextSerializer__1: "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serializer::serialize_i32"(__local_6.buf, value);
+        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;
@@ -582,10 +593,12 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextStructSerializer^
         "core:prelude/string.wado/String::push"(__local_3, 34);
         "core:prelude/string.wado/String::push"(__local_3, 58);
         break __tmpl: __local_3;
+        unreachable;
     });
     drop(__inline_String_Serialize__serialize_TextSerializer__1: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
         __local_6 = self.parent;
         break __inline_String_Serialize__serialize_TextSerializer__1: "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serializer::serialize_string"(__local_6.buf, value);
+        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;
@@ -599,6 +612,7 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSeqSerializer^Ser
     drop(__inline_i32_Serialize__serialize_TextSerializer__0: block -> ref null "wado-compiler/tests/fixtures/serde_sub_serializer.wado//SerializeError" {
         __local_3 = self.parent;
         break __inline_i32_Serialize__serialize_TextSerializer__0: "wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextSerializer^Serializer::serialize_i32"(__local_3.buf, value);
+        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;

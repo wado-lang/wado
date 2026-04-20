@@ -70,9 +70,10 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/array_bounds_check_empty.wado/__cm_export__run"() {
     let __local_1: ref "core:prelude//Array<i32>";
     let arr: ref "core:prelude//Array<i32>";
-    arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
+    arr = __inline_run_2____seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_1 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-        break __seq_lit: __local_1;
+        break __inline_run_2____seq_lit: __local_1;
+        unreachable;
     };
     drop(__inline_Array_i32__IndexValue_i32___index_value_8: block -> i32 {
         block {
@@ -80,6 +81,7 @@ fn "wado-compiler/tests/fixtures/array_bounds_check_empty.wado/__cm_export__run"
             unreachable;
         };
         break __inline_Array_i32__IndexValue_i32___index_value_8: builtin::array_get<i32>(arr.repr, 0);
+        unreachable;
     });
     "wasi/task-return"(0);
 }

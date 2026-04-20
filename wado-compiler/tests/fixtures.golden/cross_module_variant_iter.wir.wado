@@ -149,6 +149,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/run"() {
+    let tree: ref "core:prelude/types.wado//Box<Choice>";
     let result: i32;
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -158,10 +159,12 @@ fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/run"() {
     let __local_10: ref "./sub/cross_module_variant_iter_helper.wado//Counter";
     let __local_14: ref "core:prelude/format.wado//Formatter";
     let __local_25: ref "core:prelude/format.wado//Formatter";
+    tree = struct.new "core:prelude/types.wado//Box<Choice>" { value: ref.as_non_null("./sub/cross_module_variant_iter_helper.wado/make_tree"()) };
     result = __inline_count_2: block -> i32 {
         __local_10 = struct.new "./sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 };
-        "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>"(__local_10, ref.as_non_null("./sub/cross_module_variant_iter_helper.wado/make_tree"()));
+        "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<Counter>"(__local_10, tree.value);
         break __inline_count_2: __local_10.total;
+        unreachable;
     };
     __cond = result == 30;
     if __cond == 0 {
@@ -188,6 +191,7 @@ fn "wado-compiler/tests/fixtures/cross_module_variant_iter.wado/run"() {
                 __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_4 };
                 "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_5);
                 break __tmpl: __local_4;
+                unreachable;
             });
             "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: result == 30
@@ -205,6 +209,7 @@ condition: result == 30
             "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_25);
             "core:prelude/string.wado/String::push"(__local_6, 10);
             break __tmpl: __local_6;
+            unreachable;
         });
         unreachable;
     }
@@ -362,6 +367,7 @@ fn "./sub/cross_module_variant_iter_helper.wado/make_tree"() {
     children = __seq_lit: block -> ref "core:prelude//Array<Choice>" {
         __local_2 = struct.new "core:prelude//Array<Choice>" { repr: array.new_fixed<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(leaf1, leaf2), used: 2 };
         break __seq_lit: __local_2;
+        unreachable;
     };
     return struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("root"), used: 4 }, children: children } };
 }
@@ -385,6 +391,7 @@ fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_
             __local_7 = __local_2.children;
             __local_8 = __local_7;
             break __inline__Choice_IntoIterator__into_iter_0: struct.new "core:prelude/array.wado//ArrayRefIter<Choice>" { repr: __local_8.repr, used: __local_8.used, index: 0 };
+            unreachable;
         };
         b15: block {
             l16: loop {
@@ -428,6 +435,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -445,8 +453,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -630,6 +640,7 @@ fn "core:prelude/array.wado/Array<Choice>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(new_capacity);
     old_repr = self.repr;

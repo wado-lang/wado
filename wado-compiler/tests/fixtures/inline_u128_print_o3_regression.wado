@@ -1,0 +1,13 @@
+// O3 inlining regression: printing u128 should compile and run correctly.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let x: u128 = 12345;
+    println(`x={x}`);
+}
+
+__DATA__
+{
+    "stdout": "x=12345\n",
+    "only_opt": ["O3"]
+}

@@ -753,6 +753,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/handle"() {
     let __ptr_224: i32;
     let __len_225: i32;
     let __pattern_temp_5: ref null "core:prelude/string.wado//String";
+    let __local_238: ref "core:prelude/string.wado//String";
     let __local_272: ref "core:prelude/format.wado//Formatter";
     let __local_277: ref "core:prelude/format.wado//Formatter";
     let __local_283: ref "core:prelude/string.wado//String";
@@ -762,7 +763,9 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/handle"() {
     drop("wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__RequestOptions_set_connect_timeout"(opts, struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 0, payload_0: 5000000000_i64 }));
     req_headers = "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Fields_new"();
     drop("wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Fields_append"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, __inline_String__as_bytes_2: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_2: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("text/plain"), used: 10, index: 0 });
+        __local_238 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 };
+        break __inline_String__as_bytes_2: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_238.repr, used: __local_238.used, index: 0 });
+        unreachable;
     }));
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
@@ -801,6 +804,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/handle"() {
 condition: out_req.get_path_with_query() matches { None }
 "), used: 59 });
             break __tmpl: __local_51;
+            unreachable;
         });
         unreachable;
     }
@@ -833,6 +837,7 @@ condition: out_req.get_path_with_query() matches { None }
 condition: out_req.get_scheme() matches { None }
 "), used: 50 });
             break __tmpl: __local_53;
+            unreachable;
         });
         unreachable;
     }
@@ -865,6 +870,7 @@ condition: out_req.get_scheme() matches { None }
 condition: out_req.get_authority() matches { None }
 "), used: 53 });
             break __tmpl: __local_55;
+            unreachable;
         });
         unreachable;
     }
@@ -898,6 +904,7 @@ condition: out_req.get_authority() matches { None }
 condition: method_result matches { Ok(_) }
 "), used: 44 });
             break __tmpl: __local_57;
+            unreachable;
         });
         unreachable;
     }
@@ -931,6 +938,7 @@ condition: method_result matches { Ok(_) }
 condition: m matches { Post }
 "), used: 31 });
             break __tmpl: __local_59;
+            unreachable;
         });
         unreachable;
     }
@@ -973,6 +981,7 @@ condition: d == 5000000000
                     "core:prelude/string.wado/String::push_str"(__local_277.buf, __local_283);
                     "core:prelude/string.wado/String::push"(__local_61, 10);
                     break __tmpl: __local_61;
+                    unreachable;
                 });
                 unreachable;
             }
@@ -1012,6 +1021,7 @@ condition: d == 5000000000
 condition: set_result matches { Err(_) }
 "), used: 42 });
                 break __tmpl: __local_63;
+                unreachable;
             });
             unreachable;
         }
@@ -1046,6 +1056,7 @@ condition: set_result matches { Err(_) }
 condition: e matches { Immutable }
 "), used: 36 });
                     break __tmpl: __local_65;
+                    unreachable;
                 });
                 unreachable;
             }
@@ -1084,6 +1095,7 @@ condition: e matches { Immutable }
 condition: path_result matches { Ok(_) }
 "), used: 42 });
             break __tmpl: __local_67;
+            unreachable;
         });
         unreachable;
     }
@@ -1117,6 +1129,7 @@ condition: path_result matches { Ok(_) }
 condition: scheme_result matches { Ok(_) }
 "), used: 44 });
             break __tmpl: __local_69;
+            unreachable;
         });
         unreachable;
     }
@@ -1150,12 +1163,13 @@ condition: scheme_result matches { Ok(_) }
 condition: auth_result matches { Ok(_) }
 "), used: 42 });
             break __tmpl: __local_71;
+            unreachable;
         });
         unreachable;
     }
     __pattern_temp_5 = "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Request_get_path_with_query"(out_req);
     if ref.is_null(__pattern_temp_5) == 0 {
-        p = ref.as_non_null(__pattern_temp_5);
+        p = value_copy "core:prelude/string.wado//String"(ref.as_non_null(__pattern_temp_5));
         __v0 = p;
         __cond_32 = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/upstream"), used: 9 });
         if __cond_32 == 0 {
@@ -1187,6 +1201,7 @@ condition: p == \"/upstream\"
                 "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_74);
                 "core:prelude/string.wado/String::push"(__local_73, 10);
                 break __tmpl: __local_73;
+                unreachable;
             });
             unreachable;
         }
@@ -1260,6 +1275,7 @@ condition: p == \"/upstream\"
             body = __inline_String_Add__add_58: block -> ref "core:prelude/string.wado//String" {
                 __local_322 = body;
                 break __inline_String_Add__add_58: "core:prelude/string.wado/String::concat"(__local_322, text);
+                unreachable;
             };
             continue l30;
         };
@@ -1648,6 +1664,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Req
                     __local_13 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
                     __local_14 = "core:internal/memory_to_gc_array"(__local_12, __local_13);
                     break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_14, used: __local_13 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -1683,6 +1700,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Fie
         __local_13 = value.repr;
         __local_14 = value.used;
         break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_13, __local_14);
+        unreachable;
     };
     __outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64), builtin::i32_wrap_i64(__value_packed), builtin::i32_wrap_i64(__value_packed >> 32_i64), __outptr);
@@ -1710,6 +1728,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Fie
                     __local_18 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
                     __local_19 = "core:internal/memory_to_gc_array"(__local_17, __local_18);
                     break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: __local_19, used: __local_18 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -1764,6 +1783,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Req
             __local_5 = builtin::load_i32((__outptr + 4) + 4);
             __local_6 = "core:internal/memory_to_gc_array"(__local_4, __local_5);
             break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_6, used: __local_5 };
+            unreachable;
         });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));
     }
@@ -1797,6 +1817,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Req
                 __local_7 = builtin::load_i32(((__outptr + 4) + 4) + 4);
                 __local_8 = "core:internal/memory_to_gc_array"(__local_6, __local_7);
                 break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_8, used: __local_7 };
+                unreachable;
             }) };
         }
         __option_result = __vresult;
@@ -1822,6 +1843,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Req
             __local_5 = builtin::load_i32((__outptr + 4) + 4);
             __local_6 = "core:internal/memory_to_gc_array"(__local_4, __local_5);
             break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_6, used: __local_5 };
+            unreachable;
         });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));
     }
@@ -1887,6 +1909,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Req
             __local_5 = builtin::load_i32((__outptr + 4) + 4);
             __local_6 = "core:internal/memory_to_gc_array"(__local_4, __local_5);
             break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_6, used: __local_5 };
+            unreachable;
         }) };
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));
@@ -2116,6 +2139,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Cli
                     __local_58 = builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4);
                     __local_59 = "core:internal/memory_to_gc_array"(__local_57, __local_58);
                     break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_59, used: __local_58 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
             }
@@ -2164,6 +2188,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Cli
                     __local_61 = builtin::load_i32(((((__async_outptr + 8) + 8) + 4) + 4) + 4);
                     __local_62 = "core:internal/memory_to_gc_array"(__local_60, __local_61);
                     break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_62, used: __local_61 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), builtin::load_i32(((((__async_outptr + 8) + 8) + 4) + 4) + 4), 1, 0));
             }
@@ -2205,6 +2230,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Cli
                         __local_64 = builtin::load_i32(((((__async_outptr + 8) + 8) + 4) + 4) + 4);
                         __local_65 = "core:internal/memory_to_gc_array"(__local_63, __local_64);
                         break __inline_memory_to_gc_string_2: struct.new "core:prelude/string.wado//String" { repr: __local_65, used: __local_64 };
+                        unreachable;
                     });
                     drop("mem/realloc"(builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), builtin::load_i32(((((__async_outptr + 8) + 8) + 4) + 4) + 4), 1, 0));
                 }
@@ -2233,6 +2259,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Cli
                     __local_67 = builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4);
                     __local_68 = "core:internal/memory_to_gc_array"(__local_66, __local_67);
                     break __inline_memory_to_gc_string_3: struct.new "core:prelude/string.wado//String" { repr: __local_68, used: __local_67 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
             }
@@ -2261,6 +2288,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Cli
                     __local_70 = builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4);
                     __local_71 = "core:internal/memory_to_gc_array"(__local_69, __local_70);
                     break __inline_memory_to_gc_string_4: struct.new "core:prelude/string.wado//String" { repr: __local_71, used: __local_70 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
             }
@@ -2294,6 +2322,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Cli
                     __local_73 = builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4);
                     __local_74 = "core:internal/memory_to_gc_array"(__local_72, __local_73);
                     break __inline_memory_to_gc_string_5: struct.new "core:prelude/string.wado//String" { repr: __local_74, used: __local_73 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
             }
@@ -2313,6 +2342,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Cli
                     __local_76 = builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4);
                     __local_77 = "core:internal/memory_to_gc_array"(__local_75, __local_76);
                     break __inline_memory_to_gc_string_6: struct.new "core:prelude/string.wado//String" { repr: __local_77, used: __local_76 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
             }
@@ -2326,6 +2356,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Cli
                     __local_79 = builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4);
                     __local_80 = "core:internal/memory_to_gc_array"(__local_78, __local_79);
                     break __inline_memory_to_gc_string_7: struct.new "core:prelude/string.wado//String" { repr: __local_80, used: __local_79 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
             }
@@ -2349,6 +2380,7 @@ fn "wado-compiler/tests/fixtures/http-client-request-full.wado/__cm_binding__Cli
                     __local_82 = builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4);
                     __local_83 = "core:internal/memory_to_gc_array"(__local_81, __local_82);
                     break __inline_memory_to_gc_string_8: struct.new "core:prelude/string.wado//String" { repr: __local_83, used: __local_82 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 8) + 8) + 4), builtin::load_i32((((__async_outptr + 8) + 8) + 4) + 4), 1, 0));
             }
@@ -2462,6 +2494,7 @@ fn "core:internal/wait_for_subtask"(packed) {
             __local_5 = subtask;
             "wasi/waitable-join"(__local_5, ws);
             break __inline_cm_waitable_join_0: __local_5;
+            unreachable;
         });
         b181: block {
             l182: loop {
@@ -2559,6 +2592,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
         __local_9 = data.repr;
         __local_10 = data.used;
         break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_9, __local_10);
+        unreachable;
     };
     ptr = builtin::i32_wrap_i64(packed);
     len = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -2661,6 +2695,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -2689,6 +2724,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
         builtin::array_set_u8(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
             __local_19 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_19.repr;
+            unreachable;
         }, offset_3, 48);
         return;
     }
@@ -2719,6 +2755,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     repr = __inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
         __local_20 = f.buf;
         break __inline_String__internal_raw_bytes_1: __local_20.repr;
+        unreachable;
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
@@ -2767,8 +2804,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -2855,6 +2894,7 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     result = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __local_1 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
+        unreachable;
     };
     _licm_used_11 = self.used;
     _licm_repr_12 = self.repr;
@@ -2898,6 +2938,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
         return 0, __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     }
     if b0 <u 224 {
@@ -3056,13 +3097,15 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
-    };
+        unreachable;
+    });
     _licm_buf_33 = f.buf;
     b248: block {
         l249: loop {
@@ -3292,6 +3335,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;

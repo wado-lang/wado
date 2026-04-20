@@ -139,6 +139,7 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_tuple.wado/_force_array_i32_
             unreachable;
         }
         break __inline_Array_i32__IndexValue_i32___index_value_2: builtin::array_get<i32>(x.repr, 0);
+        unreachable;
     };
     len = x.used;
     return first + len;
@@ -179,6 +180,7 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_tuple.wado/build_and_sum_pus
                         unreachable;
                     }
                     break __inline_Array_i32__IndexValue_i32___index_value_4: builtin::array_get<i32>(_licm_repr_16, i);
+                    unreachable;
                 });
                 i = i + 1;
                 continue l3;
@@ -212,6 +214,7 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_tuple.wado/slot_copy_pattern
             unreachable;
         }
         break __inline_Array_i32__IndexValue_i32___index_value_3: builtin::array_get<i32>(__csroa_items_0.repr, 1);
+        unreachable;
     };
     if 2 >= self_6.used {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -225,6 +228,7 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_tuple.wado/slot_copy_pattern
             unreachable;
         }
         break __inline_Array_i32__IndexValue_i32___index_value_5: builtin::array_get<i32>(__csroa_items_1.repr, 1);
+        unreachable;
     };
     if 2 >= self_11.used {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -249,24 +253,28 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_tuple.wado/slot_copy_pattern
             unreachable;
         }
         break __inline_Array_i32__IndexValue_i32___index_value_8: builtin::array_get<i32>(__csroa_items_0.repr, 0);
+        unreachable;
     } + __inline_Array_i32__IndexValue_i32___index_value_9: block -> i32 {
         if 0 >= __csroa_items_1.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         break __inline_Array_i32__IndexValue_i32___index_value_9: builtin::array_get<i32>(__csroa_items_1.repr, 0);
+        unreachable;
     }) + __inline_Array_i32__IndexValue_i32___index_value_10: block -> i32 {
         if 2 >= __csroa_items_0.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         break __inline_Array_i32__IndexValue_i32___index_value_10: builtin::array_get<i32>(__csroa_items_0.repr, 2);
+        unreachable;
     }) + __inline_Array_i32__IndexValue_i32___index_value_11: block -> i32 {
         if 2 >= __csroa_items_1.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         break __inline_Array_i32__IndexValue_i32___index_value_11: builtin::array_get<i32>(__csroa_items_1.repr, 2);
+        unreachable;
     };
 }
 
@@ -303,6 +311,7 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_tuple.wado/with_capacity_ini
                         unreachable;
                     }
                     break __inline_Array_i32__IndexValue_i32___index_value_4: builtin::array_get<i32>(_licm_repr_15, i);
+                    unreachable;
                 });
                 i = i + 1;
                 continue l17;
@@ -364,6 +373,7 @@ condition: _force_array_i32_monomorphization() == 12
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_0, __local_25);
             "core:prelude/string.wado/String::push"(__local_8, 10);
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     }
@@ -394,6 +404,7 @@ condition: build_and_sum_push() == 66
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_2, __local_36);
             "core:prelude/string.wado/String::push"(__local_10, 10);
             break __tmpl: __local_10;
+            unreachable;
         });
         unreachable;
     }
@@ -424,6 +435,7 @@ condition: slot_copy_pattern() == 1111
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_4, __local_47);
             "core:prelude/string.wado/String::push"(__local_12, 10);
             break __tmpl: __local_12;
+            unreachable;
         });
         unreachable;
     }
@@ -454,6 +466,7 @@ condition: with_capacity_init() == 50
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_6, __local_58);
             "core:prelude/string.wado/String::push"(__local_14, 10);
             break __tmpl: __local_14;
+            unreachable;
         });
         unreachable;
     }
@@ -653,6 +666,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -670,8 +684,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -855,6 +871,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

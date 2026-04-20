@@ -140,6 +140,7 @@ fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/print_depth"(
         __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_1 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(depth, __local_2);
         break __tmpl: __local_1;
+        unreachable;
     });
 }
 
@@ -156,23 +157,29 @@ fn "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/run"() with S
     leaf1 = struct.new "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>" { keys: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<String>" {
         __local_0 = struct.new "core:prelude//Array<String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b"), used: 1 }), used: 2 };
         break __seq_lit: __local_0;
+        unreachable;
     }), children: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<Node<String>>" {
         __local_1 = struct.new "core:prelude//Array<Node<String>>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(0), used: 0 };
         break __seq_lit: __local_1;
+        unreachable;
     }), is_leaf: 1 };
     leaf2 = struct.new "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>" { keys: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<String>" {
         __local_3 = struct.new "core:prelude//Array<String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("d"), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("e"), used: 1 }), used: 2 };
         break __seq_lit: __local_3;
+        unreachable;
     }), children: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<Node<String>>" {
         __local_4 = struct.new "core:prelude//Array<Node<String>>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(0), used: 0 };
         break __seq_lit: __local_4;
+        unreachable;
     }), is_leaf: 1 };
     root = struct.new "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>" { keys: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<String>" {
         __local_6 = struct.new "core:prelude//Array<String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("c"), used: 1 }), used: 1 };
         break __seq_lit: __local_6;
+        unreachable;
     }), children: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<Node<String>>" {
         __local_7 = struct.new "core:prelude//Array<Node<String>>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(leaf1, leaf2), used: 2 };
         break __seq_lit: __local_7;
+        unreachable;
     }), is_leaf: 0 };
     "wado-compiler/tests/fixtures/array_index_inline_recursive.wado/Node<String>::traverse"(root, 0);
 }
@@ -333,6 +340,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -350,8 +358,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -525,6 +535,7 @@ fn "core:prelude/array.wado/Array<String>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(new_capacity);
     old_repr = self.repr;
@@ -593,6 +604,7 @@ fn "core:prelude/array.wado/Array<Node<String>>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/array_index_inline_recursive.wado//Node<String>">(new_capacity);
     old_repr = self.repr;

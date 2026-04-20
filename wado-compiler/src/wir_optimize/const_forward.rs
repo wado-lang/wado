@@ -352,11 +352,25 @@ fn try_forward_struct_gets(instr: &mut WirInstr, known: &FieldKnowledge<'_>) -> 
     false
 }
 
+/// Return the slice with any trailing `Unreachable` instructions removed.
+fn skip_trailing_unreachable(body: &[WirInstr]) -> &[WirInstr] {
+    let mut end = body.len();
+    while end > 0 && matches!(body[end - 1], WirInstr::Unreachable) {
+        end -= 1;
+    }
+    &body[..end]
+}
+
 /// Invalidate field knowledge for any locals that are assigned in a body.
 /// Extract the local name from a block's result value.
 /// Matches patterns like: `[..., LocalGet { name }, Br { depth: 0 }]`
 /// or `[..., Seq([LocalGet { name }, Br { depth: 0 }])]`.
+///
+/// Trailing `Unreachable` instructions are ignored — the code generator
+/// may append `unreachable` after a `Br` so the Wasm validator accepts
+/// the typed block even when the fallthrough path is dead.
 fn extract_block_result_local(body: &[WirInstr]) -> Option<String> {
+    let body = skip_trailing_unreachable(body);
     // Check last instruction(s) for LocalGet + Br pattern
     let len = body.len();
     if len >= 2
@@ -387,6 +401,10 @@ fn extract_block_result_local(body: &[WirInstr]) -> Option<String> {
 /// Only safe when the block has a single exit point (one `Br { depth: 0 }`).
 /// Blocks with multiple exits (e.g., early `break` inside branches) may
 /// produce different `StructNew` values on different paths.
+///
+/// Trailing `Unreachable` instructions are ignored — the code generator
+/// may append `unreachable` after a `Br` so the Wasm validator accepts
+/// the typed block even when the fallthrough path is dead.
 fn extract_block_result_struct_new(body: &[WirInstr]) -> Option<(WirTypeId, Vec<WirInstr>)> {
     // Count Br { depth: 0 } in the block body. If there are multiple, the
     // block result is ambiguous and we cannot safely forward fields.
@@ -395,6 +413,7 @@ fn extract_block_result_struct_new(body: &[WirInstr]) -> Option<(WirTypeId, Vec<
     }
 
     let extract = |items: &[WirInstr]| -> Option<(WirTypeId, Vec<WirInstr>)> {
+        let items = skip_trailing_unreachable(items);
         let len = items.len();
         if len >= 2
             && let WirInstr::Br { depth: 0 } = &items[len - 1]
@@ -408,6 +427,7 @@ fn extract_block_result_struct_new(body: &[WirInstr]) -> Option<(WirTypeId, Vec<
     if let Some(result) = extract(body) {
         return Some(result);
     }
+    let body = skip_trailing_unreachable(body);
     if let Some(WirInstr::Seq(seq)) = body.last() {
         return extract(seq);
     }

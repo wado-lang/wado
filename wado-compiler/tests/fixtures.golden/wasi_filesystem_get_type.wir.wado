@@ -254,6 +254,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/run"() with Stdou
             unreachable;
         }
         break __inline_Array_Tuple_Descriptor_String___IndexValue_i32___index_value_3: builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0);
+        unreachable;
     }.0;
     dir_type_result = "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Descriptor_get_type"(dir);
     if ref.test "core:prelude/types.wado//Result<DescriptorType,ErrorCode>::Ok"(dir_type_result) {
@@ -361,6 +362,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Pre
                 __local_10 = builtin::load_i32((__elem_addr + 4) + 4);
                 __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
                 break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_11, used: __local_10 };
+                unreachable;
             };
             "core:prelude/Array<Tuple<Descriptor,String>>::push"(__result, struct.new "tuple//[Descriptor, String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
@@ -425,6 +427,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Des
                     __local_14 = builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4);
                     __local_15 = "core:internal/memory_to_gc_array"(__local_13, __local_14);
                     break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_15, used: __local_14 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -515,6 +518,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Des
                     __local_17 = builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4);
                     __local_18 = "core:internal/memory_to_gc_array"(__local_16, __local_17);
                     break __inline_memory_to_gc_string_1: struct.new "core:prelude/string.wado//String" { repr: __local_18, used: __local_17 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -639,6 +643,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Des
                     __local_16 = builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4);
                     __local_17 = "core:internal/memory_to_gc_array"(__local_15, __local_16);
                     break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_17, used: __local_16 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -753,6 +758,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Des
                     __local_10 = builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4);
                     __local_11 = "core:internal/memory_to_gc_array"(__local_9, __local_10);
                     break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_11, used: __local_10 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__async_outptr + 4) + 4) + 4), builtin::load_i32((((__async_outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -879,6 +885,7 @@ fn "core:internal/wait_for_subtask"(packed) {
             __local_5 = subtask;
             "wasi/waitable-join"(__local_5, ws);
             break __inline_cm_waitable_join_0: __local_5;
+            unreachable;
         });
         b148: block {
             l149: loop {
@@ -999,6 +1006,7 @@ fn "core:prelude/array.wado/Array<Tuple<Descriptor,String>>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(new_capacity);
     old_repr = self.repr;

@@ -117,14 +117,17 @@ fn "wado-compiler/tests/fixtures/ordering-basic.wado/run"() with Stdout {
     arr1 = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_3 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_3;
+        unreachable;
     };
     arr2 = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_5 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 4), used: 3 };
         break __seq_lit: __local_5;
+        unreachable;
     };
     arr3 = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_7 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
         break __seq_lit: __local_7;
+        unreachable;
     };
     if "core:prelude/array.wado/Array<i32>^Ord::cmp"(arr1, arr2) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 < arr2"), used: 11 });
@@ -374,6 +377,7 @@ fn "core:prelude/array.wado/Array<i32>^Ord::cmp"(self, other) {
         __local_6 = self.used;
         __local_7 = other.used;
         break __inline_i32_min_0: select i32(__local_6 < __local_7, __local_6, __local_7);
+        unreachable;
     };
     __for_10: block {
         i = 0;
@@ -428,6 +432,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

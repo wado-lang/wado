@@ -153,6 +153,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_safe.wado/run"() with Stdout 
                     __fmt_buf_107.indent = 0;
                     "core:prelude/primitive.wado/i32::fmt_decimal"(i_1, __fmt_buf_107);
                     break __tmpl: __tmpl_buf_106;
+                    unreachable;
                 };
                 total = total + s_2.used;
                 i_1 = i_1 + 1;
@@ -169,6 +170,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_safe.wado/run"() with Stdout 
         __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_18 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(total, __local_19);
         break __tmpl: __local_18;
+        unreachable;
     });
     byte_sum = 0_i64;
     __for_1: block {
@@ -187,6 +189,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_safe.wado/run"() with Stdout 
                     __fmt_buf_109.indent = 0;
                     "core:prelude/primitive.wado/i32::fmt_decimal"(i_4, __fmt_buf_109);
                     break __tmpl: __tmpl_buf_108;
+                    unreachable;
                 };
                 __sroa___iter_6_repr = s_5.repr;
                 __sroa___iter_6_used = s_5.used;
@@ -223,6 +226,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_safe.wado/run"() with Stdout 
         __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_22 };
         "core:prelude/primitive.wado/u64::fmt_decimal"(byte_sum, __local_23);
         break __tmpl: __local_22;
+        unreachable;
     });
     t1 = 0;
     t2 = 0;
@@ -244,6 +248,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_safe.wado/run"() with Stdout 
                     __fmt_buf_111.indent = 0;
                     "core:prelude/primitive.wado/i32::fmt_decimal"(i_10, __fmt_buf_111);
                     break __tmpl: __tmpl_buf_110;
+                    unreachable;
                 };
                 b = __tmpl: block -> ref "core:prelude/string.wado//String" {
                     __tmpl_buf_112.used = 0;
@@ -252,6 +257,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_safe.wado/run"() with Stdout 
                     __fmt_buf_113.indent = 0;
                     "core:prelude/primitive.wado/i32::fmt_decimal"(i_10, __fmt_buf_113);
                     break __tmpl: __tmpl_buf_112;
+                    unreachable;
                 };
                 t1 = t1 + a.used;
                 t2 = t2 + b.used;
@@ -276,6 +282,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_safe.wado/run"() with Stdout 
         __local_87 = __local_29;
         "core:prelude/primitive.wado/i32::fmt_decimal"(t2, __local_87);
         break __tmpl: __local_28;
+        unreachable;
     });
     t3 = 0;
     __for_3: block {
@@ -294,6 +301,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_safe.wado/run"() with Stdout 
                     __fmt_buf_115.indent = 0;
                     "core:prelude/primitive.wado/i32::fmt_decimal"(i_14, __fmt_buf_115);
                     break __tmpl: __tmpl_buf_114;
+                    unreachable;
                 };
                 t3 = t3 + s_15.used;
                 i_14 = i_14 + 1;
@@ -309,6 +317,7 @@ fn "wado-compiler/tests/fixtures/tmpl_hoist_escape_safe.wado/run"() with Stdout 
         __local_33 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_32 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(t3, __local_33);
         break __tmpl: __local_32;
+        unreachable;
     });
 }
 
@@ -468,6 +477,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -496,6 +506,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
         builtin::array_set_u8(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
             __local_19 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_19.repr;
+            unreachable;
         }, offset_3, 48);
         return;
     }
@@ -526,6 +537,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     repr = __inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
         __local_20 = f.buf;
         break __inline_String__internal_raw_bytes_1: __local_20.repr;
+        unreachable;
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
@@ -574,8 +586,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
