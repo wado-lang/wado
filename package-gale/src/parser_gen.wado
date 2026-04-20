@@ -32,7 +32,7 @@ use {
     gen_visibility_comment,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group } from "./gen_context.wado";
-use { CodeWriter, StructSpec, ImplSpec, FnSpec } from "./wadopoet.wado";
+use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { log_stderr } from "core:cli";
 use { TreeSet } from "core:collections";
 
@@ -1275,15 +1275,14 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext
 ///
 ///   - scan_X_atom(tokens, pos): scans non-LR alternatives (first-match).
 ///   - scan_X_lr_N(tokens, pos): scans the suffix (elements[1..]) of the N-th
-///     LR alternative, recursing into scan_X_prec for self-refs with the same
+///     LR alternative, recursing into scan_X for self-refs with the same
 ///     precedence thresholds that parse_X_lr_N uses.
-///   - scan_X_prec(tokens, pos, min_prec): atom + precedence-aware LR-suffix
+///   - scan_X(tokens, pos, min_prec = 0): atom + precedence-aware LR-suffix
 ///     loop with token-kind dispatch and second-token overlap resolution.
-///   - scan_X(tokens, pos) = scan_X_prec(tokens, pos, 0).
+///     Callers without a precedence context omit min_prec and get 0.
 fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, non_lr_indices: &Array<i32>, ctx: &mut GenContext) {
     let fn_name = `scan_{to_snake_case(&rule.name)}`;
     let atom_name = `{fn_name}_atom`;
-    let prec_fn = `{fn_name}_prec`;
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
@@ -1311,11 +1310,15 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Arr
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
     gen_scan_lr_suffix_helpers(w, rule, lr_indices, ctx);
 
-    // scan_X_prec(tokens, pos, min_prec): atom + precedence-aware dispatch loop.
-    let mut f2 = FnSpec::new(&prec_fn);
+    // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
+    let mut f2 = FnSpec::new(&fn_name);
     f2.add_param("tokens", "&Array<Token>");
     f2.add_param("pos", "i32");
-    f2.add_param("min_prec", "i32");
+    f2.add_param_spec(ParamSpec {
+        name: "min_prec",
+        type_str: "i32",
+        default_value: Option::<String>::Some("0"),
+    });
     f2.set_return_type("i32");
     f2.emit_begin(w);
     w.line(`let mut pos = {atom_name}(tokens, pos);`);
@@ -1324,25 +1327,14 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Arr
     w.line("return pos;");
     w.end();
     w.blank();
-
-    // scan_X(tokens, pos) — wrapper that allows all precedences.
-    let mut f3 = FnSpec::new(&fn_name);
-    f3.add_param("tokens", "&Array<Token>");
-    f3.add_param("pos", "i32");
-    f3.set_return_type("i32");
-    f3.emit_begin(w);
-    w.line(`return {prec_fn}(tokens, pos, 0);`);
-    w.end();
-    w.blank();
 }
 
 /// Scan-side twin of `gen_lr_suffix_helpers`. Emits `scan_X_lr_N(tokens, pos)`
 /// for each valid LR alternative, scanning its suffix (elements[1..]). Self-
-/// recursive calls compile to `scan_X_prec(tokens, pos, prec)` with the same
+/// recursive calls compile to `scan_X(tokens, pos, prec)` with the same
 /// precedence value the parse side uses (via `compute_lr_self_ref_prec`).
 fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices: &Array<i32>, ctx: &mut GenContext) {
     let fn_name = `scan_{to_snake_case(&rule.name)}`;
-    let prec_fn = `{fn_name}_prec`;
     let total_lr = lr_indices.len();
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens(rule, lr_indices, ctx);
 
@@ -1384,7 +1376,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_indices:
                         inner_min_prec,
                         &lr_suffix_first_tokens,
                     );
-                    w.line(`pos = {prec_fn}(tokens, pos, {prec});`);
+                    w.line(`pos = {fn_name}(tokens, pos, {prec});`);
                     w.line("if pos < 0 { return -1; }");
                     continue;
                 }
@@ -2381,26 +2373,21 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext) {
 
         gen_lr_suffix_helpers(w, rule, &type_name, &lr_indices, ctx);
 
-        // Generate parse_rule_prec(p, min_prec) — the precedence-aware parser
-        let prec_fn = `{fn_name}_prec`;
-        let mut f2 = FnSpec::new(&prec_fn);
+        // Generate parse_rule(p, min_prec = 0) — precedence-aware parser.
+        // Callers without a precedence context omit min_prec and get 0.
+        let mut f2 = FnSpec::new(&fn_name);
         f2.add_param("p", "&mut Parser");
-        f2.add_param("min_prec", "i32");
+        f2.add_param_spec(ParamSpec {
+            name: "min_prec",
+            type_str: "i32",
+            default_value: Option::<String>::Some("0"),
+        });
         f2.set_return_type(`Result<{type_name}, ParseError>`);
         f2.emit_begin(w);
         w.line("let start = p.peek().span.start;");
         w.line(`let mut result = {fn_name}_atom(p)?;`);
         gen_lr_suffix_dispatch(w, rule, &type_name, &lr_indices, ctx, true);
         w.line(`return Result::<{type_name}, ParseError>::Ok(result);`);
-        w.end();
-        w.blank();
-
-        // Generate parse_rule(p) — wrapper that allows all precedences
-        let mut f3 = FnSpec::new(&fn_name);
-        f3.add_param("p", "&mut Parser");
-        f3.set_return_type(`Result<{type_name}, ParseError>`);
-        f3.emit_begin(w);
-        w.line(`return {prec_fn}(p, 0);`);
         w.end();
         w.blank();
     } else {
@@ -5032,7 +5019,6 @@ fn compute_lr_self_ref_prec(alt: &Alternative, ei: i32, last_self_ref_idx: i32, 
 
 fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_indices: &Array<i32>, ctx: &mut GenContext) {
     let fn_name = `parse_{to_snake_case(&rule.name)}`;
-    let prec_fn = `{fn_name}_prec`;
     let case_names = case_names_for_rule(&rule.alternatives);
     let total_lr = lr_indices.len();
     let lr_suffix_first_tokens = collect_lr_suffix_first_tokens(rule, lr_indices, ctx);
@@ -5087,7 +5073,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                         inner_min_prec,
                         &lr_suffix_first_tokens,
                     );
-                    w.line(`let {field_name} = {prec_fn}(p, {prec})?;`);
+                    w.line(`let {field_name} = {fn_name}(p, {prec})?;`);
                 } else {
                     let elem_fn = `parse_{to_snake_case(&rr.name)}`;
                     let field_name = dedup_name(&escape_ident(&to_snake_case(&rr.name)), &mut name_counts);

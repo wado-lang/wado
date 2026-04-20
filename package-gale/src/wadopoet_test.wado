@@ -282,6 +282,19 @@ test "FnSpec with mut param" {
     assert f.signature() == "fn process(mut n: i32)";
 }
 
+test "FnSpec with default-valued param" {
+    let mut f = FnSpec::new("parse_expr");
+    f.add_param("p", "&mut Parser");
+    f.add_param_spec(ParamSpec {
+        name: "min_prec",
+        type_str: "i32",
+        default_value: Option::<String>::Some("0"),
+    });
+    f.set_return_type("ExprNode");
+
+    assert f.signature() == "fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> ExprNode";
+}
+
 test "FnSpec no return type" {
     let mut f = FnSpec::new("reset");
     f.set_receiver("&mut self");
