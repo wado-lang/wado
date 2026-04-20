@@ -594,14 +594,16 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             if let Some(instr) = self.translate_stmt(stmt) {
+                let last_instr_always_diverges = is_last && instr.always_diverges();
                 instrs.push(instr);
-            }
-            // A Loop that always exits via a labeled `break` to an outer block never
-            // falls through in Wado, but the Wasm `loop` instruction itself can fall
-            // through. Add `unreachable` so the Wasm validator knows the fallthrough
-            // path of the enclosing value-block is dead.
-            if is_last && matches!(stmt.kind, TirStmtKind::Loop { .. }) {
-                instrs.push(WirInstr::Unreachable);
+                // In a value-producing block, a final statement may exit exclusively
+                // via `break`/`return` from nested control flow while still lowering
+                // to a void WIR instruction (e.g. `if` whose branches both `br` out).
+                // Mark the fallthrough as unreachable so the enclosing typed Wasm
+                // block does not expect a value on the normal path.
+                if last_instr_always_diverges {
+                    instrs.push(WirInstr::Unreachable);
+                }
             }
         }
         instrs
