@@ -140,9 +140,10 @@ fn "wado-compiler/tests/fixtures/sequence-literal-fn-arg.wado/run"() with Stdout
     let __local_58: ref "core:prelude//Array<i32>";
     result = __inline_count_items_2: block -> i32 {
         __local_13 = __seq_lit: block -> ref "wado-compiler/tests/fixtures/sequence-literal-fn-arg.wado//SeqVec<i32>" {
-            __local_0 = struct.new "wado-compiler/tests/fixtures/sequence-literal-fn-arg.wado//SeqVec<i32>" { items: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<i32>" {
+            __local_0 = struct.new "wado-compiler/tests/fixtures/sequence-literal-fn-arg.wado//SeqVec<i32>" { items: ref.as_non_null(__inline_SeqVec_i32___new_4____seq_lit: block -> ref "core:prelude//Array<i32>" {
                 __local_15 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-                break __seq_lit: __local_15;
+                break __inline_SeqVec_i32___new_4____seq_lit: __local_15;
+                unreachable;
             }) };
             "core:prelude/array.wado/Array<i32>::push"(__local_0.items, 1);
             "core:prelude/array.wado/Array<i32>::push"(__local_0.items, 2);
@@ -150,12 +151,15 @@ fn "wado-compiler/tests/fixtures/sequence-literal-fn-arg.wado/run"() with Stdout
             "core:prelude/array.wado/Array<i32>::push"(__local_0.items, 4);
             "core:prelude/array.wado/Array<i32>::push"(__local_0.items, 5);
             break __seq_lit: __local_0;
+            unreachable;
         };
         __inline_Array_i32___len_2: block -> i32 {
             __local_58 = __local_13.items;
             break __inline_Array_i32___len_2: __local_58.used;
+            unreachable;
         };
         break __inline_count_items_2;
+        unreachable;
     };
     __cond_3 = result == 5;
     if __cond_3 == 0 {
@@ -190,19 +194,23 @@ condition: result == 5
             "core:prelude/primitive.wado/i32::fmt_decimal"(result, __local_36);
             "core:prelude/string.wado/String::push"(__local_8, 10);
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     }
     empty = __seq_lit: block -> ref "wado-compiler/tests/fixtures/sequence-literal-fn-arg.wado//SeqVec<i32>" {
-        __local_4 = struct.new "wado-compiler/tests/fixtures/sequence-literal-fn-arg.wado//SeqVec<i32>" { items: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<i32>" {
+        __local_4 = struct.new "wado-compiler/tests/fixtures/sequence-literal-fn-arg.wado//SeqVec<i32>" { items: ref.as_non_null(__inline_SeqVec_i32___new_20____seq_lit: block -> ref "core:prelude//Array<i32>" {
             __local_40 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-            break __seq_lit: __local_40;
+            break __inline_SeqVec_i32___new_20____seq_lit: __local_40;
+            unreachable;
         }) };
         break __seq_lit: __local_4;
+        unreachable;
     };
     __v0 = __inline_Array_i32___len_23: block -> i32 {
         __local_43 = empty.items;
         break __inline_Array_i32___len_23: __local_43.used;
+        unreachable;
     };
     __cond_7 = __v0 == 0;
     if __cond_7 == 0 {
@@ -230,6 +238,7 @@ condition: empty.len() == 0
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, __local_52);
             "core:prelude/string.wado/String::push"(__local_10, 10);
             break __tmpl: __local_10;
+            unreachable;
         });
         unreachable;
     }
@@ -429,6 +438,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -446,8 +456,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -631,6 +643,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

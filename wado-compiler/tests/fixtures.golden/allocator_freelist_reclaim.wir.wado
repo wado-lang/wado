@@ -198,6 +198,7 @@ condition: ptr1 > 0
             "core:prelude/primitive.wado/i32::fmt_decimal"(ptr1, __local_54);
             "core:prelude/string.wado/String::push"(__local_31, 10);
             break __tmpl: __local_31;
+            unreachable;
         });
         unreachable;
     }
@@ -239,6 +240,7 @@ condition: ptr1 > 0
                 __local_71 = __local_34;
                 "core:prelude/primitive.wado/i32::fmt_decimal"(ptr2, __local_71);
                 break __tmpl: __local_33;
+                unreachable;
             });
             "core:prelude/string.wado/String::push_str"(__local_35, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: ptr2 == ptr1
@@ -264,6 +266,7 @@ condition: ptr2 == ptr1
             "core:prelude/primitive.wado/i32::fmt_decimal"(ptr1, __local_81);
             "core:prelude/string.wado/String::push"(__local_35, 10);
             break __tmpl: __local_35;
+            unreachable;
         });
         unreachable;
     }
@@ -302,6 +305,7 @@ condition: ptr2 == ptr1
                             "core:prelude/primitive.wado/i32::fmt_decimal"(i, __local_38);
                             "core:prelude/string.wado/String::push_str"(__local_37, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(": expected recycled address"), used: 27 });
                             break __tmpl: __local_37;
+                            unreachable;
                         });
                         "core:prelude/string.wado/String::push_str"(__local_39, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: p == ptr1
@@ -324,6 +328,7 @@ condition: p == ptr1
                         "core:prelude/primitive.wado/i32::fmt_decimal"(ptr1, __local_103);
                         "core:prelude/string.wado/String::push"(__local_39, 10);
                         break __tmpl: __local_39;
+                        unreachable;
                     });
                     unreachable;
                 }
@@ -406,6 +411,7 @@ condition: p == ptr1
                 __local_130 = __local_42;
                 "core:prelude/primitive.wado/i32::fmt_decimal"(b2, __local_130);
                 break __tmpl: __local_41;
+                unreachable;
             });
             "core:prelude/string.wado/String::push_str"(__local_43, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: a2 == a && b2 == b || a2 == b && b2 == a
@@ -525,6 +531,7 @@ condition: a2 == a && b2 == b || a2 == b && b2 == a
             }));
             "core:prelude/string.wado/String::push"(__local_43, 10);
             break __tmpl: __local_43;
+            unreachable;
         });
         unreachable;
     }
@@ -724,6 +731,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -741,8 +749,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

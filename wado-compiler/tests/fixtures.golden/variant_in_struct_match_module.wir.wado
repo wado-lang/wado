@@ -73,15 +73,13 @@ fn "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado/__cm_export
     let name: ref "core:prelude/string.wado//String";
     let __sroa_opts_align: ref "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado//Align";
     __sroa_opts_align = struct.new "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado//Align" { 1 };
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado//Align";
-    __match_scrut_0 = __sroa_opts_align;
-    name = (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    name = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_in_struct_match_module.wado//Align"; __match_scrut_0 = __sroa_opts_align; (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("left"), used: 4 };
     } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right"), used: 5 };
     } else {
         unreachable;
-    });
+    }));
     "core:cli/println"(name);
     "wasi/task-return"(0);
 }

@@ -72,11 +72,12 @@ fn "wado-compiler/tests/fixtures/trait_unit_return.wado/__cm_export__run"() {
     let __local_4: ref "core:prelude/string.wado//String";
     let __sroa_m_text: ref "core:prelude/string.wado//String";
     __sroa_m_text = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello, World!"), used: 13 };
-    "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
+    "core:cli/println"(__inline_Message_Printable__print_5____tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Message: "), used: 9 });
         "core:prelude/string.wado/String::push_str"(__local_4, __sroa_m_text);
-        break __tmpl: __local_4;
+        break __inline_Message_Printable__print_5____tmpl: __local_4;
+        unreachable;
     });
     "wasi/task-return"(0);
 }
@@ -178,8 +179,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

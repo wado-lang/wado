@@ -594,14 +594,24 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             if let Some(instr) = self.translate_stmt(stmt) {
+                // In a value-producing block, a final statement that does not push
+                // a value to the Wasm stack means the enclosing typed block must be
+                // exited exclusively via labeled `break`/`return` from inside the
+                // statement.  The normal fall-through at the block's `end` is therefore
+                // unreachable; append `unreachable` so the Wasm validator accepts the
+                // typed block even when it has no stack value at the `end`.
+                //
+                // This covers all non-value-producing last statements:
+                //  - explicit divergence (Return, Br, BrTable, Unreachable)
+                //  - void blocks / loops whose only exits are outer labeled breaks
+                //    (e.g. a TIR `loop {}` translated to `Block{result:None,[Loop{…}]}`)
+                //  - any other void WIR instruction that should never reach this point
+                //    in well-typed TIR
+                let needs_unreachable = is_last && !instr.produces_stack_value();
                 instrs.push(instr);
-            }
-            // A Loop that always exits via a labeled `break` to an outer block never
-            // falls through in Wado, but the Wasm `loop` instruction itself can fall
-            // through. Add `unreachable` so the Wasm validator knows the fallthrough
-            // path of the enclosing value-block is dead.
-            if is_last && matches!(stmt.kind, TirStmtKind::Loop { .. }) {
-                instrs.push(WirInstr::Unreachable);
+                if needs_unreachable {
+                    instrs.push(WirInstr::Unreachable);
+                }
             }
         }
         instrs

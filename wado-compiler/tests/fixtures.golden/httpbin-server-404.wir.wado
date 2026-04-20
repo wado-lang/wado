@@ -832,6 +832,7 @@ fn "wado-compiler/tests/fixtures/httpbin-server-404.wado/__cm_binding__Request_g
             __local_5 = builtin::load_i32((__outptr + 4) + 4);
             __local_6 = "core:internal/memory_to_gc_array"(__local_4, __local_5);
             break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_6, used: __local_5 };
+            unreachable;
         });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));
     }
@@ -959,6 +960,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
         __local_9 = data.repr;
         __local_10 = data.used;
         break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_9, __local_10);
+        unreachable;
     };
     ptr = builtin::i32_wrap_i64(packed);
     len = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -1008,6 +1010,7 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     result = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __local_1 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
+        unreachable;
     };
     _licm_used_11 = self.used;
     _licm_repr_12 = self.repr;
@@ -1052,6 +1055,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;

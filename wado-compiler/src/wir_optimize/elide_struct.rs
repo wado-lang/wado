@@ -123,6 +123,44 @@ fn collect_stats(
     }
 }
 
+/// Returns `true` when `instr` is safe to re-evaluate at a different program
+/// point (i.e. it is referentially transparent between its definition and any
+/// use site).
+///
+/// Heap reads (`StructGet`, `ArrayGet*`) and calls are rejected because the
+/// underlying GC object or array element might have been mutated between the
+/// struct-local's definition and its use.  Allocations (`StructNew`, `ArrayNew*`)
+/// are rejected because re-allocating creates a distinct object identity.
+/// Any side-effecting instruction nested inside an expression is also rejected.
+fn is_pure_for_elision(instr: &WirInstr) -> bool {
+    match instr {
+        // Heap reads: the field/element may have been mutated in the meantime.
+        WirInstr::StructGet { .. }
+        | WirInstr::ArrayGet { .. }
+        | WirInstr::ArrayGetS { .. }
+        | WirInstr::ArrayGetU { .. } => false,
+        // Function calls: potential side effects.
+        WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => false,
+        // Heap allocations: re-allocating at the use site creates a new, distinct object.
+        WirInstr::StructNew { .. }
+        | WirInstr::ArrayNew { .. }
+        | WirInstr::ArrayNewDefault { .. }
+        | WirInstr::ArrayNewData { .. }
+        | WirInstr::ArrayNewFixed { .. } => false,
+        // Everything else (constants, LocalGet, arithmetic, comparisons, …):
+        // recurse to ensure no impure sub-expressions are present.
+        _ => {
+            let mut pure = true;
+            instr.for_each_child(&mut |child| {
+                if pure && !is_pure_for_elision(child) {
+                    pure = false;
+                }
+            });
+            pure
+        }
+    }
+}
+
 /// Walk `instr` to check whether any descendant `LocalGet(name)` has its name in
 /// `candidates` and not equal to `exclude`.
 fn inner_refs_any_candidate(
@@ -171,6 +209,12 @@ fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
             }
             let inner = cand.fields.into_iter().next()?;
             if inner_refs_any_candidate(&inner, &candidate_names, &name) {
+                return None;
+            }
+            // Only substitute when the inner expression is safe to re-evaluate at
+            // the use site.  Expressions that read heap state (StructGet, ArrayGet)
+            // or have side effects must not be moved past intervening mutations.
+            if !is_pure_for_elision(&inner) {
                 return None;
             }
             Some((name, inner))
@@ -250,6 +294,10 @@ fn elide_multi_field_struct_locals_one_pass(
             }
             for inner in &cand.fields {
                 if inner_refs_any_candidate(inner, &candidate_names, &name) {
+                    return None;
+                }
+                // Same safety check as the single-field pass.
+                if !is_pure_for_elision(inner) {
                     return None;
                 }
             }

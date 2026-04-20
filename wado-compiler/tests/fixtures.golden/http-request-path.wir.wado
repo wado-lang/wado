@@ -487,7 +487,7 @@ fn "wado-compiler/tests/fixtures/http-request-path.wado/handle"(request) {
     let __local_170: ref "core:prelude/format.wado//Formatter";
     path = "wado-compiler/tests/fixtures/http-request-path.wado/__cm_binding__Request_get_path_with_query"(request);
     if ref.is_null(path) == 0 {
-        p = ref.as_non_null(path);
+        p = value_copy "core:prelude/string.wado//String"(ref.as_non_null(path));
         __v0 = p;
         __cond = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/hello"), used: 6 });
         if __cond == 0 {
@@ -519,6 +519,7 @@ condition: p == \"/hello\"
                 "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_11);
                 "core:prelude/string.wado/String::push"(__local_10, 10);
                 break __tmpl: __local_10;
+                unreachable;
             });
             unreachable;
         }
@@ -876,6 +877,7 @@ fn "wado-compiler/tests/fixtures/http-request-path.wado/__cm_binding__Request_ge
             __local_5 = builtin::load_i32((__outptr + 4) + 4);
             __local_6 = "core:internal/memory_to_gc_array"(__local_4, __local_5);
             break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_6, used: __local_5 };
+            unreachable;
         });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));
     }
@@ -1095,6 +1097,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1112,8 +1115,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1197,6 +1202,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
         return 0, __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     }
     if b0 <u 224 {
@@ -1355,13 +1361,15 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
-    };
+        unreachable;
+    });
     _licm_buf_33 = f.buf;
     b97: block {
         l98: loop {

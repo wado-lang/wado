@@ -567,16 +567,27 @@ fn is_boolean_valued(instr: &WirInstr) -> bool {
 /// GC constructors (`StructNew`, `ArrayNew*`), function call return values,
 /// and block expressions whose result is itself fresh.
 fn elide_redundant_value_copies(instrs: &mut [WirInstr]) {
-    for instr in instrs.iter_mut() {
-        let WirInstr::LocalSet { value, .. } = instr else {
+    for i in 0..instrs.len() {
+        let (left, right) = instrs.split_at_mut(i + 1);
+        let instr = &mut left[i];
+        let WirInstr::LocalSet { name, value } = instr else {
             continue;
         };
-        let is_fresh = if let WirInstr::ValueCopy { expr, .. } = value.as_ref() {
+        let can_elide = if let WirInstr::ValueCopy { expr, .. } = value.as_ref() {
             is_fresh_wir_value(expr)
+                // `value_copy(local)` is not always redundant even when the local
+                // currently holds a fresh value: removing it may create an alias
+                // that later mutations through the destination local can observe
+                // via the source local (e.g. inlined `mut` parameter bindings).
+                && value_copy_source_local(expr).is_none()
+                // Keep the existing destination safety guard used by cross-scope
+                // copy-elision to avoid dropping defensive copies that isolate a
+                // local later used in mutating/escaping positions.
+                && right.iter().all(|instr| uses_of_var_are_reads_only(instr, name))
         } else {
             false
         };
-        if is_fresh {
+        if can_elide {
             let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
             if let WirInstr::ValueCopy { expr, .. } = old {
                 *value = expr;
@@ -812,8 +823,10 @@ fn uses_of_var_are_reads_only(instr: &WirInstr, var_name: &str) -> bool {
                     }
                     !instr_contains_local_get(value, var_name)
                 }
-                // LocalGet(var) stored into another local: creates alias but OK if read-only
-                WirInstr::LocalGet { name, .. } if name == var_name => true,
+                // LocalGet(var) stored into another local creates a new alias that
+                // may be mutated later through the alias; treat this as unsafe for
+                // copy elision in this pass.
+                WirInstr::LocalGet { name, .. } if name == var_name => false,
                 // RefAsNonNull/RefCast/RefTest on var — type narrowing, safe
                 WirInstr::RefAsNonNull(inner)
                 | WirInstr::RefCast { expr: inner, .. }

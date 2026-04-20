@@ -137,12 +137,14 @@ fn "wado-compiler/tests/fixtures/match_ergonomics_mut_ref.wado/test_mut_ref_if_l
     let __local_22: ref "core:prelude/format.wado//Formatter";
     let __local_23: ref "core:prelude/types.wado//Box<i32>";
     let __local_25: ref "core:prelude/string.wado//String";
+    let __local_26: ref "core:prelude/types.wado//Box<i32>";
     let __local_32: ref "core:prelude/format.wado//Formatter";
     let __local_38: ref "core:prelude/format.wado//Formatter";
     let __local_42: ref "core:prelude/types.wado//Box<i32>";
     let __local_43: ref "core:prelude/format.wado//Formatter";
     let __local_44: ref "core:prelude/types.wado//Box<i32>";
     let __local_46: ref "core:prelude/string.wado//String";
+    let __local_47: ref "core:prelude/types.wado//Box<i32>";
     let __local_53: ref "core:prelude/format.wado//Formatter";
     let __sroa_opt_value: ref "core:prelude/types.wado//Option<i32>";
     __sroa_opt_value = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
@@ -177,7 +179,8 @@ condition: *x == 42
                 __local_25 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&mut "), used: 5 };
                 "core:prelude/string.wado/String::push_str"(__local_22.buf, __local_25);
                 __local_23 = __local_21;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_23.value, __local_22);
+                __local_26 = struct.new "core:prelude/types.wado//Box<i32>" { value: __local_23.value };
+                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_26.value, __local_22);
                 "core:prelude/string.wado/String::push"(__local_9, 10);
                 "core:prelude/string.wado/String::push"(__local_9, 42);
                 "core:prelude/string.wado/String::push"(__local_9, 120);
@@ -188,6 +191,7 @@ condition: *x == 42
                 "core:prelude/primitive.wado/i32::fmt_decimal"(__v1_4, __local_32);
                 "core:prelude/string.wado/String::push"(__local_9, 10);
                 break __tmpl: __local_9;
+                unreachable;
             });
             unreachable;
         }
@@ -221,7 +225,8 @@ condition: *x == 100
                 __local_46 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&mut "), used: 5 };
                 "core:prelude/string.wado/String::push_str"(__local_43.buf, __local_46);
                 __local_44 = __local_42;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_44.value, __local_43);
+                __local_47 = struct.new "core:prelude/types.wado//Box<i32>" { value: __local_44.value };
+                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_47.value, __local_43);
                 "core:prelude/string.wado/String::push"(__local_11, 10);
                 "core:prelude/string.wado/String::push"(__local_11, 42);
                 "core:prelude/string.wado/String::push"(__local_11, 120);
@@ -232,6 +237,7 @@ condition: *x == 100
                 "core:prelude/primitive.wado/i32::fmt_decimal"(__v1_7, __local_53);
                 "core:prelude/string.wado/String::push"(__local_11, 10);
                 break __tmpl: __local_11;
+                unreachable;
             });
             unreachable;
         }
@@ -255,6 +261,7 @@ fn "wado-compiler/tests/fixtures/match_ergonomics_mut_ref.wado/test_mut_ref_matc
     let __local_21: ref "core:prelude/format.wado//Formatter";
     let __local_22: ref "core:prelude/types.wado//Box<i32>";
     let __local_24: ref "core:prelude/string.wado//String";
+    let __local_25: ref "core:prelude/types.wado//Box<i32>";
     let __local_31: ref "core:prelude/format.wado//Formatter";
     let __local_37: ref "core:prelude/format.wado//Formatter";
     let __local_42: ref "core:prelude/format.wado//Formatter";
@@ -295,7 +302,8 @@ condition: *x == 10
                 __local_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&mut "), used: 5 };
                 "core:prelude/string.wado/String::push_str"(__local_21.buf, __local_24);
                 __local_22 = __local_20;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_22.value, __local_21);
+                __local_25 = struct.new "core:prelude/types.wado//Box<i32>" { value: __local_22.value };
+                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_25.value, __local_21);
                 "core:prelude/string.wado/String::push"(__local_9, 10);
                 "core:prelude/string.wado/String::push"(__local_9, 42);
                 "core:prelude/string.wado/String::push"(__local_9, 120);
@@ -306,6 +314,7 @@ condition: *x == 10
                 "core:prelude/primitive.wado/i32::fmt_decimal"(__local_4, __local_31);
                 "core:prelude/string.wado/String::push"(__local_9, 10);
                 break __tmpl: __local_9;
+                unreachable;
             });
             unreachable;
         }
@@ -344,6 +353,7 @@ condition: val == 20
             "core:prelude/primitive.wado/i32::fmt_decimal"(val, __local_42);
             "core:prelude/string.wado/String::push"(__local_11, 10);
             break __tmpl: __local_11;
+            unreachable;
         });
         unreachable;
     }
@@ -361,6 +371,7 @@ fn "wado-compiler/tests/fixtures/match_ergonomics_mut_ref.wado/test_ref_if_let_u
     let __local_17: ref "core:prelude/format.wado//Formatter";
     let __local_18: ref "core:prelude/types.wado//Box<i32>";
     let __local_20: ref "core:prelude/string.wado//String";
+    let __local_21: ref "core:prelude/types.wado//Box<i32>";
     let __local_27: ref "core:prelude/format.wado//Formatter";
     let __sroa_opt_value: ref "core:prelude/types.wado//Option<i32>";
     __sroa_opt_value = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
@@ -394,7 +405,8 @@ condition: *x == 42
                 __local_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
                 "core:prelude/string.wado/String::push_str"(__local_17.buf, __local_20);
                 __local_18 = __v0;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_18.value, __local_17);
+                __local_21 = struct.new "core:prelude/types.wado//Box<i32>" { value: __local_18.value };
+                "core:prelude/primitive.wado/i32::fmt_decimal"(__local_21.value, __local_17);
                 "core:prelude/string.wado/String::push"(__local_6, 10);
                 "core:prelude/string.wado/String::push"(__local_6, 42);
                 "core:prelude/string.wado/String::push"(__local_6, 120);
@@ -405,6 +417,7 @@ condition: *x == 42
                 "core:prelude/primitive.wado/i32::fmt_decimal"(__v1, __local_27);
                 "core:prelude/string.wado/String::push"(__local_6, 10);
                 break __tmpl: __local_6;
+                unreachable;
             });
             unreachable;
         }
@@ -607,6 +620,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -624,8 +638,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

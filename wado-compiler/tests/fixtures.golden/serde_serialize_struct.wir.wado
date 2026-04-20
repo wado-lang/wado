@@ -291,6 +291,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -308,8 +309,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -378,6 +381,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonSerializer^Seri
         __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_2 };
         "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_3);
         break __tmpl: __local_2;
+        unreachable;
     });
     return ref.null none;
 }
@@ -390,6 +394,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonSerializer^Seri
         "core:prelude/string.wado/String::push_str"(__local_2, v);
         "core:prelude/string.wado/String::push"(__local_2, 34);
         break __tmpl: __local_2;
+        unreachable;
     });
     return ref.null none;
 }
@@ -523,6 +528,7 @@ fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/User^Serialize::ser
     return __inline_JsonStructSerializer_SerializeStruct__end_1: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_struct.wado//SerializeError" {
         "core:prelude/string.wado/String::push"(st.ser.buf, 125);
         break __inline_JsonStructSerializer_SerializeStruct__end_1: ref.null none;
+        unreachable;
     };
     return struct.new "wado-compiler/tests/fixtures/serde_serialize_struct.wado//SerializeError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("begin_struct failed"), used: 19 } };
 }
@@ -540,10 +546,12 @@ fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonStructSerialize
         "core:prelude/string.wado/String::push"(__local_3, 34);
         "core:prelude/string.wado/String::push"(__local_3, 58);
         break __tmpl: __local_3;
+        unreachable;
     });
     drop(__inline_bool_Serialize__serialize_JsonSerializer__1: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_struct.wado//SerializeError" {
         __local_6 = self.ser;
         break __inline_bool_Serialize__serialize_JsonSerializer__1: "wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonSerializer^Serializer::serialize_bool"(__local_6.buf, value);
+        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;
@@ -562,10 +570,12 @@ fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonStructSerialize
         "core:prelude/string.wado/String::push"(__local_3, 34);
         "core:prelude/string.wado/String::push"(__local_3, 58);
         break __tmpl: __local_3;
+        unreachable;
     });
     drop(__inline_i32_Serialize__serialize_JsonSerializer__1: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_struct.wado//SerializeError" {
         __local_6 = self.ser;
         break __inline_i32_Serialize__serialize_JsonSerializer__1: "wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonSerializer^Serializer::serialize_i32"(__local_6.buf, value);
+        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;
@@ -584,10 +594,12 @@ fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonStructSerialize
         "core:prelude/string.wado/String::push"(__local_3, 34);
         "core:prelude/string.wado/String::push"(__local_3, 58);
         break __tmpl: __local_3;
+        unreachable;
     });
     drop(__inline_String_Serialize__serialize_JsonSerializer__1: block -> ref null "wado-compiler/tests/fixtures/serde_serialize_struct.wado//SerializeError" {
         __local_6 = self.ser;
         break __inline_String_Serialize__serialize_JsonSerializer__1: "wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonSerializer^Serializer::serialize_string"(__local_6.buf, value);
+        unreachable;
     });
     self.count = self.count + 1;
     return ref.null none;

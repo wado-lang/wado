@@ -180,6 +180,7 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
         __local_51 = __local_24;
         "core:prelude/primitive.wado/i32::fmt_decimal"(20, __local_51);
         break __tmpl: __local_23;
+        unreachable;
     });
     __sroa_pair_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -196,10 +197,12 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
         __local_62 = __local_26;
         "core:prelude/primitive.wado/i32::fmt_decimal"(2, __local_62);
         break __tmpl: __local_25;
+        unreachable;
     });
     items = __seq_lit: block -> ref "core:prelude//Array<Tagged>" {
         __local_8 = struct.new "core:prelude//Array<Tagged>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged">(struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("P"), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 } }, struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Q"), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 5, 1: 6 } }), used: 2 };
         break __seq_lit: __local_8;
+        unreachable;
     };
     __iter_10 = struct.new "core:prelude/array.wado//ArrayIter<Tagged>" { repr: items.repr, used: 2, index: 0 };
     b0: block {
@@ -219,6 +222,7 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
                     __local_28 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_27 };
                     "core:prelude/primitive.wado/i32::fmt_decimal"(a + b, __local_28);
                     break __tmpl: __local_27;
+                    unreachable;
                 });
             } else {
                 break b0;
@@ -227,9 +231,7 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
         };
     };
     t = struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("X"), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 100, 1: 200 } };
-    let __match_scrut_0: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
-    __match_scrut_0 = t;
-    desc = (if let __struct_field_3: ref "tuple//[i32, i32]"; __struct_field_3 = __match_scrut_0.coords; __local_15 = __struct_field_3.0; __local_16 = __struct_field_3.1; (__local_15 + __local_16) > 250 -> ref "core:prelude/string.wado//String" {
+    desc = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged"; __match_scrut_0 = t; (if let __struct_field_3: ref "tuple//[i32, i32]"; __struct_field_3 = __match_scrut_0.coords; __local_15 = __struct_field_3.0; __local_16 = __struct_field_3.1; (__local_15 + __local_16) > 250 -> ref "core:prelude/string.wado//String" {
         let __struct_field_2: ref "tuple//[i32, i32]";
         __struct_field_2 = __match_scrut_0.coords;
         __local_15 = __struct_field_2.0;
@@ -251,8 +253,9 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
             __local_87 = __local_30;
             "core:prelude/primitive.wado/i32::fmt_decimal"(__local_18, __local_87);
             break __tmpl: __local_29;
+            unreachable;
         };
-    });
+    }));
     "core:cli/println"(desc);
     opt = struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Point" { x: 7, y: 8 };
     if ref.is_null(opt) == 0 {
@@ -264,6 +267,7 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
             __local_32 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_31 };
             "core:prelude/primitive.wado/i32::fmt_decimal"(x + y, __local_32);
             break __tmpl: __local_31;
+            unreachable;
         });
     }
 }
@@ -424,6 +428,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -441,8 +446,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -636,6 +643,7 @@ fn "core:prelude/array.wado/Array<Tagged>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged">(new_capacity);
     old_repr = self.repr;

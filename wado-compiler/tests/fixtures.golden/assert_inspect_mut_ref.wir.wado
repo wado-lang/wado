@@ -109,6 +109,7 @@ fn "wado-compiler/tests/fixtures/assert_inspect_mut_ref.wado/run"() with Stdout,
     let __local_16: ref "core:prelude/format.wado//Formatter";
     let __local_17: ref "core:prelude/types.wado//Box<i32>";
     let __local_19: ref "core:prelude/string.wado//String";
+    let __local_20: ref "core:prelude/types.wado//Box<i32>";
     let __local_26: ref "core:prelude/format.wado//Formatter";
     y = struct.new "core:prelude/types.wado//Box<i32>" { value: 100 };
     __v0 = y;
@@ -143,7 +144,8 @@ condition: *mr == 99
             __local_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&mut "), used: 5 };
             "core:prelude/string.wado/String::push_str"(__local_16.buf, __local_19);
             __local_17 = __local_15;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_17.value, __local_16);
+            __local_20 = struct.new "core:prelude/types.wado//Box<i32>" { value: __local_17.value };
+            "core:prelude/primitive.wado/i32::fmt_decimal"(__local_20.value, __local_16);
             "core:prelude/string.wado/String::push"(__local_5, 10);
             "core:prelude/string.wado/String::push"(__local_5, 42);
             "core:prelude/string.wado/String::push"(__local_5, 109);
@@ -155,6 +157,7 @@ condition: *mr == 99
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v1, __local_26);
             "core:prelude/string.wado/String::push"(__local_5, 10);
             break __tmpl: __local_5;
+            unreachable;
         });
         unreachable;
     }
@@ -319,6 +322,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -336,8 +340,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

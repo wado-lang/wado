@@ -79,11 +79,13 @@ fn "wado-compiler/tests/fixtures/array_bounds_check_negative.wado/run"() {
     arr = __seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     };
     drop(__inline_Array_i32__IndexValue_i32___index_value_8: block -> i32 {
         block {
         };
         break __inline_Array_i32__IndexValue_i32___index_value_8: builtin::array_get<i32>(arr.repr, -1);
+        unreachable;
     });
 }
 
@@ -204,6 +206,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

@@ -156,6 +156,7 @@ fn "wado-compiler/tests/fixtures/variant_construct.wado/return_non_empty"() {
     return ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<u8>" {
         __local_0 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(1, 2, 3), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     });
 }
 
@@ -164,6 +165,7 @@ fn "wado-compiler/tests/fixtures/variant_construct.wado/return_result_array"() {
     return 0, ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
         break __seq_lit: __local_0;
+        unreachable;
     }), ref.null none;
 }
 
@@ -224,9 +226,10 @@ fn "wado-compiler/tests/fixtures/variant_construct.wado/variant_construct_litera
     let __local_109: ref "core:prelude//Array<i32>";
     let __local_117: ref "core:prelude/format.wado//Formatter";
     let __local_122: ref "core:prelude/format.wado//Formatter";
-    __pattern_temp_0 = ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<u8>" {
+    __pattern_temp_0 = ref.as_non_null(__inline_return_empty_0____seq_lit: block -> ref "core:prelude//Array<u8>" {
         __local_43 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-        break __seq_lit: __local_43;
+        break __inline_return_empty_0____seq_lit: __local_43;
+        unreachable;
     });
     if ref.is_null(__pattern_temp_0) == 0 {
         arr_0 = ref.as_non_null(__pattern_temp_0);
@@ -255,6 +258,7 @@ condition: arr.len() == 0
                 "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_1, __local_56);
                 "core:prelude/string.wado/String::push"(__local_23, 10);
                 break __tmpl: __local_23;
+                unreachable;
             });
             unreachable;
         }
@@ -290,6 +294,7 @@ condition: arr.len() == 3
                 "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_4, __local_68);
                 "core:prelude/string.wado/String::push"(__local_25, 10);
                 break __tmpl: __local_25;
+                unreachable;
             });
             unreachable;
         }
@@ -299,6 +304,7 @@ condition: arr.len() == 3
                 unreachable;
             }
             break __inline_Array_u8__IndexValue_i32___index_value_20: builtin::array_get<u8>(arr_3.repr, 0);
+            unreachable;
         };
         __cond_7 = __v0_6 == 1;
         if __cond_7 == 0 {
@@ -331,6 +337,7 @@ condition: arr[0] == 1 as u8
                 "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_6, __local_81);
                 "core:prelude/string.wado/String::push"(__local_27, 10);
                 break __tmpl: __local_27;
+                unreachable;
             });
             unreachable;
         }
@@ -369,6 +376,7 @@ condition: arr.len() == 3
                 "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_9, __local_93);
                 "core:prelude/string.wado/String::push"(__local_29, 10);
                 break __tmpl: __local_29;
+                unreachable;
             });
             unreachable;
         }
@@ -378,6 +386,7 @@ condition: arr.len() == 3
                 unreachable;
             }
             break __inline_Array_i32__IndexValue_i32___index_value_36: builtin::array_get<i32>(arr_8.repr, 0);
+            unreachable;
         };
         __cond_12 = __v0_11 == 10;
         if __cond_12 == 0 {
@@ -410,6 +419,7 @@ condition: arr[0] == 10
                 "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_11, __local_106);
                 "core:prelude/string.wado/String::push"(__local_31, 10);
                 break __tmpl: __local_31;
+                unreachable;
             });
             unreachable;
         }
@@ -417,9 +427,10 @@ condition: arr[0] == 10
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected Ok"), used: 11 });
         unreachable;
     }
-    __pattern_temp_3 = struct.new "core:prelude/types.wado//Result<Array<i32>,String>::Ok" { discriminant: 0, payload_0: ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<i32>" {
+    __pattern_temp_3 = struct.new "core:prelude/types.wado//Result<Array<i32>,String>::Ok" { discriminant: 0, payload_0: ref.as_non_null(__inline_return_result_empty_44____seq_lit: block -> ref "core:prelude//Array<i32>" {
         __local_109 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-        break __seq_lit: __local_109;
+        break __inline_return_result_empty_44____seq_lit: __local_109;
+        unreachable;
     }) };
     if ref.test "core:prelude/types.wado//Result<Array<i32>,String>::Ok"(__pattern_temp_3) {
         arr_13 = ref.cast "core:prelude/types.wado//Result<Array<i32>,String>::Ok"(__pattern_temp_3).payload_0;
@@ -448,6 +459,7 @@ condition: arr.len() == 0
                 "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_14, __local_122);
                 "core:prelude/string.wado/String::push"(__local_33, 10);
                 break __tmpl: __local_33;
+                unreachable;
             });
             unreachable;
         }
@@ -459,6 +471,7 @@ condition: arr.len() == 0
     opt_arr = ref.as_non_null(__seq_lit: block -> ref "core:prelude//Array<u8>" {
         __local_17 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(1, 2), used: 2 };
         break __seq_lit: __local_17;
+        unreachable;
     });
     let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
     __match_scrut_0 = opt_i32;
@@ -487,6 +500,7 @@ condition: arr.len() == 0
 condition: opt_i32 matches { Some(n) && n == 42 }
 "), used: 51 });
             break __tmpl: __local_35;
+            unreachable;
         });
         unreachable;
     }
@@ -517,6 +531,7 @@ condition: opt_i32 matches { Some(n) && n == 42 }
 condition: opt_arr matches { Some(a) && a.len() == 2 }
 "), used: 56 });
             break __tmpl: __local_37;
+            unreachable;
         });
         unreachable;
     }
@@ -717,6 +732,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -734,8 +750,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -919,6 +937,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;
@@ -961,6 +980,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;

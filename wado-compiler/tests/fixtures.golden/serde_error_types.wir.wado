@@ -112,6 +112,7 @@ fn "wado-compiler/tests/fixtures/serde_error_types.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeError: "), used: 16 });
         "core:prelude/string.wado/String::push_str"(__local_4, __sroa_se_message);
         break __tmpl: __local_4;
+        unreachable;
     });
     __sroa_de_message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("field 'name' is missing"), used: 23 };
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -122,9 +123,10 @@ fn "wado-compiler/tests/fixtures/serde_error_types.wado/run"() with Stdout {
         __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -1, indent: 0, buf: __local_5 };
         "core:prelude/primitive.wado/i64::fmt_decimal"(42_i64, __local_6);
         break __tmpl: __local_5;
+        unreachable;
     });
     kind = 1;
-    label = b0: block -> ref "core:prelude/string.wado//String" {
+    label = value_copy "core:prelude/string.wado//String"(b0: block -> ref "core:prelude/string.wado//String" {
         b1: block {
             b2: block {
                 b3: block {
@@ -170,7 +172,7 @@ fn "wado-compiler/tests/fixtures/serde_error_types.wado/run"() with Stdout {
             break b0;
         };
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("custom"), used: 6 };
-    };
+    });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
         "core:prelude/string.wado/String::push"(__local_7, 75);
@@ -181,6 +183,7 @@ fn "wado-compiler/tests/fixtures/serde_error_types.wado/run"() with Stdout {
         "core:prelude/string.wado/String::push"(__local_7, 32);
         "core:prelude/string.wado/String::push_str"(__local_7, label);
         break __tmpl: __local_7;
+        unreachable;
     });
 }
 
@@ -348,6 +351,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         repr = __inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
             __local_12 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_12.repr;
+            unreachable;
         };
         "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
@@ -362,6 +366,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
             __local_13 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_13.repr;
+            unreachable;
         }, offset_11, abs_val, digit_count_10);
     }
 }
@@ -380,8 +385,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

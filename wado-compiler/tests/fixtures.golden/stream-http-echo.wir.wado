@@ -476,6 +476,7 @@ fn "wado-compiler/tests/fixtures/stream-http-echo.wado/handle"(request) {
     chunks = __seq_lit: block -> ref "core:prelude//Array<Array<u8>>" {
         __local_5 = struct.new "core:prelude//Array<Array<u8>>" { repr: builtin::array_new<ref "core:prelude//Array<u8>">(0), used: 0 };
         break __seq_lit: __local_5;
+        unreachable;
     };
     b0: block {
         l1: loop {
@@ -974,6 +975,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
         __local_9 = data.repr;
         __local_10 = data.used;
         break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_9, __local_10);
+        unreachable;
     };
     ptr = builtin::i32_wrap_i64(packed);
     len = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -1016,6 +1018,7 @@ fn "core:prelude/array.wado/Array<Array<u8>>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<ref "core:prelude//Array<u8>">(new_capacity);
     old_repr = self.repr;

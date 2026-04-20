@@ -544,6 +544,7 @@ fn "wado-compiler/tests/fixtures/http-response-set-status-invalid.wado/handle"()
 condition: ok_result matches { Ok(_) }
 "), used: 40 });
             break __tmpl: __local_18;
+            unreachable;
         });
         unreachable;
     }
@@ -579,6 +580,7 @@ condition: response.get_status_code() == 201
             "core:prelude/string.wado/String::push_str"(__local_198.buf, __local_204);
             "core:prelude/string.wado/String::push"(__local_20, 10);
             break __tmpl: __local_20;
+            unreachable;
         });
         unreachable;
     }
@@ -612,6 +614,7 @@ condition: response.get_status_code() == 201
 condition: err_result_0 matches { Err(_) }
 "), used: 44 });
             break __tmpl: __local_22;
+            unreachable;
         });
         unreachable;
     }
@@ -647,6 +650,7 @@ condition: response.get_status_code() == 201
             "core:prelude/string.wado/String::push_str"(__local_219.buf, __local_225);
             "core:prelude/string.wado/String::push"(__local_24, 10);
             break __tmpl: __local_24;
+            unreachable;
         });
         unreachable;
     }
@@ -680,6 +684,7 @@ condition: response.get_status_code() == 201
 condition: err_result_max matches { Err(_) }
 "), used: 46 });
             break __tmpl: __local_26;
+            unreachable;
         });
         unreachable;
     }
@@ -715,6 +720,7 @@ condition: response.get_status_code() == 201
             "core:prelude/string.wado/String::push_str"(__local_240.buf, __local_246);
             "core:prelude/string.wado/String::push"(__local_28, 10);
             break __tmpl: __local_28;
+            unreachable;
         });
         unreachable;
     }
@@ -1252,6 +1258,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1269,8 +1276,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

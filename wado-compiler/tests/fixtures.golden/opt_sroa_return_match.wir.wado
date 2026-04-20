@@ -108,15 +108,13 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/opt_sroa_return_match.wado/use_small_match"(x) {
     let p: ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair";
-    let __match_scrut_0: i32;
-    __match_scrut_0 = x;
-    p = (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" {
+    p = value_copy "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair"(let __match_scrut_0: i32; __match_scrut_0 = x; (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" { a: 10, b: 20 };
     } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" { a: 30, b: 40 };
     } else {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" { a: 50, b: 60 };
-    });
+    }));
     return p.a + p.b;
 }
 
@@ -236,6 +234,7 @@ condition: use_small_match(0) == 30
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_0, __local_37);
             "core:prelude/string.wado/String::push"(__local_14, 10);
             break __tmpl: __local_14;
+            unreachable;
         });
         unreachable;
     }
@@ -266,6 +265,7 @@ condition: use_small_match(1) == 70
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_2, __local_48);
             "core:prelude/string.wado/String::push"(__local_16, 10);
             break __tmpl: __local_16;
+            unreachable;
         });
         unreachable;
     }
@@ -296,6 +296,7 @@ condition: use_small_match(2) == 110
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_4, __local_59);
             "core:prelude/string.wado/String::push"(__local_18, 10);
             break __tmpl: __local_18;
+            unreachable;
         });
         unreachable;
     }
@@ -326,6 +327,7 @@ condition: use_large_match(0) == 300
             "core:prelude/primitive.wado/u64::fmt_decimal"(__v0_6, __local_70);
             "core:prelude/string.wado/String::push"(__local_20, 10);
             break __tmpl: __local_20;
+            unreachable;
         });
         unreachable;
     }
@@ -356,6 +358,7 @@ condition: use_large_match(5) == 2300
             "core:prelude/primitive.wado/u64::fmt_decimal"(__v0_8, __local_81);
             "core:prelude/string.wado/String::push"(__local_22, 10);
             break __tmpl: __local_22;
+            unreachable;
         });
         unreachable;
     }
@@ -386,6 +389,7 @@ condition: use_large_match(9) == 3900
             "core:prelude/primitive.wado/u64::fmt_decimal"(__v0_10, __local_92);
             "core:prelude/string.wado/String::push"(__local_24, 10);
             break __tmpl: __local_24;
+            unreachable;
         });
         unreachable;
     }
@@ -416,6 +420,7 @@ condition: use_large_match(99) == 0
             "core:prelude/primitive.wado/u64::fmt_decimal"(__v0_12, __local_103);
             "core:prelude/string.wado/String::push"(__local_26, 10);
             break __tmpl: __local_26;
+            unreachable;
         });
         unreachable;
     }
@@ -580,6 +585,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -608,6 +614,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
         builtin::array_set_u8(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
             __local_19 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_19.repr;
+            unreachable;
         }, offset_3, 48);
         return;
     }
@@ -638,6 +645,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     repr = __inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
         __local_20 = f.buf;
         break __inline_String__internal_raw_bytes_1: __local_20.repr;
+        unreachable;
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
@@ -686,8 +694,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

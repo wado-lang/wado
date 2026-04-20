@@ -132,6 +132,7 @@ fn "wado-compiler/tests/fixtures/type_param_omission_cross_module.wado/__test_0_
     b = __inline___sub_type_param_omission_helper_wado_wrap_String__1: block -> ref "core:prelude/string.wado//String" {
         __local_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
         break __inline___sub_type_param_omission_helper_wado_wrap_String__1: __local_16;
+        unreachable;
     };
     __v0 = b;
     __cond = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
@@ -159,6 +160,7 @@ condition: b == \"hello\"
             "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_12);
             "core:prelude/string.wado/String::push"(__local_11, 10);
             break __tmpl: __local_11;
+            unreachable;
         });
         unreachable;
     }
@@ -175,6 +177,7 @@ fn "wado-compiler/tests/fixtures/type_param_omission_cross_module.wado/__test_1_
     a = __inline___sub_type_param_omission_helper_wado_pair_first_i32_String__0: block -> i32 {
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ignored"), used: 7 };
         break __inline___sub_type_param_omission_helper_wado_pair_first_i32_String__0: 10;
+        unreachable;
     };
     __cond = a == 10;
     if __cond == 0 {
@@ -202,6 +205,7 @@ condition: a == 10
             "core:prelude/primitive.wado/i32::fmt_decimal"(a, __local_15);
             "core:prelude/string.wado/String::push"(__local_3, 10);
             break __tmpl: __local_3;
+            unreachable;
         });
         unreachable;
     }
@@ -218,6 +222,7 @@ fn "wado-compiler/tests/fixtures/type_param_omission_cross_module.wado/__test_2_
     b = __inline_CrossBox__make_String__1: block -> ref "core:prelude/string.wado//String" {
         __local_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
         break __inline_CrossBox__make_String__1: __local_11;
+        unreachable;
     };
     __v0 = b;
     __cond = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
@@ -245,6 +250,7 @@ condition: b == \"hello\"
             "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_9);
             "core:prelude/string.wado/String::push"(__local_8, 10);
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     }
@@ -274,17 +280,20 @@ fn "wado-compiler/tests/fixtures/type_param_omission_cross_module.wado/__test_3_
     a = __inline_CrossBox__select_i32__0: block -> i32 {
         drop(0);
         break __inline_CrossBox__select_i32__0: 42;
+        unreachable;
     };
     b = __inline_CrossBox__select_String__1: block -> ref "core:prelude/string.wado//String" {
         __local_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
         drop(0);
         break __inline_CrossBox__select_String__1: __local_19;
+        unreachable;
     };
     d = __inline_CrossBox__pair_i64_String__2: block -> i64 {
         __local_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ignored"), used: 7 };
         drop(0);
         drop(__local_22);
         break __inline_CrossBox__pair_i64_String__2: 10_i64;
+        unreachable;
     };
     __cond_5 = a == 42;
     if __cond_5 == 0 {
@@ -312,6 +321,7 @@ condition: a == 42
             "core:prelude/primitive.wado/i32::fmt_decimal"(a, __local_31);
             "core:prelude/string.wado/String::push"(__local_10, 10);
             break __tmpl: __local_10;
+            unreachable;
         });
         unreachable;
     }
@@ -341,6 +351,7 @@ condition: b == \"hello\"
             "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_13);
             "core:prelude/string.wado/String::push"(__local_12, 10);
             break __tmpl: __local_12;
+            unreachable;
         });
         unreachable;
     }
@@ -370,6 +381,7 @@ condition: d == 10 as i64
             "core:prelude/primitive.wado/i64::fmt_decimal"(d, __local_49);
             "core:prelude/string.wado/String::push"(__local_14, 10);
             break __tmpl: __local_14;
+            unreachable;
         });
         unreachable;
     }
@@ -549,6 +561,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -573,6 +586,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         repr = __inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
             __local_12 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_12.repr;
+            unreachable;
         };
         "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
@@ -587,6 +601,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
             __local_13 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_13.repr;
+            unreachable;
         }, offset_11, abs_val, digit_count_10);
     }
 }
@@ -605,8 +620,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -690,6 +707,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
         return 0, __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     }
     if b0 <u 224 {
@@ -848,13 +866,15 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
-    };
+        unreachable;
+    });
     _licm_buf_33 = f.buf;
     b59: block {
         l60: loop {

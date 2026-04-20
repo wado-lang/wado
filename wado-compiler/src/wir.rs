@@ -1704,7 +1704,9 @@ impl WirInstr {
     /// end with `return` or `unreachable` before producing a value).
     pub fn always_diverges(&self) -> bool {
         match self {
-            Self::Return { .. } | Self::Unreachable => true,
+            Self::Return { .. } | Self::Unreachable | Self::Br { .. } | Self::BrTable { .. } => {
+                true
+            }
             Self::If {
                 then_body,
                 else_body,

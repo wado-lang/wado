@@ -127,6 +127,7 @@ fn "wado-compiler/tests/fixtures/default_arg_pure_call.wado/run"() {
             break __inline_clamp_2: __local_18;
         }
         break __inline_clamp_2: 5;
+        unreachable;
     };
     __cond_2 = m == 5;
     if __cond_2 == 0 {
@@ -156,6 +157,7 @@ condition: m == 5
             "core:prelude/primitive.wado/i32::fmt_decimal"(m, __local_31);
             "core:prelude/string.wado/String::push"(__local_9, 10);
             break __tmpl: __local_9;
+            unreachable;
         });
         unreachable;
     }
@@ -169,6 +171,7 @@ condition: m == 5
             break __inline_clamp_12: __local_36;
         }
         break __inline_clamp_12: 100;
+        unreachable;
     };
     __cond_5 = hi == 10;
     if __cond_5 == 0 {
@@ -199,6 +202,7 @@ condition: hi == 10
             "core:prelude/primitive.wado/i32::fmt_decimal"(hi, __local_49);
             "core:prelude/string.wado/String::push"(__local_11, 10);
             break __tmpl: __local_11;
+            unreachable;
         });
         unreachable;
     }
@@ -209,6 +213,7 @@ condition: hi == 10
             break __inline_clamp_22: __local_54;
         }
         break __inline_clamp_22: -3;
+        unreachable;
     };
     __cond_8 = lo == 0;
     if __cond_8 == 0 {
@@ -239,6 +244,7 @@ condition: lo == 0
             "core:prelude/primitive.wado/i32::fmt_decimal"(lo, __local_65);
             "core:prelude/string.wado/String::push"(__local_13, 10);
             break __tmpl: __local_13;
+            unreachable;
         });
         unreachable;
     }
@@ -403,6 +409,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -420,8 +427,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

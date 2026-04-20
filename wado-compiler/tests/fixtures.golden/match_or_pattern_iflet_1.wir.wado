@@ -194,6 +194,7 @@ fn "wado-compiler/tests/fixtures/match_or_pattern_iflet_1.wado/run"() {
             break __inline_is_sized_2: 1;
         }
         break __inline_is_sized_2: 0;
+        unreachable;
     };
     if __v0_0 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -224,6 +225,7 @@ condition: is_sized(Shape::Circle(1.0))
             }));
             "core:prelude/string.wado/String::push"(__local_12, 10);
             break __tmpl: __local_12;
+            unreachable;
         });
         unreachable;
     }
@@ -237,6 +239,7 @@ condition: is_sized(Shape::Circle(1.0))
             break __inline_is_sized_10: 1;
         }
         break __inline_is_sized_10: 0;
+        unreachable;
     };
     if __v0_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -267,6 +270,7 @@ condition: is_sized(Shape::Square(2.0))
             }));
             "core:prelude/string.wado/String::push"(__local_14, 10);
             break __tmpl: __local_14;
+            unreachable;
         });
         unreachable;
     }
@@ -280,6 +284,7 @@ condition: is_sized(Shape::Square(2.0))
             break __inline_is_sized_18: 1;
         }
         break __inline_is_sized_18: 0;
+        unreachable;
     };
     __cond_5 = __v0_4 == 0;
     if __cond_5 == 0 {
@@ -311,6 +316,7 @@ condition: !is_sized(Shape::Point)
             }));
             "core:prelude/string.wado/String::push"(__local_16, 10);
             break __tmpl: __local_16;
+            unreachable;
         });
         unreachable;
     }
@@ -341,6 +347,7 @@ condition: get_value(Expr::Num(42)) == 42
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_6, __local_72);
             "core:prelude/string.wado/String::push"(__local_18, 10);
             break __tmpl: __local_18;
+            unreachable;
         });
         unreachable;
     }
@@ -371,6 +378,7 @@ condition: get_value(Expr::Neg(-5)) == -5
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_8, __local_83);
             "core:prelude/string.wado/String::push"(__local_20, 10);
             break __tmpl: __local_20;
+            unreachable;
         });
         unreachable;
     }
@@ -401,6 +409,7 @@ condition: get_value(Expr::Zero) == 0
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_10, __local_94);
             "core:prelude/string.wado/String::push"(__local_22, 10);
             break __tmpl: __local_22;
+            unreachable;
         });
         unreachable;
     }
@@ -565,6 +574,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -582,8 +592,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

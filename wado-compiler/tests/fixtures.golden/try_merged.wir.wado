@@ -343,6 +343,7 @@ condition: n == 42
                 "core:prelude/primitive.wado/i32::fmt_decimal"(n_2, __local_46);
                 "core:prelude/string.wado/String::push"(__local_24, 10);
                 break __tmpl: __local_24;
+                unreachable;
             });
             unreachable;
         }
@@ -380,6 +381,7 @@ condition: msg.message == \"3000000000 out of range for i32\"
                 "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_27);
                 "core:prelude/string.wado/String::push"(__local_26, 10);
                 break __tmpl: __local_26;
+                unreachable;
             });
             unreachable;
         }
@@ -428,6 +430,7 @@ condition: n == 100 as u32
                 "core:prelude/primitive.wado/u32::fmt_decimal"(n_14, __local_64);
                 "core:prelude/string.wado/String::push"(__local_28, 10);
                 break __tmpl: __local_28;
+                unreachable;
             });
             unreachable;
         }
@@ -467,6 +470,7 @@ condition: n == 200 as u8
                 "core:prelude/primitive.wado/i32::fmt_decimal"(n_19, __local_75);
                 "core:prelude/string.wado/String::push"(__local_30, 10);
                 break __tmpl: __local_30;
+                unreachable;
             });
             unreachable;
         }
@@ -502,6 +506,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/pipeline"(x) {
             break __inline_step1_0: struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("step1: negative"), used: 15 } };
         }
         break __inline_step1_0: struct.new "core:prelude/types.wado//Result<i32,String>::Ok" { discriminant: 0, payload_0: x + 1 };
+        unreachable;
     };
     a = (if ref.test "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_0) -> i32 {
         let __cast_2: ref "core:prelude/types.wado//Result<i32,String>::Ok";
@@ -514,6 +519,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/pipeline"(x) {
         __local_2 = __cast_1.payload_0;
         return struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: __local_2 };
         unreachable;
+        unreachable;
     } else {
         unreachable;
     });
@@ -523,6 +529,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/pipeline"(x) {
             break __inline_step2_1: struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("step2: too large"), used: 16 } };
         }
         break __inline_step2_1: struct.new "core:prelude/types.wado//Result<i32,String>::Ok" { discriminant: 0, payload_0: a * 2 };
+        unreachable;
     };
     b = (if ref.test "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_1) -> i32 {
         let __cast_4: ref "core:prelude/types.wado//Result<i32,String>::Ok";
@@ -535,6 +542,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/pipeline"(x) {
         __local_5 = __cast_3.payload_0;
         return struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: __local_5 };
         unreachable;
+        unreachable;
     } else {
         unreachable;
     });
@@ -544,6 +552,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/pipeline"(x) {
             break __inline_step3_2: struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("step3: zero"), used: 11 } };
         }
         break __inline_step3_2: struct.new "core:prelude/types.wado//Result<i32,String>::Ok" { discriminant: 0, payload_0: b - 1 };
+        unreachable;
     };
     c = (if ref.test "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_2) -> i32 {
         let __cast_6: ref "core:prelude/types.wado//Result<i32,String>::Ok";
@@ -555,6 +564,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/pipeline"(x) {
         __cast_5 = ref.cast "core:prelude/types.wado//Result<i32,String>::Err"(__match_scrut_2);
         __local_8 = __cast_5.payload_0;
         return struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: __local_8 };
+        unreachable;
         unreachable;
     } else {
         unreachable;
@@ -602,6 +612,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_op_chained"() with Std
 condition: pipeline(5) matches { Ok(n) && n == 11 }
 "), used: 53 });
             break __tmpl: __local_6;
+            unreachable;
         });
         unreachable;
     }
@@ -632,6 +643,7 @@ condition: pipeline(5) matches { Ok(n) && n == 11 }
 condition: pipeline(-1) matches { Err(e) && e == \"step1: negative\" }
 "), used: 70 });
             break __tmpl: __local_8;
+            unreachable;
         });
         unreachable;
     }
@@ -662,6 +674,7 @@ condition: pipeline(-1) matches { Err(e) && e == \"step1: negative\" }
 condition: pipeline(100) matches { Err(e) && e == \"step2: too large\" }
 "), used: 72 });
             break __tmpl: __local_10;
+            unreachable;
         });
         unreachable;
     }
@@ -711,6 +724,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_op_option_basic"() wit
         __local_18 = __seq_lit: block -> ref "core:prelude//Array<i32>" {
             __local_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
             break __seq_lit: __local_0;
+            unreachable;
         };
         let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
         __match_scrut_0 = "wado-compiler/tests/fixtures/try_merged.wado/first_positive"(__local_18);
@@ -722,10 +736,12 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_op_option_basic"() wit
         } else if __match_scrut_0.discriminant == 1 -> i32 {
             break __inline_first_positive_doubled_6: struct.new "core:prelude/types.wado//Option<i32>" { 1 };
             unreachable;
+            unreachable;
         } else {
             unreachable;
         });
         break __inline_first_positive_doubled_6: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: __local_20 * 2 };
+        unreachable;
     };
     __cond_2 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1) -> bool {
         let __cast_2: ref "core:prelude/types.wado//Option<i32>::Some";
@@ -752,6 +768,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_op_option_basic"() wit
 condition: first_positive_doubled([1, 2, 3] as Array<i32>) matches { Some(n) && n == 2 }
 "), used: 90 });
             break __tmpl: __local_5;
+            unreachable;
         });
         unreachable;
     }
@@ -760,6 +777,7 @@ condition: first_positive_doubled([1, 2, 3] as Array<i32>) matches { Some(n) && 
         __local_34 = __seq_lit: block -> ref "core:prelude//Array<i32>" {
             __local_3 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(-1, -2), used: 2 };
             break __seq_lit: __local_3;
+            unreachable;
         };
         let __match_scrut_2: ref "core:prelude/types.wado//Option<i32>";
         __match_scrut_2 = "wado-compiler/tests/fixtures/try_merged.wado/first_positive"(__local_34);
@@ -771,10 +789,12 @@ condition: first_positive_doubled([1, 2, 3] as Array<i32>) matches { Some(n) && 
         } else if __match_scrut_2.discriminant == 1 -> i32 {
             break __inline_first_positive_doubled_16: struct.new "core:prelude/types.wado//Option<i32>" { 1 };
             unreachable;
+            unreachable;
         } else {
             unreachable;
         });
         break __inline_first_positive_doubled_16: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: __local_36 * 2 };
+        unreachable;
     };
     __cond_4 = (if __match_scrut_3.discriminant == 1 -> bool {
         1;
@@ -798,6 +818,7 @@ condition: first_positive_doubled([1, 2, 3] as Array<i32>) matches { Some(n) && 
 condition: first_positive_doubled([-1, -2] as Array<i32>) matches { None }
 "), used: 76 });
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     }
@@ -834,10 +855,12 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_op_result_basic"() wit
             __local_11 = __cast_1.payload_0;
             break __inline_compute_div_0: struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: __local_11 };
             unreachable;
+            unreachable;
         } else {
             unreachable;
         });
         break __inline_compute_div_0: struct.new "core:prelude/types.wado//Result<i32,String>::Ok" { discriminant: 0, payload_0: __local_12 * 2 };
+        unreachable;
     };
     __cond_1 = (if ref.test "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_1) -> bool {
         let __cast_3: ref "core:prelude/types.wado//Result<i32,String>::Ok";
@@ -864,6 +887,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_op_result_basic"() wit
 condition: compute_div(10, 2) matches { Ok(n) && n == 10 }
 "), used: 60 });
             break __tmpl: __local_4;
+            unreachable;
         });
         unreachable;
     }
@@ -873,6 +897,7 @@ condition: compute_div(10, 2) matches { Ok(n) && n == 10 }
         __match_scrut_2 = __inline_safe_div_1: block -> ref "core:prelude/types.wado//Result<i32,String>" {
             break __inline_safe_div_1: struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("division by zero"), used: 16 } };
             break __inline_safe_div_1: struct.new "core:prelude/types.wado//Result<i32,String>::Ok" { discriminant: 0, payload_0: 10 / 0 };
+            unreachable;
         };
         __local_23 = (if ref.test "core:prelude/types.wado//Result<i32,String>::Ok"(__match_scrut_2) -> i32 {
             let __cast_5: ref "core:prelude/types.wado//Result<i32,String>::Ok";
@@ -885,10 +910,12 @@ condition: compute_div(10, 2) matches { Ok(n) && n == 10 }
             __local_22 = __cast_4.payload_0;
             break __inline_compute_div_5: struct.new "core:prelude/types.wado//Result<i32,String>::Err" { discriminant: 1, payload_0: __local_22 };
             unreachable;
+            unreachable;
         } else {
             unreachable;
         });
         break __inline_compute_div_5: struct.new "core:prelude/types.wado//Result<i32,String>::Ok" { discriminant: 0, payload_0: __local_23 * 2 };
+        unreachable;
     };
     __cond_3 = (if ref.test "core:prelude/types.wado//Result<i32,String>::Err"(__match_scrut_3) -> bool {
         let __cast_6: ref "core:prelude/types.wado//Result<i32,String>::Err";
@@ -915,6 +942,7 @@ condition: compute_div(10, 2) matches { Ok(n) && n == 10 }
 condition: compute_div(10, 0) matches { Err(msg) && msg == \"division by zero\" }
 "), used: 81 });
             break __tmpl: __local_6;
+            unreachable;
         });
         unreachable;
     }
@@ -956,10 +984,12 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_op_result_from"() with
             __local_15 = __cast_1.payload_0;
             break __inline_high_op_0: struct.new "core:prelude/types.wado//Result<i32,HighError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//HighError::Low" { discriminant: 0, payload_0: __local_15 } };
             unreachable;
+            unreachable;
         } else {
             unreachable;
         });
         break __inline_high_op_0: struct.new "core:prelude/types.wado//Result<i32,HighError>::Ok" { discriminant: 0, payload_0: __local_16 + 1 };
+        unreachable;
     };
     __cond_1 = (if ref.test "core:prelude/types.wado//Result<i32,HighError>::Ok"(__match_scrut_1) -> bool {
         let __cast_3: ref "core:prelude/types.wado//Result<i32,HighError>::Ok";
@@ -986,6 +1016,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/test_try_op_result_from"() with
 condition: high_op(false) matches { Ok(n) && n == 101 }
 "), used: 57 });
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     }
@@ -994,6 +1025,7 @@ condition: high_op(false) matches { Ok(n) && n == 101 }
         __match_scrut_2 = __inline_low_op_6: block -> ref "core:prelude/types.wado//Result<i32,LowError>" {
             break __inline_low_op_6: struct.new "core:prelude/types.wado//Result<i32,LowError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//LowError" { code: 42 } };
             break __inline_low_op_6: struct.new "core:prelude/types.wado//Result<i32,LowError>::Ok" { discriminant: 0, payload_0: 100 };
+            unreachable;
         };
         __local_26 = (if ref.test "core:prelude/types.wado//Result<i32,LowError>::Ok"(__match_scrut_2) -> i32 {
             let __cast_5: ref "core:prelude/types.wado//Result<i32,LowError>::Ok";
@@ -1006,10 +1038,12 @@ condition: high_op(false) matches { Ok(n) && n == 101 }
             __local_25 = __cast_4.payload_0;
             break __inline_high_op_5: struct.new "core:prelude/types.wado//Result<i32,HighError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//HighError::Low" { discriminant: 0, payload_0: __local_25 } };
             unreachable;
+            unreachable;
         } else {
             unreachable;
         });
         break __inline_high_op_5: struct.new "core:prelude/types.wado//Result<i32,HighError>::Ok" { discriminant: 0, payload_0: __local_26 + 1 };
+        unreachable;
     };
     if ref.test "core:prelude/types.wado//Result<i32,HighError>::Err"(r2) {
         e = ref.cast "core:prelude/types.wado//Result<i32,HighError>::Err"(r2).payload_0;
@@ -1040,6 +1074,7 @@ condition: inner.code == 42
                     "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, __local_37);
                     "core:prelude/string.wado/String::push"(__local_9, 10);
                     break __tmpl: __local_9;
+                    unreachable;
                 });
                 unreachable;
             }
@@ -1066,6 +1101,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/caller_unit"() {
         __local_1 = ref.as_non_null(__cast_1);
         return __local_1;
         unreachable;
+        unreachable;
     } else {
         unreachable;
     }
@@ -1077,6 +1113,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/caller_unit"() {
         __cast_2 = ref.as_non_null(__match_scrut_1);
         __local_3 = ref.as_non_null(__cast_2);
         return __local_3;
+        unreachable;
         unreachable;
     } else {
         unreachable;
@@ -1097,6 +1134,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/process"(io_ok, valid) {
             break __inline_read_data_0: struct.new "core:prelude/types.wado//Result<String,IoError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42"), used: 2 } };
         }
         break __inline_read_data_0: struct.new "core:prelude/types.wado//Result<String,IoError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//IoError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("disk error"), used: 10 } } };
+        unreachable;
     }; (if ref.test "core:prelude/types.wado//Result<String,IoError>::Ok"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
         let __cast_2: ref "core:prelude/types.wado//Result<String,IoError>::Ok";
         __cast_2 = ref.cast "core:prelude/types.wado//Result<String,IoError>::Ok"(__match_scrut_0);
@@ -1107,6 +1145,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/process"(io_ok, valid) {
         __cast_1 = ref.cast "core:prelude/types.wado//Result<String,IoError>::Err"(__match_scrut_0);
         __local_3 = __cast_1.payload_0;
         return 1, 0, struct.new "wado-compiler/tests/fixtures/try_merged.wado//AppError::Io" { discriminant: 0, payload_0: __local_3 };
+        unreachable;
         unreachable;
     } else {
         unreachable;
@@ -1122,6 +1161,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/process"(io_ok, valid) {
             break __inline_parse_number_2: struct.new "core:prelude/types.wado//Result<i32,ParseError>::Ok" { discriminant: 0, payload_0: 42 };
         }
         break __inline_parse_number_2: struct.new "core:prelude/types.wado//Result<i32,ParseError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//ParseError" { input: __local_10 } };
+        unreachable;
     };
     n = (if ref.test "core:prelude/types.wado//Result<i32,ParseError>::Ok"(__match_scrut_1) -> i32 {
         let __cast_4: ref "core:prelude/types.wado//Result<i32,ParseError>::Ok";
@@ -1133,6 +1173,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/process"(io_ok, valid) {
         __cast_3 = ref.cast "core:prelude/types.wado//Result<i32,ParseError>::Err"(__match_scrut_1);
         __local_6 = __cast_3.payload_0;
         return 1, 0, struct.new "wado-compiler/tests/fixtures/try_merged.wado//AppError::Parse" { discriminant: 1, payload_0: __local_6 };
+        unreachable;
         unreachable;
     } else {
         unreachable;
@@ -1193,6 +1234,7 @@ condition: n == 42
                 "core:prelude/primitive.wado/i32::fmt_decimal"(n, __local_33);
                 "core:prelude/string.wado/String::push"(__local_14, 10);
                 break __tmpl: __local_14;
+                unreachable;
             });
             unreachable;
         }
@@ -1232,6 +1274,7 @@ condition: inner.message == \"disk error\"
                     "core:prelude/format.wado/String^Inspect::inspect"(__v0_7, __local_17);
                     "core:prelude/string.wado/String::push"(__local_16, 10);
                     break __tmpl: __local_16;
+                    unreachable;
                 });
                 unreachable;
             }
@@ -1275,6 +1318,7 @@ condition: inner.input == \"bad\"
                     "core:prelude/format.wado/String^Inspect::inspect"(__v0_12, __local_19);
                     "core:prelude/string.wado/String::push"(__local_18, 10);
                     break __tmpl: __local_18;
+                    unreachable;
                 });
                 unreachable;
             }
@@ -1492,6 +1536,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1512,6 +1557,7 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1536,6 +1582,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         repr = __inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
             __local_12 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_12.repr;
+            unreachable;
         };
         "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
@@ -1550,6 +1597,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
         "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
             __local_13 = f.buf;
             break __inline_String__internal_raw_bytes_1: __local_13.repr;
+            unreachable;
         }, offset_11, abs_val, digit_count_10);
     }
 }
@@ -1570,8 +1618,10 @@ fn "core:prelude/primitive.wado/i32^TryFrom<i64>::try_from"(value) {
                 "core:prelude/primitive.wado/i64::fmt_decimal"(value, __local_2);
                 "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" out of range for i32"), used: 21 });
                 break __tmpl: __local_1;
+                unreachable;
             };
             break __inline_ConvertError__new_4: struct.new "core:prelude/traits.wado//ConvertError" { message: __local_9 };
+            unreachable;
         });
     }
     return 0, builtin::i32_wrap_i64(value), ref.null none;
@@ -1589,8 +1639,10 @@ fn "core:prelude/primitive.wado/u32^TryFrom<i32>::try_from"(value) {
                 "core:prelude/primitive.wado/i32::fmt_decimal"(value, __local_2);
                 "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" out of range for u32"), used: 21 });
                 break __tmpl: __local_1;
+                unreachable;
             };
             break __inline_ConvertError__new_4: struct.new "core:prelude/traits.wado//ConvertError" { message: __local_9 };
+            unreachable;
         });
     }
     return 0, value, ref.null none;
@@ -1608,8 +1660,10 @@ fn "core:prelude/primitive.wado/u8^TryFrom<u32>::try_from"(value) {
                 "core:prelude/primitive.wado/u32::fmt_decimal"(value, __local_2);
                 "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" out of range for u8"), used: 20 });
                 break __tmpl: __local_1;
+                unreachable;
             };
             break __inline_ConvertError__new_4: struct.new "core:prelude/traits.wado//ConvertError" { message: __local_9 };
+            unreachable;
         });
     }
     return 0, value & 255, ref.null none;
@@ -1629,8 +1683,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -1714,6 +1770,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
         return 0, __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
+            unreachable;
         };
     }
     if b0 <u 224 {
@@ -1872,13 +1929,15 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
+            unreachable;
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
-    };
+        unreachable;
+    });
     _licm_buf_33 = f.buf;
     b133: block {
         l134: loop {
@@ -1936,6 +1995,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<i32>(new_capacity);
     old_repr = self.repr;

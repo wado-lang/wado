@@ -166,7 +166,7 @@ pub fn optimize(
         OptLevel::O3 => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(100),
-                inline_threshold: inline_threshold.unwrap_or(20),
+                inline_threshold: inline_threshold.unwrap_or(30),
             };
             run_dce(&mut project, profiler);
             run_optimization_passes(&mut project, &config, profiler);

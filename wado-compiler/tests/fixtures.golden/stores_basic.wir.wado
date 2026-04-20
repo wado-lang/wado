@@ -135,6 +135,7 @@ condition: v == 42
             "core:prelude/primitive.wado/i32::fmt_decimal"(v, __local_22);
             "core:prelude/string.wado/String::push"(__local_7, 10);
             break __tmpl: __local_7;
+            unreachable;
         });
         unreachable;
     }
@@ -165,6 +166,7 @@ condition: c.data.value == 42
             "core:prelude/primitive.wado/i32::fmt_decimal"(__v0, __local_33);
             "core:prelude/string.wado/String::push"(__local_9, 10);
             break __tmpl: __local_9;
+            unreachable;
         });
         unreachable;
     }
@@ -329,6 +331,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -346,8 +349,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

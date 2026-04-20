@@ -130,6 +130,7 @@ fn "wado-compiler/tests/fixtures/copy_prop_mutable_source.wado/run"() with Stdou
         __local_25 = __local_9;
         "core:prelude/primitive.wado/i32::fmt_decimal"(9, __local_25);
         break __tmpl: __local_8;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 };
@@ -150,6 +151,7 @@ fn "wado-compiler/tests/fixtures/copy_prop_mutable_source.wado/run"() with Stdou
         __local_36 = __local_11;
         "core:prelude/primitive.wado/i32::fmt_decimal"(9, __local_36);
         break __tmpl: __local_10;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 };
@@ -170,6 +172,7 @@ fn "wado-compiler/tests/fixtures/copy_prop_mutable_source.wado/run"() with Stdou
         __local_47 = __local_13;
         "core:prelude/primitive.wado/i32::fmt_decimal"(9, __local_47);
         break __tmpl: __local_12;
+        unreachable;
     });
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 };
@@ -190,6 +193,7 @@ fn "wado-compiler/tests/fixtures/copy_prop_mutable_source.wado/run"() with Stdou
         __local_58 = __local_15;
         "core:prelude/primitive.wado/u32::fmt_decimal"(9, __local_58);
         break __tmpl: __local_14;
+        unreachable;
     });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 });
 }
@@ -350,6 +354,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -370,6 +375,7 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -387,8 +393,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);

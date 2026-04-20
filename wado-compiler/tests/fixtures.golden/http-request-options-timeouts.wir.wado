@@ -611,6 +611,7 @@ fn "wado-compiler/tests/fixtures/http-request-options-timeouts.wado/handle"() {
     let __local_352: ref "core:prelude/format.wado//Formatter";
     let __local_357: ref "core:prelude/format.wado//Formatter";
     let __local_363: ref "core:prelude/string.wado//String";
+    let __local_376: ref "core:prelude/string.wado//String";
     opts = "wado-compiler/tests/fixtures/http-request-options-timeouts.wado/__cm_binding__RequestOptions_new"();
     let __match_scrut_0: ref "core:prelude/types.wado//Option<u64>";
     __match_scrut_0 = "wado-compiler/tests/fixtures/http-request-options-timeouts.wado/__cm_binding__RequestOptions_get_connect_timeout"(opts);
@@ -641,6 +642,7 @@ fn "wado-compiler/tests/fixtures/http-request-options-timeouts.wado/handle"() {
 condition: opts.get_connect_timeout() matches { None }
 "), used: 56 });
             break __tmpl: __local_49;
+            unreachable;
         });
         unreachable;
     }
@@ -673,6 +675,7 @@ condition: opts.get_connect_timeout() matches { None }
 condition: opts.get_first_byte_timeout() matches { None }
 "), used: 59 });
             break __tmpl: __local_51;
+            unreachable;
         });
         unreachable;
     }
@@ -705,6 +708,7 @@ condition: opts.get_first_byte_timeout() matches { None }
 condition: opts.get_between_bytes_timeout() matches { None }
 "), used: 62 });
             break __tmpl: __local_53;
+            unreachable;
         });
         unreachable;
     }
@@ -738,6 +742,7 @@ condition: opts.get_between_bytes_timeout() matches { None }
 condition: result matches { Ok(_) }
 "), used: 37 });
             break __tmpl: __local_55;
+            unreachable;
         });
         unreachable;
     }
@@ -777,6 +782,7 @@ condition: d == 5000000000
                 "core:prelude/string.wado/String::push_str"(__local_270.buf, __local_276);
                 "core:prelude/string.wado/String::push"(__local_57, 10);
                 break __tmpl: __local_57;
+                unreachable;
             });
             unreachable;
         }
@@ -814,6 +820,7 @@ condition: d == 5000000000
 condition: result2 matches { Ok(_) }
 "), used: 38 });
             break __tmpl: __local_59;
+            unreachable;
         });
         unreachable;
     }
@@ -853,6 +860,7 @@ condition: d == 10000000000
                 "core:prelude/string.wado/String::push_str"(__local_291.buf, __local_297);
                 "core:prelude/string.wado/String::push"(__local_61, 10);
                 break __tmpl: __local_61;
+                unreachable;
             });
             unreachable;
         }
@@ -890,6 +898,7 @@ condition: d == 10000000000
 condition: result3 matches { Ok(_) }
 "), used: 38 });
             break __tmpl: __local_63;
+            unreachable;
         });
         unreachable;
     }
@@ -929,6 +938,7 @@ condition: d == 2000000000
                 "core:prelude/string.wado/String::push_str"(__local_312.buf, __local_318);
                 "core:prelude/string.wado/String::push"(__local_65, 10);
                 break __tmpl: __local_65;
+                unreachable;
             });
             unreachable;
         }
@@ -973,6 +983,7 @@ condition: d == 5000000000
                 "core:prelude/string.wado/String::push_str"(__local_327.buf, __local_333);
                 "core:prelude/string.wado/String::push"(__local_67, 10);
                 break __tmpl: __local_67;
+                unreachable;
             });
             unreachable;
         }
@@ -1016,6 +1027,7 @@ condition: d == 10000000000
                 "core:prelude/string.wado/String::push_str"(__local_342.buf, __local_348);
                 "core:prelude/string.wado/String::push"(__local_69, 10);
                 break __tmpl: __local_69;
+                unreachable;
             });
             unreachable;
         }
@@ -1059,6 +1071,7 @@ condition: d == 2000000000
                 "core:prelude/string.wado/String::push_str"(__local_357.buf, __local_363);
                 "core:prelude/string.wado/String::push"(__local_71, 10);
                 break __tmpl: __local_71;
+                unreachable;
             });
             unreachable;
         }
@@ -1096,6 +1109,7 @@ condition: d == 2000000000
 condition: result4 matches { Ok(_) }
 "), used: 38 });
             break __tmpl: __local_73;
+            unreachable;
         });
         unreachable;
     }
@@ -1128,6 +1142,7 @@ condition: result4 matches { Ok(_) }
 condition: opts.get_connect_timeout() matches { None }
 "), used: 56 });
             break __tmpl: __local_75;
+            unreachable;
         });
         unreachable;
     }
@@ -1447,7 +1462,9 @@ condition: opts.get_connect_timeout() matches { None }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     "core:internal/cm_stream_write_u8"(resp_tx, __inline_String__as_bytes_88: block -> ref "core:prelude//Array<u8>" {
-        break __inline_String__as_bytes_88: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("ok"), used: 2, index: 0 });
+        __local_376 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
+        break __inline_String__as_bytes_88: "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_376.repr, used: __local_376.used, index: 0 });
+        unreachable;
     });
     "wasi/stream-drop-writable"(resp_tx);
     let __fw_write_ptr_3: i32;
@@ -1561,6 +1578,7 @@ fn "wado-compiler/tests/fixtures/http-request-options-timeouts.wado/__cm_binding
                     __local_13 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
                     __local_14 = "core:internal/memory_to_gc_array"(__local_12, __local_13);
                     break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_14, used: __local_13 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -1612,6 +1630,7 @@ fn "wado-compiler/tests/fixtures/http-request-options-timeouts.wado/__cm_binding
                     __local_13 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
                     __local_14 = "core:internal/memory_to_gc_array"(__local_12, __local_13);
                     break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_14, used: __local_13 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -1663,6 +1682,7 @@ fn "wado-compiler/tests/fixtures/http-request-options-timeouts.wado/__cm_binding
                     __local_13 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4);
                     __local_14 = "core:internal/memory_to_gc_array"(__local_12, __local_13);
                     break __inline_memory_to_gc_string_0: struct.new "core:prelude/string.wado//String" { repr: __local_14, used: __local_13 };
+                    unreachable;
                 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
@@ -1822,6 +1842,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
         __local_9 = data.repr;
         __local_10 = data.used;
         break __inline_cm_lower_array_u8_0: "core:internal/cm_lower_list_u8"(__local_9, __local_10);
+        unreachable;
     };
     ptr = builtin::i32_wrap_i64(packed);
     len = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -1911,6 +1932,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
+        unreachable;
     }, offset, abs_val, digit_count);
 }
 
@@ -1939,6 +1961,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
         builtin::array_set_u8(__inline_String__internal_raw_bytes_0: block -> ref builtin::array<u8> {
             __local_19 = f.buf;
             break __inline_String__internal_raw_bytes_0: __local_19.repr;
+            unreachable;
         }, offset_3, 48);
         return;
     }
@@ -1969,6 +1992,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     repr = __inline_String__internal_raw_bytes_1: block -> ref builtin::array<u8> {
         __local_20 = f.buf;
         break __inline_String__internal_raw_bytes_1: __local_20.repr;
+        unreachable;
     };
     pos = offset_11 + digit_count;
     temp = val_i64;
@@ -2017,8 +2041,10 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
         __local_5 = __inline_i32_max_1: block -> i32 {
             __local_7 = capacity * 2;
             break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
+            unreachable;
         };
         break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
@@ -2062,6 +2088,7 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     result = __seq_lit: block -> ref "core:prelude//Array<u8>" {
         __local_1 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
         break __seq_lit: __local_1;
+        unreachable;
     };
     _licm_used_11 = self.used;
     _licm_repr_12 = self.repr;
@@ -2234,6 +2261,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     new_capacity = __inline_i32_max_0: block -> i32 {
         __local_7 = capacity * 2;
         break __inline_i32_max_0: select i32(__local_7 > 4, __local_7, 4);
+        unreachable;
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     old_repr = self.repr;
