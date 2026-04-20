@@ -1,0 +1,34 @@
+// Regression: cross-module variant of trait_default_method_calls_t_default.
+// The trait with `<T: Default>` and a default method calling `T::default()`
+// is defined in a helper module and imported here.
+
+use { Maker } from "./sub/trait_default_method_calls_t_default_helper.wado";
+
+struct IntMaker {}
+
+impl Maker<i32> for IntMaker {
+    fn make(&self) -> i32 {
+        return 42;
+    }
+}
+
+struct StringMaker {}
+
+impl Maker<String> for StringMaker {
+    fn make(&self) -> String {
+        return "custom";
+    }
+}
+
+export fn run() {
+    let im = IntMaker {};
+    assert im.make() == 42;
+    assert im.make_with_default() == 0;
+
+    let sm = StringMaker {};
+    assert sm.make() == "custom";
+    assert sm.make_with_default() == "";
+}
+
+__DATA__
+{"stdout": ""}

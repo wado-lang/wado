@@ -24,11 +24,10 @@
 use { print, println, Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
 use {
-    compress2,
-    deflate_raw2,
-    gzip_compress2,
     zlib_compress_stored,
-    compress_with_strategy,
+    zlib_compress,
+    deflate_raw,
+    gzip_compress,
     compress_bound,
     zlib_version,
     adler32,
@@ -92,7 +91,7 @@ export fn run() with Stdout, Stdin {
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
-        let result = compress2(&data, level);
+        let result = zlib_compress(&data, level);
         print_bytes(&result);
     } else if cmd == 1 {
         // deflate_raw2: level=input[1], data=input[2..]
@@ -101,7 +100,7 @@ export fn run() with Stdout, Stdin {
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
-        let result = deflate_raw2(&data, level);
+        let result = deflate_raw(&data, level);
         print_bytes(&result);
     } else if cmd == 2 {
         // gzip_compress2: level=input[1], data=input[2..]
@@ -110,7 +109,7 @@ export fn run() with Stdout, Stdin {
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
-        let result = gzip_compress2(&data, level);
+        let result = gzip_compress(&data, level);
         print_bytes(&result);
     } else if cmd == 3 {
         // zlib_compress_stored: data=input[1..]
@@ -128,7 +127,7 @@ export fn run() with Stdout, Stdin {
         for let mut i = 3; i < input.len(); i += 1 {
             data.push(input[i]);
         }
-        let result = compress_with_strategy(&data, level, strategy);
+        let result = zlib_compress(&data, level, strategy);
         print_bytes(&result);
     } else if cmd == 5 {
         // checksums: data=input[1..]

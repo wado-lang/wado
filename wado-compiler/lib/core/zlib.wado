@@ -608,9 +608,7 @@ enum InflateMode {
 }
 
 // Permutation of code lengths for dynamic blocks
-fn get_order() -> Array<u16> {
-    return [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
-}
+global INFLATE_ORDER: Array<i32> =  [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
 struct InflateState {
     mode: InflateMode,
@@ -787,7 +785,6 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
     let mut have = input_length;
     let mut left = 0;  // available output (we grow dynamically)
 
-    let order = get_order();
     let mut ret = 0;  // Z_OK
     let mut leave = false;
 
@@ -934,7 +931,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         break;
                     }
 
-                    state.lens[order[state.have_count] as i32] = (state.hold & 7) as u16;
+                    state.lens[INFLATE_ORDER[state.have_count]] = (state.hold & 7) as u16;
                     state.hold = state.hold >> 3;
                     state.bits -= 3;
                     state.have_count += 1;
@@ -944,7 +941,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 }
 
                 while state.have_count < 19 {
-                    state.lens[order[state.have_count] as i32] = 0;
+                    state.lens[INFLATE_ORDER[state.have_count]] = 0;
                     state.have_count += 1;
                 }
 
@@ -1396,8 +1393,8 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
 // Decompress raw deflate data from a slice of input (no zlib/gzip header)
 // Returns the decompressed output only
 fn inflate_raw_from(input: &Array<u8>, input_offset: i32, input_length: i32) -> Array<u8> {
-    let result = inflate_raw_ex(input, input_offset, input_length);
-    return result.0;
+    let [result, ..] = inflate_raw_ex(input, input_offset, input_length);
+    return result;
 }
 
 // Decompress raw deflate data (no zlib/gzip header)
@@ -1449,13 +1446,10 @@ pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
 pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
     let total = input.len();
     let mut output: Array<u8> = Array::with_capacity(total + (total / 65535 + 1) * 5);
-    let mut pos = 0;
 
+    let mut pos = 0;
     while pos < total {
-        let mut block_len = total - pos;
-        if block_len > 65535 {
-            block_len = 65535;
-        }
+        let block_len = i32::min(total - pos, 65535);
         let is_last = pos + block_len >= total;
 
         // Block header: BFINAL (1 bit) + BTYPE=00 (2 bits) = stored
@@ -2367,27 +2361,17 @@ struct DeflateConfig {
 }
 
 fn get_deflate_config(level: i32) -> DeflateConfig {
-    if level == 0 {
-        return DeflateConfig { good_length: 0, max_lazy: 0, nice_length: 0, max_chain: 0, use_lazy: false };
-    } else if level == 1 {
-        return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 8, max_chain: 4, use_lazy: false };
-    } else if level == 2 {
-        return DeflateConfig { good_length: 4, max_lazy: 5, nice_length: 16, max_chain: 8, use_lazy: false };
-    } else if level == 3 {
-        return DeflateConfig { good_length: 4, max_lazy: 6, nice_length: 32, max_chain: 32, use_lazy: false };
-    } else if level == 4 {
-        return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 16, max_chain: 16, use_lazy: true };
-    } else if level == 5 {
-        return DeflateConfig { good_length: 8, max_lazy: 16, nice_length: 32, max_chain: 32, use_lazy: true };
-    } else if level == 6 {
-        return DeflateConfig { good_length: 8, max_lazy: 16, nice_length: 128, max_chain: 128, use_lazy: true };
-    } else if level == 7 {
-        return DeflateConfig { good_length: 8, max_lazy: 32, nice_length: 128, max_chain: 256, use_lazy: true };
-    } else if level == 8 {
-        return DeflateConfig { good_length: 32, max_lazy: 128, nice_length: 258, max_chain: 1024, use_lazy: true };
-    } else {
-        // level 9
-        return DeflateConfig { good_length: 32, max_lazy: 258, nice_length: 258, max_chain: 4096, use_lazy: true };
+    match level {
+        0 => return DeflateConfig { good_length: 0, max_lazy: 0, nice_length: 0, max_chain: 0, use_lazy: false },
+        1 => return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 8, max_chain: 4, use_lazy: false },
+        2 => return DeflateConfig { good_length: 4, max_lazy: 5, nice_length: 16, max_chain: 8, use_lazy: false },
+        3 => return DeflateConfig { good_length: 4, max_lazy: 6, nice_length: 32, max_chain: 32, use_lazy: false },
+        4 => return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 16, max_chain: 16, use_lazy: true },
+        5 => return DeflateConfig { good_length: 8, max_lazy: 16, nice_length: 32, max_chain: 32, use_lazy: true },
+        6 => return DeflateConfig { good_length: 8, max_lazy: 16, nice_length: 128, max_chain: 128, use_lazy: true },
+        7 => return DeflateConfig { good_length: 8, max_lazy: 32, nice_length: 128, max_chain: 256, use_lazy: true },
+        8 => return DeflateConfig { good_length: 32, max_lazy: 128, nice_length: 258, max_chain: 1024, use_lazy: true },
+        _ => return DeflateConfig { good_length: 32, max_lazy: 258, nice_length: 258, max_chain: 4096, use_lazy: true }, // level 9
     }
 }
 
@@ -2955,25 +2939,11 @@ fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
 }
 
 // Full zlib compression with fixed Huffman codes + LZ77 (default level 6)
-/// Compresses data in zlib format with default compression level.
-pub fn zlib_compress(input: &Array<u8>) -> Array<u8> {
-    return compress2(input, Z_DEFAULT_COMPRESSION);
-}
-
-// Compress with specified level (0-9)
-/// Compresses data in zlib format with the specified compression level.
-pub fn compress2(input: &Array<u8>, level: i32) -> Array<u8> {
-    let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
-    return zlib_wrap(input, &deflated, level);
-}
-
-// Compress with level and strategy
-/// Compresses data in zlib format with the specified compression level and strategy.
-pub fn compress_with_strategy(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8> {
+/// Compresses data in zlib format with the specified compression level (defaults to Z_DEFAULT_COMPRESSION) and strategy (defaults to Z_DEFAULT_STRATEGY).
+pub fn zlib_compress(input: &Array<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> Array<u8> {
     let deflated = deflate_with_level(input, level, strategy);
     return zlib_wrap(input, &deflated, level);
 }
-
 
 // Gzip header constants
 global GZIP_MAGIC1: u8 = 0x1F;
@@ -3101,15 +3071,9 @@ pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
     return Result::Ok(output);
 }
 
-// Compress data in gzip format
-/// Compresses data in gzip format with default compression level.
-pub fn gzip_compress(input: &Array<u8>) -> Array<u8> {
-    return gzip_compress2(input, Z_DEFAULT_COMPRESSION);
-}
-
-/// Compresses data in gzip format with the specified compression level.
-pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
-    let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
+/// Compresses data in gzip format with the specified compression level and strategy.
+pub fn gzip_compress(input: &Array<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> Array<u8> {
+    let deflated = deflate_with_level(input, level, strategy);
     let mut output: Array<u8> = Array::with_capacity(deflated.len() + 18);
 
     // Gzip header (10 bytes)
@@ -3154,47 +3118,32 @@ pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
     return output;
 }
 
-// Auto-detect format and decompress (zlib or gzip)
-/// Decompresses zlib-wrapped data (alias for `inflate_zlib`).
-pub fn uncompress(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
+/// Auto-detect format and decompress (zlib or gzip) with the specified output size limit.
+pub fn uncompress(input: &Array<u8>, max_output: i32 = i32::MAX) -> Result<Array<u8>, ZlibError> {
     if input.len() < 2 {
         return Result::Err(ZlibError::DataTooShort);
     }
     // Check for gzip magic
     if input[0] == GZIP_MAGIC1 && input[1] == GZIP_MAGIC2 {
-        return inflate_gzip(input);
+        let result = inflate_gzip(input)?;
+        if result.len() > max_output {
+        return Result::Err(ZlibError::OutputExceedsMax);
+        }
+        return Result::Ok(result);
     }
     // Otherwise assume zlib format
-    return inflate_zlib(input);
-}
-
-
-// Deflate raw (no zlib/gzip header or trailer)
-/// Compresses data as raw DEFLATE (no header/checksum) with default level.
-pub fn deflate_raw(input: &Array<u8>) -> Array<u8> {
-    return deflate_with_level(input, Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY);
-}
-
-// Deflate raw with level
-/// Compresses data as raw DEFLATE (no header/checksum) with the specified level.
-pub fn deflate_raw2(input: &Array<u8>, level: i32) -> Array<u8> {
-    return deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
-}
-
-// uncompress2: decompress with output size limit
-/// Decompresses zlib-wrapped data with a maximum output size limit.
-pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Result<Array<u8>, ZlibError> {
-    let uncompress_result = uncompress(input);
-    if let Err(e) = uncompress_result {
-        return Result::Err(e);
-    }
-    let result = uncompress_result.unwrap();
+    let result = inflate_zlib(input)?;
     if result.len() > max_output {
         return Result::Err(ZlibError::OutputExceedsMax);
     }
     return Result::Ok(result);
 }
 
+
+/// Compresses data as raw DEFLATE (no zlib/gzip header or trailer) with the specified level and strategy.
+pub fn deflate_raw(input: &Array<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> Array<u8> {
+    return deflate_with_level(input, level, strategy);
+}
 
 /// Represents a gzip header for customization (deflateSetHeader / inflateGetHeader).
 pub struct GzipHeader {
@@ -3362,14 +3311,13 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
 // Helper: build a string from bytes in an array
 fn bytes_to_string(buf: &Array<u8>, offset: i32, len: i32) -> String {
     let mut s = String::with_capacity(len);
+    // FIXME: UTF-8 handling
     for let mut i = 0; i < len; i += 1 {
-        // Append single-byte characters as strings via template
-        s.push_str(`{buf[offset + i] as char}`);
+        s.push(buf[offset + i] as char);
     }
     return s;
 }
 
-// Extract gzip header information from compressed data
 /// Extracts the gzip header from compressed data without decompressing.
 pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, ZlibError> {
     if input.len() < 10 {
@@ -3646,7 +3594,7 @@ impl DeflateStream {
         if self.has_gzip_header {
             return gzip_compress_with_header(input, self.level, &self.gzip_header);
         }
-        return gzip_compress2(input, self.level);
+        return gzip_compress(input, self.level);
     }
 }
 

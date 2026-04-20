@@ -253,11 +253,9 @@ impl<K: Ord> TreeMap<K, V> {
         self.entries = new_entries;
         self.deleted_count = 0;
 
-        let mut i = 0;
-        while i < self.entries.len() {
+        for let mut i = 0; i < self.entries.len(); i += 1{
             let entry = &self.entries[i];
             self.root = self.insert_node(self.root, entry.key, i);
-            i = i + 1;
         }
     }
 
@@ -463,60 +461,28 @@ impl<T: Ord> SequenceLiteralBuilder for TreeSet<T> {
 impl<T: Serialize, V: Serialize> Serialize for TreeMap<String, V> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let entries = self.entries();
-        let map_r = s.begin_map(entries.len());
-        if let Ok(mut m) = map_r {
-            for let entry of entries {
-                let k = entry.0;
-                let v = entry.1;
-                let kr = m.key::<String>(&k);
-                if let Err(e) = kr {
-                    return Result::Err(e);
-                }
-                let vr = m.value::<V>(&v);
-                if let Err(e) = vr {
-                    return Result::Err(e);
-                }
-            }
-            return m.end();
+        let m = s.begin_map(entries.len())?;
+        for let [k, v] of entries {
+            m.key(&k)?;
+            m.value(&v)?;
         }
-        if let Err(e) = map_r {
-            return Result::Err(e);
-        }
-        unreachable();
+        return m.end();
     }
 }
 
 impl<V: Deserialize> Deserialize for TreeMap<String, V> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError> {
-        let map_r = d.begin_map();
-        if let Ok(mut ma) = map_r {
-            let mut result: TreeMap<String, V> = TreeMap::new();
-            loop {
-                let key_r = ma.next_key_string();
-                if let Ok(key_opt) = key_r {
-                    if let Some(key) = key_opt {
-                        let val_r = ma.next_value::<V>();
-                        if let Ok(val) = val_r {
-                            result.insert(key, val);
-                        }
-                        if let Err(e) = val_r {
-                            return Result::Err(e);
-                        }
-                    } else {
-                        let end_r = ma.end();
-                        if let Err(e) = end_r {
-                            return Result::Err(e);
-                        }
-                        return Result::Ok(result);
-                    }
-                }
-                if let Err(e) = key_r {
-                    return Result::Err(e);
-                }
+        let map = d.begin_map()?;
+        let mut result: TreeMap<String, V> = {};
+        loop {
+            let key_opt = map.next_key_string()?;
+            if let Some(key) = key_opt {
+                let val = map.next_value::<V>()?;
+                result.insert(key, val);
+            } else {
+                map.end()?;
+                return Result::Ok(result);
             }
-        }
-        if let Err(e) = map_r {
-            return Result::Err(e);
         }
         unreachable();
     }

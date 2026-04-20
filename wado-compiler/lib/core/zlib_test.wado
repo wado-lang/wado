@@ -37,17 +37,12 @@ use {
     zlib_compress,
     zlib_compress_stored,
     inflate_zlib,
-    compress2,
-    compress_with_strategy,
     compress_bound,
     deflate_raw,
-    deflate_raw2,
     inflate_raw,
     gzip_compress,
-    gzip_compress2,
     inflate_gzip,
     uncompress,
-    uncompress2,
     DeflateStream,
     InflateStream,
     ZLIB_FORMAT,
@@ -305,56 +300,56 @@ test "compress_bound exceeds source length" {
 
 test "compression level 0 (stored) round-trip" {
     let data = make_pattern_data(1000);
-    let compressed = compress2(&data, Z_NO_COMPRESSION);
+    let compressed = zlib_compress(&data, Z_NO_COMPRESSION);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "compression level 1 (fastest) round-trip" {
     let data = make_pattern_data(1000);
-    let compressed = compress2(&data, Z_BEST_SPEED);
+    let compressed = zlib_compress(&data, Z_BEST_SPEED);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "compression level 6 (default) round-trip" {
     let data = make_pattern_data(1000);
-    let compressed = compress2(&data, Z_DEFAULT_COMPRESSION);
+    let compressed = zlib_compress(&data, Z_DEFAULT_COMPRESSION);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "compression level 9 (best) round-trip" {
     let data = make_pattern_data(1000);
-    let compressed = compress2(&data, Z_BEST_COMPRESSION);
+    let compressed = zlib_compress(&data, Z_BEST_COMPRESSION);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "stored is larger than compressed" {
     let data = make_pattern_data(1000);
-    let c0 = compress2(&data, Z_NO_COMPRESSION);
-    let c1 = compress2(&data, Z_BEST_SPEED);
+    let c0 = zlib_compress(&data, Z_NO_COMPRESSION);
+    let c1 = zlib_compress(&data, Z_BEST_SPEED);
     assert c0.len() > c1.len();
 }
 
 test "strategy Huffman-only round-trip" {
     let data = make_pattern_data(1000);
-    let compressed = compress_with_strategy(&data, 6, Z_HUFFMAN_ONLY);
+    let compressed = zlib_compress(&data, 6, Z_HUFFMAN_ONLY);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "strategy RLE round-trip" {
     let data = make_repeated(65, 1000);
-    let compressed = compress_with_strategy(&data, 6, Z_RLE);
+    let compressed = zlib_compress(&data, 6, Z_RLE);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "strategy fixed round-trip" {
     let data = make_pattern_data(1000);
-    let compressed = compress_with_strategy(&data, 6, Z_FIXED);
+    let compressed = zlib_compress(&data, 6, Z_FIXED);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
@@ -369,9 +364,9 @@ test "raw deflate round-trip" {
 
 test "raw deflate levels" {
     let data = string_to_bytes("Hello, raw deflate!");
-    let c1 = deflate_raw2(&data, Z_BEST_SPEED);
+    let c1 = deflate_raw(&data, Z_BEST_SPEED);
     assert bytes_equal(&data, &inflate_raw(&c1));
-    let c9 = deflate_raw2(&data, Z_BEST_COMPRESSION);
+    let c9 = deflate_raw(&data, Z_BEST_COMPRESSION);
     assert bytes_equal(&data, &inflate_raw(&c9));
 }
 
@@ -394,9 +389,9 @@ test "gzip round-trip" {
 
 test "gzip compression levels" {
     let data = string_to_bytes("Hello, gzip!");
-    let c1 = gzip_compress2(&data, Z_BEST_SPEED);
+    let c1 = gzip_compress(&data, Z_BEST_SPEED);
     assert bytes_equal(&data, &inflate_gzip(&c1).unwrap());
-    let c9 = gzip_compress2(&data, Z_BEST_COMPRESSION);
+    let c9 = gzip_compress(&data, Z_BEST_COMPRESSION);
     assert bytes_equal(&data, &inflate_gzip(&c9).unwrap());
 }
 
@@ -579,22 +574,29 @@ test "compress_bound values" {
 
 test "compress_bound is an upper bound" {
     let data = make_pattern_data(100);
-    let compressed = compress2(&data, Z_DEFAULT_COMPRESSION);
+    let compressed = zlib_compress(&data, Z_DEFAULT_COMPRESSION);
     assert compressed.len() <= compress_bound(100);
 }
 
 test "uncompress round-trip" {
     let data = make_pattern_data(100);
-    let compressed = compress2(&data, Z_DEFAULT_COMPRESSION);
+    let compressed = zlib_compress(&data, Z_DEFAULT_COMPRESSION);
     let decompressed = uncompress(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
-test "uncompress2 with limit" {
+test "uncompress with limit" {
     let data = make_pattern_data(100);
-    let compressed = compress2(&data, Z_DEFAULT_COMPRESSION);
-    let decompressed = uncompress2(&compressed, 200).unwrap();
+    let compressed = zlib_compress(&data, Z_DEFAULT_COMPRESSION);
+    let decompressed = uncompress(&compressed, 200).unwrap();
     assert bytes_equal(&data, &decompressed);
+}
+
+test "uncompress with limit (exceeded)" {
+    let data = make_pattern_data(100);
+    let compressed = zlib_compress(&data, Z_DEFAULT_COMPRESSION);
+    let result = uncompress(&compressed, 50);
+    assert result matches { Err(ZlibError::OutputExceedsMax) };
 }
 
 test "round-trip large data (>32KB window boundary)" {
