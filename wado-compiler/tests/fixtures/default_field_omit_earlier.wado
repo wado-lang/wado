@@ -1,0 +1,32 @@
+// Test: struct literal omits an earlier-declared default field while
+// providing a later one. Field indices must come from the struct
+// declaration order, not the order fields appear in the literal.
+
+struct Foo {
+    b: bool = false,
+    c: String = "",
+}
+
+struct Bar {
+    a: i32,
+    b: bool = false,
+    c: String = "",
+}
+
+export fn run() {
+    let f = Foo { c: "x" };
+    assert f.b == false;
+    assert f.c == "x";
+
+    let g = Foo { b: true };
+    assert g.b == true;
+    assert g.c == "";
+
+    let h = Bar { a: 1, c: "y" };
+    assert h.a == 1;
+    assert h.b == false;
+    assert h.c == "y";
+}
+
+__DATA__
+{"stdout": ""}

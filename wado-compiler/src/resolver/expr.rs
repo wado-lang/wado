@@ -2285,7 +2285,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .fields
             .iter()
             .enumerate()
-            .map(|(index, field)| {
+            .map(|(provided_idx, field)| {
                 // Find expected field type for literal coercion
                 // We use expected type for numeric literals (including negated ones)
                 // and null literals to avoid interfering with tuple-to-array coercion
@@ -2360,7 +2360,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // re-coerce with the concrete type.
                 if needs_deferred_coercion && matches!(value.kind, TirExprKind::TupleLiteral { .. })
                 {
-                    deferred_coercions.push((index, index));
+                    deferred_coercions.push((provided_idx, provided_idx));
                 }
 
                 // Check field name exists in struct definition
@@ -2381,10 +2381,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     self.typecheck(value.type_id, *expected_type_id, field.value.span());
                 }
 
+                let decl_idx = struct_field_types
+                    .iter()
+                    .position(|(n, _)| n == &field.name)
+                    .unwrap_or(provided_idx);
+
                 TirStructField {
                     name: field.name.clone(),
                     value,
-                    field_index: index as u32,
+                    field_index: decl_idx as u32,
                 }
             })
             .collect();
@@ -2422,6 +2427,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     });
                 }
             }
+            fields.sort_by_key(|f| f.field_index);
         }
 
         // Check field visibility: non-pub fields cannot be set from other modules
