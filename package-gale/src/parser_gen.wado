@@ -221,7 +221,7 @@ fn pop_return(c: &SllConfig) -> SllConfig {
 
 
 /// Identity closure — nullable handling is done in sll_config_first
-/// (first_of_elements_from) and sll_advance_inner (explicit skip logic).
+/// (first_of_elements_from) and sll_advance (explicit skip logic).
 fn sll_closure(configs: &Array<SllConfig>) -> Array<SllConfig> {
     return *configs;
 }
@@ -246,11 +246,7 @@ fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> Array<String> {
 
 /// Advance a config by one token. For terminals, advance pos.
 /// For RuleRef, expand into the rule's alternatives (entering the rule).
-fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext) -> Array<SllConfig> {
-    return sll_advance_inner(c, token, ctx, 0);
-}
-
-fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth: i32) -> Array<SllConfig> {
+fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth: i32 = 0) -> Array<SllConfig> {
     // Limit inline expansion depth to prevent explosion from recursive rules.
     if inline_depth > 2 {
         return [];
@@ -264,7 +260,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
             return [];
         }
         let popped = pop_return(c);
-        return sll_advance_inner(&popped, token, ctx, inline_depth);
+        return sll_advance(&popped, token, ctx, inline_depth);
     }
     let elem = &c.elements[c.pos];
 
@@ -301,7 +297,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
                                         pos: 0,
                                         return_stack: new_stack,
                                     };
-                                    let advanced = sll_advance_inner(&exp, token, ctx, inline_depth + 1);
+                                    let advanced = sll_advance(&exp, token, ctx, inline_depth + 1);
                                     for let a of advanced {
                                         results.push(a);
                                     }
@@ -481,7 +477,7 @@ fn sll_advance_inner(c: &SllConfig, token: &String, ctx: &mut GenContext, inline
             pos: c.pos,
             return_stack: c.return_stack,
         };
-        return sll_advance_inner(&unwrapped, token, ctx, inline_depth);
+        return sll_advance(&unwrapped, token, ctx, inline_depth);
     }
 
     return [];
@@ -698,7 +694,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
                         pos: 0,
                         return_stack: new_stack,
                     };
-                    let advanced = sll_advance_inner(&exp, token, ctx, 0);
+                    let advanced = sll_advance(&exp, token, ctx);
                     for let a of advanced {
                         if a.pos != -1 {
                             expanded_configs.push(a);
