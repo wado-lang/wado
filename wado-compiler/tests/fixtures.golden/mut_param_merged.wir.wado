@@ -291,12 +291,12 @@ fn "wado-compiler/tests/fixtures/mut_param_merged.wado/mut_param_string"() with 
     let __local_212: ref "core:prelude/format.wado//Formatter";
     let __local_217: ref "core:prelude/format.wado//Formatter";
     original = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 };
-    result = value_copy "core:prelude/string.wado//String"(__inline_replace_0: block -> ref "core:prelude/string.wado//String" {
+    result = __inline_replace_0: block -> ref "core:prelude/string.wado//String" {
         __local_67 = value_copy "core:prelude/string.wado//String"(original);
         __local_67 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("new value"), used: 9 };
         break __inline_replace_0: __local_67;
         unreachable;
-    });
+    };
     __v0_2 = result;
     __cond_3 = "core:prelude/string.wado/String^Eq::eq"(__v0_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("new value"), used: 9 });
     if __cond_3 == 0 {
@@ -361,12 +361,12 @@ condition: original == \"original\"
         unreachable;
     }
     greeting = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    excited = value_copy "core:prelude/string.wado//String"(__inline_append_bang_11: block -> ref "core:prelude/string.wado//String" {
+    excited = __inline_append_bang_11: block -> ref "core:prelude/string.wado//String" {
         __local_82 = value_copy "core:prelude/string.wado//String"(greeting);
         "core:prelude/string.wado/String::push"(__local_82, 33);
         break __inline_append_bang_11: __local_82;
         unreachable;
-    });
+    };
     __v0_8 = excited;
     __cond_9 = "core:prelude/string.wado/String^Eq::eq"(__v0_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello!"), used: 6 });
     if __cond_9 == 0 {
@@ -516,7 +516,7 @@ condition: a[0] == 1
         break __seq_lit: __local_19;
         unreachable;
     };
-    d = value_copy "core:prelude//Array<i32>"(__inline_double_first_50: block -> ref "core:prelude//Array<i32>" {
+    d = __inline_double_first_50: block -> ref "core:prelude//Array<i32>" {
         __local_141 = value_copy "core:prelude//Array<i32>"(c);
         __local_144 = __inline_Array_i32__IndexValue_i32___index_value_52: block -> i32 {
             block {
@@ -529,7 +529,7 @@ condition: a[0] == 1
         builtin::array_set<i32>(__local_141.repr, 0, __local_144);
         break __inline_double_first_50: __local_141;
         unreachable;
-    });
+    };
     __v0_22 = __inline_Array_i32__IndexValue_i32___index_value_53: block -> i32 {
         if 0 >= d.used {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -616,7 +616,7 @@ condition: c[0] == 10
         unreachable;
     };
     f = __inline_push_zero_75: block -> ref "core:prelude//Array<i32>" {
-        __local_182 = value_copy "core:prelude//Array<i32>"(e);
+        __local_182 = e;
         "core:prelude/array.wado/Array<i32>::push"(__local_182, 0);
         break __inline_push_zero_75: __local_182;
         unreachable;
@@ -1060,7 +1060,7 @@ condition: a.y == 2
     }
     c = struct.new "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" { x: 3, y: 4 };
     d = __inline_shift_57: block -> ref "wado-compiler/tests/fixtures/mut_param_merged.wado//Point" {
-        __local_136 = value_copy "wado-compiler/tests/fixtures/mut_param_merged.wado//Point"(c);
+        __local_136 = c;
         __local_136.x = 3 + 1;
         break __inline_shift_57: __local_136;
         unreachable;
@@ -1593,7 +1593,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
@@ -1601,7 +1601,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
         unreachable;
-    });
+    };
     _licm_buf_33 = f.buf;
     b80: block {
         l81: loop {

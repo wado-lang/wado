@@ -309,7 +309,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/run"() with St
         file = ref.cast "core:prelude/types.wado//Result<Descriptor,ErrorCode>::Ok"(read_result).payload_0;
         stat_result = "wado-compiler/tests/fixtures/wasi_filesystem_advise_sync.wado/__cm_binding__Descriptor_stat"(file);
         file_size = (if ref.test "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Ok"(stat_result) -> u64 {
-            __local_5 = value_copy "wasi:filesystem/types.wado//DescriptorStat"(ref.cast "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Ok"(stat_result).payload_0);
+            __local_5 = ref.cast "core:prelude/types.wado//Result<DescriptorStat,ErrorCode>::Ok"(stat_result).payload_0;
             __local_5.size;
         } else {
             14_i64;

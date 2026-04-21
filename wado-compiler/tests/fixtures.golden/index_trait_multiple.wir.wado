@@ -125,8 +125,8 @@ fn "wado-compiler/tests/fixtures/index_trait_multiple.wado/run"() with Stdout {
     __sroa_h2_point = struct.new "wado-compiler/tests/fixtures/index_trait_multiple.wado//Point" { x: 10, y: 10 };
     "wado-compiler/tests/fixtures/index_trait_multiple.wado/Point::move_by"(__sroa_h1_point, 5, 5);
     "wado-compiler/tests/fixtures/index_trait_multiple.wado/Point::move_by"(__sroa_h2_point, -3, -3);
-    p1 = value_copy "wado-compiler/tests/fixtures/index_trait_multiple.wado//Point"(__sroa_h1_point);
-    p2 = value_copy "wado-compiler/tests/fixtures/index_trait_multiple.wado//Point"(__sroa_h2_point);
+    p1 = __sroa_h1_point;
+    p2 = __sroa_h2_point;
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 };
         "core:prelude/string.wado/String::push"(__local_4, 104);

@@ -489,7 +489,9 @@ condition: !z matches { TK_FOO | TK_BAR }
         });
         unreachable;
     }
-    label = value_copy "core:prelude/string.wado//String"(let __match_scrut_3: i32; __match_scrut_3 = 2; (if __local_23 = __match_scrut_3; __local_23 == 1 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_3: i32;
+    __match_scrut_3 = 2;
+    label = (if __local_23 = __match_scrut_3; __local_23 == 1 -> ref "core:prelude/string.wado//String" {
         __local_23 = __match_scrut_3;
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("foo or bar"), used: 10 };
     __local_24 = __match_scrut_3;
@@ -502,7 +504,7 @@ condition: !z matches { TK_FOO | TK_BAR }
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("baz"), used: 3 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    }));
+    });
     __v0 = label;
     __cond_8 = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("foo or bar"), used: 10 });
     if __cond_8 == 0 {
@@ -1083,13 +1085,15 @@ condition: !x matches { i32::MIN }
         });
         unreachable;
     }
-    label = value_copy "core:prelude/string.wado//String"(let __match_scrut_2: i32; __match_scrut_2 = 2147483647; (if __match_scrut_2 == 2147483647 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_2: i32;
+    __match_scrut_2 = 2147483647;
+    label = (if __match_scrut_2 == 2147483647 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max"), used: 3 };
     } else if __match_scrut_2 == -2147483648 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("min"), used: 3 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    }));
+    });
     __v0 = label;
     __cond_5 = "core:prelude/string.wado/String^Eq::eq"(__v0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max"), used: 3 });
     if __cond_5 == 0 {
@@ -1603,7 +1607,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
@@ -1611,7 +1615,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
         unreachable;
-    });
+    };
     _licm_buf_33 = f.buf;
     b116: block {
         l117: loop {

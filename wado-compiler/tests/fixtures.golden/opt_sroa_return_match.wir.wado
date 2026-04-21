@@ -108,13 +108,15 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/opt_sroa_return_match.wado/use_small_match"(x) {
     let p: ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair";
-    p = value_copy "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair"(let __match_scrut_0: i32; __match_scrut_0 = x; (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" {
+    let __match_scrut_0: i32;
+    __match_scrut_0 = x;
+    p = (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" { a: 10, b: 20 };
     } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" { a: 30, b: 40 };
     } else {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_return_match.wado//Pair" { a: 50, b: 60 };
-    }));
+    });
     return p.a + p.b;
 }
 

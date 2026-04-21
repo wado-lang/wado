@@ -128,12 +128,12 @@ fn "wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop_safety.wad
     let __local_38: ref "core:prelude/format.wado//Formatter";
     let __local_43: ref "core:prelude/format.wado//Formatter";
     greeting = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    __v0_1 = value_copy "core:prelude/string.wado//String"(__inline_append_bang_2: block -> ref "core:prelude/string.wado//String" {
+    __v0_1 = __inline_append_bang_2: block -> ref "core:prelude/string.wado//String" {
         __local_19 = value_copy "core:prelude/string.wado//String"(greeting);
         "core:prelude/string.wado/String::push"(__local_19, 33);
         break __inline_append_bang_2: __local_19;
         unreachable;
-    });
+    };
     __cond_2 = "core:prelude/string.wado/String^Eq::eq"(__v0_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello!"), used: 6 });
     if __cond_2 == 0 {
         "core:internal/panic"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -654,7 +654,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let __local_8: ref "core:prelude/string.wado//String";
     let _licm_buf_33: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push"(f.buf, 34);
-    __iter_2 = value_copy "core:prelude/string.wado//StrCharIter"(__inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
+    __iter_2 = __inline_StrCharIter_IntoIterator__into_iter_1: block -> ref "core:prelude/string.wado//StrCharIter" {
         __local_7 = __inline_String__chars_2: block -> ref "core:prelude/string.wado//StrCharIter" {
             __local_8 = self;
             break __inline_String__chars_2: struct.new "core:prelude/string.wado//StrCharIter" { repr: __local_8.repr, used: __local_8.used, byte_index: 0 };
@@ -662,7 +662,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
         };
         break __inline_StrCharIter_IntoIterator__into_iter_1: __local_7;
         unreachable;
-    });
+    };
     _licm_buf_33 = f.buf;
     b54: block {
         l55: loop {

@@ -108,7 +108,9 @@ fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run"() with
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __local_15: ref "core:prelude/format.wado//Formatter";
     opt = struct.new "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point" { x: 5, y: 10 };
-    result = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref null "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point"; __match_scrut_0 = opt; (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: ref null "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
+    __match_scrut_0 = opt;
+    result = (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
         let __cast_1: ref null "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
         __cast_1 = ref.as_non_null(__match_scrut_0);
         let __variant_payload_2: ref "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado//Point";
@@ -138,7 +140,7 @@ fn "wado-compiler/tests/fixtures/match_nested_struct_in_variant.wado/run"() with
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(result);
 }
 

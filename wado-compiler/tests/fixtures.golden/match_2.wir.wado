@@ -286,7 +286,9 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_basic"() with Stdout {
     let __local_6: i32;
     let __local_7: i32;
     let result2: ref "core:prelude/string.wado//String";
-    result = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: i32; __match_scrut_0 = 15; (if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: i32;
+    __match_scrut_0 = 15;
+    result = (if __match_scrut_0 == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("zero"), used: 4 };
     __local_1 = __match_scrut_0;
     } else if __local_1 < 10 -> ref "core:prelude/string.wado//String" {
@@ -298,9 +300,11 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_basic"() with Stdout {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("medium"), used: 6 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("large"), used: 5 };
-    }));
+    });
     "core:cli/println"(result);
-    result2 = value_copy "core:prelude/string.wado//String"(let __match_scrut_1: i32; __match_scrut_1 = 5; (if __local_5 = __match_scrut_1; __local_5 > 100 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_1: i32;
+    __match_scrut_1 = 5;
+    result2 = (if __local_5 = __match_scrut_1; __local_5 > 100 -> ref "core:prelude/string.wado//String" {
         __local_5 = __match_scrut_1;
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("huge"), used: 4 };
     __local_6 = __match_scrut_1;
@@ -313,7 +317,7 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_basic"() with Stdout {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("medium"), used: 6 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("small"), used: 5 };
-    }));
+    });
     "core:cli/println"(result2);
 }
 
@@ -330,7 +334,9 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_custom_variant"() with
     s1 = struct.new "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle" { discriminant: 0, payload_0: 5 };
     s2 = struct.new "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle" { discriminant: 0, payload_0: 0.5 };
     s3 = struct.new "wado-compiler/tests/fixtures/match_2.wado//MGuardShape" { 2 };
-    desc1 = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape"; __match_scrut_0 = s1; (if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape";
+    __match_scrut_0 = s1;
+    desc1 = (if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
         let __cast_4: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle";
         __cast_4 = ref.cast "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(__match_scrut_0);
         __local_3 = __cast_4.payload_0;
@@ -364,9 +370,11 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_custom_variant"() with
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("point"), used: 5 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(desc1);
-    desc2 = value_copy "core:prelude/string.wado//String"(let __match_scrut_1: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape"; __match_scrut_1 = s2; (if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_1: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape";
+    __match_scrut_1 = s2;
+    desc2 = (if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
         let __cast_8: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle";
         __cast_8 = ref.cast "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(__match_scrut_1);
         __local_5 = __cast_8.payload_0;
@@ -400,9 +408,11 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_custom_variant"() with
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("point"), used: 5 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(desc2);
-    desc3 = value_copy "core:prelude/string.wado//String"(let __match_scrut_2: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape"; __match_scrut_2 = s3; (if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(__match_scrut_2) -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_2: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape";
+    __match_scrut_2 = s3;
+    desc3 = (if ref.test "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(__match_scrut_2) -> ref "core:prelude/string.wado//String" {
         let __cast_12: ref "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle";
         __cast_12 = ref.cast "wado-compiler/tests/fixtures/match_2.wado//MGuardShape::Circle"(__match_scrut_2);
         __local_7 = __cast_12.payload_0;
@@ -436,7 +446,7 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_custom_variant"() with
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("point"), used: 5 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(desc3);
 }
 
@@ -453,7 +463,9 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_variant"() with Stdout
     opt1 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
     opt2 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 3 };
     none = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
-    msg1 = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_0 = opt1; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
+    __match_scrut_0 = opt1;
+    msg1 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
         let __cast_3: ref "core:prelude/types.wado//Option<i32>::Some";
         __cast_3 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0);
         __local_3 = __cast_3.payload_0;
@@ -479,9 +491,11 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_variant"() with Stdout
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no value"), used: 8 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(msg1);
-    msg2 = value_copy "core:prelude/string.wado//String"(let __match_scrut_1: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_1 = opt2; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_1: ref "core:prelude/types.wado//Option<i32>";
+    __match_scrut_1 = opt2;
+    msg2 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1) -> ref "core:prelude/string.wado//String" {
         let __cast_6: ref "core:prelude/types.wado//Option<i32>::Some";
         __cast_6 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_1);
         __local_5 = __cast_6.payload_0;
@@ -507,9 +521,11 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_variant"() with Stdout
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no value"), used: 8 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(msg2);
-    msg3 = value_copy "core:prelude/string.wado//String"(let __match_scrut_2: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_2 = none; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_2) -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_2: ref "core:prelude/types.wado//Option<i32>";
+    __match_scrut_2 = none;
+    msg3 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_2) -> ref "core:prelude/string.wado//String" {
         let __cast_9: ref "core:prelude/types.wado//Option<i32>::Some";
         __cast_9 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_2);
         __local_7 = __cast_9.payload_0;
@@ -535,7 +551,7 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_guard_variant"() with Stdout
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no value"), used: 8 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(msg3);
 }
 
@@ -606,11 +622,13 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_exhaustive"() with Stdout {
         unreachable;
     });
     c = 1;
-    name = value_copy "core:prelude/string.wado//String"(let __match_scrut_3: "wado-compiler/tests/fixtures/match_2.wado//enum:MExhColor"; __match_scrut_3 = c; (if __match_scrut_3 == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_3: "wado-compiler/tests/fixtures/match_2.wado//enum:MExhColor";
+    __match_scrut_3 = c;
+    name = (if __match_scrut_3 == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    }));
+    });
     "core:cli/println"(name);
 }
 
@@ -624,25 +642,31 @@ fn "wado-compiler/tests/fixtures/match_2.wado/match_wildcard"() with Stdout {
     red = struct.new "wado-compiler/tests/fixtures/match_2.wado//MWildColor" { 0 };
     green = struct.new "wado-compiler/tests/fixtures/match_2.wado//MWildColor" { 1 };
     blue = struct.new "wado-compiler/tests/fixtures/match_2.wado//MWildColor" { 2 };
-    name1 = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_2.wado//MWildColor"; __match_scrut_0 = red; (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/match_2.wado//MWildColor";
+    __match_scrut_0 = red;
+    name1 = (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    }));
+    });
     "core:cli/println"(name1);
-    name2 = value_copy "core:prelude/string.wado//String"(let __match_scrut_1: ref "wado-compiler/tests/fixtures/match_2.wado//MWildColor"; __match_scrut_1 = green; (if __match_scrut_1.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_1: ref "wado-compiler/tests/fixtures/match_2.wado//MWildColor";
+    __match_scrut_1 = green;
+    name2 = (if __match_scrut_1.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    }));
+    });
     "core:cli/println"(name2);
-    name3 = value_copy "core:prelude/string.wado//String"(let __match_scrut_2: ref "wado-compiler/tests/fixtures/match_2.wado//MWildColor"; __match_scrut_2 = blue; (if __match_scrut_2.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_2: ref "wado-compiler/tests/fixtures/match_2.wado//MWildColor";
+    __match_scrut_2 = blue;
+    name3 = (if __match_scrut_2.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
     } else if __match_scrut_2.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    }));
+    });
     "core:cli/println"(name3);
 }
 

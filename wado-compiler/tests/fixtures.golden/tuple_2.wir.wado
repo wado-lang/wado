@@ -475,7 +475,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_if_let"() with Stdout {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 });
     }
     if ref.is_null(opt) == 0 {
-        __pattern_temp_5 = value_copy "tuple//[i32, i32]"(ref.as_non_null(opt));
+        __pattern_temp_5 = ref.as_non_null(opt);
         drop(__pattern_temp_5.0);
         y_6 = __pattern_temp_5.1;
         "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -671,7 +671,9 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
     let __local_30: ref "core:prelude/string.wado//String";
     let __local_33: bool;
     pair = struct.new "tuple//[i32, i32]" { 0: 42, 1: 10 };
-    result = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref "tuple//[i32, i32]"; __match_scrut_0 = pair; (if __local_1 = __match_scrut_0.0; __local_26 = __match_scrut_0.1; __local_26 == 10 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: ref "tuple//[i32, i32]";
+    __match_scrut_0 = pair;
+    result = (if __local_1 = __match_scrut_0.0; __local_26 = __match_scrut_0.1; __local_26 == 10 -> ref "core:prelude/string.wado//String" {
         __local_1 = __match_scrut_0.0;
         __local_26 = __match_scrut_0.1;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -684,10 +686,12 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
         };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
-    }));
+    });
     "core:cli/println"(result);
     bpair = struct.new "tuple//[String, bool]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yes"), used: 3 }, 1: 1 };
-    result3 = value_copy "core:prelude/string.wado//String"(let __match_scrut_1: ref "tuple//[String, bool]"; __match_scrut_1 = bpair; (if __local_4 = __match_scrut_1.0; __local_27 = __match_scrut_1.1; __local_27 == 1 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_1: ref "tuple//[String, bool]";
+    __match_scrut_1 = bpair;
+    result3 = (if __local_4 = __match_scrut_1.0; __local_27 = __match_scrut_1.1; __local_27 == 1 -> ref "core:prelude/string.wado//String" {
         __local_4 = __match_scrut_1.0;
         __local_27 = __match_scrut_1.1;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -711,10 +715,12 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
         };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(result3);
     cpair = struct.new "tuple//[i32, char]" { 0: 99, 1: 88 };
-    result4 = value_copy "core:prelude/string.wado//String"(let __match_scrut_2: ref "tuple//[i32, char]"; __match_scrut_2 = cpair; (if __local_8 = __match_scrut_2.0; __local_29 = __match_scrut_2.1; __local_29 == 88 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_2: ref "tuple//[i32, char]";
+    __match_scrut_2 = cpair;
+    result4 = (if __local_8 = __match_scrut_2.0; __local_29 = __match_scrut_2.1; __local_29 == 88 -> ref "core:prelude/string.wado//String" {
         __local_8 = __match_scrut_2.0;
         __local_29 = __match_scrut_2.1;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -727,10 +733,12 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
         };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
-    }));
+    });
     "core:cli/println"(result4);
     spair = struct.new "tuple//[i32, String]" { 0: 7, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-    result5 = value_copy "core:prelude/string.wado//String"(let __match_scrut_3: ref "tuple//[i32, String]"; __match_scrut_3 = spair; (if __local_11 = __match_scrut_3.0; __local_30 = __match_scrut_3.1; "core:prelude/string.wado/String^Eq::eq"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }) -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_3: ref "tuple//[i32, String]";
+    __match_scrut_3 = spair;
+    result5 = (if __local_11 = __match_scrut_3.0; __local_30 = __match_scrut_3.1; "core:prelude/string.wado/String^Eq::eq"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }) -> ref "core:prelude/string.wado//String" {
         __local_11 = __match_scrut_3.0;
         __local_30 = __match_scrut_3.1;
         __tmpl: block -> ref "core:prelude/string.wado//String" {
@@ -743,7 +751,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_literal"() with Stdout {
         };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
-    }));
+    });
     "core:cli/println"(result5);
     "core:cli/println"(__tmpl: block -> ref "core:prelude/string.wado//String" {
         __local_24 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(28), used: 0 };
@@ -790,7 +798,9 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_match"() with Stdout {
     let __local_24: ref "core:prelude/format.wado//Formatter";
     let __local_29: ref "core:prelude/format.wado//Formatter";
     pair = struct.new "tuple//[i32, i32]" { 0: 5, 1: 10 };
-    label = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref "tuple//[i32, i32]"; __match_scrut_0 = pair; (if __local_1 = __match_scrut_0.0; __local_2 = __match_scrut_0.1; (__local_1 + __local_2) > 20 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: ref "tuple//[i32, i32]";
+    __match_scrut_0 = pair;
+    label = (if __local_1 = __match_scrut_0.0; __local_2 = __match_scrut_0.1; (__local_1 + __local_2) > 20 -> ref "core:prelude/string.wado//String" {
         __local_1 = __match_scrut_0.0;
         __local_2 = __match_scrut_0.1;
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("large"), used: 5 };
@@ -816,7 +826,7 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_match"() with Stdout {
             break __tmpl: __local_14;
             unreachable;
         };
-    }));
+    });
     "core:cli/println"(label);
     let __match_scrut_1: ref "tuple//[i32, i32]";
     __match_scrut_1 = pair;

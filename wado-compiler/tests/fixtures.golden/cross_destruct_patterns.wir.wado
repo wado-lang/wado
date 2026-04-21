@@ -231,7 +231,9 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
         };
     };
     t = struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("X"), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 100, 1: 200 } };
-    desc = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged"; __match_scrut_0 = t; (if let __struct_field_3: ref "tuple//[i32, i32]"; __struct_field_3 = __match_scrut_0.coords; __local_15 = __struct_field_3.0; __local_16 = __struct_field_3.1; (__local_15 + __local_16) > 250 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
+    __match_scrut_0 = t;
+    desc = (if let __struct_field_3: ref "tuple//[i32, i32]"; __struct_field_3 = __match_scrut_0.coords; __local_15 = __struct_field_3.0; __local_16 = __struct_field_3.1; (__local_15 + __local_16) > 250 -> ref "core:prelude/string.wado//String" {
         let __struct_field_2: ref "tuple//[i32, i32]";
         __struct_field_2 = __match_scrut_0.coords;
         __local_15 = __struct_field_2.0;
@@ -255,7 +257,7 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
             break __tmpl: __local_29;
             unreachable;
         };
-    }));
+    });
     "core:cli/println"(desc);
     opt = struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Point" { x: 7, y: 8 };
     if ref.is_null(opt) == 0 {

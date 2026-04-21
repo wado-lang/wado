@@ -261,13 +261,15 @@ fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/interleaved_field_ops"
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/struct_in_match"(n) {
     let p: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
-    p = value_copy "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point"(let __match_scrut_0: i32; __match_scrut_0 = n; (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+    let __match_scrut_0: i32;
+    __match_scrut_0 = n;
+    p = (if __match_scrut_0 == 0 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 1, y: 2 };
     } else if __match_scrut_0 == 1 -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
     } else {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 100, y: 200 };
-    }));
+    });
     return p.x + p.y;
 }
 
@@ -299,11 +301,11 @@ fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/dependent_field_constr
 
 fn "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado/struct_from_conditional"(flag) {
     let p: ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point";
-    p = value_copy "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point"((if flag -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
+    p = (if flag -> ref "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
     } else {
         struct.new "wado-compiler/tests/fixtures/opt_sroa_edge_cases.wado//Point" { x: 30, y: 40 };
-    }));
+    });
     return p.x + p.y;
 }
 

@@ -117,7 +117,9 @@ fn "wado-compiler/tests/fixtures/match_nested_three_level.wado/run"() with Stdou
     let __local_22: ref "core:prelude/format.wado//Formatter";
     let __local_27: ref "core:prelude/format.wado//Formatter";
     data = struct.new "tuple//[Point, Point]" { 0: struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 1, y: 2 }, 1: struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 3, y: 4 } };
-    result = value_copy "core:prelude/string.wado//String"(let __match_scrut_0: ref null "tuple//[Point, Point]"; __match_scrut_0 = data; (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
+    let __match_scrut_0: ref null "tuple//[Point, Point]";
+    __match_scrut_0 = data;
+    result = (if ref.is_null(__match_scrut_0) == 0 -> ref "core:prelude/string.wado//String" {
         let __cast_1: ref null "tuple//[Point, Point]";
         __cast_1 = ref.as_non_null(__match_scrut_0);
         let __variant_payload_2: ref "tuple//[Point, Point]";
@@ -159,7 +161,7 @@ fn "wado-compiler/tests/fixtures/match_nested_three_level.wado/run"() with Stdou
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 };
     } else {
         unreachable;
-    }));
+    });
     "core:cli/println"(result);
 }
 
