@@ -1050,37 +1050,62 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         is_type_param: bool,
     ) -> Option<ResolvedTraitMethod> {
-        let info = match trait_name {
-            "Eq" => self.find_eq_trait_impl(struct_name, lookup_type_id)?,
-            "Ord" => self.find_ord_trait_impl(struct_name, lookup_type_id)?,
-            _ => self.find_arithmetic_trait_impl(
+        // 1. User-written impl via the shared arithmetic-trait lookup.
+        // 2. Auto-derive fallback (Eq / Ord only; other operator traits
+        //    have no auto-derive rules).
+        //
+        // Eq / Ord trait decls fix their return types (`bool` and `Ordering`
+        // respectively) regardless of what a user impl writes, so normalize
+        // those here. `find_arithmetic_trait_impl` would otherwise default
+        // `output_type` to the receiver type when no `type Output` is
+        // declared.
+        let (info_trait_name, self_kind, rhs_type, return_type) =
+            if let Some(info) = self.find_arithmetic_trait_impl(
                 struct_name,
                 lookup_type_id,
                 trait_name,
                 method_name,
-            )?,
-        };
-        // The Eq / Ord trait decls fix their return types (`bool` and
-        // `Ordering` respectively) regardless of what a user impl writes.
-        // `find_arithmetic_trait_impl` — which backs user-defined Eq/Ord
-        // impls — does not know that and defaults `output_type` to the
-        // receiver type when no `type Output` is declared.  Normalize here
-        // so callers see the real trait return type.
-        let return_type = match trait_name {
-            "Eq" => TypeTable::BOOL,
-            "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                name: "Ordering".to_string(),
-                module_source: ModuleSource::prelude(),
-            }),
-            _ => info.output_type,
-        };
+            ) {
+                let return_type = match trait_name {
+                    "Eq" => TypeTable::BOOL,
+                    "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
+                        name: "Ordering".to_string(),
+                        module_source: ModuleSource::prelude(),
+                    }),
+                    _ => info.output_type,
+                };
+                (info.trait_name, info.self_kind, info.rhs_type, return_type)
+            } else if matches!(trait_name, "Eq" | "Ord")
+                && self.type_implements_trait(lookup_type_id, trait_name)
+            {
+                let ref_self_ty = self
+                    .type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Ref(lookup_type_id));
+                let return_type = match trait_name {
+                    "Eq" => TypeTable::BOOL,
+                    "Ord" => self.type_table.borrow_mut().intern(ResolvedType::Enum {
+                        name: "Ordering".to_string(),
+                        module_source: ModuleSource::prelude(),
+                    }),
+                    _ => unreachable!(),
+                };
+                (
+                    trait_name.to_string(),
+                    ast::SelfKind::Ref,
+                    Some(ref_self_ty),
+                    return_type,
+                )
+            } else {
+                return None;
+            };
         Some(ResolvedTraitMethod {
-            trait_name: info.trait_name,
+            trait_name: info_trait_name,
             method_name: method_name.to_string(),
             impl_name: struct_name.to_string(),
-            self_kind: info.self_kind,
+            self_kind,
             return_type,
-            rhs_type: info.rhs_type,
+            rhs_type,
             is_type_param_receiver: is_type_param,
         })
     }

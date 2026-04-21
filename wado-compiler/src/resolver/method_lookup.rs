@@ -2453,64 +2453,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )
     }
 
-    /// Find `Eq` trait implementation for a type.
-    ///
-    /// Falls back to auto-derived Eq for structs whose fields all implement Eq.
-    pub(super) fn find_eq_trait_impl(
-        &mut self,
-        struct_name: &str,
-        base_type_id: TypeId,
-    ) -> Option<ArithmeticTraitInfo> {
-        if let Some(info) = self.find_arithmetic_trait_impl(struct_name, base_type_id, "Eq", "eq") {
-            return Some(info);
-        }
-        // Auto-derive: check if all fields implement Eq
-        if self.type_implements_trait(base_type_id, "Eq") {
-            let ref_type = self
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::Ref(base_type_id));
-            return Some(ArithmeticTraitInfo {
-                output_type: TypeTable::BOOL,
-                self_kind: ast::SelfKind::Ref,
-                trait_name: "Eq".to_string(),
-                rhs_type: Some(ref_type),
-            });
-        }
-        None
-    }
-
-    /// Find `Ord` trait implementation for a type.
-    ///
-    /// Falls back to auto-derived Ord for structs whose fields all implement Ord.
-    pub(super) fn find_ord_trait_impl(
-        &mut self,
-        struct_name: &str,
-        base_type_id: TypeId,
-    ) -> Option<ArithmeticTraitInfo> {
-        if let Some(info) = self.find_arithmetic_trait_impl(struct_name, base_type_id, "Ord", "cmp")
-        {
-            return Some(info);
-        }
-        // Auto-derive: check if all fields implement Ord
-        if self.type_implements_trait(base_type_id, "Ord") {
-            let ordering_type = self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                name: "Ordering".to_string(),
-                module_source: ModuleSource::prelude(),
-            });
-            let ref_type = self
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::Ref(base_type_id));
-            return Some(ArithmeticTraitInfo {
-                output_type: ordering_type,
-                self_kind: ast::SelfKind::Ref,
-                trait_name: "Ord".to_string(),
-                rhs_type: Some(ref_type),
-            });
-        }
-        None
-    }
 
     /// Find operator trait implementation
     pub(super) fn find_arithmetic_trait_impl(
