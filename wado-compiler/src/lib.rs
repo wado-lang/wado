@@ -14,6 +14,7 @@ pub mod doc;
 pub mod effect_check;
 pub mod flat_package;
 pub mod hashmap;
+pub mod kiln;
 pub mod lexer;
 pub mod link;
 pub mod loader;
@@ -45,7 +46,10 @@ pub use annotate::{Annotated, Definition, annotate};
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use compiler_host::{
-    Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SourceError,
+    Code, CompilerHost, Diagnostic, DiagnosticSpan, GeneratorDiagnostic, GeneratorDiagnosticLevel,
+    GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
+    GeneratorResponse, GeneratorRunnerError, GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel,
+    Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
 

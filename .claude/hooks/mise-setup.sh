@@ -22,18 +22,78 @@ log "Remote session detected, setting up mise..."
 LOCAL_BIN="$HOME/.local/bin"
 mkdir -p "$LOCAL_BIN"
 
+# Fallback: mise.run has been observed to return 403 from some egress IPs.
+# Grab the latest release tarball from GitHub directly.
+install_mise_from_github() {
+    local arch os
+    case "$(uname -m)" in
+        x86_64) arch="x64" ;;
+        aarch64 | arm64) arch="arm64" ;;
+        *) log "Unsupported arch for GitHub fallback: $(uname -m)"; return 1 ;;
+    esac
+    case "$(uname -s)" in
+        Linux) os="linux" ;;
+        Darwin) os="macos" ;;
+        *) log "Unsupported OS for GitHub fallback: $(uname -s)"; return 1 ;;
+    esac
+
+    # Resolve the latest version by following the /releases/latest 302.
+    # api.github.com is commonly rate-limited or blocked; this only hits github.com.
+    local effective tag
+    effective=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        https://github.com/jdx/mise/releases/latest 2>/dev/null) || {
+        log "Could not resolve latest mise tag from GitHub"
+        return 1
+    }
+    tag="${effective##*/}"
+    case "$tag" in
+        v[0-9]*) ;;
+        *) log "Unexpected tag resolved from GitHub: '$tag'"; return 1 ;;
+    esac
+
+    local url="https://github.com/jdx/mise/releases/download/$tag/mise-$tag-$os-$arch.tar.gz"
+    local tmp
+    tmp=$(mktemp -d) || return 1
+
+    log "Downloading $url ..."
+    if ! curl -fsSL -o "$tmp/mise.tar.gz" "$url"; then
+        log "Download failed from $url"
+        rm -rf "$tmp"
+        return 1
+    fi
+    if ! tar -xzf "$tmp/mise.tar.gz" -C "$tmp"; then
+        log "Failed to extract mise tarball"
+        rm -rf "$tmp"
+        return 1
+    fi
+    if [ ! -f "$tmp/mise/bin/mise" ]; then
+        log "mise binary not found at expected path in tarball"
+        rm -rf "$tmp"
+        return 1
+    fi
+
+    cp "$tmp/mise/bin/mise" "$LOCAL_BIN/mise"
+    chmod +x "$LOCAL_BIN/mise"
+    rm -rf "$tmp"
+    return 0
+}
+
 # Check if mise is already available
 if command -v mise &>/dev/null; then
     log "mise already available: $(mise --version)"
 else
     log "Installing mise to $LOCAL_BIN..."
 
-    if ! curl -fsSL https://mise.run | sh; then
-        log "Failed to install mise"
-        exit 1
+    if curl -fsSL https://mise.run | sh; then
+        log "mise installed via mise.run: $($LOCAL_BIN/mise --version)"
+    else
+        log "mise.run installer failed; falling back to GitHub Releases"
+        if ! install_mise_from_github; then
+            log "Failed to install mise (both mise.run and GitHub fallback)"
+            exit 1
+        fi
+        log "mise installed from GitHub: $($LOCAL_BIN/mise --version)"
     fi
-
-    log "mise installed: $($LOCAL_BIN/mise --version)"
 fi
 
 # Persist PATH and mise settings to CLAUDE_ENV_FILE

@@ -315,7 +315,160 @@ pub trait CompilerHost: Send + Sync {
     /// needs to be reported. Implementations can print to stderr, collect into
     /// a list, send to an LSP client, etc.
     fn emit_diagnostic(&self, diagnostic: Diagnostic);
+
+    /// Execute a Kiln generator component and return its response.
+    ///
+    /// `component_wasm` is the compiled generator component. The host is
+    /// responsible for instantiating it, linking `wado:kiln/host` so that
+    /// `read-file` and `emit-diagnostic` forward back into this same host,
+    /// and returning the generator's response.
+    ///
+    /// The default implementation returns `Unsupported`, which drives
+    /// "consume-only" mode (the compiler reuses the most recent cached
+    /// outputs on disk and warns on drift). Hosts that have a Wasm runtime
+    /// available (e.g. `wado-cli` via wasmtime) override this method.
+    ///
+    /// See WEP 2026-04-12 (Kiln) for the full protocol.
+    fn run_generator(
+        &self,
+        _component_wasm: &[u8],
+        _request: GeneratorRequest,
+    ) -> impl Future<Output = Result<GeneratorResponse, GeneratorRunnerError>> + Send {
+        async move { Err(GeneratorRunnerError::Unsupported) }
+    }
 }
+
+/// Request handed to a Kiln generator by the compiler.
+///
+/// Mirrors `wado:kiln/types::request` 1:1 but does not depend on wasmtime;
+/// hosts lift/lower at their own boundary.
+#[derive(Debug, Clone)]
+pub struct GeneratorRequest {
+    /// The schema file named by `from` in the invocation.
+    pub primary: GeneratorInputFile,
+    /// Supplementary schema files.
+    pub inputs: Vec<GeneratorInputFile>,
+    /// Canonical-encoded generator options, produced by the compiler.
+    ///
+    /// Empty in M2; the typed encoder lands in M4.
+    pub options: Vec<u8>,
+}
+
+/// One schema file passed to a Kiln generator.
+#[derive(Debug, Clone)]
+pub struct GeneratorInputFile {
+    pub path: String,
+    pub content: Vec<u8>,
+}
+
+/// Response returned by a Kiln generator.
+#[derive(Debug, Clone)]
+pub struct GeneratorResponse {
+    /// Generated Wado source files.
+    pub files: Vec<GeneratorOutputFile>,
+    /// Every `host::read-file` call the generator made during this run, in
+    /// call order. The compiler feeds this list into the cache key so that
+    /// transitive schema reads invalidate the cache when they change.
+    pub reads: Vec<GeneratorReadRecord>,
+}
+
+/// One file produced by a Kiln generator.
+#[derive(Debug, Clone)]
+pub struct GeneratorOutputFile {
+    /// Path relative to the invocation's output directory.
+    pub path: String,
+    /// UTF-8 source contents.
+    pub content: String,
+    /// Whether this file is the invocation's entry module.
+    pub is_entry: bool,
+}
+
+/// A single recorded `host::read-file` call.
+#[derive(Debug, Clone)]
+pub struct GeneratorReadRecord {
+    pub path: String,
+    /// SHA-256 of the file contents, as raw bytes.
+    pub content_hash: [u8; 32],
+}
+
+/// Generator-side error, mirroring `wado:kiln/types::error`.
+#[derive(Debug, Clone)]
+pub enum GeneratorError {
+    /// The generator rejected the schema it was given.
+    InvalidSchema(String),
+    /// The schema used a feature the generator does not (yet) handle.
+    Unsupported(String),
+    /// Catch-all generator-produced error.
+    Other(String),
+}
+
+impl std::fmt::Display for GeneratorError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GeneratorError::InvalidSchema(msg) => write!(f, "invalid schema: {msg}"),
+            GeneratorError::Unsupported(msg) => write!(f, "unsupported: {msg}"),
+            GeneratorError::Other(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
+impl std::error::Error for GeneratorError {}
+
+/// Outcome of calling `CompilerHost::run_generator`.
+#[derive(Debug, Clone)]
+pub enum GeneratorRunnerError {
+    /// The host has no Wasm runtime available — trigger consume-only mode.
+    Unsupported,
+    /// The generator returned a typed error.
+    Generator(GeneratorError),
+    /// The host failed (instantiation, import linking, fuel, timeout, …).
+    Host(String),
+}
+
+impl std::fmt::Display for GeneratorRunnerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GeneratorRunnerError::Unsupported => {
+                write!(f, "generator execution is not supported by this host")
+            }
+            GeneratorRunnerError::Generator(e) => write!(f, "generator error: {e}"),
+            GeneratorRunnerError::Host(msg) => write!(f, "generator host error: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for GeneratorRunnerError {}
+
+/// Severity mirrored from `wado:kiln/host::diagnostic-level`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneratorDiagnosticLevel {
+    Error,
+    Warning,
+    Info,
+    Hint,
+}
+
+/// Span into a file known to the generator. Paths are relayed back to the
+/// compiler's diagnostic renderer, which re-reads the file via `load_source`.
+#[derive(Debug, Clone)]
+pub struct GeneratorSourceSpan {
+    pub path: String,
+    pub byte_start: u32,
+    pub byte_end: u32,
+}
+
+/// A diagnostic produced by a generator via `host::emit-diagnostic`.
+#[derive(Debug, Clone)]
+pub struct GeneratorDiagnostic {
+    pub level: GeneratorDiagnosticLevel,
+    pub span: Option<GeneratorSourceSpan>,
+    pub message: String,
+}
+
+/// The Kiln WIT world, embedded so the compiler can treat its byte identity
+/// as part of every cache key. The single source of truth; `wado-cli` reads
+/// the same file via `wasmtime::component::bindgen!(path = "...")`.
+pub const KILN_GENERATOR_WIT: &str = include_str!("../lib/wado/kiln/generator.wit");
 
 /// A simple in-memory compiler host for testing
 ///
@@ -402,6 +555,34 @@ mod tests {
                 let result = host.load_source("./missing.wado").await;
                 assert!(matches!(result, Err(SourceError::NotFound { .. })));
             });
+    }
+
+    #[test]
+    fn default_run_generator_is_unsupported() {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let host = InMemoryCompilerHost::new();
+                let req = GeneratorRequest {
+                    primary: GeneratorInputFile {
+                        path: "schema.proto".to_string(),
+                        content: b"syntax = \"proto3\";".to_vec(),
+                    },
+                    inputs: vec![],
+                    options: vec![],
+                };
+                let result = host.run_generator(b"\0asm", req).await;
+                assert!(matches!(result, Err(GeneratorRunnerError::Unsupported)));
+            });
+    }
+
+    #[test]
+    fn kiln_generator_wit_is_embedded() {
+        assert!(KILN_GENERATOR_WIT.contains("package wado:kiln"));
+        assert!(KILN_GENERATOR_WIT.contains("world generator"));
+        assert!(KILN_GENERATOR_WIT.contains("export generate"));
     }
 
     #[test]

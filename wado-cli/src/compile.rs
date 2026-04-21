@@ -335,6 +335,9 @@ pub async fn try_compile_with_full_opts(
         ..Default::default()
     };
 
+    // TODO(M6): before compile_with_options, resolve the manifest and call
+    //   wado_cli::kiln_driver::run_pipeline(manifest, base_path, &host, &provider).await?;
+    // See docs/wep-2026-04-12-kiln.md §"M6 — Gale migration".
     wado_compiler::compile_with_options(&source, &host, Some(filename), options).await
 }
 
@@ -379,6 +382,9 @@ pub async fn compile_with_full_opts(
         ..Default::default()
     };
 
+    // TODO(M6): before compile_with_options, resolve the manifest and call
+    //   wado_cli::kiln_driver::run_pipeline(manifest, base_path, &host, &provider).await?;
+    // See docs/wep-2026-04-12-kiln.md §"M6 — Gale migration".
     // Compile using async API
     let result = wado_compiler::compile_with_options(&source, &host, Some(filename), options).await;
 
