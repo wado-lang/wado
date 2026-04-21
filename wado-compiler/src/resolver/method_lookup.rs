@@ -1923,6 +1923,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
 
+                // Make `Self` in the method signature resolve to the concrete
+                // receiver type (e.g. `&Self` → `&Result<String, i32>` when
+                // calling through `impl<T: Eq, E: Eq> Eq for Result<T, E>`).
+                // Without this, `resolve_type("Self")` falls through to
+                // UNKNOWN and the caller's argument typecheck silently
+                // accepts anything, surfacing as an ICE at codegen.
+                let old_self_type = scope.trait_ctx.self_type;
+                if let Some(recv_id) = receiver_type_id {
+                    scope.trait_ctx.self_type = Some(recv_id);
+                }
+
                 let return_type = return_type_ast
                     .as_ref()
                     .map(|t| scope.resolve_type(t))
@@ -1932,6 +1943,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // in scope — otherwise `&T` in a parameter would not resolve to
                 // the proper `TypeParam` id that inference expects.
                 let param_types = scope.extract_param_types(&params);
+
+                scope.trait_ctx.self_type = old_self_type;
 
                 // Remove method-level type params from scope
                 for type_param in &method_type_params {
